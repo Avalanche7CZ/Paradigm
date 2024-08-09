@@ -22,7 +22,7 @@ public class ColorUtils {
 
             if (part.startsWith("§")) {
                 char code = part.charAt(1);
-                currentStyle = applyColorCode(currentStyle, code);
+                currentStyle = applyColorCode(new Style(), code);
                 part = part.substring(2);
             }
             Matcher urlMatcher = URL_PATTERN.matcher(part);
@@ -32,7 +32,7 @@ public class ColorUtils {
                 message.appendSibling(new TextComponentString(part.substring(lastEnd, urlMatcher.start())).setStyle(currentStyle));
                 String url = urlMatcher.group();
                 message.appendSibling(new TextComponentString(url)
-                        .setStyle(currentStyle.setClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, url))));
+                        .setStyle(currentStyle.createDeepCopy().setClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, url))));
 
                 lastEnd = urlMatcher.end();
             }
