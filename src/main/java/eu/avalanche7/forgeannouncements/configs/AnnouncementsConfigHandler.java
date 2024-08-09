@@ -12,8 +12,6 @@ public class AnnouncementsConfigHandler {
 
     private static final Logger LOGGER = LogManager.getLogger(ForgeAnnouncements.MODID);
     public static Configuration config;
-
-    public static boolean debugEnable;
     public static boolean globalEnable;
     public static boolean headerAndFooter;
     public static int globalInterval;
@@ -40,8 +38,6 @@ public class AnnouncementsConfigHandler {
     public static void init(Configuration config) {
         AnnouncementsConfigHandler.config = config;
         config.load();
-
-        debugEnable = config.getBoolean("DebugEnable", Configuration.CATEGORY_GENERAL, false, "Enable debug logging");
 
         globalEnable = config.getBoolean("GlobalEnable", "Auto_Broadcast", true, "Enable global messages");
         headerAndFooter = config.getBoolean("HeaderAndFooter", "Auto_Broadcast", true, "Enable header and footer");

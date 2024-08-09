@@ -1,13 +1,8 @@
 package eu.avalanche7.forgeannouncements;
 
 import eu.avalanche7.forgeannouncements.commands.AnnouncementsCommand;
-import eu.avalanche7.forgeannouncements.configs.MOTDConfigHandler;
-import eu.avalanche7.forgeannouncements.configs.AnnouncementsConfigHandler;
-import eu.avalanche7.forgeannouncements.configs.MentionConfigHandler;
-import eu.avalanche7.forgeannouncements.utils.Announcements;
-import eu.avalanche7.forgeannouncements.utils.MOTD;
-import eu.avalanche7.forgeannouncements.utils.Mentions;
-import eu.avalanche7.forgeannouncements.utils.PermissionsHandler;
+import eu.avalanche7.forgeannouncements.configs.*;
+import eu.avalanche7.forgeannouncements.utils.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import net.minecraftforge.common.MinecraftForge;
@@ -27,11 +22,9 @@ public class ForgeAnnouncements {
 
     public static final String MODID = "forgeannouncements";
     public static final String NAME = "Forge Announcements";
-    public static final String VERSION = "12.0.2";
+    public static final String VERSION = "12.0.3";
 
     private static final Logger LOGGER = LogManager.getLogger(MODID);
-
-    private Configuration config;
 
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
@@ -40,16 +33,21 @@ public class ForgeAnnouncements {
         if (!directory.exists()) {
             directory.mkdir();
         }
+        Configuration mainConfig = new Configuration(new File(directory.getPath(), "main.cfg"));
+        MainConfigHandler.init(mainConfig);
         Configuration config = new Configuration(new File(directory.getPath(), "announcements.cfg"));
         AnnouncementsConfigHandler.init(config);
         Configuration motdConfig = new Configuration(new File(directory.getPath(), "motd.cfg"));
         MOTDConfigHandler.init(motdConfig);
         Configuration mentionsConfig = new Configuration(new File(directory.getPath(), "mentions.cfg"));
         MentionConfigHandler.init(mentionsConfig);
+        Configuration restartConfig = new Configuration(new File(directory.getPath(), "restart.cfg"));
+        RestartConfigHandler.init(restartConfig);
         MinecraftForge.EVENT_BUS.register(this);
         MinecraftForge.EVENT_BUS.register(new MOTD());
         MinecraftForge.EVENT_BUS.register(new Mentions());
         MinecraftForge.EVENT_BUS.register(new PermissionsHandler());
+        MinecraftForge.EVENT_BUS.register(new Restart());
     }
 
     @Mod.EventHandler
@@ -63,6 +61,7 @@ public class ForgeAnnouncements {
 
         UpdateChecker.checkForUpdates();
         Announcements.onServerStarting(event);
+        Restart.onServerStarting(event);
         PermissionsHandler.onServerStarting(event);
         AnnouncementsCommand.registerCommands(event);
     }
