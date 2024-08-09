@@ -1,5 +1,6 @@
 package eu.avalanche7.forgeannouncements.utils;
 
+import eu.avalanche7.forgeannouncements.configs.MainConfigHandler;
 import eu.avalanche7.forgeannouncements.configs.MentionConfigHandler;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.network.play.server.SPacketTitle;
@@ -19,6 +20,12 @@ public class Mentions {
 
     @SubscribeEvent
     public static void onChatMessage(ServerChatEvent event) {
+
+        if (!MainConfigHandler.MENTIONS_ENABLE) {
+            DebugLogger.debugLog("Mention feature is disabled.");
+            return;
+        }
+
         String mentionSymbol = MentionConfigHandler.MENTION_SYMBOL;
         String message = event.getMessage();
         EntityPlayerMP sender = event.getPlayer();

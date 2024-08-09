@@ -5,7 +5,6 @@ import net.minecraftforge.common.config.Configuration;
 public class MOTDConfigHandler {
 
     private static Configuration motdConfig;
-    public static boolean motdEnable;
     public static String motdMessage;
 
     public static void init(Configuration config) {
@@ -16,9 +15,6 @@ public class MOTDConfigHandler {
     public static void loadConfig() {
         String category = "MOTD";
         motdConfig.addCustomCategoryComment(category, "MOTD Configuration");
-
-        motdEnable = motdConfig.getBoolean("Enable", category, true, "Enable or disable the MOTD feature");
-
         String[] defaultMessageLines = getDefaultMotdMessage().split("\n");
         StringBuilder defaultMessage = new StringBuilder();
         for (String line : defaultMessageLines) {

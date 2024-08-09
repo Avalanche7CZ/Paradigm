@@ -30,7 +30,7 @@ public class Announcements {
     @Mod.EventHandler
     public static void onServerStarting(FMLServerStartingEvent event) {
         if (!MainConfigHandler.ANNOUNCEMENTS_ENABLE) {
-            DebugLogger.debugLog("Restart feature is disabled.");
+            DebugLogger.debugLog("Announcements feature is disabled.");
             return;
         }
 
@@ -92,7 +92,8 @@ public class Announcements {
     private static void broadcastGlobalMessages() {
         if (server != null) {
             List<String> messages = AnnouncementsConfigHandler.globalMessages;
-            String prefix = AnnouncementsConfigHandler.prefix + "§r";
+            String prefix = AnnouncementsConfigHandler.prefix;
+            DebugLogger.debugLog("Prefix before parsing: " + prefix);
             String header = AnnouncementsConfigHandler.header;
             String footer = AnnouncementsConfigHandler.footer;
 
@@ -119,7 +120,7 @@ public class Announcements {
     private static void broadcastTitleMessages() {
         if (server != null) {
             List<String> messages = AnnouncementsConfigHandler.titleMessages;
-            String prefix = AnnouncementsConfigHandler.prefix + "§r";
+            String prefix = AnnouncementsConfigHandler.prefix;
 
             String messageText = messages.get(random.nextInt(messages.size())).replace("{Prefix}", prefix);
             ITextComponent message = ColorUtils.parseMessageWithColor(messageText);
@@ -138,7 +139,7 @@ public class Announcements {
     private static void broadcastActionbarMessages() {
         if (server != null) {
             List<String> messages = AnnouncementsConfigHandler.actionbarMessages;
-            String prefix = AnnouncementsConfigHandler.prefix + "§r";
+            String prefix = AnnouncementsConfigHandler.prefix;
 
             String messageText = messages.get(random.nextInt(messages.size())).replace("{Prefix}", prefix);
             ITextComponent message = ColorUtils.parseMessageWithColor(messageText);
@@ -156,7 +157,7 @@ public class Announcements {
     private static void broadcastBossbarMessages() {
         if (server != null) {
             List<String> messages = AnnouncementsConfigHandler.bossbarMessages;
-            String prefix = AnnouncementsConfigHandler.prefix + "§r";
+            String prefix = AnnouncementsConfigHandler.prefix;
             int bossbarTime = AnnouncementsConfigHandler.bossbarTime;
             String bossbarColor = AnnouncementsConfigHandler.bossbarColor;
 

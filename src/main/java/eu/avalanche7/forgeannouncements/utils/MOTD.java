@@ -1,6 +1,7 @@
 package eu.avalanche7.forgeannouncements.utils;
 
 import eu.avalanche7.forgeannouncements.configs.MOTDConfigHandler;
+import eu.avalanche7.forgeannouncements.configs.MainConfigHandler;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.network.play.server.SPacketTitle;
 import net.minecraft.util.text.*;
@@ -16,12 +17,10 @@ public class MOTD {
 
     @SubscribeEvent
     public static void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
-        if (MOTDConfigHandler.motdEnable) {
-            String motdString = MOTDConfigHandler.motdMessage;
-            if (motdString == null) {
-                System.out.println("MOTD string is null");
-                return;
-            }
+        if (!MainConfigHandler.MOTD_ENABLE) {
+            DebugLogger.debugLog("MOTD feature is disabled.");
+            return;
+        }
             ITextComponent motdMessage = createMOTDMessage((EntityPlayerMP) event.player);
             if (motdMessage == null) {
                 System.out.println("MOTD message is null");
@@ -29,7 +28,7 @@ public class MOTD {
             }
             event.player.sendMessage(motdMessage);
         }
-    }
+
 
     private static ITextComponent createMOTDMessage(EntityPlayerMP player) {
         String[] lines = MOTDConfigHandler.motdMessage.split("\n");
