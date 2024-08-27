@@ -1,5 +1,6 @@
 package eu.avalanche7.forgeannouncements;
 
+import eu.avalanche7.forgeannouncements.chat.StaffChat;
 import eu.avalanche7.forgeannouncements.configs.*;
 import eu.avalanche7.forgeannouncements.utils.Mentions;
 import eu.avalanche7.forgeannouncements.utils.PermissionsHandler;
@@ -34,6 +35,7 @@ public class ForgeAnnouncements {
         MinecraftForge.EVENT_BUS.register(PermissionsHandler.class);
         MinecraftForge.EVENT_BUS.register(RestartConfigHandler.class);
         MinecraftForge.EVENT_BUS.register(Restart.class);
+        MinecraftForge.EVENT_BUS.register(StaffChat.class);
 
         try {
             createDefaultConfigs();
@@ -43,12 +45,14 @@ public class ForgeAnnouncements {
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, MOTDConfigHandler.SERVER_CONFIG, "forgeannouncements/motd.toml");
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, MentionConfigHandler.SERVER_CONFIG, "forgeannouncements/mentions.toml");
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, RestartConfigHandler.SERVER_CONFIG, "forgeannouncements/restarts.toml");
+            ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, ChatConfigHandler.SERVER_CONFIG, "forgeannouncements/chat.toml");
 
             MainConfigHandler.loadConfig(MainConfigHandler.SERVER_CONFIG, FMLPaths.CONFIGDIR.get().resolve("forgeannouncements/main.toml").toString());
             RestartConfigHandler.loadConfig(RestartConfigHandler.SERVER_CONFIG, FMLPaths.CONFIGDIR.get().resolve("forgeannouncements/restarts.toml").toString());
             AnnouncementsConfigHandler.loadConfig(AnnouncementsConfigHandler.SERVER_CONFIG, FMLPaths.CONFIGDIR.get().resolve("forgeannouncements/announcements.toml").toString());
             MOTDConfigHandler.loadConfig(MOTDConfigHandler.SERVER_CONFIG, FMLPaths.CONFIGDIR.get().resolve("forgeannouncements/motd.toml").toString());
             MentionConfigHandler.loadConfig(MentionConfigHandler.SERVER_CONFIG, FMLPaths.CONFIGDIR.get().resolve("forgeannouncements/mentions.toml").toString());
+            ChatConfigHandler.loadConfig(ChatConfigHandler.SERVER_CONFIG, FMLPaths.CONFIGDIR.get().resolve("forgeannouncements/chat.toml").toString());
         } catch (Exception e) {
             LOGGER.error("Failed to register or load configuration", e);
             throw new RuntimeException("Configuration loading failed", e);
@@ -93,6 +97,12 @@ public class ForgeAnnouncements {
            Files.createFile(restartConfig);
            RestartConfigHandler.loadConfig(RestartConfigHandler.SERVER_CONFIG, restartConfig.toString());
             RestartConfigHandler.SERVER_CONFIG.save();
+        }
+        Path chatConfig = configDir.resolve("chat.toml");
+        if (!Files.exists(chatConfig)) {
+            Files.createFile(chatConfig);
+            ChatConfigHandler.loadConfig(ChatConfigHandler.SERVER_CONFIG, chatConfig.toString());
+            ChatConfigHandler.SERVER_CONFIG.save();
         }
     }
 

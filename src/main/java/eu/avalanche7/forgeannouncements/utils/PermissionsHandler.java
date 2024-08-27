@@ -14,6 +14,7 @@ public class PermissionsHandler {
     private static final Logger LOGGER = Logger.getLogger(PermissionsHandler.class.getName());
     public static final String MENTION_EVERYONE_PERMISSION = "forgeannouncements.mention.everyone";
     public static final String MENTION_PLAYER_PERMISSION = "forgeannouncements.mention.player";
+    public static final String STAFF_CHAT_PERMISSION = "forgeannouncements.staff";
     public static final int MENTION_EVERYONE_PERMISSION_LEVEL = 2;
     public static final int MENTION_PLAYER_PERMISSION_LEVEL = 2;
     public static final int BROADCAST_PERMISSION_LEVEL = 2;
@@ -45,6 +46,7 @@ public class PermissionsHandler {
         if (checker instanceof ForgeEssentialsChecker) {
             ((ForgeEssentialsChecker) checker).registerPermission(MENTION_EVERYONE_PERMISSION, "Allows mentioning everyone");
             ((ForgeEssentialsChecker) checker).registerPermission(MENTION_PLAYER_PERMISSION, "Allows mentioning a player");
+            ((ForgeEssentialsChecker) checker).registerPermission(STAFF_CHAT_PERMISSION, "Allows access to staff chat");
         } else {
             LOGGER.warning("Cannot register permissions. ForgeEssentials mod is not present [NOT ERROR].");
         }
@@ -96,6 +98,9 @@ public class PermissionsHandler {
         }
 
         private int getPermissionLevel(String permission) {
+            if (permission.equals(STAFF_CHAT_PERMISSION)) {
+                return 2;
+            }
             return 0;
         }
     }
