@@ -9,12 +9,12 @@
 
 Forge Announcements is a Minecraft mod designed for server administrators who want to automate broadcasting messages to players. This mod allows you to configure and schedule messages with ease, ensuring important information reaches all players without manual intervention.
 
-| Version | Forge   | LuckPerms | ForgeEssentials |                  
-|:--------|:--------|:--------:|:--------------:|
-| 1.19.2  | 41.1.0  |     ✅    |              ❌  |   
-| 1.18.2  | 40.2.21 |     ✅    |              ✅  |
-| 1.16.5  | 36.2.42 |     ✅    |              ❌  |
-| 1.12.2  | 14.23.5 |     ✅    |              ✅  |
+| Version | Forge   | LuckPerms | ForgeEssentials | Status |                
+|:--------|:--------|:--------:|:--------------:|:--------------:|
+| 1.19.2  | 41.1.0  |     ✅    |              ❌  | ACTIVE | 
+| 1.18.2  | 40.2.21 |     ✅    |              ✅  | ACTIVE |
+| 1.16.5  | 36.2.42 |     ✅    |              ❌  | SUSPENDED |
+| 1.12.2  | 14.23.5 |     ✅    |              ✅  | ACTIVE |
 
 ## Features
 - Automated Broadcasts: Set up automated messages to be sent at specified intervals.
