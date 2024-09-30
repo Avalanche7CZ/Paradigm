@@ -36,7 +36,7 @@ public class ChatConfigHandler {
 
             staffChatFormat = builder
                     .comment("Format for staff chat messages")
-                    .define("staffChatFormat", "§d[Staff Chat] §8%s: §d%s");
+                    .define("staffChatFormat", "§f[§cStaff Chat§f] §d%s §7> §f%s");
 
             enableStaffBossBar = builder
                     .comment("Enable boss bar while staff chat is enabled")

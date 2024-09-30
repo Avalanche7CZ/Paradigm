@@ -24,25 +24,28 @@ public class PermissionsHandler {
 
     private static PermissionChecker checker;
 
-    static {
-        if (ModList.get().isLoaded("luckperms")) {
-            checker = new LuckPermsChecker();
-            LOGGER.info("Using LuckPermsChecker");
-        } else if (ModList.get().isLoaded("forgeessentials")) {
-            try {
-                checker = new ForgeEssentialsChecker();
-                LOGGER.info("Using ForgeEssentialsChecker");
-            } catch (NoClassDefFoundError e) {
-                LOGGER.info("ForgeEssentials mod not found, falling back to ForgePermissionChecker");
+    private static void initializeChecker() {
+        if (checker == null) {
+            if (ModList.get().isLoaded("luckperms")) {
+                checker = new LuckPermsChecker();
+                LOGGER.info("Using LuckPermsChecker");
+            } else if (ModList.get().isLoaded("forgeessentials")) {
+                try {
+                    checker = new ForgeEssentialsChecker();
+                    LOGGER.info("Using ForgeEssentialsChecker");
+                } catch (NoClassDefFoundError e) {
+                    LOGGER.info("ForgeEssentials mod not found, falling back to ForgePermissionChecker");
+                    checker = new ForgePermissionChecker();
+                }
+            } else {
                 checker = new ForgePermissionChecker();
+                LOGGER.info("Using ForgePermissionChecker");
             }
-        } else {
-            checker = new ForgePermissionChecker();
-            LOGGER.info("Using ForgePermissionChecker");
         }
     }
     @SubscribeEvent
     public static void onServerStarting(ServerStartingEvent event) {
+        initializeChecker();
         if (checker instanceof ForgeEssentialsChecker) {
             ((ForgeEssentialsChecker) checker).registerPermission(MENTION_EVERYONE_PERMISSION, "Allows mentioning everyone");
             ((ForgeEssentialsChecker) checker).registerPermission(MENTION_PLAYER_PERMISSION, "Allows mentioning a player");
@@ -69,7 +72,8 @@ public class PermissionsHandler {
             net.luckperms.api.model.user.User user = userManager.getUser(player.getUUID());
 
             if (user != null) {
-                return user.getCachedData().getPermissionData().checkPermission(permission).asBoolean();
+                boolean hasPermission = user.getCachedData().getPermissionData().checkPermission(permission).asBoolean();
+                return hasPermission;
             } else {
                 return false;
             }
