@@ -42,6 +42,3 @@ Each of the features can be enabled or disabled in main configuration file `main
 
 ## Support
 You can get support on our [![Discord-Join-Us](https://img.shields.io/badge/discord-invite?logo=discord&logoColor=white)](https://discord.gg/bbqPQTzK7b)
-
-## From 30.09 2024 Development of version 1.16.5 will be suspended
-- Reason: due to low interest, but if some volunteer wants to port the feature to other versions of forge or even fabric it can be done in the future
