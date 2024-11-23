@@ -19,6 +19,8 @@ public class MentionConfigHandler {
     public static ForgeConfigSpec.ConfigValue<String> EVERYONE_MENTION_MESSAGE;
     public static ForgeConfigSpec.ConfigValue<String> INDIVIDUAL_TITLE_MESSAGE;
     public static ForgeConfigSpec.ConfigValue<String> EVERYONE_TITLE_MESSAGE;
+    public static ForgeConfigSpec.IntValue INDIVIDUAL_MENTION_RATE_LIMIT;
+    public static ForgeConfigSpec.IntValue EVERYONE_MENTION_RATE_LIMIT;
 
     static {
         ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
@@ -35,6 +37,10 @@ public class MentionConfigHandler {
                 .define("individualTitleMessage", "§4%s §cmentioned you!");
         EVERYONE_TITLE_MESSAGE = builder.comment("Title message displayed to everyone when @everyone is used")
                 .define("everyoneTitleMessage", "§4%s §cmentioned everyone!");
+        INDIVIDUAL_MENTION_RATE_LIMIT = builder.comment("Rate limit for individual mentions in seconds")
+                .defineInRange("individualMentionRateLimit", 30, 0, Integer.MAX_VALUE);
+        EVERYONE_MENTION_RATE_LIMIT = builder.comment("Rate limit for @everyone mentions in seconds")
+                .defineInRange("everyoneMentionRateLimit", 60, 0, Integer.MAX_VALUE);
 
         builder.pop();
         builder.pop();

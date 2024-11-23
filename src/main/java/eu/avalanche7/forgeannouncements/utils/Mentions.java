@@ -13,10 +13,15 @@ import net.minecraftforge.event.ServerChatEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.UUID;
 
 @Mod.EventBusSubscriber(modid = "forgeannouncements")
 public class Mentions {
+
+    private static final HashMap<UUID, Long> lastIndividualMentionTime = new HashMap<>();
+    private static long lastEveryoneMentionTime = 0;
 
     @SubscribeEvent
     public static void onChatMessage(ServerChatEvent event) {
@@ -35,6 +40,10 @@ public class Mentions {
         boolean mentionEveryone = message.contains(mentionSymbol + "everyone");
 
         if (mentionEveryone) {
+            if (!canMentionEveryone(sender)) {
+                sender.sendMessage(new TextComponent("You are mentioning everyone too frequently. Please wait a while."), Util.NIL_UUID);
+                return;
+            }
             boolean hasPermission = PermissionsHandler.hasPermission(sender, PermissionsHandler.MENTION_EVERYONE_PERMISSION);
             boolean hasPermissionLevel = sender.hasPermissions(PermissionsHandler.MENTION_EVERYONE_PERMISSION_LEVEL);
             if (!hasPermission && !hasPermissionLevel) {
@@ -48,6 +57,10 @@ public class Mentions {
             for (ServerPlayer player : players) {
                 String mention = mentionSymbol + player.getName().getString();
                 if (message.contains(mention)) {
+                    if (!canMentionPlayer(sender, player)) {
+                        sender.sendMessage(new TextComponent("You are mentioning players too frequently. Please wait a while."), Util.NIL_UUID);
+                        return;
+                    }
                     boolean hasPermission = PermissionsHandler.hasPermission(sender, PermissionsHandler.MENTION_PLAYER_PERMISSION);
                     boolean hasPermissionLevel = sender.hasPermissions(PermissionsHandler.MENTION_PLAYER_PERMISSION_LEVEL);
                     if (!hasPermission && !hasPermissionLevel) {
@@ -61,6 +74,33 @@ public class Mentions {
                 }
             }
         }
+    }
+
+    private static boolean canMentionEveryone(ServerPlayer sender) {
+        if (sender.hasPermissions(2)) { // OP bypass
+            return true;
+        }
+        int rateLimit = MentionConfigHandler.EVERYONE_MENTION_RATE_LIMIT.get();
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastEveryoneMentionTime < rateLimit * 1000) {
+            return false;
+        }
+        lastEveryoneMentionTime = currentTime;
+        return true;
+    }
+
+    private static boolean canMentionPlayer(ServerPlayer sender, ServerPlayer player) {
+        if (sender.hasPermissions(2)) { // OP bypass
+            return true;
+        }
+        int rateLimit = MentionConfigHandler.INDIVIDUAL_MENTION_RATE_LIMIT.get();
+        long currentTime = System.currentTimeMillis();
+        UUID playerUUID = player.getUUID();
+        if (lastIndividualMentionTime.containsKey(playerUUID) && currentTime - lastIndividualMentionTime.get(playerUUID) < rateLimit * 1000) {
+            return false;
+        }
+        lastIndividualMentionTime.put(playerUUID, currentTime);
+        return true;
     }
 
     private static void notifyEveryone(List<ServerPlayer> players, ServerPlayer sender, String message) {
@@ -85,6 +125,3 @@ public class Mentions {
         player.playNotifySound(SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0F, 1.0F);
     }
 }
-
-
-
