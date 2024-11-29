@@ -2,8 +2,10 @@ package eu.avalanche7.forgeannouncements.utils;
 
 import eu.avalanche7.forgeannouncements.configs.MainConfigHandler;
 import eu.avalanche7.forgeannouncements.configs.MentionConfigHandler;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.TextComponent;
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -41,13 +43,15 @@ public class Mentions {
 
         if (mentionEveryone) {
             if (!canMentionEveryone(sender)) {
-                sender.sendMessage(new TextComponent("You are mentioning everyone too frequently. Please wait a while."), Util.NIL_UUID);
+                sender.sendMessage(new TextComponent("&cYou are mentioning everyone too frequently. Please wait a while."), Util.NIL_UUID);
+                event.setCanceled(true);
                 return;
             }
             boolean hasPermission = PermissionsHandler.hasPermission(sender, PermissionsHandler.MENTION_EVERYONE_PERMISSION);
             boolean hasPermissionLevel = sender.hasPermissions(PermissionsHandler.MENTION_EVERYONE_PERMISSION_LEVEL);
             if (!hasPermission && !hasPermissionLevel) {
-                sender.sendMessage(new TextComponent("You do not have permission to mention everyone."), Util.NIL_UUID);
+                sender.sendMessage(new TextComponent("&cYou do not have permission to mention everyone."), Util.NIL_UUID);
+                event.setCanceled(true);
                 return;
             }
             DebugLogger.debugLog("Mention everyone detected");
@@ -58,19 +62,20 @@ public class Mentions {
                 String mention = mentionSymbol + player.getName().getString();
                 if (message.contains(mention)) {
                     if (!canMentionPlayer(sender, player)) {
-                        sender.sendMessage(new TextComponent("You are mentioning players too frequently. Please wait a while."), Util.NIL_UUID);
+                        sender.sendMessage(new TextComponent("&cYou are mentioning players too frequently. Please wait a while."), Util.NIL_UUID);
+                        event.setCanceled(true);
                         return;
                     }
                     boolean hasPermission = PermissionsHandler.hasPermission(sender, PermissionsHandler.MENTION_PLAYER_PERMISSION);
                     boolean hasPermissionLevel = sender.hasPermissions(PermissionsHandler.MENTION_PLAYER_PERMISSION_LEVEL);
                     if (!hasPermission && !hasPermissionLevel) {
-                        sender.sendMessage(new TextComponent("You do not have permission to mention players."), Util.NIL_UUID);
+                        sender.sendMessage(new TextComponent("&cYou do not have permission to mention players."), Util.NIL_UUID);
+                        event.setCanceled(true);
                         return;
                     }
                     DebugLogger.debugLog("Mention player detected: " + player.getName().getString());
                     notifyPlayer(player, sender, message);
-                    message = message.replaceFirst(mention, "");
-                    event.setComponent(new TextComponent(message));
+                    event.setCanceled(true);
                 }
             }
         }
@@ -106,22 +111,32 @@ public class Mentions {
     private static void notifyEveryone(List<ServerPlayer> players, ServerPlayer sender, String message) {
         String chatMessage = String.format(MentionConfigHandler.EVERYONE_MENTION_MESSAGE.get(), sender.getName().getString());
         String titleMessage = String.format(MentionConfigHandler.EVERYONE_TITLE_MESSAGE.get(), sender.getName().getString());
+        String subtitleMessage = message.replaceFirst("@everyone", "").trim();
 
         for (ServerPlayer player : players) {
-            sendMentionNotification(player, chatMessage, titleMessage);
+            sendMentionNotification(player, chatMessage, titleMessage, subtitleMessage);
         }
     }
 
     private static void notifyPlayer(ServerPlayer player, ServerPlayer sender, String message) {
         String chatMessage = String.format(MentionConfigHandler.INDIVIDUAL_MENTION_MESSAGE.get(), sender.getName().getString());
         String titleMessage = String.format(MentionConfigHandler.INDIVIDUAL_TITLE_MESSAGE.get(), sender.getName().getString());
+        String subtitleMessage = message.replaceFirst("@" + player.getName().getString(), "").trim();
 
-        sendMentionNotification(player, chatMessage, titleMessage);
+        sendMentionNotification(player, chatMessage, titleMessage, subtitleMessage);
     }
 
-    private static void sendMentionNotification(ServerPlayer player, String chatMessage, String titleMessage) {
-        player.displayClientMessage(new TextComponent(chatMessage), false);
-        player.connection.send(new ClientboundSetTitleTextPacket(new TextComponent(titleMessage)));
+    private static void sendMentionNotification(ServerPlayer player, String chatMessage, String titleMessage, String subtitleMessage) {
+        MutableComponent formattedChatMessage = ColorUtils.parseMessageWithColor(chatMessage);
+        if (!subtitleMessage.isEmpty()) {
+            MutableComponent formattedSubtitleMessage = ColorUtils.parseMessageWithColor("- " + subtitleMessage);
+            formattedChatMessage.append("\n").append(formattedSubtitleMessage);
+        }
+        player.displayClientMessage(formattedChatMessage, false);
+        player.connection.send(new ClientboundSetTitleTextPacket(ColorUtils.parseMessageWithColor(titleMessage)));
+        if (!subtitleMessage.isEmpty()) {
+            player.connection.send(new ClientboundSetSubtitleTextPacket(ColorUtils.parseMessageWithColor(subtitleMessage)));
+        }
         player.playNotifySound(SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0F, 1.0F);
     }
 }
