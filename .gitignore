@@ -10,6 +10,7 @@ target/
 build/
 run/
 run-data/
+build.gradle
 ForgeAnnoucements-1.0.0.jar
 ForgeAnnoucements-1.0.0/config.yml
 ForgeAnnoucements-1.0.0/META-INF/MANIFEST.MF
