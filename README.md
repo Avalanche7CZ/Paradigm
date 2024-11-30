@@ -43,3 +43,6 @@ Each of the features can be enabled or disabled in main configuration file `main
 
 ## Support
 You can get support on our [![Discord-Join-Us](https://img.shields.io/badge/discord-invite?logo=discord&logoColor=white)](https://discord.gg/bbqPQTzK7b)
+
+## Dev Builds
+You can find latest experimental/dev builds on our [Discord](https://discord.gg/bbqPQTzK7b)
