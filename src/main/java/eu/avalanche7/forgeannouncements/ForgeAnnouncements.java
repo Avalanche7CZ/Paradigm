@@ -2,6 +2,7 @@ package eu.avalanche7.forgeannouncements;
 
 import eu.avalanche7.forgeannouncements.chat.StaffChat;
 import eu.avalanche7.forgeannouncements.configs.*;
+import eu.avalanche7.forgeannouncements.utils.GroupChatManager;
 import eu.avalanche7.forgeannouncements.utils.Mentions;
 import eu.avalanche7.forgeannouncements.utils.PermissionsHandler;
 import eu.avalanche7.forgeannouncements.utils.Restart;
@@ -36,6 +37,7 @@ public class ForgeAnnouncements {
         MinecraftForge.EVENT_BUS.register(RestartConfigHandler.class);
         MinecraftForge.EVENT_BUS.register(Restart.class);
         MinecraftForge.EVENT_BUS.register(StaffChat.class);
+        MinecraftForge.EVENT_BUS.register(GroupChatManager.class);
 
         try {
             createDefaultConfigs();
@@ -115,6 +117,7 @@ public class ForgeAnnouncements {
         LOGGER.info(displayName);
         LOGGER.info("Version " + version);
         LOGGER.info("Author: Avalanche7CZ");
+        LOGGER.info("Discord: https://discord.com/invite/qZDcQdEFqQ");
         LOGGER.info("=========================");
         UpdateChecker.checkForUpdates();
     }
