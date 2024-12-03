@@ -64,21 +64,22 @@ public class Restart {
     }
 
     public static void shutdown() {
-        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-        if (server != null) {
-            DebugLogger.debugLog("Shutdown initiated at: " + new Date());
-            try {
-                DebugLogger.debugLog("Stopping server...");
-                server.saveEverything(true, true, true);
-                server.halt(false);
-                DebugLogger.debugLog("Server stopped successfully.");
-            } catch (Exception e) {
-                DebugLogger.debugLog("Error during server shutdown", e);
-            }
-        } else {
-            DebugLogger.debugLog("Server instance is null, cannot shutdown.");
+    MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+    if (server != null) {
+        DebugLogger.debugLog("Shutdown initiated at: " + new Date());
+        try {
+            DebugLogger.debugLog("Stopping server...");
+            server.saveEverything(true, true, true);
+            DebugLogger.debugLog("Server state saved, halting server...");
+            server.halt(false);
+            DebugLogger.debugLog("Server halted successfully.");
+        } catch (Exception e) {
+            DebugLogger.debugLog("Error during server shutdown", e);
         }
+    } else {
+        DebugLogger.debugLog("Server instance is null, cannot shutdown.");
     }
+}
 
     public static void warningMessages(double rInterval) {
         List<? extends Integer> timerBroadcast = RestartConfigHandler.CONFIG.timerBroadcast.get();
