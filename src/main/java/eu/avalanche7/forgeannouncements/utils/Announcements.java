@@ -11,8 +11,10 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.world.BossEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
+import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
+import net.minecraftforge.fml.server.ServerLifecycleHooks;
 
 import java.util.List;
 import java.util.Random;
@@ -53,11 +55,26 @@ public class Announcements {
         }));
     }
 
+    @SubscribeEvent
+    public static void onServerStopping(ServerStoppingEvent event) {
+        DebugLogger.debugLog("Server is stopping, shutting down scheduler...");
+        scheduler.shutdown();
+        try {
+            if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+                scheduler.shutdownNow();
+            }
+        } catch (InterruptedException ex) {
+            scheduler.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+        DebugLogger.debugLog("Scheduler has been shut down.");
+    }
+
     public static void scheduleAnnouncements() {
         if (AnnouncementsConfigHandler.CONFIG.globalEnable.get()) {
             long globalInterval = AnnouncementsConfigHandler.CONFIG.globalInterval.get();
             DebugLogger.debugLog("Scheduling global messages with interval: {} seconds", globalInterval);
-            scheduler.scheduleAtFixedRate(Announcements::broadcastGlobalMessages, globalInterval, globalInterval, TimeUnit.SECONDS);
+            scheduler.scheduleAtFixedRate(() -> syncExecute(Announcements::broadcastGlobalMessages), globalInterval, globalInterval, TimeUnit.SECONDS);
         } else {
             DebugLogger.debugLog("Global messages are disabled.");
         }
@@ -65,7 +82,7 @@ public class Announcements {
         if (AnnouncementsConfigHandler.CONFIG.actionbarEnable.get()) {
             long actionbarInterval = AnnouncementsConfigHandler.CONFIG.actionbarInterval.get();
             DebugLogger.debugLog("Scheduling actionbar messages with interval: {} seconds", actionbarInterval);
-            scheduler.scheduleAtFixedRate(Announcements::broadcastActionbarMessages, actionbarInterval, actionbarInterval, TimeUnit.SECONDS);
+            scheduler.scheduleAtFixedRate(() -> syncExecute(Announcements::broadcastActionbarMessages), actionbarInterval, actionbarInterval, TimeUnit.SECONDS);
         } else {
             DebugLogger.debugLog("Actionbar messages are disabled.");
         }
@@ -73,7 +90,7 @@ public class Announcements {
         if (AnnouncementsConfigHandler.CONFIG.titleEnable.get()) {
             long titleInterval = AnnouncementsConfigHandler.CONFIG.titleInterval.get();
             DebugLogger.debugLog("Scheduling title messages with interval: {} seconds", titleInterval);
-            scheduler.scheduleAtFixedRate(Announcements::broadcastTitleMessages, titleInterval, titleInterval, TimeUnit.SECONDS);
+            scheduler.scheduleAtFixedRate(() -> syncExecute(Announcements::broadcastTitleMessages), titleInterval, titleInterval, TimeUnit.SECONDS);
         } else {
             DebugLogger.debugLog("Title messages are disabled.");
         }
@@ -81,9 +98,17 @@ public class Announcements {
         if (AnnouncementsConfigHandler.CONFIG.bossbarEnable.get()) {
             long bossbarInterval = AnnouncementsConfigHandler.CONFIG.bossbarInterval.get();
             DebugLogger.debugLog("Scheduling bossbar messages with interval: {} seconds", bossbarInterval);
-            scheduler.scheduleAtFixedRate(Announcements::broadcastBossbarMessages, bossbarInterval, bossbarInterval, TimeUnit.SECONDS);
+            scheduler.scheduleAtFixedRate(() -> syncExecute(Announcements::broadcastBossbarMessages), bossbarInterval, bossbarInterval, TimeUnit.SECONDS);
         } else {
             DebugLogger.debugLog("Bossbar messages are disabled.");
+        }
+    }
+
+    private static void syncExecute(Runnable task) {
+        if (server != null) {
+            server.execute(task);
+        } else {
+            DebugLogger.debugLog("Server instance is null, unable to execute task.");
         }
     }
 
@@ -91,6 +116,7 @@ public class Announcements {
     private static int actionbarMessageIndex = 0;
     private static int titleMessageIndex = 0;
     private static int bossbarMessageIndex = 0;
+
     private static void broadcastGlobalMessages() {
         if (server != null) {
             List<? extends String> messages = AnnouncementsConfigHandler.CONFIG.globalMessages.get();
@@ -196,17 +222,13 @@ public class Announcements {
             });
             DebugLogger.debugLog("Broadcasted bossbar message: {}", message.getString());
 
-            scheduler.schedule(() -> {
-                if (server != null) {
-                    ClientboundBossEventPacket removePacket = ClientboundBossEventPacket.createRemovePacket(bossEvent.getId());
-                    server.getPlayerList().getPlayers().forEach(player -> {
-                        player.connection.send(removePacket);
-                    });
-                    DebugLogger.debugLog("Removed bossbar message after {} seconds", bossbarTime);
-                } else {
-                    DebugLogger.debugLog("Server instance is null.");
-                }
-            }, bossbarTime, TimeUnit.SECONDS);
+            scheduler.schedule(() -> syncExecute(() -> {
+                ClientboundBossEventPacket removePacket = ClientboundBossEventPacket.createRemovePacket(bossEvent.getId());
+                server.getPlayerList().getPlayers().forEach(player -> {
+                    player.connection.send(removePacket);
+                });
+                DebugLogger.debugLog("Removed bossbar message after {} seconds", bossbarTime);
+            }), bossbarTime, TimeUnit.SECONDS);
         } else {
             DebugLogger.debugLog("Server instance is null.");
         }
