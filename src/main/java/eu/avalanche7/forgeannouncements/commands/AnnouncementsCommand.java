@@ -10,6 +10,7 @@ import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import eu.avalanche7.forgeannouncements.utils.TaskScheduler;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.ClickEvent;
@@ -137,7 +138,7 @@ public class AnnouncementsCommand {
                 source.getServer().getPlayerList().getPlayers().forEach(player -> {
                     bossEvent.addPlayer(player);
                 });
-                Announcements.scheduler.schedule(() -> {
+                TaskScheduler.schedule(() -> {
                     source.getServer().getPlayerList().getPlayers().forEach(player -> {
                         bossEvent.removePlayer(player);
                     });

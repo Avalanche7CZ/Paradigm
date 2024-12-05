@@ -1,9 +1,6 @@
 package eu.avalanche7.forgeannouncements;
 
-import eu.avalanche7.forgeannouncements.utils.DebugLogger;
-import eu.avalanche7.forgeannouncements.utils.Mentions;
-import eu.avalanche7.forgeannouncements.utils.PermissionsHandler;
-import eu.avalanche7.forgeannouncements.utils.Restart;
+import eu.avalanche7.forgeannouncements.utils.*;
 import com.mojang.logging.LogUtils;
 import eu.avalanche7.forgeannouncements.configs.*;
 import net.minecraftforge.common.MinecraftForge;
@@ -35,6 +32,7 @@ public class ForgeAnnouncements {
         MinecraftForge.EVENT_BUS.register(PermissionsHandler.class);
         MinecraftForge.EVENT_BUS.register(RestartConfigHandler.class);
         MinecraftForge.EVENT_BUS.register(Restart.class);
+        MinecraftForge.EVENT_BUS.register(TaskScheduler.class);
 
         try {
             createDefaultConfigs();
@@ -112,7 +110,7 @@ public class ForgeAnnouncements {
 
     public static class UpdateChecker {
 
-        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/ForgeAnnouncements/main/version.txt";
+        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/ForgeAnnouncements/1.19.2/version.txt";
         private static String CURRENT_VERSION;
 
         public static void checkForUpdates() {
