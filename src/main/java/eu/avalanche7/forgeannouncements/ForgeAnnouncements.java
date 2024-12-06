@@ -104,6 +104,7 @@ public class ForgeAnnouncements {
         LOGGER.info(displayName);
         LOGGER.info("Version " + version);
         LOGGER.info("Author: Avalanche7CZ");
+        LOGGER.info("Discord: https://discord.com/invite/qZDcQdEFqQ");
         LOGGER.info("=========================");
         UpdateChecker.checkForUpdates();
     }
