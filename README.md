@@ -2,7 +2,6 @@
 
 [![Minecraft 1.19.2](https://img.shields.io/badge/Minecraft-1.19.2-brightgreen)](https://www.minecraft.net/)
 [![Minecraft 1.18.2](https://img.shields.io/badge/Minecraft-1.18.2-brightgreen)](https://www.minecraft.net/)
-[![Minecraft 1.16.5](https://img.shields.io/badge/Minecraft-1.16.5-brightgreen)](https://www.minecraft.net/)
 [![Minecraft 1.12.2](https://img.shields.io/badge/Minecraft-1.12.2-brightgreen)](https://www.minecraft.net/)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L4Z8L38)
@@ -13,7 +12,6 @@ Forge Announcements is a Minecraft mod designed for server administrators who wa
 |:--------|:--------|:--------:|:--------------:|:--------------:|
 | 1.19.2  | 41.1.0  |     ✅    |              ❌  | ACTIVE | 
 | 1.18.2  | 40.2.21 |     ✅    |              ✅  | ACTIVE |
-| 1.16.5  | 36.2.42 |     ✅    |              ❌  | SUSPENDED |
 | 1.12.2  | 14.23.5 |     ✅    |              ✅  | ACTIVE |
 
 ## Features
