@@ -2,19 +2,17 @@
 
 [![Minecraft 1.19.2](https://img.shields.io/badge/Minecraft-1.19.2-brightgreen)](https://www.minecraft.net/)
 [![Minecraft 1.18.2](https://img.shields.io/badge/Minecraft-1.18.2-brightgreen)](https://www.minecraft.net/)
-[![Minecraft 1.16.5](https://img.shields.io/badge/Minecraft-1.16.5-brightgreen)](https://www.minecraft.net/)
 [![Minecraft 1.12.2](https://img.shields.io/badge/Minecraft-1.12.2-brightgreen)](https://www.minecraft.net/)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L4Z8L38)
 
 Forge Announcements is a Minecraft mod designed for server administrators who want to automate broadcasting messages to players. This mod allows you to configure and schedule messages with ease, ensuring important information reaches all players without manual intervention.
 
-| Version | Forge   | LuckPerms | ForgeEssentials |                  
-|:--------|:--------|:--------:|:--------------:|
-| 1.19.2  | 41.1.0  |     ✅    |              ❌  |   
-| 1.18.2  | 40.2.21 |     ✅    |              ✅  |
-| 1.16.5  | 36.2.42 |     ✅    |              ❌  |
-| 1.12.2  | 14.23.5 |     ✅    |              ✅  |
+| Version | Forge   | LuckPerms | ForgeEssentials | Status |                
+|:--------|:--------|:--------:|:--------------:|:--------------:|
+| 1.19.2  | 41.1.0  |     ✅    |              ❌  | ACTIVE | 
+| 1.18.2  | 40.2.21 |     ✅    |              ✅  | ACTIVE |
+| 1.12.2  | 14.23.5 |     ✅    |              ✅  | ACTIVE |
 
 ## Features
 - Automated Broadcasts: Set up automated messages to be sent at specified intervals.
@@ -23,9 +21,12 @@ Forge Announcements is a Minecraft mod designed for server administrators who wa
 - Sound Alerts: Configure sounds to play with your messages to attract player attention.
 - Clickable Links: Supports clickable links in messages for easy access to external resources.
 - Customizable MOTD: You can customize your motd with multiple tags
-- Commands [Announcements]
+- Commands [Announcements, StaffChat, Groupchat]
 - Mentions system: `@everyone` ; `@PlayerName`
 - Restart Scheduler: Schedule server restarts with configurable messages and countdowns.
+- Chat module: Staff Chat and more soon!
+- GroupChat
+- Hex Color Support
 
 ## Installation
 1. Download the latest version of the mod from the [Releases page](https://github.com/Avalanche7CZ/ForgeAnnouncements/releases).
@@ -42,3 +43,7 @@ Each of the features can be enabled or disabled in main configuration file `main
 
 ## Support
 You can get support on our [![Discord-Join-Us](https://img.shields.io/badge/discord-invite?logo=discord&logoColor=white)](https://discord.gg/bbqPQTzK7b)
+
+## Dev Builds
+You can find latest experimental/dev builds on our [Discord](https://discord.gg/bbqPQTzK7b)
+
