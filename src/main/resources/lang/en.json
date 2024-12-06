@@ -1,0 +1,19 @@
+{
+  "group": {
+    "already_exists": "Group already exists.",
+    "created_successfully": "Group created successfully.",
+    "no_group_to_delete": "No group to delete.",
+    "not_owner": "You are not the owner of this group.",
+    "deleted_successfully": "Group deleted successfully.",
+    "no_groups_available": "No groups available.",
+    "available_groups": "Available groups:",
+    "group_not_found": "Group not found.",
+    "invited": "You have been invited to join the group: {group_name}.",
+    "joined": "Joined the group: {group_name}.",
+    "left": "Left the group: {group_name}.",
+    "no_group_to_send_message": "No group to send message to.",
+    "message_format": "[{group_name}] {sender_name} > {message}",
+    "chat_enabled": "Group chat enabled. Your messages will now only go to your group.",
+    "chat_disabled": "Group chat disabled. Your messages will go to public chat."
+  }
+}

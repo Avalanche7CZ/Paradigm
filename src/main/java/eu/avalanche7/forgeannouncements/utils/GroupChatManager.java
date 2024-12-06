@@ -15,13 +15,13 @@ public class GroupChatManager {
 
     public boolean createGroup(ServerPlayer player, String groupName) {
         if (groups.containsKey(groupName)) {
-            player.sendMessage(new TextComponent("§4Group already exists."), player.getUUID());
+            player.sendMessage(new TextComponent(Lang.translate("group.already_exists").getString()), player.getUUID());
             return false;
         }
         Group group = new Group(groupName, player.getUUID());
         groups.put(groupName, group);
         getPlayerData(player).setCurrentGroup(groupName);
-        player.sendMessage(new TextComponent("§aGroup created successfully."), player.getUUID());
+        player.sendMessage(new TextComponent(Lang.translate("group.created_successfully").getString()), player.getUUID());
         return true;
     }
 
@@ -29,74 +29,67 @@ public class GroupChatManager {
         PlayerGroupData data = getPlayerData(player);
         String groupName = data.getCurrentGroup();
         if (groupName == null || !groups.containsKey(groupName)) {
-            player.sendMessage(new TextComponent("§4No group to delete."), player.getUUID());
+            player.sendMessage(new TextComponent(Lang.translate("group.no_group_to_delete").getString()), player.getUUID());
             return false;
         }
         Group group = groups.get(groupName);
         if (!group.getOwner().equals(player.getUUID())) {
-            player.sendMessage(new TextComponent("§4You are not the owner of this group."), player.getUUID());
+            player.sendMessage(new TextComponent(Lang.translate("group.not_owner").getString()), player.getUUID());
             return false;
         }
         groups.remove(groupName);
-        player.sendMessage(new TextComponent("§aGroup deleted successfully."), player.getUUID());
+        player.sendMessage(new TextComponent(Lang.translate("group.deleted_successfully").getString()), player.getUUID());
         return true;
     }
 
     public void listGroups(ServerPlayer player) {
         if (groups.isEmpty()) {
-            player.sendMessage(new TextComponent("§4No groups available."), player.getUUID());
-        } else {
-            player.sendMessage(new TextComponent("§aAvailable groups:"), player.getUUID());
-            for (String groupName : groups.keySet()) {
-                player.sendMessage(new TextComponent("§7- " + groupName), player.getUUID());
-            }
+            player.sendMessage(new TextComponent(Lang.translate("group.no_groups_available").getString()), player.getUUID());
+            return;
+        }
+        player.sendMessage(new TextComponent(Lang.translate("group.available_groups").getString()), player.getUUID());
+        for (String groupName : groups.keySet()) {
+            player.sendMessage(new TextComponent(groupName), player.getUUID());
         }
     }
 
     public void groupInfo(ServerPlayer player, String groupName) {
         Group group = groups.get(groupName);
         if (group == null) {
-            player.sendMessage(new TextComponent("§4Group not found."), player.getUUID());
-        } else {
-            player.sendMessage(new TextComponent("§aGroup: " + groupName), player.getUUID());
-            player.sendMessage(new TextComponent("§aOwner: " + group.getOwner()), player.getUUID());
-            player.sendMessage(new TextComponent("§aMembers:"), player.getUUID());
-            for (UUID memberId : group.getMembers()) {
-                ServerPlayer member = player.getServer().getPlayerList().getPlayer(memberId);
-                if (member != null) {
-                    player.sendMessage(new TextComponent("§7- " + member.getName().getString()), player.getUUID());
-                }
-            }
+            player.sendMessage(new TextComponent(Lang.translate("group.group_not_found").getString()), player.getUUID());
+            return;
         }
+        player.sendMessage(new TextComponent("Group: " + groupName), player.getUUID());
+        player.sendMessage(new TextComponent("Owner: " + group.getOwner()), player.getUUID());
+        player.sendMessage(new TextComponent("Members: " + group.getMembers().size()), player.getUUID());
     }
 
     public boolean invitePlayer(ServerPlayer player, ServerPlayer target) {
         PlayerGroupData data = getPlayerData(player);
         String groupName = data.getCurrentGroup();
         if (groupName == null || !groups.containsKey(groupName)) {
-            player.sendMessage(new TextComponent("§4No group to invite to."), player.getUUID());
+            player.sendMessage(new TextComponent(Lang.translate("group.no_group_to_invite").getString()), player.getUUID());
             return false;
         }
         Group group = groups.get(groupName);
         if (!group.getOwner().equals(player.getUUID())) {
-            player.sendMessage(new TextComponent("§4You are not the owner of this group."), player.getUUID());
+            player.sendMessage(new TextComponent(Lang.translate("group.not_owner").getString()), player.getUUID());
             return false;
         }
-        getPlayerData(target).addInvitation(groupName);
-        target.sendMessage(new TextComponent("§aYou have been invited to join the group: " + groupName), target.getUUID());
+        group.addMember(target.getUUID());
+        target.sendMessage(new TextComponent(Lang.translate("group.invited").getString().replace("{group_name}", groupName)), target.getUUID());
         return true;
     }
 
     public boolean joinGroup(ServerPlayer player, String groupName) {
-        PlayerGroupData data = getPlayerData(player);
-        if (!data.getInvitations().contains(groupName)) {
-            player.sendMessage(new TextComponent("§4You are not invited to this group."), player.getUUID());
+        Group group = groups.get(groupName);
+        if (group == null) {
+            player.sendMessage(new TextComponent(Lang.translate("group.group_not_found").getString()), player.getUUID());
             return false;
         }
-        Group group = groups.get(groupName);
         group.addMember(player.getUUID());
-        data.setCurrentGroup(groupName);
-        player.sendMessage(new TextComponent("§aJoined the group: " + groupName), player.getUUID());
+        getPlayerData(player).setCurrentGroup(groupName);
+        player.sendMessage(new TextComponent(Lang.translate("group.joined").getString().replace("{group_name}", groupName)), player.getUUID());
         return true;
     }
 
@@ -104,13 +97,13 @@ public class GroupChatManager {
         PlayerGroupData data = getPlayerData(player);
         String groupName = data.getCurrentGroup();
         if (groupName == null || !groups.containsKey(groupName)) {
-            player.sendMessage(new TextComponent("§4No group to leave."), player.getUUID());
+            player.sendMessage(new TextComponent(Lang.translate("group.no_group_to_leave").getString()), player.getUUID());
             return false;
         }
         Group group = groups.get(groupName);
         group.removeMember(player.getUUID());
         data.setCurrentGroup(null);
-        player.sendMessage(new TextComponent("§4Left the group: " + groupName), player.getUUID());
+        player.sendMessage(new TextComponent(Lang.translate("group.left").getString().replace("{group_name}", groupName)), player.getUUID());
         return true;
     }
 
@@ -119,8 +112,7 @@ public class GroupChatManager {
         boolean toggled = !data.isGroupChatToggled();
         data.setGroupChatToggled(toggled);
 
-        String message = toggled ? "§aGroup chat enabled. Your messages will now only go to your group."
-                                 : "§4Group chat disabled. Your messages will go to public chat.";
+        String message = toggled ? Lang.translate("group.chat_enabled").getString() : Lang.translate("group.chat_disabled").getString();
         player.sendMessage(new TextComponent(message), player.getUUID());
     }
 
@@ -132,14 +124,17 @@ public class GroupChatManager {
         PlayerGroupData data = getPlayerData(sender);
         String groupName = data.getCurrentGroup();
         if (groupName == null || !groups.containsKey(groupName)) {
-            sender.sendMessage(new TextComponent("§4No group to send message to."), sender.getUUID());
+            sender.sendMessage(new TextComponent(Lang.translate("group.no_group_to_send_message").getString()), sender.getUUID());
             return;
         }
         Group group = groups.get(groupName);
         for (UUID memberId : group.getMembers()) {
             ServerPlayer member = sender.getServer().getPlayerList().getPlayer(memberId);
             if (member != null) {
-                member.sendMessage(new TextComponent("[§9" + groupName + "§f] " + sender.getName().getString() + " §7>§f " + message), member.getUUID());
+                member.sendMessage(new TextComponent(Lang.translate("group.message_format").getString()
+                        .replace("{group_name}", groupName)
+                        .replace("{sender_name}", sender.getName().getString())
+                        .replace("{message}", message)), member.getUUID());
             }
         }
     }

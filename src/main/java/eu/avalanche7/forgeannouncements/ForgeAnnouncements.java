@@ -4,10 +4,7 @@ import eu.avalanche7.forgeannouncements.chat.StaffChat;
 import eu.avalanche7.forgeannouncements.commands.GroupChatCommands;
 import eu.avalanche7.forgeannouncements.configs.*;
 import eu.avalanche7.forgeannouncements.listeners.GroupChatListener;
-import eu.avalanche7.forgeannouncements.utils.GroupChatManager;
-import eu.avalanche7.forgeannouncements.utils.Mentions;
-import eu.avalanche7.forgeannouncements.utils.PermissionsHandler;
-import eu.avalanche7.forgeannouncements.utils.Restart;
+import eu.avalanche7.forgeannouncements.utils.*;
 import com.mojang.logging.LogUtils;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.ModLoadingContext;
@@ -17,6 +14,7 @@ import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
+
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -41,6 +39,7 @@ public class ForgeAnnouncements {
         MinecraftForge.EVENT_BUS.register(RestartConfigHandler.class);
         MinecraftForge.EVENT_BUS.register(Restart.class);
         MinecraftForge.EVENT_BUS.register(StaffChat.class);
+        MinecraftForge.EVENT_BUS.register(Lang.class);
         MinecraftForge.EVENT_BUS.register(GroupChatManager.class);
         MinecraftForge.EVENT_BUS.register(GroupChatListener.class);
         MinecraftForge.EVENT_BUS.register(new GroupChatListener(groupChatManager));
@@ -49,6 +48,7 @@ public class ForgeAnnouncements {
 
         try {
             createDefaultConfigs();
+            createLangFolder();
 
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, MainConfigHandler.SERVER_CONFIG, "forgeannouncements/main.toml");
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, AnnouncementsConfigHandler.SERVER_CONFIG, "forgeannouncements/announcements.toml");
@@ -114,7 +114,16 @@ public class ForgeAnnouncements {
             ChatConfigHandler.loadConfig(ChatConfigHandler.SERVER_CONFIG, chatConfig.toString());
             ChatConfigHandler.SERVER_CONFIG.save();
         }
+
     }
+    private void createLangFolder() throws IOException {
+        Path langFolder = FMLPaths.GAMEDIR.get().resolve("world/serverconfig/forgeannouncements/lang");
+        if (!Files.exists(langFolder)) {
+            Files.createDirectories(langFolder);
+        }
+        Lang.ensureDefaultLangFile();
+    }
+
 
     private void setup(final FMLCommonSetupEvent event) {
         String version = ModLoadingContext.get().getActiveContainer().getModInfo().getVersion().toString();

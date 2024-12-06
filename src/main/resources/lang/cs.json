@@ -1,0 +1,19 @@
+{
+  "group": {
+    "already_exists": "Skupina již existuje.",
+    "created_successfully": "Skupina byla úspěšně vytvořena.",
+    "no_group_to_delete": "Žádná skupina k odstranění.",
+    "not_owner": "Nejste vlastníkem této skupiny.",
+    "deleted_successfully": "Skupina byla úspěšně odstraněna.",
+    "no_groups_available": "Žádné dostupné skupiny.",
+    "available_groups": "Dostupné skupiny:",
+    "group_not_found": "Skupina nebyla nalezena.",
+    "invited": "Byli jste pozváni k připojení ke skupině: {group_name}.",
+    "joined": "Připojili jste se ke skupině: {group_name}.",
+    "left": "Opustili jste skupinu: {group_name}.",
+    "no_group_to_send_message": "Žádná skupina pro odeslání zprávy.",
+    "message_format": "[{group_name}] {sender_name} > {message}",
+    "chat_enabled": "Skupinový chat je povolen. Vaše zprávy budou nyní odesílány pouze do vaší skupiny.",
+    "chat_disabled": "Skupinový chat je zakázán. Vaše zprávy budou odesílány do veřejného chatu."
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "group": {
+    "already_exists": "Группа уже существует.",
+    "created_successfully": "Группа успешно создана.",
+    "no_group_to_delete": "Нет группы для удаления.",
+    "not_owner": "Вы не являетесь владельцем этой группы.",
+    "deleted_successfully": "Группа успешно удалена.",
+    "no_groups_available": "Группы недоступны.",
+    "available_groups": "Доступные группы:",
+    "group_not_found": "Группа не найдена.",
+    "invited": "Вас пригласили присоединиться к группе: {group_name}.",
+    "joined": "Вы присоединились к группе: {group_name}.",
+    "left": "Вы покинули группу: {group_name}.",
+    "no_group_to_send_message": "Нет группы для отправки сообщения.",
+    "message_format": "[{group_name}] {sender_name} > {message}",
+    "chat_enabled": "Групповой чат включен. Ваши сообщения теперь будут отправляться только в вашу группу.",
+    "chat_disabled": "Групповой чат отключен. Ваши сообщения будут отправляться в общий чат."
+  }
+}

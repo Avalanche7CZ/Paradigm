@@ -70,8 +70,17 @@ repositories {
     }
 }
 
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
+
 processResources {
+    from(sourceSets.main.resources.srcDirs) {
+        include 'lang/**'
+    }
     expand(project.properties)
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    filteringCharset = 'UTF-8'
 }
 
 dependencies {
@@ -89,7 +98,6 @@ sourceSets {
         }
     }
 }
-
 
 tasks.named('processResources', ProcessResources).configure {
     var replaceProperties = [
@@ -124,6 +132,11 @@ tasks.named('jar', Jar).configure {
     finalizedBy 'reobfJar'
 }
 
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8'
+task ensureUtf8Encoding {
+    doLast {
+        fileTree('src/main/resources/lang').each { file ->
+            def content = file.getText('UTF-8')
+            file.write(content, 'UTF-8')
+        }
+    }
 }

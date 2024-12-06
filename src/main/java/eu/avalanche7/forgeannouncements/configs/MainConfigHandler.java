@@ -19,6 +19,8 @@ public class MainConfigHandler {
         public final ForgeConfigSpec.BooleanValue mentionsEnable;
         public final ForgeConfigSpec.BooleanValue restartEnable;
         public final ForgeConfigSpec.BooleanValue debugEnable;
+        public final ForgeConfigSpec.ConfigValue<String> defaultLanguage;
+
 
         public Config(ForgeConfigSpec.Builder builder) {
             builder.push("main");
@@ -42,6 +44,9 @@ public class MainConfigHandler {
             debugEnable = builder
                     .comment("Enable or disable debug mode")
                     .define("debugEnable", false);
+            defaultLanguage = builder
+                    .comment("Set the default language")
+                    .define("defaultLanguage", "en");
 
             builder.pop();
         }
