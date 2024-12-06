@@ -101,24 +101,16 @@ public class GroupChatManager {
             }
         }
     }
-
     public void toggleGroupChat(ServerPlayer player) {
         PlayerGroupData data = getPlayerData(player);
         boolean toggled = !data.isGroupChatToggled();
         data.setGroupChatToggled(toggled);
 
-        if (toggled) {
-            player.sendMessage(new TextComponent("§aGroup chat enabled."), player.getUUID());
-        } else {
-            player.sendMessage(new TextComponent("§4Group chat disabled."), player.getUUID());
-        }
+        String message = toggled ? "§aGroup chat enabled. Your messages will now only go to your group."
+                : "§4Group chat disabled. Your messages will go to public chat.";
+        player.sendMessage(new TextComponent(message), player.getUUID());
     }
-
-    public boolean isGroupChatToggled(ServerPlayer player) {
-        return getPlayerData(player).isGroupChatToggled();
-    }
-
-    private PlayerGroupData getPlayerData(ServerPlayer player) {
+    public PlayerGroupData getPlayerData(ServerPlayer player) {
         return playerData.computeIfAbsent(player.getUUID(), k -> new PlayerGroupData());
     }
 }

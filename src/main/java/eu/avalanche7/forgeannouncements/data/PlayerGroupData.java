@@ -1,14 +1,12 @@
 package eu.avalanche7.forgeannouncements.data;
 
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
 public class PlayerGroupData {
     private String currentGroup;
     private Set<String> invitations = new HashSet<>();
-    private boolean groupChatToggled = false; // Default: disabled
+    private boolean groupChatToggled = false;
 
     public String getCurrentGroup() {
         return currentGroup;
