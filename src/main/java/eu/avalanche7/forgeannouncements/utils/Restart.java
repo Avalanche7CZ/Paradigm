@@ -14,6 +14,7 @@ import net.minecraft.world.BossInfoServer;
 import net.minecraft.world.storage.WorldInfo;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.registry.ForgeRegistries;
 
 import java.text.DecimalFormat;
@@ -24,8 +25,6 @@ import java.util.concurrent.*;
 
 @Mod.EventBusSubscriber(modid = "forgeannouncements")
 public class Restart {
-
-    private static final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
     private static final DecimalFormat TIME_FORMATTER = new DecimalFormat("00");
     public static boolean isRestarting = false;
     private static MinecraftServer server;
@@ -37,6 +36,7 @@ public class Restart {
             return;
         }
         server = event.getServer();
+        TaskScheduler.initialize(server);
         DebugLogger.debugLog("Server is starting, scheduling restarts.");
         String restartType = RestartConfigHandler.restartType;
         DebugLogger.debugLog("Configured restart type: " + restartType);
@@ -149,7 +149,7 @@ public class Restart {
                             DebugLogger.debugLog("Broadcasted boss bar message: {}", message.getUnformattedText());
 
                             long bossbarTime = 1;
-                            executorService.schedule(() -> {
+                            TaskScheduler.schedule(() -> {
                                 for (EntityPlayerMP player : server.getPlayerList().getPlayers()) {
                                     bossEvent.removePlayer(player);
                                 }
@@ -170,13 +170,8 @@ public class Restart {
         }
 
         long intervalMillis = (long) (intervalHours * 3600 * 1000);
-        if (executorService.isShutdown()) {
-            DebugLogger.debugLog("ExecutorService has been shut down. Not scheduling new tasks.");
-            return;
-        }
-
         DebugLogger.debugLog("Scheduling fixed restart every " + intervalHours + " hours.");
-        executorService.scheduleAtFixedRate(() -> {
+        TaskScheduler.scheduleAtFixedRate(() -> {
             try {
                 shutdown();
             } catch (Exception e) {
@@ -227,7 +222,7 @@ public class Restart {
         DebugLogger.debugLog("Scheduled shutdown at: " + format.format(new Date(System.currentTimeMillis() + minDelayMillis)));
         isRestarting = true;
 
-        executorService.schedule(() -> {
+        TaskScheduler.schedule(() -> {
             DebugLogger.debugLog("Timer task triggered.");
             shutdown();
         }, minDelayMillis, TimeUnit.MILLISECONDS);

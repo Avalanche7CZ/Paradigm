@@ -7,7 +7,6 @@ import net.minecraft.network.play.server.SPacketUpdateBossInfo;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.management.PlayerList;
 import net.minecraft.util.text.*;
-import net.minecraft.util.text.event.ClickEvent;
 import net.minecraft.world.BossInfo;
 import net.minecraft.world.BossInfoServer;
 import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
@@ -16,14 +15,11 @@ import eu.avalanche7.forgeannouncements.configs.MainConfigHandler;
 
 import java.util.List;
 import java.util.Random;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 @Mod.EventBusSubscriber(modid = "forgeannouncements")
 public class Announcements {
 
-    private static final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
     private static final Random random = new Random();
     private static MinecraftServer server;
 
@@ -35,31 +31,16 @@ public class Announcements {
         }
 
         server = event.getServer();
+        TaskScheduler.initialize(server);
         DebugLogger.debugLog("Server is starting, scheduling announcements.");
         scheduleAnnouncements();
-
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            if (!scheduler.isShutdown()) {
-                DebugLogger.debugLog("Server is stopping, shutting down scheduler...");
-                scheduler.shutdown();
-                try {
-                    if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
-                        scheduler.shutdownNow();
-                    }
-                } catch (InterruptedException ex) {
-                    scheduler.shutdownNow();
-                    Thread.currentThread().interrupt();
-                }
-                DebugLogger.debugLog("Scheduler has been shut down.");
-            }
-        }));
     }
 
     public static void scheduleAnnouncements() {
         if (AnnouncementsConfigHandler.globalEnable) {
             long globalInterval = AnnouncementsConfigHandler.globalInterval;
                 DebugLogger.debugLog("Scheduling global messages with interval: {} seconds", globalInterval);
-            scheduler.scheduleAtFixedRate(Announcements::broadcastGlobalMessages, globalInterval, globalInterval, TimeUnit.SECONDS);
+            TaskScheduler.scheduleAtFixedRate(Announcements::broadcastGlobalMessages, globalInterval, globalInterval, TimeUnit.SECONDS);
         } else {
                 DebugLogger.debugLog("Global messages are disabled.");
         }
@@ -67,7 +48,7 @@ public class Announcements {
         if (AnnouncementsConfigHandler.actionbarEnable) {
             long actionbarInterval = AnnouncementsConfigHandler.actionbarInterval;
                 DebugLogger.debugLog("Scheduling actionbar messages with interval: {} seconds", actionbarInterval);
-            scheduler.scheduleAtFixedRate(Announcements::broadcastActionbarMessages, actionbarInterval, actionbarInterval, TimeUnit.SECONDS);
+            TaskScheduler.scheduleAtFixedRate(Announcements::broadcastActionbarMessages, actionbarInterval, actionbarInterval, TimeUnit.SECONDS);
         } else {
                 DebugLogger.debugLog("Actionbar messages are disabled.");
         }
@@ -75,7 +56,7 @@ public class Announcements {
         if (AnnouncementsConfigHandler.titleEnable) {
             long titleInterval = AnnouncementsConfigHandler.titleInterval;
                 DebugLogger.debugLog("Scheduling title messages with interval: {} seconds", titleInterval);
-            scheduler.scheduleAtFixedRate(Announcements::broadcastTitleMessages, titleInterval, titleInterval, TimeUnit.SECONDS);
+            TaskScheduler.scheduleAtFixedRate(Announcements::broadcastTitleMessages, titleInterval, titleInterval, TimeUnit.SECONDS);
         } else {
                 DebugLogger.debugLog("Title messages are disabled.");
         }
@@ -83,7 +64,7 @@ public class Announcements {
         if (AnnouncementsConfigHandler.bossbarEnable) {
             long bossbarInterval = AnnouncementsConfigHandler.bossbarInterval;
                 DebugLogger.debugLog("Scheduling bossbar messages with interval: {} seconds", bossbarInterval);
-            scheduler.scheduleAtFixedRate(Announcements::broadcastBossbarMessages, bossbarInterval, bossbarInterval, TimeUnit.SECONDS);
+            TaskScheduler.scheduleAtFixedRate(Announcements::broadcastBossbarMessages, bossbarInterval, bossbarInterval, TimeUnit.SECONDS);
         } else {
                 DebugLogger.debugLog("Bossbar messages are disabled.");
         }
@@ -173,7 +154,7 @@ public class Announcements {
             }
             DebugLogger.debugLog("Broadcasted bossbar message: {}", message.getUnformattedText());
 
-            scheduler.schedule(() -> {
+            TaskScheduler.schedule(() -> {
                 if (server != null) {
                     SPacketUpdateBossInfo removePacket = new SPacketUpdateBossInfo(SPacketUpdateBossInfo.Operation.REMOVE, bossEvent);
                     for (EntityPlayerMP player : playerList.getPlayers()) {

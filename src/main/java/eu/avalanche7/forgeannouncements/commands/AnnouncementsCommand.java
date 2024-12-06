@@ -1,6 +1,7 @@
 package eu.avalanche7.forgeannouncements.commands;
 
 import eu.avalanche7.forgeannouncements.utils.PermissionsHandler;
+import eu.avalanche7.forgeannouncements.utils.TaskScheduler;
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.ICommandSender;
 import net.minecraft.entity.player.EntityPlayerMP;
@@ -22,9 +23,6 @@ import java.util.concurrent.TimeUnit;
 
 @Mod.EventBusSubscriber(modid = "forgeannouncements")
 public class AnnouncementsCommand extends CommandBase {
-
-    private static final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-
     @Override
     public String getName() {
         return "forgeannouncements";
@@ -165,7 +163,7 @@ public class AnnouncementsCommand extends CommandBase {
             bossInfo.addPlayer(player);
         }
 
-        scheduler.schedule(() -> {
+        TaskScheduler.schedule(() -> {
             for (EntityPlayerMP player : playerList.getPlayers()) {
                 bossInfo.removePlayer(player);
             }

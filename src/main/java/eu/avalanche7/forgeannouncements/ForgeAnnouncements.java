@@ -22,7 +22,7 @@ public class ForgeAnnouncements {
 
     public static final String MODID = "forgeannouncements";
     public static final String NAME = "Forge Announcements";
-    public static final String VERSION = "12.0.3";
+    public static final String VERSION = "12.0.4";
 
     private static final Logger LOGGER = LogManager.getLogger(MODID);
 
@@ -48,6 +48,7 @@ public class ForgeAnnouncements {
         MinecraftForge.EVENT_BUS.register(new Mentions());
         MinecraftForge.EVENT_BUS.register(new PermissionsHandler());
         MinecraftForge.EVENT_BUS.register(new Restart());
+        MinecraftForge.EVENT_BUS.register(new TaskScheduler());
     }
 
     @Mod.EventHandler
@@ -57,6 +58,7 @@ public class ForgeAnnouncements {
         LOGGER.info("ForgeAnnouncements");
         LOGGER.info("Version: " + VERSION);
         LOGGER.info("Author: Avalanche7CZ");
+        LOGGER.info("Discord: https://discord.com/invite/qZDcQdEFqQ");
         LOGGER.info("=========================");
 
         UpdateChecker.checkForUpdates();
