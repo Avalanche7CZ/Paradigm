@@ -10,6 +10,7 @@ import eu.avalanche7.forgeannouncements.configs.AnnouncementsConfigHandler;
 import eu.avalanche7.forgeannouncements.utils.Announcements;
 import eu.avalanche7.forgeannouncements.utils.ColorUtils;
 import eu.avalanche7.forgeannouncements.utils.PermissionsHandler;
+import eu.avalanche7.forgeannouncements.utils.TaskScheduler;
 import net.minecraft.Util;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -119,7 +120,7 @@ public class AnnouncementsCommand {
                 source.getServer().getPlayerList().getPlayers().forEach(player -> {
                     bossEvent.addPlayer(player);
                 });
-                Announcements.scheduler.schedule(() -> {
+                TaskScheduler.schedule(() -> {
                     source.getServer().getPlayerList().getPlayers().forEach(player -> {
                         bossEvent.removePlayer(player);
                     });

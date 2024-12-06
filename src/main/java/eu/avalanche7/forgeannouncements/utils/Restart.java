@@ -17,18 +17,16 @@ import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.registries.ForgeRegistries;
-import net.minecraftforge.server.ServerLifecycleHooks;
 
 import java.text.DecimalFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.TimeUnit;
 
 @Mod.EventBusSubscriber(modid = "forgeannouncements", bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class Restart {
 
-    private static ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);
     private static final DecimalFormat TIME_FORMATTER = new DecimalFormat("00");
     public static boolean isRestarting = false;
     private static MinecraftServer server;
@@ -40,6 +38,7 @@ public class Restart {
             return;
         }
         server = event.getServer();
+        TaskScheduler.initialize(server);
         DebugLogger.debugLog("Server is starting, scheduling restarts.");
         String restartType = RestartConfigHandler.CONFIG.restartType.get();
         DebugLogger.debugLog("Configured restart type: " + restartType);
@@ -64,7 +63,6 @@ public class Restart {
     }
 
     public static void shutdown() {
-        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
         if (server != null) {
             DebugLogger.debugLog("Shutdown initiated at: " + new Date());
             try {
@@ -91,71 +89,67 @@ public class Restart {
             long broadcastIntervalSeconds = totalIntervalSeconds - broadcastTime;
             if (broadcastIntervalSeconds > 0) {
                 DebugLogger.debugLog("Scheduling warning message for: " + broadcastIntervalSeconds + " seconds from now.");
-                Timer warnTimer = new Timer();
-                warnTimer.schedule(new TimerTask() {
-                    @Override
-                    public void run() {
-                        long timeElapsed = (System.currentTimeMillis() - startTimestamp) / 1000;
-                        long timeLeft = totalIntervalSeconds - timeElapsed;
+                TaskScheduler.schedule(() -> {
+                    long timeElapsed = (System.currentTimeMillis() - startTimestamp) / 1000;
+                    long timeLeft = totalIntervalSeconds - timeElapsed;
 
-                        int hours = (int) (timeLeft / 3600);
-                        int minutes = (int) ((timeLeft % 3600) / 60);
-                        int seconds = (int) (timeLeft % 60);
+                    int hours = (int) (timeLeft / 3600);
+                    int minutes = (int) ((timeLeft % 3600) / 60);
+                    int seconds = (int) (timeLeft % 60);
 
-                        String formattedTime = String.format("%dh %02dm %02ds", hours, minutes, seconds);
+                    String formattedTime = String.format("%dh %02dm %02ds", hours, minutes, seconds);
 
-                        if (RestartConfigHandler.CONFIG.timerUseChat.get()) {
-                            String customMessage = RestartConfigHandler.CONFIG.BroadcastMessage.get()
-                                    .replace("{hours}", String.valueOf(hours))
-                                    .replace("{minutes}", TIME_FORMATTER.format(minutes))
-                                    .replace("{seconds}", TIME_FORMATTER.format(seconds));
-                            Component messageComponent = ColorUtils.parseMessageWithColor(customMessage);
-                            server.getPlayerList().broadcastMessage(messageComponent, ChatType.SYSTEM, Util.NIL_UUID);
-                        }
+                    if (RestartConfigHandler.CONFIG.timerUseChat.get()) {
+                        String customMessage = RestartConfigHandler.CONFIG.BroadcastMessage.get()
+                                .replace("{hours}", String.valueOf(hours))
+                                .replace("{minutes}", TIME_FORMATTER.format(minutes))
+                                .replace("{seconds}", TIME_FORMATTER.format(seconds));
+                        Component messageComponent = ColorUtils.parseMessageWithColor(customMessage);
+                        server.getPlayerList().broadcastMessage(messageComponent, ChatType.SYSTEM, Util.NIL_UUID);
+                    }
 
-                        if (RestartConfigHandler.CONFIG.titleEnabled.get()) {
-                            String titleMessage = RestartConfigHandler.CONFIG.titleMessage.get()
-                                    .replace("{hours}", String.valueOf(hours))
-                                    .replace("{minutes}", TIME_FORMATTER.format(minutes))
-                                    .replace("{seconds}", TIME_FORMATTER.format(seconds));
+                    if (RestartConfigHandler.CONFIG.titleEnabled.get()) {
+                        String titleMessage = RestartConfigHandler.CONFIG.titleMessage.get()
+                                .replace("{hours}", String.valueOf(hours))
+                                .replace("{minutes}", TIME_FORMATTER.format(minutes))
+                                .replace("{seconds}", TIME_FORMATTER.format(seconds));
 
-                            Component titleComponent = ColorUtils.parseMessageWithColor(titleMessage);
-                            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-                                player.connection.send(new ClientboundSetTitleTextPacket(titleComponent));
-                            }
-                        }
-
-                        if (RestartConfigHandler.CONFIG.playSoundEnabled.get()) {
-                            String soundString = RestartConfigHandler.CONFIG.playSoundString.get();
-                            SoundEvent soundEvent = ForgeRegistries.SOUND_EVENTS.getValue(new ResourceLocation(soundString));
-                            if (soundEvent != null) {
-                                for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-                                    player.playNotifySound(soundEvent, net.minecraft.sounds.SoundSource.PLAYERS, 1.0F, 1.0F);
-                                }
-                            }
-                        }
-
-                        if (RestartConfigHandler.CONFIG.bossbarEnabled.get()) {
-                            String bossBarMessage = RestartConfigHandler.CONFIG.bossBarMessage.get()
-                                    .replace("{time}", formattedTime);
-                            Component message = ColorUtils.parseMessageWithColor(bossBarMessage);
-                            ServerBossEvent bossEvent = new ServerBossEvent(message, BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.PROGRESS);
-
-                            ClientboundBossEventPacket addPacket = ClientboundBossEventPacket.createAddPacket(bossEvent);
-                            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-                                player.connection.send(addPacket);
-                            }
-                            bossEvent.setProgress((float) timeLeft / totalIntervalSeconds);
-                            long bossbarTime = 1;
-                            executorService.schedule(() -> {
-                                ClientboundBossEventPacket removePacket = ClientboundBossEventPacket.createRemovePacket(bossEvent.getId());
-                                for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-                                    player.connection.send(removePacket);
-                                }
-                            }, bossbarTime, TimeUnit.SECONDS);
+                        Component titleComponent = ColorUtils.parseMessageWithColor(titleMessage);
+                        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                            player.connection.send(new ClientboundSetTitleTextPacket(titleComponent));
                         }
                     }
-                }, broadcastIntervalSeconds * 1000);
+
+                    if (RestartConfigHandler.CONFIG.playSoundEnabled.get()) {
+                        String soundString = RestartConfigHandler.CONFIG.playSoundString.get();
+                        SoundEvent soundEvent = ForgeRegistries.SOUND_EVENTS.getValue(new ResourceLocation(soundString));
+                        if (soundEvent != null) {
+                            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                                player.playNotifySound(soundEvent, net.minecraft.sounds.SoundSource.PLAYERS, 1.0F, 1.0F);
+                            }
+                        }
+                    }
+
+                    if (RestartConfigHandler.CONFIG.bossbarEnabled.get()) {
+                        String bossBarMessage = RestartConfigHandler.CONFIG.bossBarMessage.get()
+                                .replace("{time}", formattedTime);
+                        Component message = ColorUtils.parseMessageWithColor(bossBarMessage);
+                        ServerBossEvent bossEvent = new ServerBossEvent(message, BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.PROGRESS);
+
+                        ClientboundBossEventPacket addPacket = ClientboundBossEventPacket.createAddPacket(bossEvent);
+                        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                            player.connection.send(addPacket);
+                        }
+                        bossEvent.setProgress((float) timeLeft / totalIntervalSeconds);
+                        long bossbarTime = 1;
+                        TaskScheduler.schedule(() -> {
+                            ClientboundBossEventPacket removePacket = ClientboundBossEventPacket.createRemovePacket(bossEvent.getId());
+                            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                                player.connection.send(removePacket);
+                            }
+                        }, bossbarTime, TimeUnit.SECONDS);
+                    }
+                }, broadcastIntervalSeconds, TimeUnit.SECONDS);
             }
         }
     }
@@ -168,13 +162,8 @@ public class Restart {
         }
 
         long intervalMillis = (long) (intervalHours * 3600 * 1000);
-        if (executorService.isShutdown()) {
-            DebugLogger.debugLog("ExecutorService has been shut down. Not scheduling new tasks.");
-            return;
-        }
-
         DebugLogger.debugLog("Scheduling fixed restart every " + intervalHours + " hours.");
-        executorService.scheduleAtFixedRate(() -> {
+        TaskScheduler.scheduleAtFixedRate(() -> {
             try {
                 shutdown();
             } catch (Exception e) {
@@ -225,12 +214,11 @@ public class Restart {
         DebugLogger.debugLog("Scheduled shutdown at: " + format.format(new Date(System.currentTimeMillis() + minDelayMillis)));
         isRestarting = true;
 
-        executorService.schedule(() -> {
+        TaskScheduler.schedule(() -> {
             DebugLogger.debugLog("Timer task triggered.");
             shutdown();
         }, minDelayMillis, TimeUnit.MILLISECONDS);
 
         warningMessages(minDelayMillis / 1000.0);
     }
-
 }

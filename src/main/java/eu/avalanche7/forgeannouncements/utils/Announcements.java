@@ -16,76 +16,57 @@ import net.minecraftforge.fml.common.Mod;
 
 import java.util.List;
 import java.util.Random;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 @Mod.EventBusSubscriber(modid = "forgeannouncements", bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class Announcements {
 
-    public static final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
     private static final Random random = new Random();
     private static MinecraftServer server;
 
     @SubscribeEvent
     public static void onServerStarting(ServerStartingEvent event) {
-
         if (!MainConfigHandler.CONFIG.announcementsEnable.get()) {
             DebugLogger.debugLog("Announcements feature is disabled.");
             return;
         }
-
         server = event.getServer();
+        TaskScheduler.initialize(server);
         DebugLogger.debugLog("Server is starting, scheduling announcements.");
         scheduleAnnouncements();
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            if (!scheduler.isShutdown()) {
-                DebugLogger.debugLog("Server is stopping, shutting down scheduler...");
-                scheduler.shutdown();
-                try {
-                    if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
-                        scheduler.shutdownNow();
-                    }
-                } catch (InterruptedException ex) {
-                    scheduler.shutdownNow();
-                    Thread.currentThread().interrupt();
-                }
-                DebugLogger.debugLog("Scheduler has been shut down.");
-            }
-        }));
     }
 
     public static void scheduleAnnouncements() {
         if (AnnouncementsConfigHandler.CONFIG.globalEnable.get()) {
             long globalInterval = AnnouncementsConfigHandler.CONFIG.globalInterval.get();
-                DebugLogger.debugLog("Scheduling global messages with interval: {} seconds", globalInterval);
-            scheduler.scheduleAtFixedRate(Announcements::broadcastGlobalMessages, globalInterval, globalInterval, TimeUnit.SECONDS);
+            DebugLogger.debugLog("Scheduling global messages with interval: {} seconds", globalInterval);
+            TaskScheduler.scheduleAtFixedRate(Announcements::broadcastGlobalMessages, globalInterval, globalInterval, TimeUnit.SECONDS);
         } else {
-                DebugLogger.debugLog("Global messages are disabled.");
+            DebugLogger.debugLog("Global messages are disabled.");
         }
 
         if (AnnouncementsConfigHandler.CONFIG.actionbarEnable.get()) {
             long actionbarInterval = AnnouncementsConfigHandler.CONFIG.actionbarInterval.get();
-                DebugLogger.debugLog("Scheduling actionbar messages with interval: {} seconds", actionbarInterval);
-            scheduler.scheduleAtFixedRate(Announcements::broadcastActionbarMessages, actionbarInterval, actionbarInterval, TimeUnit.SECONDS);
+            DebugLogger.debugLog("Scheduling actionbar messages with interval: {} seconds", actionbarInterval);
+            TaskScheduler.scheduleAtFixedRate(Announcements::broadcastActionbarMessages, actionbarInterval, actionbarInterval, TimeUnit.SECONDS);
         } else {
-                DebugLogger.debugLog("Actionbar messages are disabled.");
+            DebugLogger.debugLog("Actionbar messages are disabled.");
         }
 
         if (AnnouncementsConfigHandler.CONFIG.titleEnable.get()) {
             long titleInterval = AnnouncementsConfigHandler.CONFIG.titleInterval.get();
-                DebugLogger.debugLog("Scheduling title messages with interval: {} seconds", titleInterval);
-            scheduler.scheduleAtFixedRate(Announcements::broadcastTitleMessages, titleInterval, titleInterval, TimeUnit.SECONDS);
+            DebugLogger.debugLog("Scheduling title messages with interval: {} seconds", titleInterval);
+            TaskScheduler.scheduleAtFixedRate(Announcements::broadcastTitleMessages, titleInterval, titleInterval, TimeUnit.SECONDS);
         } else {
-                DebugLogger.debugLog("Title messages are disabled.");
+            DebugLogger.debugLog("Title messages are disabled.");
         }
 
         if (AnnouncementsConfigHandler.CONFIG.bossbarEnable.get()) {
             long bossbarInterval = AnnouncementsConfigHandler.CONFIG.bossbarInterval.get();
-                DebugLogger.debugLog("Scheduling bossbar messages with interval: {} seconds", bossbarInterval);
-            scheduler.scheduleAtFixedRate(Announcements::broadcastBossbarMessages, bossbarInterval, bossbarInterval, TimeUnit.SECONDS);
+            DebugLogger.debugLog("Scheduling bossbar messages with interval: {} seconds", bossbarInterval);
+            TaskScheduler.scheduleAtFixedRate(Announcements::broadcastBossbarMessages, bossbarInterval, bossbarInterval, TimeUnit.SECONDS);
         } else {
-                DebugLogger.debugLog("Bossbar messages are disabled.");
+            DebugLogger.debugLog("Bossbar messages are disabled.");
         }
     }
 
@@ -93,6 +74,7 @@ public class Announcements {
     private static int actionbarMessageIndex = 0;
     private static int titleMessageIndex = 0;
     private static int bossbarMessageIndex = 0;
+
     private static void broadcastGlobalMessages() {
         if (server != null) {
             List<? extends String> messages = AnnouncementsConfigHandler.CONFIG.globalMessages.get();
@@ -121,96 +103,96 @@ public class Announcements {
                     player.sendMessage(message, player.getUUID());
                 });
             }
-                DebugLogger.debugLog("Broadcasted global message: {}", message.getString());
+            DebugLogger.debugLog("Broadcasted global message: {}", message.getString());
         } else {
             DebugLogger.debugLog("Server instance is null.");
         }
     }
 
     private static void broadcastActionbarMessages() {
-    if (server != null) {
-        List<? extends String> messages = AnnouncementsConfigHandler.CONFIG.actionbarMessages.get();
-        String prefix = AnnouncementsConfigHandler.CONFIG.prefix.get() + "§r";
+        if (server != null) {
+            List<? extends String> messages = AnnouncementsConfigHandler.CONFIG.actionbarMessages.get();
+            String prefix = AnnouncementsConfigHandler.CONFIG.prefix.get() + "§r";
 
-        String messageText;
-        if (AnnouncementsConfigHandler.CONFIG.orderMode.get().equals("SEQUENTIAL")) {
-            messageText = messages.get(actionbarMessageIndex).replace("{Prefix}", prefix);
-            actionbarMessageIndex = (actionbarMessageIndex + 1) % messages.size();
-        } else {
-            messageText = messages.get(random.nextInt(messages.size())).replace("{Prefix}", prefix);
-        }
-        MutableComponent message = ColorUtils.parseMessageWithColor(messageText);
-
-        server.getPlayerList().getPlayers().forEach(player -> {
-            player.connection.send(new ClientboundSetActionBarTextPacket(message));
-        });
-        DebugLogger.debugLog("Broadcasted actionbar message: {}", message.getString());
-    } else {
-        DebugLogger.debugLog("Server instance is null.");
-    }
-}
-
-private static void broadcastTitleMessages() {
-    if (server != null) {
-        List<? extends String> messages = AnnouncementsConfigHandler.CONFIG.titleMessages.get();
-        String prefix = AnnouncementsConfigHandler.CONFIG.prefix.get() + "§r";
-
-        String messageText;
-        if (AnnouncementsConfigHandler.CONFIG.orderMode.get().equals("SEQUENTIAL")) {
-            messageText = messages.get(titleMessageIndex).replace("{Prefix}", prefix);
-            titleMessageIndex = (titleMessageIndex + 1) % messages.size();
-        } else {
-            messageText = messages.get(random.nextInt(messages.size())).replace("{Prefix}", prefix);
-        }
-        MutableComponent message = ColorUtils.parseMessageWithColor(messageText);
-
-        server.getPlayerList().getPlayers().forEach(player -> {
-            player.connection.send(new ClientboundClearTitlesPacket(false));
-            player.connection.send(new ClientboundSetTitleTextPacket(message));
-        });
-        DebugLogger.debugLog("Broadcasted title message: {}", message.getString());
-    } else {
-        DebugLogger.debugLog("Server instance is null.");
-    }
-}
-
-private static void broadcastBossbarMessages() {
-    if (server != null) {
-        List<? extends String> messages = AnnouncementsConfigHandler.CONFIG.bossbarMessages.get();
-        String prefix = AnnouncementsConfigHandler.CONFIG.prefix.get() + "§r";
-        int bossbarTime = AnnouncementsConfigHandler.CONFIG.bossbarTime.get();
-        String bossbarColor = AnnouncementsConfigHandler.CONFIG.bossbarColor.get();
-
-        String messageText;
-        if (AnnouncementsConfigHandler.CONFIG.orderMode.get().equals("SEQUENTIAL")) {
-            messageText = messages.get(bossbarMessageIndex).replace("{Prefix}", prefix);
-            bossbarMessageIndex = (bossbarMessageIndex + 1) % messages.size();
-        } else {
-            messageText = messages.get(random.nextInt(messages.size())).replace("{Prefix}", prefix);
-        }
-        MutableComponent message = ColorUtils.parseMessageWithColor(messageText);
-
-        ServerBossEvent bossEvent = new ServerBossEvent(message, BossEvent.BossBarColor.valueOf(bossbarColor.toUpperCase()), BossEvent.BossBarOverlay.PROGRESS);
-
-        ClientboundBossEventPacket addPacket = ClientboundBossEventPacket.createAddPacket(bossEvent);
-        server.getPlayerList().getPlayers().forEach(player -> {
-            player.connection.send(addPacket);
-        });
-        DebugLogger.debugLog("Broadcasted bossbar message: {}", message.getString());
-
-        scheduler.schedule(() -> {
-            if (server != null) {
-                ClientboundBossEventPacket removePacket = ClientboundBossEventPacket.createRemovePacket(bossEvent.getId());
-                server.getPlayerList().getPlayers().forEach(player -> {
-                    player.connection.send(removePacket);
-                });
-                DebugLogger.debugLog("Removed bossbar message after {} seconds", bossbarTime);
+            String messageText;
+            if (AnnouncementsConfigHandler.CONFIG.orderMode.get().equals("SEQUENTIAL")) {
+                messageText = messages.get(actionbarMessageIndex).replace("{Prefix}", prefix);
+                actionbarMessageIndex = (actionbarMessageIndex + 1) % messages.size();
             } else {
-                DebugLogger.debugLog("Server instance is null.");
+                messageText = messages.get(random.nextInt(messages.size())).replace("{Prefix}", prefix);
             }
-        }, bossbarTime, TimeUnit.SECONDS);
-    } else {
-        DebugLogger.debugLog("Server instance is null.");
+            MutableComponent message = ColorUtils.parseMessageWithColor(messageText);
+
+            server.getPlayerList().getPlayers().forEach(player -> {
+                player.connection.send(new ClientboundSetActionBarTextPacket(message));
+            });
+            DebugLogger.debugLog("Broadcasted actionbar message: {}", message.getString());
+        } else {
+            DebugLogger.debugLog("Server instance is null.");
+        }
     }
-}
+
+    private static void broadcastTitleMessages() {
+        if (server != null) {
+            List<? extends String> messages = AnnouncementsConfigHandler.CONFIG.titleMessages.get();
+            String prefix = AnnouncementsConfigHandler.CONFIG.prefix.get() + "§r";
+
+            String messageText;
+            if (AnnouncementsConfigHandler.CONFIG.orderMode.get().equals("SEQUENTIAL")) {
+                messageText = messages.get(titleMessageIndex).replace("{Prefix}", prefix);
+                titleMessageIndex = (titleMessageIndex + 1) % messages.size();
+            } else {
+                messageText = messages.get(random.nextInt(messages.size())).replace("{Prefix}", prefix);
+            }
+            MutableComponent message = ColorUtils.parseMessageWithColor(messageText);
+
+            server.getPlayerList().getPlayers().forEach(player -> {
+                player.connection.send(new ClientboundClearTitlesPacket(false));
+                player.connection.send(new ClientboundSetTitleTextPacket(message));
+            });
+            DebugLogger.debugLog("Broadcasted title message: {}", message.getString());
+        } else {
+            DebugLogger.debugLog("Server instance is null.");
+        }
+    }
+
+    private static void broadcastBossbarMessages() {
+        if (server != null) {
+            List<? extends String> messages = AnnouncementsConfigHandler.CONFIG.bossbarMessages.get();
+            String prefix = AnnouncementsConfigHandler.CONFIG.prefix.get() + "§r";
+            int bossbarTime = AnnouncementsConfigHandler.CONFIG.bossbarTime.get();
+            String bossbarColor = AnnouncementsConfigHandler.CONFIG.bossbarColor.get();
+
+            String messageText;
+            if (AnnouncementsConfigHandler.CONFIG.orderMode.get().equals("SEQUENTIAL")) {
+                messageText = messages.get(bossbarMessageIndex).replace("{Prefix}", prefix);
+                bossbarMessageIndex = (bossbarMessageIndex + 1) % messages.size();
+            } else {
+                messageText = messages.get(random.nextInt(messages.size())).replace("{Prefix}", prefix);
+            }
+            MutableComponent message = ColorUtils.parseMessageWithColor(messageText);
+
+            ServerBossEvent bossEvent = new ServerBossEvent(message, BossEvent.BossBarColor.valueOf(bossbarColor.toUpperCase()), BossEvent.BossBarOverlay.PROGRESS);
+
+            ClientboundBossEventPacket addPacket = ClientboundBossEventPacket.createAddPacket(bossEvent);
+            server.getPlayerList().getPlayers().forEach(player -> {
+                player.connection.send(addPacket);
+            });
+            DebugLogger.debugLog("Broadcasted bossbar message: {}", message.getString());
+
+            TaskScheduler.schedule(() -> {
+                if (server != null) {
+                    ClientboundBossEventPacket removePacket = ClientboundBossEventPacket.createRemovePacket(bossEvent.getId());
+                    server.getPlayerList().getPlayers().forEach(player -> {
+                        player.connection.send(removePacket);
+                    });
+                    DebugLogger.debugLog("Removed bossbar message after {} seconds", bossbarTime);
+                } else {
+                    DebugLogger.debugLog("Server instance is null.");
+                }
+            }, bossbarTime, TimeUnit.SECONDS);
+        } else {
+            DebugLogger.debugLog("Server instance is null.");
+        }
+    }
 }
