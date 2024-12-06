@@ -3,6 +3,8 @@ package eu.avalanche7.forgeannouncements.commands;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import eu.avalanche7.forgeannouncements.utils.GroupChatManager;
+import eu.avalanche7.forgeannouncements.utils.MessageText;
+import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.TextComponent;
@@ -14,7 +16,11 @@ import net.minecraftforge.fml.common.Mod;
 @Mod.EventBusSubscriber(modid = "forgeannouncements")
 public class GroupChatCommands {
 
-    private static GroupChatManager manager = new GroupChatManager();
+    private static GroupChatManager manager;
+
+    public static void setManager(GroupChatManager manager) {
+        GroupChatCommands.manager = manager;
+    }
 
     @SubscribeEvent
     public static void onRegisterCommands(RegisterCommandsEvent event) {
@@ -23,33 +29,34 @@ public class GroupChatCommands {
 
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         dispatcher.register(Commands.literal("groupchat")
+                .executes(ctx -> {
+                    ServerPlayer player = ctx.getSource().getPlayerOrException();
+                    displayHelp(player);
+                    return 1;
+                })
                 .then(Commands.literal("create")
                         .then(Commands.argument("name", StringArgumentType.string())
                                 .executes(ctx -> {
                                     ServerPlayer player = ctx.getSource().getPlayerOrException();
                                     String groupName = StringArgumentType.getString(ctx, "name");
-                                    boolean success = manager.createGroup(player, groupName);
-                                    return success ? 1 : 0;
+                                    return manager.createGroup(player, groupName) ? 1 : 0;
                                 })))
                 .then(Commands.literal("delete")
                         .executes(ctx -> {
                             ServerPlayer player = ctx.getSource().getPlayerOrException();
-                            boolean success = manager.deleteGroup(player);
-                            return success ? 1 : 0;
+                            return manager.deleteGroup(player) ? 1 : 0;
                         }))
                 .then(Commands.literal("join")
                         .then(Commands.argument("name", StringArgumentType.string())
                                 .executes(ctx -> {
                                     ServerPlayer player = ctx.getSource().getPlayerOrException();
                                     String groupName = StringArgumentType.getString(ctx, "name");
-                                    boolean success = manager.joinGroup(player, groupName);
-                                    return success ? 1 : 0;
+                                    return manager.joinGroup(player, groupName) ? 1 : 0;
                                 })))
                 .then(Commands.literal("leave")
                         .executes(ctx -> {
                             ServerPlayer player = ctx.getSource().getPlayerOrException();
-                            boolean success = manager.leaveGroup(player);
-                            return success ? 1 : 0;
+                            return manager.leaveGroup(player) ? 1 : 0;
                         }))
                 .then(Commands.literal("say")
                         .then(Commands.argument("message", StringArgumentType.greedyString())
@@ -63,10 +70,6 @@ public class GroupChatCommands {
                         .executes(ctx -> {
                             ServerPlayer player = ctx.getSource().getPlayerOrException();
                             manager.toggleGroupChat(player);
-                            boolean toggled = manager.getPlayerData(player).isGroupChatToggled();
-                            String message = toggled ? "§aGroup chat enabled. Your messages will now only go to your group."
-                                    : "§4Group chat disabled. Your messages will go to public chat.";
-                            player.sendMessage(new TextComponent(message), player.getUUID());
                             return 1;
                         }))
                 .then(Commands.literal("invite")
@@ -79,8 +82,21 @@ public class GroupChatCommands {
                                         player.sendMessage(new TextComponent("§4Player not found."), player.getUUID());
                                         return 0;
                                     }
-                                    boolean success = manager.invitePlayer(player, target);
-                                    return success ? 1 : 0;
+                                    return manager.invitePlayer(player, target) ? 1 : 0;
+                                })))
+                .then(Commands.literal("list")
+                        .executes(ctx -> {
+                            ServerPlayer player = ctx.getSource().getPlayerOrException();
+                            manager.listGroups(player);
+                            return 1;
+                        }))
+                .then(Commands.literal("info")
+                        .then(Commands.argument("name", StringArgumentType.string())
+                                .executes(ctx -> {
+                                    ServerPlayer player = ctx.getSource().getPlayerOrException();
+                                    String groupName = StringArgumentType.getString(ctx, "name");
+                                    manager.groupInfo(player, groupName);
+                                    return 1;
                                 })))
                 .then(Commands.literal("help")
                         .executes(ctx -> {
@@ -91,14 +107,16 @@ public class GroupChatCommands {
     }
 
     private static void displayHelp(ServerPlayer player) {
+        String label = "groupchat";
         player.sendMessage(new TextComponent("=== Group Chat Commands ==="), player.getUUID());
-        player.sendMessage(new TextComponent("/groupchat create <name> - Create a new group."), player.getUUID());
-        player.sendMessage(new TextComponent("/groupchat delete - Delete your current group."), player.getUUID());
-        player.sendMessage(new TextComponent("/groupchat invite <player> - Invite a player to your group."), player.getUUID());
-        player.sendMessage(new TextComponent("/groupchat join <name> - Join an existing group."), player.getUUID());
-        player.sendMessage(new TextComponent("/groupchat leave - Leave your current group."), player.getUUID());
-        player.sendMessage(new TextComponent("/groupchat say <message> - Send a message to your group."), player.getUUID());
-        player.sendMessage(new TextComponent("/groupchat toggle - Toggle group chat on or off."), player.getUUID());
-        player.sendMessage(new TextComponent("/groupchat help - Show this help message."), player.getUUID());
+        MessageText.sendInteractiveMessage(player, label, "create [name]", "Create a new group.", ChatFormatting.YELLOW);
+        MessageText.sendInteractiveMessage(player, label, "delete", "Delete your current group.", ChatFormatting.YELLOW);
+        MessageText.sendInteractiveMessage(player, label, "invite [player]", "Invite a player to your group.", ChatFormatting.YELLOW);
+        MessageText.sendInteractiveMessage(player, label, "join [group name]", "Join an existing group.", ChatFormatting.YELLOW);
+        MessageText.sendInteractiveMessage(player, label, "leave", "Leave your current group.", ChatFormatting.YELLOW);
+        MessageText.sendInteractiveMessage(player, label, "list", "List all groups.", ChatFormatting.YELLOW);
+        MessageText.sendInteractiveMessage(player, label, "info [group name]", "Get information about a group.", ChatFormatting.YELLOW);
+        MessageText.sendInteractiveMessage(player, label, "say [message]", "Send a message to the group.", ChatFormatting.YELLOW);
+        MessageText.sendInteractiveMessage(player, label, "toggle", "Toggle group chat on or off.", ChatFormatting.YELLOW);
     }
 }

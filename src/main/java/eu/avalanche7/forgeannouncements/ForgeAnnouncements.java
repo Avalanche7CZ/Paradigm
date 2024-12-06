@@ -1,6 +1,7 @@
 package eu.avalanche7.forgeannouncements;
 
 import eu.avalanche7.forgeannouncements.chat.StaffChat;
+import eu.avalanche7.forgeannouncements.commands.GroupChatCommands;
 import eu.avalanche7.forgeannouncements.configs.*;
 import eu.avalanche7.forgeannouncements.listeners.GroupChatListener;
 import eu.avalanche7.forgeannouncements.utils.GroupChatManager;
@@ -28,6 +29,8 @@ import java.nio.file.Path;
 public class ForgeAnnouncements {
 
     private static final Logger LOGGER = LogUtils.getLogger();
+    private final GroupChatManager groupChatManager = new GroupChatManager();
+
 
     public ForgeAnnouncements() {
         LOGGER.info("Initializing Forge Announcement mod...");
@@ -40,6 +43,9 @@ public class ForgeAnnouncements {
         MinecraftForge.EVENT_BUS.register(StaffChat.class);
         MinecraftForge.EVENT_BUS.register(GroupChatManager.class);
         MinecraftForge.EVENT_BUS.register(GroupChatListener.class);
+        MinecraftForge.EVENT_BUS.register(new GroupChatListener(groupChatManager));
+        GroupChatCommands.setManager(groupChatManager);
+
 
         try {
             createDefaultConfigs();

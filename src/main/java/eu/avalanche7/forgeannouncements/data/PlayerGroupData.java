@@ -6,7 +6,7 @@ import java.util.Set;
 public class PlayerGroupData {
     private String currentGroup;
     private Set<String> invitations = new HashSet<>();
-    private boolean groupChatToggled = false;
+    private boolean groupChatToggled;
 
     public String getCurrentGroup() {
         return currentGroup;
@@ -28,7 +28,7 @@ public class PlayerGroupData {
         return groupChatToggled;
     }
 
-    public void setGroupChatToggled(boolean toggled) {
-        this.groupChatToggled = toggled;
+    public void setGroupChatToggled(boolean groupChatToggled) {
+        this.groupChatToggled = groupChatToggled;
     }
 }
