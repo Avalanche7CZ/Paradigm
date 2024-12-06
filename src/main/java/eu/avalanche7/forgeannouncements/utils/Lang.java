@@ -35,7 +35,7 @@ public class Lang {
 
     public static void initializeLanguage() {
         String language = MainConfigHandler.CONFIG.defaultLanguage.get();
-        LOGGER.info("Loaded language setting: " + language);  // Log the language setting
+        LOGGER.info("Loaded language setting: " + language);
         loadLanguage(language);
     }
 
@@ -83,7 +83,7 @@ public class Lang {
         for (String lang : availableLanguages) {
             Path langFile = LANG_FOLDER.resolve(lang + ".json");
             if (!Files.exists(langFile)) {
-                LOGGER.warn("Language file missing: " + lang + ".json");  // Log if a language file is missing
+                LOGGER.warn("Language file missing: " + lang + ".json");
                 try (InputStream in = Lang.class.getResourceAsStream("/lang/" + lang + ".json");
                      Reader reader = new InputStreamReader(in, StandardCharsets.UTF_8);
                      Writer writer = Files.newBufferedWriter(langFile, StandardCharsets.UTF_8)) {
