@@ -4,16 +4,33 @@
     "created_successfully": "Skupina byla úspěšně vytvořena.",
     "no_group_to_delete": "Žádná skupina k odstranění.",
     "not_owner": "Nejste vlastníkem této skupiny.",
-    "deleted_successfully": "Skupina byla úspěšně odstraněna.",
-    "no_groups_available": "Žádné dostupné skupiny.",
+    "deleted_successfully": "Skupina byla úspěšně smazána.",
+    "no_groups_available": "Žádné skupiny nejsou k dispozici.",
     "available_groups": "Dostupné skupiny:",
     "group_not_found": "Skupina nebyla nalezena.",
-    "invited": "Byli jste pozváni k připojení ke skupině: {group_name}.",
+    "invited": "Byli jste pozváni do skupiny: {group_name}.",
     "joined": "Připojili jste se ke skupině: {group_name}.",
     "left": "Opustili jste skupinu: {group_name}.",
     "no_group_to_send_message": "Žádná skupina pro odeslání zprávy.",
     "message_format": "[{group_name}] {sender_name} > {message}",
-    "chat_enabled": "Skupinový chat je povolen. Vaše zprávy budou nyní odesílány pouze do vaší skupiny.",
-    "chat_disabled": "Skupinový chat je zakázán. Vaše zprávy budou odesílány do veřejného chatu."
+    "chat_enabled": "Skupinový chat je zapnutý. Vaše zprávy budou odesílány pouze do vaší skupiny.",
+    "chat_disabled": "Skupinový chat je vypnutý. Vaše zprávy budou odesílány do veřejného chatu.",
+    "help_title": "=== Příkazy Skupinového Chatu ===",
+    "help_create": "Vytvořit novou skupinu.",
+    "help_delete": "Smazat vaši aktuální skupinu.",
+    "help_invite": "Pozvat hráče do vaší skupiny.",
+    "help_join": "Připojit se k existující skupině.",
+    "help_leave": "Opustit aktuální skupinu.",
+    "help_list": "Seznam všech skupin.",
+    "help_info": "Získat informace o skupině.",
+    "help_say": "Poslat zprávu do skupiny.",
+    "help_toggle": "Přepnout skupinový chat zapnutý nebo vypnutý."
+  },
+  "mention": {
+    "too_frequent_mention_everyone": "Příliš často zmiňujete všechny. Počkejte chvíli.",
+    "no_permission_everyone": "Nemáte oprávnění zmiňovat všechny.",
+    "too_frequent_mention_player": "Příliš často zmiňujete hráče. Počkejte chvíli.",
+    "no_permission_player": "Nemáte oprávnění zmiňovat hráče."
   }
 }
+

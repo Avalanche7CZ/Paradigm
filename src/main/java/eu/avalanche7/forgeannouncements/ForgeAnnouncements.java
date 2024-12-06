@@ -15,7 +15,6 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -28,7 +27,6 @@ public class ForgeAnnouncements {
 
     private static final Logger LOGGER = LogUtils.getLogger();
     private final GroupChatManager groupChatManager = new GroupChatManager();
-
 
     public ForgeAnnouncements() {
         LOGGER.info("Initializing Forge Announcement mod...");
@@ -45,24 +43,28 @@ public class ForgeAnnouncements {
         MinecraftForge.EVENT_BUS.register(new GroupChatListener(groupChatManager));
         GroupChatCommands.setManager(groupChatManager);
 
-
         try {
             createDefaultConfigs();
             createLangFolder();
 
-            ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, MainConfigHandler.SERVER_CONFIG, "forgeannouncements/main.toml");
-            ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, AnnouncementsConfigHandler.SERVER_CONFIG, "forgeannouncements/announcements.toml");
-            ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, MOTDConfigHandler.SERVER_CONFIG, "forgeannouncements/motd.toml");
-            ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, MentionConfigHandler.SERVER_CONFIG, "forgeannouncements/mentions.toml");
-            ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, RestartConfigHandler.SERVER_CONFIG, "forgeannouncements/restarts.toml");
-            ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, ChatConfigHandler.SERVER_CONFIG, "forgeannouncements/chat.toml");
+            Path serverConfigDir = FMLPaths.GAMEDIR.get().resolve("world/serverconfig/forgeannouncements");
 
-            MainConfigHandler.loadConfig(MainConfigHandler.SERVER_CONFIG, FMLPaths.CONFIGDIR.get().resolve("forgeannouncements/main.toml").toString());
-            RestartConfigHandler.loadConfig(RestartConfigHandler.SERVER_CONFIG, FMLPaths.CONFIGDIR.get().resolve("forgeannouncements/restarts.toml").toString());
-            AnnouncementsConfigHandler.loadConfig(AnnouncementsConfigHandler.SERVER_CONFIG, FMLPaths.CONFIGDIR.get().resolve("forgeannouncements/announcements.toml").toString());
-            MOTDConfigHandler.loadConfig(MOTDConfigHandler.SERVER_CONFIG, FMLPaths.CONFIGDIR.get().resolve("forgeannouncements/motd.toml").toString());
-            MentionConfigHandler.loadConfig(MentionConfigHandler.SERVER_CONFIG, FMLPaths.CONFIGDIR.get().resolve("forgeannouncements/mentions.toml").toString());
-            ChatConfigHandler.loadConfig(ChatConfigHandler.SERVER_CONFIG, FMLPaths.CONFIGDIR.get().resolve("forgeannouncements/chat.toml").toString());
+            ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, MainConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("main.toml").toString());
+            ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, AnnouncementsConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("announcements.toml").toString());
+            ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, MOTDConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("motd.toml").toString());
+            ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, MentionConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("mentions.toml").toString());
+            ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, RestartConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("restarts.toml").toString());
+            ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, ChatConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("chat.toml").toString());
+
+            MainConfigHandler.loadConfig(MainConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("main.toml").toString());
+            RestartConfigHandler.loadConfig(RestartConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("restarts.toml").toString());
+            AnnouncementsConfigHandler.loadConfig(AnnouncementsConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("announcements.toml").toString());
+            MOTDConfigHandler.loadConfig(MOTDConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("motd.toml").toString());
+            MentionConfigHandler.loadConfig(MentionConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("mentions.toml").toString());
+            ChatConfigHandler.loadConfig(ChatConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("chat.toml").toString());
+
+            Lang.initializeLanguage();
+
         } catch (Exception e) {
             LOGGER.error("Failed to register or load configuration", e);
             throw new RuntimeException("Configuration loading failed", e);
@@ -70,7 +72,7 @@ public class ForgeAnnouncements {
     }
 
     private void createDefaultConfigs() throws IOException {
-        Path configDir = FMLPaths.CONFIGDIR.get().resolve("forgeannouncements");
+        Path configDir = FMLPaths.GAMEDIR.get().resolve("world/serverconfig/forgeannouncements");  // Use the serverconfig directory
         if (!Files.exists(configDir)) {
             Files.createDirectories(configDir);
         }
@@ -104,8 +106,8 @@ public class ForgeAnnouncements {
         }
         Path restartConfig = configDir.resolve("restarts.toml");
         if (!Files.exists(restartConfig)) {
-           Files.createFile(restartConfig);
-           RestartConfigHandler.loadConfig(RestartConfigHandler.SERVER_CONFIG, restartConfig.toString());
+            Files.createFile(restartConfig);
+            RestartConfigHandler.loadConfig(RestartConfigHandler.SERVER_CONFIG, restartConfig.toString());
             RestartConfigHandler.SERVER_CONFIG.save();
         }
         Path chatConfig = configDir.resolve("chat.toml");
@@ -116,6 +118,7 @@ public class ForgeAnnouncements {
         }
 
     }
+
     private void createLangFolder() throws IOException {
         Path langFolder = FMLPaths.GAMEDIR.get().resolve("world/serverconfig/forgeannouncements/lang");
         if (!Files.exists(langFolder)) {
@@ -123,7 +126,6 @@ public class ForgeAnnouncements {
         }
         Lang.ensureDefaultLangFile();
     }
-
 
     private void setup(final FMLCommonSetupEvent event) {
         String version = ModLoadingContext.get().getActiveContainer().getModInfo().getVersion().toString();

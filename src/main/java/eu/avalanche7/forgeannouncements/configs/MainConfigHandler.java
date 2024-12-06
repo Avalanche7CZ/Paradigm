@@ -1,6 +1,7 @@
 package eu.avalanche7.forgeannouncements.configs;
 
 import com.electronwill.nightconfig.core.file.CommentedFileConfig;
+import eu.avalanche7.forgeannouncements.utils.Lang;
 import net.minecraftforge.common.ForgeConfigSpec;
 
 public class MainConfigHandler {

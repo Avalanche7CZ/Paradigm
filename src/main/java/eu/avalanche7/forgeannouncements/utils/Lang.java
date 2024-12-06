@@ -3,6 +3,7 @@ package eu.avalanche7.forgeannouncements.utils;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.mojang.logging.LogUtils;
+import eu.avalanche7.forgeannouncements.configs.MainConfigHandler;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.loading.FMLPaths;
@@ -16,27 +17,30 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-
-
 @Mod.EventBusSubscriber(modid = "forgeannouncements")
 public class Lang {
 
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Path LANG_FOLDER = FMLPaths.GAMEDIR.get().resolve("world/serverconfig/forgeannouncements/lang");
-    private static final String DEFAULT_LANG = "en";
     private static final Map<String, String> translations = new HashMap<>();
-    private static String currentLanguage = DEFAULT_LANG;
+    private static String currentLanguage;
 
     static {
         try {
             ensureDefaultLangFile();
-            loadLanguage(DEFAULT_LANG);
         } catch (Exception e) {
             throw new RuntimeException("Failed to initialize Lang class", e);
         }
     }
 
+    public static void initializeLanguage() {
+        String language = MainConfigHandler.CONFIG.defaultLanguage.get();
+        LOGGER.info("Loaded language setting: " + language);  // Log the language setting
+        loadLanguage(language);
+    }
+
     public static void loadLanguage(String language) {
+        LOGGER.info("Attempting to load language: " + language);
         Gson gson = new Gson();
         Type type = new TypeToken<Map<String, Object>>() {}.getType();
         Path langFile = LANG_FOLDER.resolve(language + ".json");
@@ -46,8 +50,9 @@ public class Lang {
             translations.clear();
             flattenMap("", rawMap);
             currentLanguage = language;
+            LOGGER.info("Successfully loaded language: " + language);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to load language file: " + language, e);
+            LOGGER.error("Failed to load language file: " + language, e);
         }
     }
 
@@ -78,6 +83,7 @@ public class Lang {
         for (String lang : availableLanguages) {
             Path langFile = LANG_FOLDER.resolve(lang + ".json");
             if (!Files.exists(langFile)) {
+                LOGGER.warn("Language file missing: " + lang + ".json");  // Log if a language file is missing
                 try (InputStream in = Lang.class.getResourceAsStream("/lang/" + lang + ".json");
                      Reader reader = new InputStreamReader(in, StandardCharsets.UTF_8);
                      Writer writer = Files.newBufferedWriter(langFile, StandardCharsets.UTF_8)) {

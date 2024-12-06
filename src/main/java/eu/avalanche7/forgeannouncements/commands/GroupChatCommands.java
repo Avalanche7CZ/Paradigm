@@ -3,6 +3,7 @@ package eu.avalanche7.forgeannouncements.commands;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import eu.avalanche7.forgeannouncements.utils.GroupChatManager;
+import eu.avalanche7.forgeannouncements.utils.Lang;
 import eu.avalanche7.forgeannouncements.utils.MessageText;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -79,7 +80,6 @@ public class GroupChatCommands {
                                     String targetName = StringArgumentType.getString(ctx, "player");
                                     ServerPlayer target = player.getServer().getPlayerList().getPlayerByName(targetName);
                                     if (target == null) {
-                                        player.sendMessage(new TextComponent("§4Player not found."), player.getUUID());
                                         return 0;
                                     }
                                     return manager.invitePlayer(player, target) ? 1 : 0;
@@ -108,15 +108,15 @@ public class GroupChatCommands {
 
     private static void displayHelp(ServerPlayer player) {
         String label = "groupchat";
-        player.sendMessage(new TextComponent("=== Group Chat Commands ==="), player.getUUID());
-        MessageText.sendInteractiveMessage(player, label, "create [name]", "Create a new group.", ChatFormatting.YELLOW);
-        MessageText.sendInteractiveMessage(player, label, "delete", "Delete your current group.", ChatFormatting.YELLOW);
-        MessageText.sendInteractiveMessage(player, label, "invite [player]", "Invite a player to your group.", ChatFormatting.YELLOW);
-        MessageText.sendInteractiveMessage(player, label, "join [group name]", "Join an existing group.", ChatFormatting.YELLOW);
-        MessageText.sendInteractiveMessage(player, label, "leave", "Leave your current group.", ChatFormatting.YELLOW);
-        MessageText.sendInteractiveMessage(player, label, "list", "List all groups.", ChatFormatting.YELLOW);
-        MessageText.sendInteractiveMessage(player, label, "info [group name]", "Get information about a group.", ChatFormatting.YELLOW);
-        MessageText.sendInteractiveMessage(player, label, "say [message]", "Send a message to the group.", ChatFormatting.YELLOW);
-        MessageText.sendInteractiveMessage(player, label, "toggle", "Toggle group chat on or off.", ChatFormatting.YELLOW);
+        player.sendMessage(new TextComponent(Lang.translate("group.help_title").getString()), player.getUUID());
+        MessageText.sendInteractiveMessage(player, label, "create [name]", Lang.translate("group.help_create").getString(), ChatFormatting.YELLOW);
+        MessageText.sendInteractiveMessage(player, label, "delete", Lang.translate("group.help_delete").getString(), ChatFormatting.YELLOW);
+        MessageText.sendInteractiveMessage(player, label, "invite [player]", Lang.translate("group.help_invite").getString(), ChatFormatting.YELLOW);
+        MessageText.sendInteractiveMessage(player, label, "join [group name]", Lang.translate("group.help_join").getString(), ChatFormatting.YELLOW);
+        MessageText.sendInteractiveMessage(player, label, "leave", Lang.translate("group.help_leave").getString(), ChatFormatting.YELLOW);
+        MessageText.sendInteractiveMessage(player, label, "list", Lang.translate("group.help_list").getString(), ChatFormatting.YELLOW);
+        MessageText.sendInteractiveMessage(player, label, "info [group name]", Lang.translate("group.help_info").getString(), ChatFormatting.YELLOW);
+        MessageText.sendInteractiveMessage(player, label, "say [message]", Lang.translate("group.help_say").getString(), ChatFormatting.YELLOW);
+        MessageText.sendInteractiveMessage(player, label, "toggle", Lang.translate("group.help_toggle").getString(), ChatFormatting.YELLOW);
     }
 }
