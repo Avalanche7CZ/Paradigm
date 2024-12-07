@@ -72,7 +72,7 @@ public class ForgeAnnouncements {
     }
 
     private void createDefaultConfigs() throws IOException {
-        Path configDir = FMLPaths.GAMEDIR.get().resolve("world/serverconfig/forgeannouncements");  // Use the serverconfig directory
+        Path configDir = FMLPaths.GAMEDIR.get().resolve("world/serverconfig/forgeannouncements");
         if (!Files.exists(configDir)) {
             Files.createDirectories(configDir);
         }
