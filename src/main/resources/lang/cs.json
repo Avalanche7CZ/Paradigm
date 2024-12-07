@@ -30,10 +30,6 @@
     "no_permission_everyone": "Nemáte oprávnění zmiňovat všechny.",
     "too_frequent_mention_player": "Příliš často zmiňujete hráče. Počkejte chvíli.",
     "no_permission_player": "Nemáte oprávnění zmiňovat hráče."
-  },
-  "announcements": {
-    "announcement.no_permission": "Nemáte oprávnění použít tento příkaz.",
-    "announcement.invalid_color": "Neplatná barva. Dostupné barvy: {colors}."
   }
 }
 

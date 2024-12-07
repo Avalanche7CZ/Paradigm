@@ -30,10 +30,6 @@
     "no_permission_everyone": "У вас нет разрешения упоминать всех.",
     "too_frequent_mention_player": "Вы слишком часто упоминаете игроков. Пожалуйста, подождите некоторое время.",
     "no_permission_player": "У вас нет разрешения упоминать игроков."
-  },
-  "announcements": {
-    "announcement.no_permission": "У вас нет прав для использования этой команды.",
-    "announcement.invalid_color": "Неверный цвет. Доступные цвета: {colors}."
   }
 }
 

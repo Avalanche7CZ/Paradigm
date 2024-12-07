@@ -30,9 +30,5 @@
     "no_permission_everyone": "You do not have permission to mention everyone.",
     "too_frequent_mention_player": "You are mentioning players too frequently. Please wait a while.",
     "no_permission_player": "You do not have permission to mention players."
-  },
-  "announcements": {
-    "announcement.no_permission": "You do not have permission to use that command.",
-    "announcement.invalid_color": "Invalid color. Available colors: {colors}."
   }
 }

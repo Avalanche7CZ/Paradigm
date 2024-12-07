@@ -7,7 +7,10 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import eu.avalanche7.forgeannouncements.configs.AnnouncementsConfigHandler;
-import eu.avalanche7.forgeannouncements.utils.*;
+import eu.avalanche7.forgeannouncements.utils.Announcements;
+import eu.avalanche7.forgeannouncements.utils.ColorUtils;
+import eu.avalanche7.forgeannouncements.utils.PermissionsHandler;
+import eu.avalanche7.forgeannouncements.utils.TaskScheduler;
 import net.minecraft.Util;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -33,7 +36,7 @@ public class AnnouncementsCommand {
         CommandSourceStack source = context.getSource();
 
         if (!source.hasPermission(2)) {
-            source.sendFailure(new TextComponent(Lang.translate("announcement.no_permission").getString()));
+            source.sendFailure(new TextComponent("You do not have permission to use this command."));
             return 0;
         }
 
@@ -56,7 +59,7 @@ public class AnnouncementsCommand {
         CommandSourceStack source = context.getSource();
 
         if (!source.hasPermission(2)) {
-            source.sendFailure(new TextComponent(Lang.translate("announcement.no_permission").getString()));
+            source.sendFailure(new TextComponent("You do not have permission to use this command."));
             return 0;
         }
 
@@ -110,7 +113,7 @@ public class AnnouncementsCommand {
                 try {
                     bossBarColor = BossEvent.BossBarColor.valueOf(color.toUpperCase());
                 } catch (IllegalArgumentException e) {
-                    source.sendFailure(new TextComponent(Lang.translate("announcement.invalid_color").getString().replace("{color}", color)));
+                    source.sendFailure(new TextComponent("Invalid color: " + color));
                     return 0;
                 }
                 ServerBossEvent bossEvent = new ServerBossEvent(broadcastMessage, bossBarColor, BossEvent.BossBarOverlay.PROGRESS);
@@ -129,7 +132,7 @@ public class AnnouncementsCommand {
         }
 
         if (!source.hasPermission(requiredPermissionLevel)) {
-            source.sendFailure(new TextComponent(Lang.translate("announcement.no_permission").getString()));
+            source.sendFailure(new TextComponent("You do not have permission to use this command."));
             return 0;
         }
 
