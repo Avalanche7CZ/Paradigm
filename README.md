@@ -24,9 +24,10 @@ Forge Announcements is a Minecraft mod designed for server administrators who wa
 - Commands [Announcements, StaffChat, Groupchat]
 - Mentions system: `@everyone` ; `@PlayerName`
 - Restart Scheduler: Schedule server restarts with configurable messages and countdowns.
-- Chat module: Staff Chat and more soon!
+- Chat module: Staff Chat
 - GroupChat
 - Hex Color Support
+- Supported Languages: English, Russian, Czech
 
 ## Installation
 1. Download the latest version of the mod from the [Releases page](https://github.com/Avalanche7CZ/ForgeAnnouncements/releases).
