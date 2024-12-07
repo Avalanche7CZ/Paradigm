@@ -51,15 +51,14 @@ public class ForgeAnnouncements {
 
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, MainConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("main.toml").toString());
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, AnnouncementsConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("announcements.toml").toString());
-            ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, MOTDConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("motd.toml").toString());
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, MentionConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("mentions.toml").toString());
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, RestartConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("restarts.toml").toString());
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, ChatConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("chat.toml").toString());
 
+            MOTDConfigHandler.loadConfig();
             MainConfigHandler.loadConfig(MainConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("main.toml").toString());
             RestartConfigHandler.loadConfig(RestartConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("restarts.toml").toString());
             AnnouncementsConfigHandler.loadConfig(AnnouncementsConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("announcements.toml").toString());
-            MOTDConfigHandler.loadConfig(MOTDConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("motd.toml").toString());
             MentionConfigHandler.loadConfig(MentionConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("mentions.toml").toString());
             ChatConfigHandler.loadConfig(ChatConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("chat.toml").toString());
 
@@ -91,11 +90,11 @@ public class ForgeAnnouncements {
             AnnouncementsConfigHandler.SERVER_CONFIG.save();
         }
 
-        Path motdConfig = configDir.resolve("motd.toml");
-        if (!Files.exists(motdConfig)) {
-            Files.createFile(motdConfig);
-            MOTDConfigHandler.loadConfig(MOTDConfigHandler.SERVER_CONFIG, motdConfig.toString());
-            MOTDConfigHandler.SERVER_CONFIG.save();
+        Path motdConfigPath = configDir.resolve("motd.json");
+        if (!Files.exists(motdConfigPath)) {
+            MOTDConfigHandler.saveConfig();
+        } else {
+            MOTDConfigHandler.loadConfig();
         }
 
         Path mentionsConfig = configDir.resolve("mentions.toml");

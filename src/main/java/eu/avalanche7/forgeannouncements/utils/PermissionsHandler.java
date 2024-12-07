@@ -2,13 +2,13 @@ package eu.avalanche7.forgeannouncements.utils;
 
 import com.forgeessentials.api.APIRegistry;
 import com.forgeessentials.api.permissions.DefaultPermissionLevel;
+import dev.ftb.mods.ftbranks.api.FTBRanksAPI;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.ModList;
 
 import java.util.logging.Logger;
-
 
 public class PermissionsHandler {
     private static final Logger LOGGER = Logger.getLogger(PermissionsHandler.class.getName());
@@ -29,6 +29,9 @@ public class PermissionsHandler {
             if (ModList.get().isLoaded("luckperms")) {
                 checker = new LuckPermsChecker();
                 LOGGER.info("Using LuckPermsChecker");
+            } else if (ModList.get().isLoaded("ftbranks")) {
+                checker = new FTBRanksChecker();
+                LOGGER.info("Using FTBRanksChecker");
             } else if (ModList.get().isLoaded("forgeessentials")) {
                 try {
                     checker = new ForgeEssentialsChecker();
@@ -43,6 +46,7 @@ public class PermissionsHandler {
             }
         }
     }
+
     @SubscribeEvent
     public static void onServerStarting(ServerStartingEvent event) {
         initializeChecker();
@@ -63,7 +67,6 @@ public class PermissionsHandler {
         boolean hasPermission(ServerPlayer player, String permission);
     }
 
-
     public static class LuckPermsChecker implements PermissionChecker {
         @Override
         public boolean hasPermission(ServerPlayer player, String permission) {
@@ -72,14 +75,20 @@ public class PermissionsHandler {
             net.luckperms.api.model.user.User user = userManager.getUser(player.getUUID());
 
             if (user != null) {
-                boolean hasPermission = user.getCachedData().getPermissionData().checkPermission(permission).asBoolean();
-                return hasPermission;
+                return user.getCachedData().getPermissionData().checkPermission(permission).asBoolean();
             } else {
                 return false;
             }
         }
     }
 
+    public static class FTBRanksChecker implements PermissionChecker {
+        @Override
+        public boolean hasPermission(ServerPlayer player, String permission) {
+            FTBRanksAPI api = FTBRanksAPI.INSTANCE;
+            return api.getPermissionValue(player, permission).asBoolean().orElse(false);
+        }
+    }
     public static class ForgeEssentialsChecker implements PermissionChecker {
         @Override
         public boolean hasPermission(ServerPlayer player, String permission) {
@@ -88,9 +97,7 @@ public class PermissionsHandler {
 
         public static void registerPermission(String permission, String description) {
             DefaultPermissionLevel level = DefaultPermissionLevel.NONE;
-
             APIRegistry.perms.registerPermission(permission, level, description);
-
         }
     }
 

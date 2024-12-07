@@ -88,6 +88,7 @@ dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     compileOnly('net.luckperms:api:5.4')
     compileOnly files("libs/forgeessentials-1.18.2-18.0.0-server.jar")
+    compileOnly files("libs/ftb-ranks-forge-1802.1.11-build.71.jar")
 
 }
 
