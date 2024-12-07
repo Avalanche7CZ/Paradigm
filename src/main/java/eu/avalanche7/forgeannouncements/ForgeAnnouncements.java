@@ -47,7 +47,7 @@ public class ForgeAnnouncements {
             createDefaultConfigs();
             createLangFolder();
 
-            Path serverConfigDir = FMLPaths.GAMEDIR.get().resolve("world/serverconfig/forgeannouncements");
+            Path serverConfigDir = FMLPaths.GAMEDIR.get().resolve("config/forgeannouncements");
 
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, MainConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("main.toml").toString());
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, AnnouncementsConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("announcements.toml").toString());
@@ -72,7 +72,7 @@ public class ForgeAnnouncements {
     }
 
     private void createDefaultConfigs() throws IOException {
-        Path configDir = FMLPaths.GAMEDIR.get().resolve("world/serverconfig/forgeannouncements");
+        Path configDir = FMLPaths.GAMEDIR.get().resolve("config/forgeannouncements");
         if (!Files.exists(configDir)) {
             Files.createDirectories(configDir);
         }
@@ -120,7 +120,7 @@ public class ForgeAnnouncements {
     }
 
     private void createLangFolder() throws IOException {
-        Path langFolder = FMLPaths.GAMEDIR.get().resolve("world/serverconfig/forgeannouncements/lang");
+        Path langFolder = FMLPaths.GAMEDIR.get().resolve("config/forgeannouncements/lang");
         if (!Files.exists(langFolder)) {
             Files.createDirectories(langFolder);
         }

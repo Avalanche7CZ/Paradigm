@@ -21,7 +21,7 @@ import java.util.Map;
 public class Lang {
 
     private static final Logger LOGGER = LogUtils.getLogger();
-    private static final Path LANG_FOLDER = FMLPaths.GAMEDIR.get().resolve("world/serverconfig/forgeannouncements/lang");
+    private static final Path LANG_FOLDER = FMLPaths.GAMEDIR.get().resolve("config/forgeannouncements/lang");
     private static final Map<String, String> translations = new HashMap<>();
     private static String currentLanguage;
 
