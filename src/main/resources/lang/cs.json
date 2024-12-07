@@ -12,7 +12,6 @@
     "joined": "Připojili jste se ke skupině: {group_name}.",
     "left": "Opustili jste skupinu: {group_name}.",
     "no_group_to_send_message": "Žádná skupina pro odeslání zprávy.",
-    "message_format": "[{group_name}] {sender_name} > {message}",
     "chat_enabled": "Skupinový chat je zapnutý. Vaše zprávy budou odesílány pouze do vaší skupiny.",
     "chat_disabled": "Skupinový chat je vypnutý. Vaše zprávy budou odesílány do veřejného chatu.",
     "help_title": "=== Příkazy Skupinového Chatu ===",

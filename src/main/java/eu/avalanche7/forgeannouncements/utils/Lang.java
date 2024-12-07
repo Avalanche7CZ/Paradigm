@@ -60,17 +60,18 @@ public class Lang {
         for (Map.Entry<String, Object> entry : map.entrySet()) {
             String key = prefix.isEmpty() ? entry.getKey() : prefix + "." + entry.getKey();
             Object value = entry.getValue();
-
-            if (value instanceof Map) {
+            if (value instanceof String) {
+                translations.put(key, (String) value);
+            } else if (value instanceof Map) {
                 flattenMap(key, (Map<String, Object>) value);
             } else {
                 translations.put(key, value.toString());
             }
         }
     }
-
     public static MutableComponent translate(String key) {
         String translatedText = translations.getOrDefault(key, key);
+        translatedText = translatedText.replace("&", "§");
         return ColorUtils.parseMessageWithColor(translatedText);
     }
 

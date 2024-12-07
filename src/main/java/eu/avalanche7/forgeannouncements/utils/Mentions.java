@@ -43,14 +43,14 @@ public class Mentions {
 
         if (mentionEveryone) {
             if (!canMentionEveryone(sender)) {
-                sender.sendMessage(new TextComponent(Lang.translate("mention.too_frequent_mention_everyone").getString()), Util.NIL_UUID);
+                sender.sendMessage(Lang.translate("mention.too_frequent_mention_everyone"), Util.NIL_UUID);
                 event.setCanceled(true);
                 return;
             }
             boolean hasPermission = PermissionsHandler.hasPermission(sender, PermissionsHandler.MENTION_EVERYONE_PERMISSION);
             boolean hasPermissionLevel = sender.hasPermissions(PermissionsHandler.MENTION_EVERYONE_PERMISSION_LEVEL);
             if (!hasPermission && !hasPermissionLevel) {
-                sender.sendMessage(new TextComponent(Lang.translate("mention.no_permission_everyone").getString()), Util.NIL_UUID);
+                sender.sendMessage(Lang.translate("mention.no_permission_everyone"), Util.NIL_UUID);
                 event.setCanceled(true);
                 return;
             }
@@ -62,14 +62,14 @@ public class Mentions {
                 String mention = mentionSymbol + player.getName().getString();
                 if (message.contains(mention)) {
                     if (!canMentionPlayer(sender, player)) {
-                        sender.sendMessage(new TextComponent(Lang.translate("mention.too_frequent_mention_player").getString()), Util.NIL_UUID);
+                        sender.sendMessage(Lang.translate("mention.too_frequent_mention_player"), Util.NIL_UUID);
                         event.setCanceled(true);
                         return;
                     }
                     boolean hasPermission = PermissionsHandler.hasPermission(sender, PermissionsHandler.MENTION_PLAYER_PERMISSION);
                     boolean hasPermissionLevel = sender.hasPermissions(PermissionsHandler.MENTION_PLAYER_PERMISSION_LEVEL);
                     if (!hasPermission && !hasPermissionLevel) {
-                        sender.sendMessage(new TextComponent(Lang.translate("mention.no_permission_player").getString()), Util.NIL_UUID);
+                        sender.sendMessage(Lang.translate("mention.no_permission_player"), Util.NIL_UUID);
                         event.setCanceled(true);
                         return;
                     }

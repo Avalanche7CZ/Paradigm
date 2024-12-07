@@ -12,7 +12,6 @@
     "joined": "Joined the group: {group_name}.",
     "left": "Left the group: {group_name}.",
     "no_group_to_send_message": "No group to send message to.",
-    "message_format": "[{group_name}] {sender_name} > {message}",
     "chat_enabled": "Group chat enabled. Your messages will now only go to your group.",
     "chat_disabled": "Group chat disabled. Your messages will go to public chat.",
     "help_title": "=== Group Chat Commands ===",

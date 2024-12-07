@@ -2,8 +2,8 @@ package eu.avalanche7.forgeannouncements.utils;
 
 import eu.avalanche7.forgeannouncements.data.Group;
 import eu.avalanche7.forgeannouncements.data.PlayerGroupData;
-import net.minecraft.network.chat.TextComponent;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.network.chat.TextComponent;
 import net.minecraftforge.fml.common.Mod;
 
 import java.util.*;
@@ -15,13 +15,14 @@ public class GroupChatManager {
 
     public boolean createGroup(ServerPlayer player, String groupName) {
         if (groups.containsKey(groupName)) {
-            player.sendMessage(new TextComponent(Lang.translate("group.already_exists").getString()), player.getUUID());
+            // Send message directly without using TextComponent
+            player.sendMessage(Lang.translate("group.already_exists"), player.getUUID());
             return false;
         }
         Group group = new Group(groupName, player.getUUID());
         groups.put(groupName, group);
         getPlayerData(player).setCurrentGroup(groupName);
-        player.sendMessage(new TextComponent(Lang.translate("group.created_successfully").getString()), player.getUUID());
+        player.sendMessage(Lang.translate("group.created_successfully"), player.getUUID());
         return true;
     }
 
@@ -29,34 +30,35 @@ public class GroupChatManager {
         PlayerGroupData data = getPlayerData(player);
         String groupName = data.getCurrentGroup();
         if (groupName == null || !groups.containsKey(groupName)) {
-            player.sendMessage(new TextComponent(Lang.translate("group.no_group_to_delete").getString()), player.getUUID());
+            player.sendMessage(Lang.translate("group.no_group_to_delete"), player.getUUID());
             return false;
         }
         Group group = groups.get(groupName);
         if (!group.getOwner().equals(player.getUUID())) {
-            player.sendMessage(new TextComponent(Lang.translate("group.not_owner").getString()), player.getUUID());
+            player.sendMessage(Lang.translate("group.not_owner"), player.getUUID());
             return false;
         }
         groups.remove(groupName);
-        player.sendMessage(new TextComponent(Lang.translate("group.deleted_successfully").getString()), player.getUUID());
+        player.sendMessage(Lang.translate("group.deleted_successfully"), player.getUUID());
         return true;
     }
 
     public void listGroups(ServerPlayer player) {
         if (groups.isEmpty()) {
-            player.sendMessage(new TextComponent(Lang.translate("group.no_groups_available").getString()), player.getUUID());
+            player.sendMessage(Lang.translate("group.no_groups_available"), player.getUUID());
             return;
         }
-        player.sendMessage(new TextComponent(Lang.translate("group.available_groups").getString()), player.getUUID());
+        player.sendMessage(Lang.translate("group.available_groups"), player.getUUID());
         for (String groupName : groups.keySet()) {
-            player.sendMessage(new TextComponent(groupName), player.getUUID());
+            // Directly send group name as a simple message
+            player.sendMessage(new TextComponent(groupName), player.getUUID());  // Use TextComponent for the group name
         }
     }
 
     public void groupInfo(ServerPlayer player, String groupName) {
         Group group = groups.get(groupName);
         if (group == null) {
-            player.sendMessage(new TextComponent(Lang.translate("group.group_not_found").getString()), player.getUUID());
+            player.sendMessage(Lang.translate("group.group_not_found"), player.getUUID());
             return;
         }
         player.sendMessage(new TextComponent("Group: " + groupName), player.getUUID());
@@ -68,28 +70,32 @@ public class GroupChatManager {
         PlayerGroupData data = getPlayerData(player);
         String groupName = data.getCurrentGroup();
         if (groupName == null || !groups.containsKey(groupName)) {
-            player.sendMessage(new TextComponent(Lang.translate("group.no_group_to_invite").getString()), player.getUUID());
+            player.sendMessage(Lang.translate("group.no_group_to_invite"), player.getUUID());
             return false;
         }
         Group group = groups.get(groupName);
         if (!group.getOwner().equals(player.getUUID())) {
-            player.sendMessage(new TextComponent(Lang.translate("group.not_owner").getString()), player.getUUID());
+            player.sendMessage(Lang.translate("group.not_owner"), player.getUUID());
             return false;
         }
         group.addMember(target.getUUID());
-        target.sendMessage(new TextComponent(Lang.translate("group.invited").getString().replace("{group_name}", groupName)), target.getUUID());
+        // Here, replace the placeholder before sending
+        String message = Lang.translate("group.invited").getString().replace("{group_name}", groupName);
+        target.sendMessage(new TextComponent(message), target.getUUID());
         return true;
     }
 
     public boolean joinGroup(ServerPlayer player, String groupName) {
         Group group = groups.get(groupName);
         if (group == null) {
-            player.sendMessage(new TextComponent(Lang.translate("group.group_not_found").getString()), player.getUUID());
+            player.sendMessage(Lang.translate("group.group_not_found"), player.getUUID());
             return false;
         }
         group.addMember(player.getUUID());
         getPlayerData(player).setCurrentGroup(groupName);
-        player.sendMessage(new TextComponent(Lang.translate("group.joined").getString().replace("{group_name}", groupName)), player.getUUID());
+        // Here, replace the placeholder before sending
+        String message = Lang.translate("group.joined").getString().replace("{group_name}", groupName);
+        player.sendMessage(new TextComponent(message), player.getUUID());
         return true;
     }
 
@@ -97,13 +103,15 @@ public class GroupChatManager {
         PlayerGroupData data = getPlayerData(player);
         String groupName = data.getCurrentGroup();
         if (groupName == null || !groups.containsKey(groupName)) {
-            player.sendMessage(new TextComponent(Lang.translate("group.no_group_to_leave").getString()), player.getUUID());
+            player.sendMessage(Lang.translate("group.no_group_to_leave"), player.getUUID());
             return false;
         }
         Group group = groups.get(groupName);
         group.removeMember(player.getUUID());
         data.setCurrentGroup(null);
-        player.sendMessage(new TextComponent(Lang.translate("group.left").getString().replace("{group_name}", groupName)), player.getUUID());
+        // Here, replace the placeholder before sending
+        String message = Lang.translate("group.left").getString().replace("{group_name}", groupName);
+        player.sendMessage(new TextComponent(message), player.getUUID());
         return true;
     }
 
@@ -124,17 +132,14 @@ public class GroupChatManager {
         PlayerGroupData data = getPlayerData(sender);
         String groupName = data.getCurrentGroup();
         if (groupName == null || !groups.containsKey(groupName)) {
-            sender.sendMessage(new TextComponent(Lang.translate("group.no_group_to_send_message").getString()), sender.getUUID());
+            sender.sendMessage(Lang.translate("group.no_group_to_send_message"), sender.getUUID());
             return;
         }
         Group group = groups.get(groupName);
         for (UUID memberId : group.getMembers()) {
             ServerPlayer member = sender.getServer().getPlayerList().getPlayer(memberId);
             if (member != null) {
-                member.sendMessage(new TextComponent(Lang.translate("group.message_format").getString()
-                        .replace("{group_name}", groupName)
-                        .replace("{sender_name}", sender.getName().getString())
-                        .replace("{message}", message)), member.getUUID());
+                member.sendMessage(new TextComponent("[§9" + groupName + "§f] " + sender.getName().getString() + " §7>§f " + message), member.getUUID());
             }
         }
     }

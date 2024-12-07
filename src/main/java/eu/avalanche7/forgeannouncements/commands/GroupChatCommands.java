@@ -2,13 +2,16 @@ package eu.avalanche7.forgeannouncements.commands;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import eu.avalanche7.forgeannouncements.utils.ColorUtils;
 import eu.avalanche7.forgeannouncements.utils.GroupChatManager;
 import eu.avalanche7.forgeannouncements.utils.Lang;
-import eu.avalanche7.forgeannouncements.utils.MessageText;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.TextComponent;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -108,15 +111,24 @@ public class GroupChatCommands {
 
     private static void displayHelp(ServerPlayer player) {
         String label = "groupchat";
-        player.sendMessage(new TextComponent(Lang.translate("group.help_title").getString()), player.getUUID());
-        MessageText.sendInteractiveMessage(player, label, "create [name]", Lang.translate("group.help_create").getString(), ChatFormatting.YELLOW);
-        MessageText.sendInteractiveMessage(player, label, "delete", Lang.translate("group.help_delete").getString(), ChatFormatting.YELLOW);
-        MessageText.sendInteractiveMessage(player, label, "invite [player]", Lang.translate("group.help_invite").getString(), ChatFormatting.YELLOW);
-        MessageText.sendInteractiveMessage(player, label, "join [group name]", Lang.translate("group.help_join").getString(), ChatFormatting.YELLOW);
-        MessageText.sendInteractiveMessage(player, label, "leave", Lang.translate("group.help_leave").getString(), ChatFormatting.YELLOW);
-        MessageText.sendInteractiveMessage(player, label, "list", Lang.translate("group.help_list").getString(), ChatFormatting.YELLOW);
-        MessageText.sendInteractiveMessage(player, label, "info [group name]", Lang.translate("group.help_info").getString(), ChatFormatting.YELLOW);
-        MessageText.sendInteractiveMessage(player, label, "say [message]", Lang.translate("group.help_say").getString(), ChatFormatting.YELLOW);
-        MessageText.sendInteractiveMessage(player, label, "toggle", Lang.translate("group.help_toggle").getString(), ChatFormatting.YELLOW);
+        player.sendMessage(Lang.translate("group.help_title"), player.getUUID());
+        helpmessage(player, label, "create [name]", Lang.translate("group.help_create").getString());
+        helpmessage(player, label, "delete", Lang.translate("group.help_delete").getString());
+        helpmessage(player, label, "invite [player]", Lang.translate("group.help_invite").getString());
+        helpmessage(player, label, "join [group name]", Lang.translate("group.help_join").getString());
+        helpmessage(player, label, "leave", Lang.translate("group.help_leave").getString());
+        helpmessage(player, label, "list", Lang.translate("group.help_list").getString());
+        helpmessage(player, label, "info [group name]", Lang.translate("group.help_info").getString());
+        helpmessage(player, label, "say [message]", Lang.translate("group.help_say").getString());
+        helpmessage(player, label, "toggle", Lang.translate("group.help_toggle").getString());
+    }
+
+    private static void helpmessage(ServerPlayer player, String label, String command, String key) {
+        MutableComponent hoverText = new TextComponent(key).withStyle(ChatFormatting.AQUA);
+        MutableComponent message = new TextComponent(" §9> §e/" + label + " " + command)
+                .withStyle(ChatFormatting.YELLOW)
+                .withStyle(style -> style.withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/" + label + " " + command)))
+                .withStyle(style -> style.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hoverText)));
+        player.sendMessage(message, player.getUUID());
     }
 }
