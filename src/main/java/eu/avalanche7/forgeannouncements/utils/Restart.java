@@ -121,7 +121,7 @@ public class Restart {
                     }
 
                     if (RestartConfigHandler.CONFIG.playSoundEnabled.get()) {
-                        String soundString = RestartConfigHandler.CONFIG.playSoundString.get();
+                        String soundString = RestartConfigHandler.CONFIG.playSoundString.get().toLowerCase();
                         SoundEvent soundEvent = ForgeRegistries.SOUND_EVENTS.getValue(new ResourceLocation(soundString));
                         if (soundEvent != null) {
                             for (ServerPlayer player : server.getPlayerList().getPlayers()) {

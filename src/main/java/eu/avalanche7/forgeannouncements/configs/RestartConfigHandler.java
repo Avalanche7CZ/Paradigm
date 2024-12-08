@@ -83,7 +83,7 @@ public class RestartConfigHandler {
 
             playSoundString = builder
                     .comment("Sound to play on restart warnings.")
-                    .define("playSoundString", "NOTE_BLOCK_PLING");
+                    .define("playSoundString", "note_block_pling");
 
             playSoundFirstTime = builder
                     .comment("When to start playing notification sound (same as one of broadcast timers).")
