@@ -90,13 +90,13 @@ public class Announcements {
                 messageText = messages.get(random.nextInt(messages.size())).replace("{Prefix}", prefix);
             }
 
-            MutableComponent message = ColorUtils.parseMessageWithColor(messageText);
+            MutableComponent message = MessageParser.parseMessage(messageText, null);
 
             if (AnnouncementsConfigHandler.CONFIG.headerAndFooter.get()) {
                 server.getPlayerList().getPlayers().forEach(player -> {
-                    player.sendMessage(ColorUtils.parseMessageWithColor(header), player.getUUID());
+                    player.sendMessage(MessageParser.parseMessage(header, player), player.getUUID());
                     player.sendMessage(message, player.getUUID());
-                    player.sendMessage(ColorUtils.parseMessageWithColor(footer), player.getUUID());
+                    player.sendMessage(MessageParser.parseMessage(footer, player), player.getUUID());
                 });
             } else {
                 server.getPlayerList().getPlayers().forEach(player -> {
@@ -121,7 +121,7 @@ public class Announcements {
             } else {
                 messageText = messages.get(random.nextInt(messages.size())).replace("{Prefix}", prefix);
             }
-            MutableComponent message = ColorUtils.parseMessageWithColor(messageText);
+            MutableComponent message = MessageParser.parseMessage(messageText, null);
 
             server.getPlayerList().getPlayers().forEach(player -> {
                 player.connection.send(new ClientboundSetActionBarTextPacket(message));
@@ -144,7 +144,7 @@ public class Announcements {
             } else {
                 messageText = messages.get(random.nextInt(messages.size())).replace("{Prefix}", prefix);
             }
-            MutableComponent message = ColorUtils.parseMessageWithColor(messageText);
+            MutableComponent message = MessageParser.parseMessage(messageText, null);
 
             server.getPlayerList().getPlayers().forEach(player -> {
                 player.connection.send(new ClientboundClearTitlesPacket(false));
@@ -170,7 +170,7 @@ public class Announcements {
             } else {
                 messageText = messages.get(random.nextInt(messages.size())).replace("{Prefix}", prefix);
             }
-            MutableComponent message = ColorUtils.parseMessageWithColor(messageText);
+            MutableComponent message = MessageParser.parseMessage(messageText, null);
 
             ServerBossEvent bossEvent = new ServerBossEvent(message, BossEvent.BossBarColor.valueOf(bossbarColor.toUpperCase()), BossEvent.BossBarOverlay.PROGRESS);
 

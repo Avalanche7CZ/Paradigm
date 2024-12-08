@@ -2,7 +2,6 @@ package eu.avalanche7.forgeannouncements.commands;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
-import eu.avalanche7.forgeannouncements.utils.ColorUtils;
 import eu.avalanche7.forgeannouncements.utils.GroupChatManager;
 import eu.avalanche7.forgeannouncements.utils.Lang;
 import net.minecraft.ChatFormatting;

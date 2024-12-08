@@ -104,7 +104,7 @@ public class Restart {
                                 .replace("{hours}", String.valueOf(hours))
                                 .replace("{minutes}", TIME_FORMATTER.format(minutes))
                                 .replace("{seconds}", TIME_FORMATTER.format(seconds));
-                        Component messageComponent = ColorUtils.parseMessageWithColor(customMessage);
+                        Component messageComponent = MessageParser.parseMessage(customMessage, null);
                         server.getPlayerList().broadcastMessage(messageComponent, ChatType.SYSTEM, Util.NIL_UUID);
                     }
 
@@ -114,7 +114,7 @@ public class Restart {
                                 .replace("{minutes}", TIME_FORMATTER.format(minutes))
                                 .replace("{seconds}", TIME_FORMATTER.format(seconds));
 
-                        Component titleComponent = ColorUtils.parseMessageWithColor(titleMessage);
+                        Component titleComponent = MessageParser.parseMessage(titleMessage, null);
                         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                             player.connection.send(new ClientboundSetTitleTextPacket(titleComponent));
                         }
@@ -133,7 +133,7 @@ public class Restart {
                     if (RestartConfigHandler.CONFIG.bossbarEnabled.get()) {
                         String bossBarMessage = RestartConfigHandler.CONFIG.bossBarMessage.get()
                                 .replace("{time}", formattedTime);
-                        Component message = ColorUtils.parseMessageWithColor(bossBarMessage);
+                        Component message = MessageParser.parseMessage(bossBarMessage, null);
                         ServerBossEvent bossEvent = new ServerBossEvent(message, BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.PROGRESS);
 
                         ClientboundBossEventPacket addPacket = ClientboundBossEventPacket.createAddPacket(bossEvent);

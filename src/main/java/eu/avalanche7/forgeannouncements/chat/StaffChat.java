@@ -1,7 +1,7 @@
 package eu.avalanche7.forgeannouncements.chat;
 
 import eu.avalanche7.forgeannouncements.configs.ChatConfigHandler;
-import eu.avalanche7.forgeannouncements.utils.ColorUtils;
+import eu.avalanche7.forgeannouncements.utils.MessageParser;
 import eu.avalanche7.forgeannouncements.utils.PermissionsHandler;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.network.chat.TextComponent;
@@ -42,7 +42,7 @@ public class StaffChat {
         String format = ChatConfigHandler.CONFIG.staffChatFormat.get();
         String formattedMessage = String.format(format, player.getName().getString(), message);
 
-        Component chatMessage = ColorUtils.parseMessageWithColor(formattedMessage);
+        Component chatMessage = MessageParser.parseMessage(formattedMessage, null);
 
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
             if (PermissionsHandler.hasPermission(p, "forgeannouncements.staff")) {

@@ -3,7 +3,6 @@ package eu.avalanche7.forgeannouncements.utils;
 import eu.avalanche7.forgeannouncements.configs.MainConfigHandler;
 import eu.avalanche7.forgeannouncements.configs.MentionConfigHandler;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.network.chat.TextComponent;
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
 import net.minecraft.server.level.ServerPlayer;
@@ -127,15 +126,15 @@ public class Mentions {
     }
 
     private static void sendMentionNotification(ServerPlayer player, String chatMessage, String titleMessage, String subtitleMessage) {
-        MutableComponent formattedChatMessage = ColorUtils.parseMessageWithColor(chatMessage);
+        MutableComponent formattedChatMessage = MessageParser.parseMessage(chatMessage,null);
         if (!subtitleMessage.isEmpty()) {
-            MutableComponent formattedSubtitleMessage = ColorUtils.parseMessageWithColor("- " + subtitleMessage);
+            MutableComponent formattedSubtitleMessage = MessageParser.parseMessage("- " + subtitleMessage,null);
             formattedChatMessage.append("\n").append(formattedSubtitleMessage);
         }
         player.displayClientMessage(formattedChatMessage, false);
-        player.connection.send(new ClientboundSetTitleTextPacket(ColorUtils.parseMessageWithColor(titleMessage)));
+        player.connection.send(new ClientboundSetTitleTextPacket(MessageParser.parseMessage(titleMessage,null)));
         if (!subtitleMessage.isEmpty()) {
-            player.connection.send(new ClientboundSetSubtitleTextPacket(ColorUtils.parseMessageWithColor(subtitleMessage)));
+            player.connection.send(new ClientboundSetSubtitleTextPacket(MessageParser.parseMessage(subtitleMessage,null)));
         }
         player.playNotifySound(SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0F, 1.0F);
     }

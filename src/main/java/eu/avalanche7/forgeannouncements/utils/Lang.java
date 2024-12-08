@@ -72,7 +72,7 @@ public class Lang {
     public static MutableComponent translate(String key) {
         String translatedText = translations.getOrDefault(key, key);
         translatedText = translatedText.replace("&", "§");
-        return ColorUtils.parseMessageWithColor(translatedText);
+        return MessageParser.parseMessage(translatedText, null);
     }
 
     public static void ensureDefaultLangFile() throws IOException {
