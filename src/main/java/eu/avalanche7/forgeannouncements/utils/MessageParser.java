@@ -38,7 +38,7 @@ public class MessageParser {
             Pattern.compile("\\[title=(.*?)\\]"), (matcher, context) -> {
                 if (context.player != null) {
                     String titleText = matcher.group(1);
-                    Component titleComponent = parseMessage(context.colorCode + titleText, context.player);
+                    Component titleComponent = parseMessage("§" + context.colorCode + titleText, context.player);
                     ClientboundSetTitleTextPacket titlePacket = new ClientboundSetTitleTextPacket(titleComponent);
                     context.player.connection.send(titlePacket);
                 }
@@ -46,7 +46,7 @@ public class MessageParser {
             Pattern.compile("\\[subtitle=(.*?)\\]"), (matcher, context) -> {
                 if (context.player != null) {
                     String subtitleText = matcher.group(1);
-                    Component subtitleComponent = parseMessage(context.colorCode + subtitleText, context.player);
+                    Component subtitleComponent = parseMessage("§" + context.colorCode + subtitleText, context.player);
                     ClientboundSetSubtitleTextPacket subtitlePacket = new ClientboundSetSubtitleTextPacket(subtitleComponent);
                     context.player.connection.send(subtitlePacket);
                 }
