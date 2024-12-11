@@ -8,6 +8,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class MessageParser {
 
@@ -28,7 +29,7 @@ public class MessageParser {
             },
             Pattern.compile("\\[hover=(.*?)\\]"), (matcher, context) -> {
                 String hoverText = matcher.group(1);
-                context.component.append(new TextComponent(hoverText)
+                context.component.append(new TextComponent(hoverText+ " ")
                         .setStyle(context.style.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new TextComponent(hoverText)))));
             },
             Pattern.compile("\\[divider\\]"), (matcher, context) -> {
@@ -38,7 +39,7 @@ public class MessageParser {
             Pattern.compile("\\[title=(.*?)\\]"), (matcher, context) -> {
                 if (context.player != null) {
                     String titleText = matcher.group(1);
-                    Component titleComponent = parseMessage("§" + context.colorCode + titleText, context.player);
+                    Component titleComponent = parseMessage(context.colorCode + titleText, context.player);
                     ClientboundSetTitleTextPacket titlePacket = new ClientboundSetTitleTextPacket(titleComponent);
                     context.player.connection.send(titlePacket);
                 }
@@ -46,16 +47,34 @@ public class MessageParser {
             Pattern.compile("\\[subtitle=(.*?)\\]"), (matcher, context) -> {
                 if (context.player != null) {
                     String subtitleText = matcher.group(1);
-                    Component subtitleComponent = parseMessage("§" + context.colorCode + subtitleText, context.player);
+                    Component subtitleComponent = parseMessage(context.colorCode + subtitleText, context.player);
                     ClientboundSetSubtitleTextPacket subtitlePacket = new ClientboundSetSubtitleTextPacket(subtitleComponent);
                     context.player.connection.send(subtitlePacket);
                 }
+            },
+            Pattern.compile("\\[center\\](.*?)\\[/center\\]"), (matcher, context) -> {
+                String text = matcher.group(1);
+                int originalLength = text.length();
+                MutableComponent centered = parseMessage(context.colorCode + text, context.player);
+                String parsedText = centered.getString();
+                int width = 50;
+                String paddedText = centerText(parsedText, width, originalLength);
+                context.component.append(new TextComponent(paddedText).setStyle(context.style));
             }
     );
 
-    public static MutableComponent parseMessage(String rawMessage, ServerPlayer player) {
-        rawMessage = rawMessage.replace("&", "§");
+    private static final Map<String, MutableComponent> messageCache = new ConcurrentHashMap<>();
 
+    public static MutableComponent parseMessage(String rawMessage, ServerPlayer player) {
+        if (rawMessage == null) {
+            return new TextComponent("");
+        }
+
+        if (messageCache.containsKey(rawMessage)) {
+            return messageCache.get(rawMessage);
+        }
+
+        rawMessage = rawMessage.replace("&", "§");
         Matcher hexMatcher = HEX_PATTERN.matcher(rawMessage);
         StringBuffer sb = new StringBuffer();
         while (hexMatcher.find()) {
@@ -132,6 +151,7 @@ public class MessageParser {
                 }
             }
         }
+        messageCache.put(rawMessage, message);
 
         return message;
     }
@@ -145,6 +165,21 @@ public class MessageParser {
 
     private static boolean isValidHexColor(String hexColor) {
         return hexColor.matches("[A-Fa-f0-9]{6}");
+    }
+
+    private static String centerText(String text, int width, int originalLength) {
+        int textLength = originalLength;
+        if (textLength >= width) {
+            return text;
+        }
+
+        int spaces = (width - textLength) / 2;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < spaces; i++) {
+            sb.append(" ");
+        }
+        sb.append(text);
+        return sb.toString();
     }
 
     private static class TagContext {
