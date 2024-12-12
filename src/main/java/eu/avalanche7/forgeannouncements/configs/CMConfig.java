@@ -75,7 +75,7 @@ public class CMConfig {
         welcomeText.add("&aEnjoy your stay and check out our rules.");
         actions1.add(new CustomCommand.Action("message", welcomeText, null, null, null, null));
 
-        defaultCommands.add(new CustomCommand("example", "Sends a greeting to the player.", "example.custom.permissions", true, actions1));
+        defaultCommands.add(new CustomCommand("example", "Sends a greeting to the player.", "example.custom.permissions", false, actions1));
 
         List<CustomCommand.Action> actions2 = new ArrayList<>();
         actions2.add(new CustomCommand.Action("teleport", null, 100, 64, 100, null));
@@ -83,7 +83,7 @@ public class CMConfig {
         spawnText.add("&aYou have been teleported to spawn!");
         actions2.add(new CustomCommand.Action("message", spawnText, null, null, null, null));
 
-        defaultCommands.add(new CustomCommand("example2", "Teleports the player to spawn.", "example2.custom.permissions", true, actions2));
+        defaultCommands.add(new CustomCommand("example2", "Teleports the player to spawn.", "example2.custom.permissions", false, actions2));
 
         List<CustomCommand.Action> actions3 = new ArrayList<>();
         List<String> cmds = new ArrayList<>();
@@ -92,7 +92,7 @@ public class CMConfig {
 
         actions3.add(new CustomCommand.Action("runcmd", null, null, null, null, cmds));
 
-        defaultCommands.add(new CustomCommand("example3", "Runs multiple commands for admins.", "example3.custom.permissions", false, actions3));
+        defaultCommands.add(new CustomCommand("example3", "Runs multiple commands for admins.", "example3.custom.permissions", true, actions3));
 
         loadedCommands = defaultCommands;
         saveCommands();
