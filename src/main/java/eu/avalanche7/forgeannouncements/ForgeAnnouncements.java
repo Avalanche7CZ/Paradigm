@@ -38,6 +38,7 @@ public class ForgeAnnouncements {
         MinecraftForge.EVENT_BUS.register(Restart.class);
         MinecraftForge.EVENT_BUS.register(StaffChat.class);
         MinecraftForge.EVENT_BUS.register(Lang.class);
+        MinecraftForge.EVENT_BUS.register(CommandManager.class);
         MinecraftForge.EVENT_BUS.register(GroupChatManager.class);
         MinecraftForge.EVENT_BUS.register(GroupChatListener.class);
         MinecraftForge.EVENT_BUS.register(new GroupChatListener(groupChatManager));
@@ -46,6 +47,7 @@ public class ForgeAnnouncements {
         try {
             createDefaultConfigs();
             createLangFolder();
+            createCommandFolder();
 
             Path serverConfigDir = FMLPaths.GAMEDIR.get().resolve("config/forgeannouncements");
 
@@ -56,6 +58,7 @@ public class ForgeAnnouncements {
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, ChatConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("chat.toml").toString());
 
             MOTDConfigHandler.loadConfig();
+            CMConfig.loadCommands();
             MainConfigHandler.loadConfig(MainConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("main.toml").toString());
             RestartConfigHandler.loadConfig(RestartConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("restarts.toml").toString());
             AnnouncementsConfigHandler.loadConfig(AnnouncementsConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("announcements.toml").toString());
@@ -97,6 +100,17 @@ public class ForgeAnnouncements {
             MOTDConfigHandler.loadConfig();
         }
 
+        Path commandsDir = configDir.resolve("commands");
+        if (!Files.exists(commandsDir)) {
+            Files.createDirectories(commandsDir);
+        }
+
+        Path commandsConfig = commandsDir.resolve("example.json");
+        if (!Files.exists(commandsConfig)) {
+            Files.createFile(commandsConfig);
+            CMConfig.loadCommands();
+        }
+
         Path mentionsConfig = configDir.resolve("mentions.toml");
         if (!Files.exists(mentionsConfig)) {
             Files.createFile(mentionsConfig);
@@ -116,6 +130,13 @@ public class ForgeAnnouncements {
             ChatConfigHandler.SERVER_CONFIG.save();
         }
 
+    }
+
+    private void createCommandFolder() throws IOException {
+        Path commandsFolder = FMLPaths.GAMEDIR.get().resolve("config/forgeannouncements/commands");
+        if (!Files.exists(commandsFolder)) {
+            Files.createDirectories(commandsFolder);
+        }
     }
 
     private void createLangFolder() throws IOException {
