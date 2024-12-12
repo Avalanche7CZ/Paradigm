@@ -123,6 +123,9 @@ public class MessageParser {
                 for (Map.Entry<Pattern, BiConsumer<Matcher, TagContext>> entry : TAG_HANDLERS.entrySet()) {
                     Matcher matcher = entry.getKey().matcher(textPart);
                     if (matcher.find()) {
+                        if (matcher.start() > 0) {
+                            context.component.append(new TextComponent(textPart.substring(0, matcher.start())).setStyle(context.style));
+                        }
                         entry.getValue().accept(matcher, context);
                         textPart = textPart.substring(matcher.end()).trim();
                         matched = true;
