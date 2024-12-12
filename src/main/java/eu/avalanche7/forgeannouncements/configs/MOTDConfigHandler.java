@@ -76,7 +76,7 @@ public class MOTDConfigHandler {
                 "§7[subtitle=Server Information]",
                 "§aWelcome to the server!",
                 "§7Visit our website: §c[link=http://example.com]",
-                "§bType [command=/help] for commands",
+                "§bType [command=help] for commands",
                 "§eHover over this message [hover=This is a hover text!] to see more info.",
                 "§7[divider]"
             );
