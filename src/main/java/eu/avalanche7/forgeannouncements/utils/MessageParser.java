@@ -29,7 +29,7 @@ public class MessageParser {
             },
             Pattern.compile("\\[hover=(.*?)\\]"), (matcher, context) -> {
                 String hoverText = matcher.group(1);
-                context.component.append(new TextComponent(hoverText+ " ")
+                context.component.append(new TextComponent(hoverText + " ")
                         .setStyle(context.style.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new TextComponent(hoverText)))));
             },
             Pattern.compile("\\[divider\\]"), (matcher, context) -> {
@@ -39,17 +39,16 @@ public class MessageParser {
             Pattern.compile("\\[title=(.*?)\\]"), (matcher, context) -> {
                 if (context.player != null) {
                     String titleText = matcher.group(1);
-                    Component titleComponent = parseMessage(context.colorCode + titleText, context.player);
-                    ClientboundSetTitleTextPacket titlePacket = new ClientboundSetTitleTextPacket(titleComponent);
-                    context.player.connection.send(titlePacket);
+                    MutableComponent titleComponent = parseTitleandSubtitle(titleText, context.style, context.player);
+                    context.player.connection.send(new ClientboundClearTitlesPacket(false));
+                    context.player.connection.send(new ClientboundSetTitleTextPacket(titleComponent));
                 }
             },
             Pattern.compile("\\[subtitle=(.*?)\\]"), (matcher, context) -> {
                 if (context.player != null) {
                     String subtitleText = matcher.group(1);
-                    Component subtitleComponent = parseMessage(context.colorCode + subtitleText, context.player);
-                    ClientboundSetSubtitleTextPacket subtitlePacket = new ClientboundSetSubtitleTextPacket(subtitleComponent);
-                    context.player.connection.send(subtitlePacket);
+                    MutableComponent subtitleComponent = parseTitleandSubtitle(subtitleText, context.style, context.player);
+                    context.player.connection.send(new ClientboundSetSubtitleTextPacket(subtitleComponent));
                 }
             },
             Pattern.compile("\\[center\\](.*?)\\[/center\\]"), (matcher, context) -> {
@@ -62,6 +61,18 @@ public class MessageParser {
                 context.component.append(new TextComponent(paddedText).setStyle(context.style));
             }
     );
+
+
+    private static MutableComponent parseTitleandSubtitle(String rawMessage, Style currentStyle, ServerPlayer player) {
+        MutableComponent parsedComponent = parseMessage(rawMessage, player);
+        for (Component sibling : parsedComponent.getSiblings()) {
+            if (sibling instanceof MutableComponent) {
+                ((MutableComponent) sibling).setStyle(currentStyle.applyTo(sibling.getStyle()));
+            }
+        }
+        parsedComponent.setStyle(currentStyle.applyTo(parsedComponent.getStyle()));
+        return parsedComponent;
+    }
 
     private static final Map<String, MutableComponent> messageCache = new ConcurrentHashMap<>();
 
@@ -140,7 +151,9 @@ public class MessageParser {
                         int end = urlMatcher.end();
 
                         if (start > 0) {
-                            message.append(new TextComponent(textPart.substring(0, start)).setStyle(currentStyle));
+                            TextComponent partComponent = new TextComponent(parts[i]);
+                            partComponent.setStyle(currentStyle);
+                            message.append(partComponent);
                         }
 
                         String url = textPart.substring(start, end);
