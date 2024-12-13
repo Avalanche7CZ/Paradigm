@@ -28,6 +28,7 @@ Forge Announcements is a Minecraft mod designed for server administrators who wa
 - GroupChat
 - Hex Color Support
 - Supported Languages: English, Russian, Czech
+- **Custom Commands**
 
 ## Installation
 1. Download the latest version of the mod from the [Releases page](https://github.com/Avalanche7CZ/ForgeAnnouncements/releases).
