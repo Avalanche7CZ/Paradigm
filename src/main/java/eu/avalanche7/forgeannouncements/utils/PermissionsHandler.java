@@ -3,6 +3,7 @@ package eu.avalanche7.forgeannouncements.utils;
 import com.forgeessentials.api.APIRegistry;
 import com.forgeessentials.api.permissions.DefaultPermissionLevel;
 import dev.ftb.mods.ftbranks.api.FTBRanksAPI;
+import eu.avalanche7.forgeannouncements.configs.CMConfig;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -55,8 +56,17 @@ public class PermissionsHandler {
             ((ForgeEssentialsChecker) checker).registerPermission(MENTION_PLAYER_PERMISSION, "Allows mentioning a player");
             ((ForgeEssentialsChecker) checker).registerPermission(STAFF_CHAT_PERMISSION, "Allows access to staff chat");
         } else {
-            LOGGER.warning("Cannot register permissions. ForgeEssentials mod is not present [NOT ERROR].");
+            DebugLogger.debugLog("Cannot register permissions. ForgeEssentials mod is not present [NOT ERROR].");
         }
+        // Dynamically register custom command permissions
+        CMConfig.getLoadedCommands().forEach(command -> {
+            if (command.isRequirePermission() && checker instanceof ForgeEssentialsChecker feChecker) {
+                String permissionDescription = command.getDescription() != null ? command.getDescription() : "No description available.";
+                feChecker.registerPermission(command.getPermission(), permissionDescription);
+                DebugLogger.debugLog("Registered custom permission: " + command.getPermission() + " - " + permissionDescription);
+            }
+        });
+
     }
 
     public static boolean hasPermission(ServerPlayer player, String permission) {
