@@ -21,6 +21,7 @@ public class MainConfigHandler {
         public final ForgeConfigSpec.BooleanValue restartEnable;
         public final ForgeConfigSpec.BooleanValue debugEnable;
         public final ForgeConfigSpec.ConfigValue<String> defaultLanguage;
+        public final ForgeConfigSpec.BooleanValue commandManagerEnable;
 
 
         public Config(ForgeConfigSpec.Builder builder) {
@@ -48,6 +49,9 @@ public class MainConfigHandler {
             defaultLanguage = builder
                     .comment("Set the default language")
                     .define("defaultLanguage", "en");
+            commandManagerEnable = builder
+                    .comment("Enable or disable CommandManager feature")
+                    .define("commandManagerEnable", true);
 
             builder.pop();
         }

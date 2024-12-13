@@ -1,6 +1,7 @@
 package eu.avalanche7.forgeannouncements.utils;
 
 import com.mojang.brigadier.CommandDispatcher;
+import eu.avalanche7.forgeannouncements.configs.MainConfigHandler;
 import eu.avalanche7.forgeannouncements.configs.CMConfig;
 import eu.avalanche7.forgeannouncements.data.CustomCommand;
 import net.minecraft.network.chat.Component;
@@ -16,6 +17,10 @@ public class CommandManager {
 
     @SubscribeEvent
     public static void registerCommands(RegisterCommandsEvent event) {
+        if (!MainConfigHandler.CONFIG.commandManagerEnable.get()) {
+            return;
+        }
+
         var dispatcher = event.getDispatcher();
         registerAllCustomCommands(dispatcher);
         dispatcher.register(
@@ -101,4 +106,3 @@ public class CommandManager {
         }
     }
 }
-
