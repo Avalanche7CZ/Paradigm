@@ -59,7 +59,13 @@ public class CommandManager {
         } catch (Exception e) {
             return false;
         }
-        return PermissionsHandler.hasPermission(player, command.getPermission());
+        boolean hasPermission = PermissionsHandler.hasPermission(player, command.getPermission());
+        if (!hasPermission) {
+            String errorMessage = command.getPermissionErrorMessage();
+            player.sendMessage(MessageParser.parseMessage(errorMessage, player), player.getUUID());
+        }
+
+        return hasPermission;
     }
 
     private static void executeCommand(CommandSourceStack source, CustomCommand command) {
@@ -90,13 +96,23 @@ public class CommandManager {
                     }
                     break;
 
-                case "runcmd":
+                case "run_command":
                     if (action.getCommands() != null) {
                         for (String cmd : action.getCommands()) {
                             source.getServer().getCommands().performCommand(source, cmd);
                         }
                     } else {
-                        player.sendMessage(MessageParser.parseMessage("&cNo commands to run.", player), player.getUUID());
+                        player.sendMessage(MessageParser.parseMessage("&cNo player commands to run.", player), player.getUUID());
+                    }
+                    break;
+
+                case "run_console":
+                    if (action.getCommands() != null) {
+                        for (String cmd : action.getCommands()) {
+                            source.getServer().getCommands().performCommand(source.getServer().createCommandSourceStack(), cmd);
+                        }
+                    } else {
+                        player.sendMessage(MessageParser.parseMessage("&cNo console commands to run.", player), player.getUUID());
                     }
                     break;
 

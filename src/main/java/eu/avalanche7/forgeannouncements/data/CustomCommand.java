@@ -8,6 +8,7 @@ public class CustomCommand {
     private String description;
     private String permission;
     private boolean requirePermission;
+    private String permissionErrorMessage;
     private List<Action> actions;
 
     public CustomCommand(String name, String description, String permission, boolean requirePermission, List<Action> actions) {
@@ -15,6 +16,7 @@ public class CustomCommand {
         this.description = description;
         this.permission = permission;
         this.requirePermission = requirePermission;
+        this.permissionErrorMessage = permissionErrorMessage;
         this.actions = actions;
     }
 
@@ -36,6 +38,10 @@ public class CustomCommand {
 
     public List<Action> getActions() {
         return actions;
+    }
+
+    public String getPermissionErrorMessage() {
+        return permissionErrorMessage != null ? permissionErrorMessage : "&cYou do not have permission to execute this command."; // Default error message
     }
 
     public static class Action {
