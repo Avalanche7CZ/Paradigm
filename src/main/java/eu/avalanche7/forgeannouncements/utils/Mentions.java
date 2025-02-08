@@ -54,7 +54,7 @@ public class Mentions {
                 return;
             }
             DebugLogger.debugLog("Mention everyone detected");
-            notifyEveryone(players, sender, message);
+            notifyEveryone(players, sender, message, false);
             event.setCanceled(true);
         } else {
             for (ServerPlayer player : players) {
@@ -73,15 +73,15 @@ public class Mentions {
                         return;
                     }
                     DebugLogger.debugLog("Mention player detected: " + player.getName().getString());
-                    notifyPlayer(player, sender, message);
+                    notifyPlayer(player, sender, message, false);
                     event.setCanceled(true);
                 }
             }
         }
     }
 
-    private static boolean canMentionEveryone(ServerPlayer sender) {
-        if (sender.hasPermissions(2)) { // OP bypass
+    public static boolean canMentionEveryone(ServerPlayer sender) {
+        if (sender != null && sender.hasPermissions(2)) {
             return true;
         }
         int rateLimit = MentionConfigHandler.EVERYONE_MENTION_RATE_LIMIT.get();
@@ -93,8 +93,8 @@ public class Mentions {
         return true;
     }
 
-    private static boolean canMentionPlayer(ServerPlayer sender, ServerPlayer player) {
-        if (sender.hasPermissions(2)) { // OP bypass
+    public static boolean canMentionPlayer(ServerPlayer sender, ServerPlayer player) {
+        if (sender != null && sender.hasPermissions(2)) {
             return true;
         }
         int rateLimit = MentionConfigHandler.INDIVIDUAL_MENTION_RATE_LIMIT.get();
@@ -107,25 +107,27 @@ public class Mentions {
         return true;
     }
 
-    private static void notifyEveryone(List<ServerPlayer> players, ServerPlayer sender, String message) {
-        String chatMessage = String.format(MentionConfigHandler.EVERYONE_MENTION_MESSAGE.get(), sender.getName().getString());
-        String titleMessage = String.format(MentionConfigHandler.EVERYONE_TITLE_MESSAGE.get(), sender.getName().getString());
+    public static void notifyEveryone(List<ServerPlayer> players, ServerPlayer sender, String message, boolean isConsole) {
+        String senderName = isConsole || sender == null ? "Console" : sender.getName().getString(); // Handle null sender
+        String chatMessage = String.format(MentionConfigHandler.EVERYONE_MENTION_MESSAGE.get(), senderName);
+        String titleMessage = String.format(MentionConfigHandler.EVERYONE_TITLE_MESSAGE.get(), senderName);
         String subtitleMessage = message.replaceFirst("@everyone", "").trim();
 
         for (ServerPlayer player : players) {
-            sendMentionNotification(player, chatMessage, titleMessage, subtitleMessage);
+            sendMentionNotification(player, player, chatMessage, titleMessage, subtitleMessage);
         }
     }
 
-    private static void notifyPlayer(ServerPlayer player, ServerPlayer sender, String message) {
-        String chatMessage = String.format(MentionConfigHandler.INDIVIDUAL_MENTION_MESSAGE.get(), sender.getName().getString());
-        String titleMessage = String.format(MentionConfigHandler.INDIVIDUAL_TITLE_MESSAGE.get(), sender.getName().getString());
+    public static void notifyPlayer(ServerPlayer player, ServerPlayer sender, String message, boolean isConsole) {
+        String senderName = isConsole || sender == null ? "Console" : sender.getName().getString();
+        String chatMessage = String.format(MentionConfigHandler.INDIVIDUAL_MENTION_MESSAGE.get(), senderName);
+        String titleMessage = String.format(MentionConfigHandler.INDIVIDUAL_TITLE_MESSAGE.get(), senderName);
         String subtitleMessage = message.replaceFirst("@" + player.getName().getString(), "").trim();
 
-        sendMentionNotification(player, chatMessage, titleMessage, subtitleMessage);
+        sendMentionNotification(player, player, chatMessage, titleMessage, subtitleMessage);
     }
 
-    private static void sendMentionNotification(ServerPlayer player, String chatMessage, String titleMessage, String subtitleMessage) {
+    private static void sendMentionNotification(ServerPlayer player, ServerPlayer senderForSound, String chatMessage, String titleMessage, String subtitleMessage) {
         MutableComponent formattedChatMessage = MessageParser.parseMessage(chatMessage,null);
         if (!subtitleMessage.isEmpty()) {
             MutableComponent formattedSubtitleMessage = MessageParser.parseMessage("- " + subtitleMessage,null);
