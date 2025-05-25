@@ -7,208 +7,265 @@ import net.minecraft.network.protocol.game.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.Map;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.function.BiConsumer;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class MessageParser {
 
     private static final Pattern HEX_PATTERN = Pattern.compile("&#([A-Fa-f0-9]{6})");
-    private static final Pattern URL_PATTERN = Pattern.compile("http://\\S+|https://\\S+");
+    private static final Pattern URL_PATTERN = Pattern.compile("https://?://\\S+");
 
-    private static final Map<Pattern, BiConsumer<Matcher, TagContext>> TAG_HANDLERS = Map.of(
-            Pattern.compile("\\[link=(.*?)\\]"), (matcher, context) -> {
-                String url = matcher.group(1);
-                context.component.append(new TextComponent(url)
-                                .setStyle(context.style.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, formatUrl(url)))))
-                        .append(new TextComponent(" "));
-            },
-            Pattern.compile("\\[command=(.*?)\\]"), (matcher, context) -> {
-                String command = matcher.group(1);
-                context.component.append(new TextComponent("/" + command + " ")
-                        .setStyle(context.style.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/" + command))));
-            },
-            Pattern.compile("\\[hover=(.*?)\\]"), (matcher, context) -> {
-                String hoverText = matcher.group(1);
-                context.component.append(new TextComponent(hoverText + " ")
-                        .setStyle(context.style.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, new TextComponent(hoverText)))));
-            },
-            Pattern.compile("\\[divider\\]"), (matcher, context) -> {
-                context.component.append(new TextComponent("--------------------")
-                        .setStyle(context.style.withColor(TextColor.fromLegacyFormat(ChatFormatting.GRAY))));
-            },
-            Pattern.compile("\\[title=(.*?)\\]"), (matcher, context) -> {
-                if (context.player != null) {
-                    String titleText = matcher.group(1);
-                    MutableComponent titleComponent = parseTitleandSubtitle(titleText, context.style, context.player);
-                    context.player.connection.send(new ClientboundClearTitlesPacket(false));
-                    context.player.connection.send(new ClientboundSetTitleTextPacket(titleComponent));
-                }
-            },
-            Pattern.compile("\\[subtitle=(.*?)\\]"), (matcher, context) -> {
-                if (context.player != null) {
-                    String subtitleText = matcher.group(1);
-                    MutableComponent subtitleComponent = parseTitleandSubtitle(subtitleText, context.style, context.player);
-                    context.player.connection.send(new ClientboundSetSubtitleTextPacket(subtitleComponent));
-                }
-            },
-            Pattern.compile("\\[center\\](.*?)\\[/center\\]"), (matcher, context) -> {
-                String text = matcher.group(1);
-                int originalLength = text.length();
-                MutableComponent centered = parseMessage(context.colorCode + text, context.player);
-                String parsedText = centered.getString();
-                int width = 50;
-                String paddedText = centerText(parsedText, width, originalLength);
-                context.component.append(new TextComponent(paddedText).setStyle(context.style));
+    private static final Map<Pattern, BiConsumer<Matcher, TagContext>> TAG_HANDLERS;
+
+    static {
+        TAG_HANDLERS = new LinkedHashMap<>();
+        TAG_HANDLERS.put(Pattern.compile("\\[link=(.*?)\\]"), (matcher, context) -> {
+            String url = matcher.group(1);
+            context.getComponent().append(new TextComponent(url)
+                            .setStyle(context.getCurrentStyle().withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, formatUrl(url)))))
+                    .append(new TextComponent(" ").setStyle(context.getCurrentStyle()));
+        });
+        TAG_HANDLERS.put(Pattern.compile("\\[command=(.*?)\\]"), (matcher, context) -> {
+            String command = matcher.group(1);
+            String fullCommand = command.startsWith("/") ? command : "/" + command;
+            context.getComponent().append(new TextComponent(fullCommand)
+                            .setStyle(context.getCurrentStyle().withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, fullCommand))))
+                    .append(new TextComponent(" ").setStyle(context.getCurrentStyle()));
+        });
+        TAG_HANDLERS.put(Pattern.compile("\\[hover=(.*?)\\](.*?)\\[/hover\\]", Pattern.DOTALL), (matcher, context) -> {
+            String hoverTextContent = matcher.group(1);
+            String mainTextContent = matcher.group(2);
+            MutableComponent hoverComponent = parseMessage(hoverTextContent, context.getPlayer(), Style.EMPTY);
+            MutableComponent textWithHover = new TextComponent("");
+            parseTextRecursive(mainTextContent, textWithHover, context.getCurrentStyle(), context.getPlayer());
+            applyHoverToComponent(textWithHover, new HoverEvent(HoverEvent.Action.SHOW_TEXT, hoverComponent));
+            context.getComponent().append(textWithHover);
+        });
+        TAG_HANDLERS.put(Pattern.compile("\\[divider\\]"), (matcher, context) -> {
+            context.getComponent().append(new TextComponent("--------------------")
+                    .setStyle(context.getCurrentStyle().withColor(TextColor.fromLegacyFormat(ChatFormatting.GRAY))));
+        });
+        TAG_HANDLERS.put(Pattern.compile("\\[title=(.*?)\\]", Pattern.DOTALL), (matcher, context) -> {
+            if (context.getPlayer() != null) {
+                String titleText = matcher.group(1);
+                MutableComponent titleComponent = parseTitleOrSubtitle(titleText, context.getCurrentStyle(), context.getPlayer());
+                context.getPlayer().connection.send(new ClientboundClearTitlesPacket(true));
+                context.getPlayer().connection.send(new ClientboundSetTitleTextPacket(titleComponent));
             }
-    );
+        });
+        TAG_HANDLERS.put(Pattern.compile("\\[subtitle=(.*?)\\]", Pattern.DOTALL), (matcher, context) -> {
+            if (context.getPlayer() != null) {
+                String subtitleText = matcher.group(1);
+                MutableComponent subtitleComponent = parseTitleOrSubtitle(subtitleText, context.getCurrentStyle(), context.getPlayer());
+                context.getPlayer().connection.send(new ClientboundSetSubtitleTextPacket(subtitleComponent));
+            }
+        });
+        TAG_HANDLERS.put(Pattern.compile("\\[center\\](.*?)\\[/center\\]", Pattern.DOTALL), (matcher, context) -> {
+            String textToCenter = matcher.group(1);
+            MutableComponent innerComponent = parseMessage(textToCenter, context.getPlayer(), context.getCurrentStyle());
+            String plainInnerText = innerComponent.getString();
+            int approximateChatWidthChars = 53;
+            String paddingSpaces = "";
+            int textLength = plainInnerText.length();
 
+            if (textLength < approximateChatWidthChars) {
+                int totalPadding = approximateChatWidthChars - textLength;
+                int leftPadding = totalPadding / 2;
+                if (leftPadding > 0) {
+                    paddingSpaces = " ".repeat(leftPadding);
+                }
+            }
+            if (!paddingSpaces.isEmpty()) {
+                context.getComponent().append(new TextComponent(paddingSpaces).setStyle(context.getCurrentStyle()));
+            }
+            context.getComponent().append(innerComponent);
+        });
+    }
 
-    private static MutableComponent parseTitleandSubtitle(String rawMessage, Style currentStyle, ServerPlayer player) {
-        MutableComponent parsedComponent = parseMessage(rawMessage, player);
-        for (Component sibling : parsedComponent.getSiblings()) {
+    private static void applyHoverToComponent(MutableComponent component, HoverEvent hoverEvent) {
+        component.setStyle(component.getStyle().withHoverEvent(hoverEvent));
+        for (Component sibling : component.getSiblings()) {
             if (sibling instanceof MutableComponent) {
-                ((MutableComponent) sibling).setStyle(currentStyle.applyTo(sibling.getStyle()));
+                applyHoverToComponent((MutableComponent) sibling, hoverEvent);
             }
         }
-        parsedComponent.setStyle(currentStyle.applyTo(parsedComponent.getStyle()));
-        return parsedComponent;
     }
 
     private static final Map<String, MutableComponent> messageCache = new ConcurrentHashMap<>();
 
     public static MutableComponent parseMessage(String rawMessage, ServerPlayer player) {
+        return parseMessage(rawMessage, player, Style.EMPTY);
+    }
+
+    private static MutableComponent parseMessage(String rawMessage, ServerPlayer player, Style initialStyle) {
         if (rawMessage == null) {
-            return new TextComponent("");
+            return new TextComponent("").setStyle(initialStyle);
         }
 
-        if (messageCache.containsKey(rawMessage)) {
-            return messageCache.get(rawMessage);
-        }
+        String processedMessage = Placeholders.replacePlaceholders(rawMessage, player);
 
-        rawMessage = rawMessage.replace("&", "§");
-        Matcher hexMatcher = HEX_PATTERN.matcher(rawMessage);
+        Matcher hexMatcher = HEX_PATTERN.matcher(processedMessage);
         StringBuffer sb = new StringBuffer();
         while (hexMatcher.find()) {
             String hexColor = hexMatcher.group(1);
-            if (isValidHexColor(hexColor)) {
-                hexMatcher.appendReplacement(sb, "§#" + hexColor);
-            }
+            hexMatcher.appendReplacement(sb, "§#" + hexColor);
         }
         hexMatcher.appendTail(sb);
-        rawMessage = sb.toString();
+        processedMessage = sb.toString();
 
-        MutableComponent message = new TextComponent("");
-        String[] parts = rawMessage.split("§", -1);
-        Style currentStyle = Style.EMPTY;
+        String messageForParsing = processedMessage.replace("&", "§");
 
-        for (int i = 0; i < parts.length; i++) {
-            if (parts[i].isEmpty()) continue;
+        final String finalCacheKey = messageForParsing + "_style_" + initialStyle.hashCode();
+        if (messageCache.containsKey(finalCacheKey)) {
+            return messageCache.get(finalCacheKey).copy();
+        }
 
-            if (i > 0) {
-                if (parts[i].startsWith("#")) {
-                    String hexCode = parts[i].substring(1, 7);
-                    if (isValidHexColor(hexCode)) {
-                        try {
-                            currentStyle = currentStyle.withColor(TextColor.fromRgb(Integer.parseInt(hexCode, 16)));
-                        } catch (NumberFormatException e) {
-                            currentStyle = currentStyle.withColor(TextColor.fromRgb(0xFFFFFF));
-                        }
-                        parts[i] = parts[i].substring(7);
-                    }
-                } else {
-                    char colorCode = parts[i].charAt(0);
-                    ChatFormatting format = ChatFormatting.getByCode(colorCode);
-                    if (format != null) {
-                        currentStyle = currentStyle.applyFormat(format);
-                    }
-                    parts[i] = parts[i].substring(1);
-                }
+        MutableComponent rootComponent = new TextComponent("");
+        parseTextRecursive(messageForParsing, rootComponent, initialStyle, player);
+
+        messageCache.put(finalCacheKey, rootComponent);
+        return rootComponent;
+    }
+
+    private static void parseTextRecursive(String textToParse, MutableComponent parentComponent, Style currentStyle, ServerPlayer player) {
+        int currentIndex = 0;
+        int length = textToParse.length();
+        Matcher urlMatcher = URL_PATTERN.matcher(textToParse);
+
+        while (currentIndex < length) {
+            int nextLegacyFormat = textToParse.indexOf('§', currentIndex);
+            int nextTagStart = textToParse.indexOf('[', currentIndex);
+
+            boolean nextUrlFound = urlMatcher.find(currentIndex);
+            int nextUrlStart = nextUrlFound ? urlMatcher.start() : -1;
+
+            int firstEventIndex = length;
+            if (nextLegacyFormat != -1) firstEventIndex = Math.min(firstEventIndex, nextLegacyFormat);
+            if (nextTagStart != -1) firstEventIndex = Math.min(firstEventIndex, nextTagStart);
+            if (nextUrlFound && nextUrlStart != -1) firstEventIndex = Math.min(firstEventIndex, nextUrlStart);
+
+            if (firstEventIndex > currentIndex) {
+                parentComponent.append(new TextComponent(textToParse.substring(currentIndex, firstEventIndex)).setStyle(currentStyle));
             }
 
-            TagContext context = new TagContext(message, currentStyle, player, "");
-            String textPart = parts[i];
+            currentIndex = firstEventIndex;
 
-            while (!textPart.isEmpty()) {
-                boolean matched = false;
+            if (currentIndex == length) break;
 
-                for (Map.Entry<Pattern, BiConsumer<Matcher, TagContext>> entry : TAG_HANDLERS.entrySet()) {
-                    Matcher matcher = entry.getKey().matcher(textPart);
-                    if (matcher.find()) {
-                        if (matcher.start() > 0) {
-                            context.component.append(new TextComponent(textPart.substring(0, matcher.start())).setStyle(context.style));
+            if (nextLegacyFormat == currentIndex) {
+                if (currentIndex + 1 < length) {
+                    char formatChar = textToParse.charAt(currentIndex + 1);
+                    if (formatChar == '#') {
+                        if (currentIndex + 7 < length) {
+                            String hex = textToParse.substring(currentIndex + 2, currentIndex + 8);
+                            try {
+                                currentStyle = currentStyle.withColor(TextColor.fromRgb(Integer.parseInt(hex, 16)));
+                                currentIndex += 8;
+                            } catch (NumberFormatException e) {
+                                parentComponent.append(new TextComponent(textToParse.substring(currentIndex, currentIndex + 2)).setStyle(currentStyle));
+                                currentIndex += 2;
+                            }
+                        } else {
+                            parentComponent.append(new TextComponent(textToParse.substring(currentIndex, currentIndex + 1)).setStyle(currentStyle));
+                            currentIndex += 1;
                         }
-                        entry.getValue().accept(matcher, context);
-                        textPart = textPart.substring(matcher.end()).trim();
-                        matched = true;
+                    } else {
+                        ChatFormatting format = ChatFormatting.getByCode(formatChar);
+                        if (format != null) {
+                            currentStyle = currentStyle.applyFormat(format);
+                            if (format == ChatFormatting.RESET) currentStyle = Style.EMPTY;
+                        } else {
+                            parentComponent.append(new TextComponent(textToParse.substring(currentIndex, currentIndex + 1)).setStyle(currentStyle));
+                        }
+                        currentIndex += 2;
+                    }
+                } else {
+                    parentComponent.append(new TextComponent(textToParse.substring(currentIndex, currentIndex + 1)).setStyle(currentStyle));
+                    currentIndex += 1;
+                }
+            } else if (nextTagStart == currentIndex) {
+                boolean tagHandled = false;
+                for (Map.Entry<Pattern, BiConsumer<Matcher, TagContext>> entry : TAG_HANDLERS.entrySet()) {
+                    Pattern tagPattern = entry.getKey();
+                    Matcher tagMatcher = tagPattern.matcher(textToParse);
+                    if (tagMatcher.find(currentIndex) && tagMatcher.start() == currentIndex) {
+                        TagContext context = new TagContext(parentComponent, currentStyle, player);
+                        entry.getValue().accept(tagMatcher, context);
+                        currentIndex = tagMatcher.end();
+                        tagHandled = true;
                         break;
                     }
                 }
-
-                if (!matched) {
-                    Matcher urlMatcher = URL_PATTERN.matcher(textPart);
-                    if (urlMatcher.find()) {
-                        int start = urlMatcher.start();
-                        int end = urlMatcher.end();
-
-                        if (start > 0) {
-                            TextComponent partComponent = new TextComponent(parts[i]);
-                            partComponent.setStyle(currentStyle);
-                            message.append(partComponent);
-                        }
-
-                        String url = textPart.substring(start, end);
-                        message.append(new TextComponent(url).setStyle(currentStyle.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, url))));
-
-                        textPart = textPart.substring(end).trim();
-                    } else {
-                        message.append(new TextComponent(textPart).setStyle(currentStyle));
-                        textPart = "";
-                    }
+                if (!tagHandled) {
+                    parentComponent.append(new TextComponent(textToParse.substring(currentIndex, currentIndex + 1)).setStyle(currentStyle));
+                    currentIndex += 1;
+                }
+            } else if (nextUrlFound && nextUrlStart == currentIndex) {
+                String url = urlMatcher.group(0);
+                Style urlStyle = currentStyle.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, formatUrl(url)));
+                parentComponent.append(new TextComponent(url).setStyle(urlStyle));
+                currentIndex = urlMatcher.end();
+            } else {
+                if (currentIndex < length) {
+                    parentComponent.append(new TextComponent(textToParse.substring(currentIndex, currentIndex + 1)).setStyle(currentStyle));
+                    currentIndex += 1;
                 }
             }
         }
-        messageCache.put(rawMessage, message);
+    }
 
-        return message;
+    private static MutableComponent parseTitleOrSubtitle(String rawText, Style baseStyle, ServerPlayer player) {
+        MutableComponent parsedComponent = parseMessage(rawText, player, Style.EMPTY);
+        return applyBaseStyle(parsedComponent, baseStyle);
+    }
+
+    private static MutableComponent applyBaseStyle(MutableComponent component, Style baseStyle) {
+        MutableComponent styledComponent = component.copy();
+        styledComponent.setStyle(baseStyle.applyTo(styledComponent.getStyle()));
+
+        List<Component> children = new ArrayList<>(styledComponent.getSiblings());
+        styledComponent.getSiblings().clear();
+        for (Component child : children) {
+            if (child instanceof MutableComponent) {
+                styledComponent.append(applyBaseStyle((MutableComponent) child, baseStyle));
+            } else {
+                styledComponent.append(child.copy().setStyle(baseStyle.applyTo(child.getStyle())));
+            }
+        }
+        return styledComponent;
     }
 
     private static String formatUrl(String url) {
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+        if (url != null && !url.toLowerCase().startsWith("http://") && !url.toLowerCase().startsWith("https://")) {
             return "http://" + url;
         }
         return url;
     }
 
-    private static boolean isValidHexColor(String hexColor) {
-        return hexColor.matches("[A-Fa-f0-9]{6}");
-    }
-
-    private static String centerText(String text, int width, int originalLength) {
-        int textLength = originalLength;
-        if (textLength >= width) {
-            return text;
-        }
-
-        int spaces = (width - textLength) / 2;
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < spaces; i++) {
-            sb.append(" ");
-        }
-        sb.append(text);
-        return sb.toString();
-    }
-
     private static class TagContext {
-        final MutableComponent component;
-        final Style style;
-        final ServerPlayer player;
-        final String colorCode;
+        private final MutableComponent component;
+        private final Style currentStyle;
+        private final ServerPlayer player;
 
-        TagContext(MutableComponent component, Style style, ServerPlayer player, String colorCode) {
+        TagContext(MutableComponent component, Style style, ServerPlayer player) {
             this.component = component;
-            this.style = style;
+            this.currentStyle = style;
             this.player = player;
-            this.colorCode = colorCode;
+        }
+
+        public MutableComponent getComponent() {
+            return component;
+        }
+
+        public Style getCurrentStyle() {
+            return currentStyle;
+        }
+
+        public ServerPlayer getPlayer() {
+            return player;
         }
     }
 }

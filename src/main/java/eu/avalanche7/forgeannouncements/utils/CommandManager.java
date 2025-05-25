@@ -81,8 +81,7 @@ public class CommandManager {
                 case "message":
                     if (action.getText() != null) {
                         for (String line : action.getText()) {
-                            String parsedMessage = line.replace("[player]", player.getName().getString());
-                            Component formattedMessage = MessageParser.parseMessage(parsedMessage, player);
+                            Component formattedMessage = MessageParser.parseMessage(line, player);
                             player.sendMessage(formattedMessage, player.getUUID());
                         }
                     }
@@ -115,7 +114,6 @@ public class CommandManager {
                         player.sendMessage(MessageParser.parseMessage("&cNo console commands to run.", player), player.getUUID());
                     }
                     break;
-
                 default:
                     player.sendMessage(MessageParser.parseMessage("&cUnknown action type: " + action.getType(), player), player.getUUID());
             }
