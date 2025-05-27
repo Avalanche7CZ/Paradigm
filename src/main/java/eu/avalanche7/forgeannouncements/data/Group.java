@@ -6,13 +6,15 @@ import java.util.UUID;
 
 public class Group {
     private final String name;
-    private final UUID owner;
+    private UUID owner;
     private final Set<UUID> members = new HashSet<>();
+    private boolean isPublic;
 
     public Group(String name, UUID owner) {
         this.name = name;
         this.owner = owner;
         this.members.add(owner);
+        this.isPublic = false;
     }
 
     public String getName() {
@@ -21,6 +23,10 @@ public class Group {
 
     public UUID getOwner() {
         return owner;
+    }
+
+    public void setOwner(UUID owner) {
+        this.owner = owner;
     }
 
     public Set<UUID> getMembers() {
@@ -33,5 +39,13 @@ public class Group {
 
     public void removeMember(UUID member) {
         members.remove(member);
+    }
+
+    public boolean isPublic() {
+        return isPublic;
+    }
+
+    public void setPublic(boolean isPublic) {
+        this.isPublic = isPublic;
     }
 }

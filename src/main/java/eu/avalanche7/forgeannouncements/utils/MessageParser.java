@@ -15,40 +15,46 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class MessageParser {
 
-    private static final Pattern HEX_PATTERN = Pattern.compile("&#([A-Fa-f0-9]{6})");
-    private static final Pattern URL_PATTERN = Pattern.compile("https://?://\\S+");
+    private final Pattern hexPattern = Pattern.compile("&#([A-Fa-f0-9]{6})");
+    private final Pattern urlPattern = Pattern.compile("https://?://\\S+");
+    private final Map<Pattern, BiConsumer<Matcher, TagContext>> tagHandlers;
+    private final Map<String, MutableComponent> messageCache = new ConcurrentHashMap<>();
+    private final Placeholders placeholders;
 
-    private static final Map<Pattern, BiConsumer<Matcher, TagContext>> TAG_HANDLERS;
+    public MessageParser(Placeholders placeholders) {
+        this.placeholders = placeholders;
+        this.tagHandlers = new LinkedHashMap<>();
+        initializeTagHandlers();
+    }
 
-    static {
-        TAG_HANDLERS = new LinkedHashMap<>();
-        TAG_HANDLERS.put(Pattern.compile("\\[link=(.*?)\\]"), (matcher, context) -> {
+    private void initializeTagHandlers() {
+        tagHandlers.put(Pattern.compile("\\[link=(.*?)\\]"), (matcher, context) -> {
             String url = matcher.group(1);
             context.getComponent().append(new TextComponent(url)
                             .setStyle(context.getCurrentStyle().withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, formatUrl(url)))))
                     .append(new TextComponent(" ").setStyle(context.getCurrentStyle()));
         });
-        TAG_HANDLERS.put(Pattern.compile("\\[command=(.*?)\\]"), (matcher, context) -> {
+        tagHandlers.put(Pattern.compile("\\[command=(.*?)\\]"), (matcher, context) -> {
             String command = matcher.group(1);
             String fullCommand = command.startsWith("/") ? command : "/" + command;
             context.getComponent().append(new TextComponent(fullCommand)
                             .setStyle(context.getCurrentStyle().withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, fullCommand))))
                     .append(new TextComponent(" ").setStyle(context.getCurrentStyle()));
         });
-        TAG_HANDLERS.put(Pattern.compile("\\[hover=(.*?)\\](.*?)\\[/hover\\]", Pattern.DOTALL), (matcher, context) -> {
+        tagHandlers.put(Pattern.compile("\\[hover=(.*?)\\](.*?)\\[/hover\\]", Pattern.DOTALL), (matcher, context) -> {
             String hoverTextContent = matcher.group(1);
             String mainTextContent = matcher.group(2);
-            MutableComponent hoverComponent = parseMessage(hoverTextContent, context.getPlayer(), Style.EMPTY);
+            MutableComponent hoverComponent = parseMessageInternal(hoverTextContent, context.getPlayer(), Style.EMPTY);
             MutableComponent textWithHover = new TextComponent("");
             parseTextRecursive(mainTextContent, textWithHover, context.getCurrentStyle(), context.getPlayer());
             applyHoverToComponent(textWithHover, new HoverEvent(HoverEvent.Action.SHOW_TEXT, hoverComponent));
             context.getComponent().append(textWithHover);
         });
-        TAG_HANDLERS.put(Pattern.compile("\\[divider\\]"), (matcher, context) -> {
+        tagHandlers.put(Pattern.compile("\\[divider\\]"), (matcher, context) -> {
             context.getComponent().append(new TextComponent("--------------------")
                     .setStyle(context.getCurrentStyle().withColor(TextColor.fromLegacyFormat(ChatFormatting.GRAY))));
         });
-        TAG_HANDLERS.put(Pattern.compile("\\[title=(.*?)\\]", Pattern.DOTALL), (matcher, context) -> {
+        tagHandlers.put(Pattern.compile("\\[title=(.*?)\\]", Pattern.DOTALL), (matcher, context) -> {
             if (context.getPlayer() != null) {
                 String titleText = matcher.group(1);
                 MutableComponent titleComponent = parseTitleOrSubtitle(titleText, context.getCurrentStyle(), context.getPlayer());
@@ -56,16 +62,16 @@ public class MessageParser {
                 context.getPlayer().connection.send(new ClientboundSetTitleTextPacket(titleComponent));
             }
         });
-        TAG_HANDLERS.put(Pattern.compile("\\[subtitle=(.*?)\\]", Pattern.DOTALL), (matcher, context) -> {
+        tagHandlers.put(Pattern.compile("\\[subtitle=(.*?)\\]", Pattern.DOTALL), (matcher, context) -> {
             if (context.getPlayer() != null) {
                 String subtitleText = matcher.group(1);
                 MutableComponent subtitleComponent = parseTitleOrSubtitle(subtitleText, context.getCurrentStyle(), context.getPlayer());
                 context.getPlayer().connection.send(new ClientboundSetSubtitleTextPacket(subtitleComponent));
             }
         });
-        TAG_HANDLERS.put(Pattern.compile("\\[center\\](.*?)\\[/center\\]", Pattern.DOTALL), (matcher, context) -> {
+        tagHandlers.put(Pattern.compile("\\[center\\](.*?)\\[/center\\]", Pattern.DOTALL), (matcher, context) -> {
             String textToCenter = matcher.group(1);
-            MutableComponent innerComponent = parseMessage(textToCenter, context.getPlayer(), context.getCurrentStyle());
+            MutableComponent innerComponent = parseMessageInternal(textToCenter, context.getPlayer(), context.getCurrentStyle());
             String plainInnerText = innerComponent.getString();
             int approximateChatWidthChars = 53;
             String paddingSpaces = "";
@@ -85,7 +91,7 @@ public class MessageParser {
         });
     }
 
-    private static void applyHoverToComponent(MutableComponent component, HoverEvent hoverEvent) {
+    private void applyHoverToComponent(MutableComponent component, HoverEvent hoverEvent) {
         component.setStyle(component.getStyle().withHoverEvent(hoverEvent));
         for (Component sibling : component.getSiblings()) {
             if (sibling instanceof MutableComponent) {
@@ -94,20 +100,18 @@ public class MessageParser {
         }
     }
 
-    private static final Map<String, MutableComponent> messageCache = new ConcurrentHashMap<>();
-
-    public static MutableComponent parseMessage(String rawMessage, ServerPlayer player) {
-        return parseMessage(rawMessage, player, Style.EMPTY);
+    public MutableComponent parseMessage(String rawMessage, ServerPlayer player) {
+        return parseMessageInternal(rawMessage, player, Style.EMPTY);
     }
 
-    private static MutableComponent parseMessage(String rawMessage, ServerPlayer player, Style initialStyle) {
+    private MutableComponent parseMessageInternal(String rawMessage, ServerPlayer player, Style initialStyle) {
         if (rawMessage == null) {
             return new TextComponent("").setStyle(initialStyle);
         }
 
-        String processedMessage = Placeholders.replacePlaceholders(rawMessage, player);
+        String processedMessage = this.placeholders.replacePlaceholders(rawMessage, player);
 
-        Matcher hexMatcher = HEX_PATTERN.matcher(processedMessage);
+        Matcher hexMatcher = hexPattern.matcher(processedMessage);
         StringBuffer sb = new StringBuffer();
         while (hexMatcher.find()) {
             String hexColor = hexMatcher.group(1);
@@ -118,7 +122,7 @@ public class MessageParser {
 
         String messageForParsing = processedMessage.replace("&", "§");
 
-        final String finalCacheKey = messageForParsing + "_style_" + initialStyle.hashCode();
+        final String finalCacheKey = messageForParsing + "_style_" + initialStyle.hashCode() + (player != null ? player.getUUID().toString() : "null_player");
         if (messageCache.containsKey(finalCacheKey)) {
             return messageCache.get(finalCacheKey).copy();
         }
@@ -130,15 +134,14 @@ public class MessageParser {
         return rootComponent;
     }
 
-    private static void parseTextRecursive(String textToParse, MutableComponent parentComponent, Style currentStyle, ServerPlayer player) {
+    private void parseTextRecursive(String textToParse, MutableComponent parentComponent, Style currentStyle, ServerPlayer player) {
         int currentIndex = 0;
         int length = textToParse.length();
-        Matcher urlMatcher = URL_PATTERN.matcher(textToParse);
+        Matcher urlMatcher = urlPattern.matcher(textToParse);
 
         while (currentIndex < length) {
             int nextLegacyFormat = textToParse.indexOf('§', currentIndex);
             int nextTagStart = textToParse.indexOf('[', currentIndex);
-
             boolean nextUrlFound = urlMatcher.find(currentIndex);
             int nextUrlStart = nextUrlFound ? urlMatcher.start() : -1;
 
@@ -150,9 +153,7 @@ public class MessageParser {
             if (firstEventIndex > currentIndex) {
                 parentComponent.append(new TextComponent(textToParse.substring(currentIndex, firstEventIndex)).setStyle(currentStyle));
             }
-
             currentIndex = firstEventIndex;
-
             if (currentIndex == length) break;
 
             if (nextLegacyFormat == currentIndex) {
@@ -178,17 +179,17 @@ public class MessageParser {
                             currentStyle = currentStyle.applyFormat(format);
                             if (format == ChatFormatting.RESET) currentStyle = Style.EMPTY;
                         } else {
-                            parentComponent.append(new TextComponent(textToParse.substring(currentIndex, currentIndex + 1)).setStyle(currentStyle));
+                            parentComponent.append(new TextComponent("§").setStyle(currentStyle)); // Append the unknown char as literal
                         }
                         currentIndex += 2;
                     }
                 } else {
-                    parentComponent.append(new TextComponent(textToParse.substring(currentIndex, currentIndex + 1)).setStyle(currentStyle));
+                    parentComponent.append(new TextComponent("§").setStyle(currentStyle));
                     currentIndex += 1;
                 }
             } else if (nextTagStart == currentIndex) {
                 boolean tagHandled = false;
-                for (Map.Entry<Pattern, BiConsumer<Matcher, TagContext>> entry : TAG_HANDLERS.entrySet()) {
+                for (Map.Entry<Pattern, BiConsumer<Matcher, TagContext>> entry : tagHandlers.entrySet()) {
                     Pattern tagPattern = entry.getKey();
                     Matcher tagMatcher = tagPattern.matcher(textToParse);
                     if (tagMatcher.find(currentIndex) && tagMatcher.start() == currentIndex) {
@@ -200,7 +201,7 @@ public class MessageParser {
                     }
                 }
                 if (!tagHandled) {
-                    parentComponent.append(new TextComponent(textToParse.substring(currentIndex, currentIndex + 1)).setStyle(currentStyle));
+                    parentComponent.append(new TextComponent("[").setStyle(currentStyle));
                     currentIndex += 1;
                 }
             } else if (nextUrlFound && nextUrlStart == currentIndex) {
@@ -217,12 +218,12 @@ public class MessageParser {
         }
     }
 
-    private static MutableComponent parseTitleOrSubtitle(String rawText, Style baseStyle, ServerPlayer player) {
-        MutableComponent parsedComponent = parseMessage(rawText, player, Style.EMPTY);
+    private MutableComponent parseTitleOrSubtitle(String rawText, Style baseStyle, ServerPlayer player) {
+        MutableComponent parsedComponent = parseMessageInternal(rawText, player, Style.EMPTY);
         return applyBaseStyle(parsedComponent, baseStyle);
     }
 
-    private static MutableComponent applyBaseStyle(MutableComponent component, Style baseStyle) {
+    private MutableComponent applyBaseStyle(MutableComponent component, Style baseStyle) {
         MutableComponent styledComponent = component.copy();
         styledComponent.setStyle(baseStyle.applyTo(styledComponent.getStyle()));
 
@@ -238,7 +239,7 @@ public class MessageParser {
         return styledComponent;
     }
 
-    private static String formatUrl(String url) {
+    private String formatUrl(String url) {
         if (url != null && !url.toLowerCase().startsWith("http://") && !url.toLowerCase().startsWith("https://")) {
             return "http://" + url;
         }
@@ -256,16 +257,8 @@ public class MessageParser {
             this.player = player;
         }
 
-        public MutableComponent getComponent() {
-            return component;
-        }
-
-        public Style getCurrentStyle() {
-            return currentStyle;
-        }
-
-        public ServerPlayer getPlayer() {
-            return player;
-        }
+        public MutableComponent getComponent() { return component; }
+        public Style getCurrentStyle() { return currentStyle; }
+        public ServerPlayer getPlayer() { return player; }
     }
 }

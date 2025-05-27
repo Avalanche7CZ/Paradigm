@@ -1,12 +1,19 @@
 package eu.avalanche7.forgeannouncements;
 
-import eu.avalanche7.forgeannouncements.chat.StaffChat;
-import eu.avalanche7.forgeannouncements.commands.GroupChatCommands;
+import com.mojang.brigadier.CommandDispatcher;
+import eu.avalanche7.forgeannouncements.core.ForgeAnnouncementModule;
+import eu.avalanche7.forgeannouncements.core.Services;
+import eu.avalanche7.forgeannouncements.modules.*;
 import eu.avalanche7.forgeannouncements.configs.*;
-import eu.avalanche7.forgeannouncements.listeners.GroupChatListener;
 import eu.avalanche7.forgeannouncements.utils.*;
 import com.mojang.logging.LogUtils;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.RegisterCommandsEvent;
+import net.minecraftforge.event.server.ServerStartingEvent;
+import net.minecraftforge.event.server.ServerStoppingEvent;
+import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
@@ -16,40 +23,49 @@ import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
-@Mod("forgeannouncements")
+@Mod(ForgeAnnouncements.MOD_ID)
 public class ForgeAnnouncements {
 
+    public static final String MOD_ID = "forgeannouncements";
     private static final Logger LOGGER = LogUtils.getLogger();
-    private final GroupChatManager groupChatManager = new GroupChatManager();
+    private final List<ForgeAnnouncementModule> modules = new ArrayList<>();
+    private Services services;
+
+    private DebugLogger debugLoggerInstance;
+    private Lang langInstance;
+    private MessageParser messageParserInstance;
+    private PermissionsHandler permissionsHandlerInstance;
+    private Placeholders placeholdersInstance;
+    private TaskScheduler taskSchedulerInstance;
+    private GroupChatManager groupChatManagerInstance;
+    private CMConfig cmConfigInstance;
+
 
     public ForgeAnnouncements() {
-        LOGGER.info("Initializing Forge Announcement mod...");
-        FMLJavaModLoadingContext.get().getModEventBus().addListener(this::setup);
+        LOGGER.info("Initializing Forge Announcements Mod (Instance-Based Services)...");
+        IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
+        modEventBus.addListener(this::commonSetup);
+
         MinecraftForge.EVENT_BUS.register(this);
-        MinecraftForge.EVENT_BUS.register(Mentions.class);
-        MinecraftForge.EVENT_BUS.register(PermissionsHandler.class);
-        MinecraftForge.EVENT_BUS.register(RestartConfigHandler.class);
-        MinecraftForge.EVENT_BUS.register(Restart.class);
-        MinecraftForge.EVENT_BUS.register(StaffChat.class);
-        MinecraftForge.EVENT_BUS.register(Lang.class);
-        MinecraftForge.EVENT_BUS.register(CommandManager.class);
-        MinecraftForge.EVENT_BUS.register(GroupChatManager.class);
-        MinecraftForge.EVENT_BUS.register(GroupChatListener.class);
-        MinecraftForge.EVENT_BUS.register(new GroupChatListener(groupChatManager));
-        GroupChatCommands.setManager(groupChatManager);
+
+        createUtilityInstances();
+        initializeServices();
+        registerModules();
+
+        modules.forEach(module -> module.registerEventListeners(MinecraftForge.EVENT_BUS, services));
+        modules.forEach(module -> module.onLoad(null, services, modEventBus));
+
 
         try {
-            createDefaultConfigs();
-            createLangFolder();
-            createCommandFolder();
-
-            Path serverConfigDir = FMLPaths.GAMEDIR.get().resolve("config/forgeannouncements");
+            Path serverConfigDir = FMLPaths.GAMEDIR.get().resolve("config/" + MOD_ID);
+            Files.createDirectories(serverConfigDir);
 
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, MainConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("main.toml").toString());
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, AnnouncementsConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("announcements.toml").toString());
@@ -58,130 +74,135 @@ public class ForgeAnnouncements {
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, ChatConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("chat.toml").toString());
 
             MOTDConfigHandler.loadConfig();
-            CMConfig.loadCommands();
-            MainConfigHandler.loadConfig(MainConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("main.toml").toString());
-            RestartConfigHandler.loadConfig(RestartConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("restarts.toml").toString());
-            AnnouncementsConfigHandler.loadConfig(AnnouncementsConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("announcements.toml").toString());
-            MentionConfigHandler.loadConfig(MentionConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("mentions.toml").toString());
-            ChatConfigHandler.loadConfig(ChatConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("chat.toml").toString());
-
-            Lang.initializeLanguage();
+            this.cmConfigInstance.loadCommands();
+            this.langInstance.initializeLanguage();
 
         } catch (Exception e) {
             LOGGER.error("Failed to register or load configuration", e);
-            throw new RuntimeException("Configuration loading failed", e);
+            throw new RuntimeException("Configuration loading failed for " + MOD_ID, e);
         }
     }
 
-    private void createDefaultConfigs() throws IOException {
-        Path configDir = FMLPaths.GAMEDIR.get().resolve("config/forgeannouncements");
-        if (!Files.exists(configDir)) {
-            Files.createDirectories(configDir);
-        }
-
-        Path mainConfig = configDir.resolve("main.toml");
-        if (!Files.exists(mainConfig)) {
-            Files.createFile(mainConfig);
-            MainConfigHandler.loadConfig(MainConfigHandler.SERVER_CONFIG, mainConfig.toString());
-            MainConfigHandler.SERVER_CONFIG.save();
-        }
-
-        Path announcementsConfig = configDir.resolve("announcements.toml");
-        if (!Files.exists(announcementsConfig)) {
-            Files.createFile(announcementsConfig);
-            AnnouncementsConfigHandler.loadConfig(AnnouncementsConfigHandler.SERVER_CONFIG, announcementsConfig.toString());
-            AnnouncementsConfigHandler.SERVER_CONFIG.save();
-        }
-
-        Path motdConfigPath = configDir.resolve("motd.json");
-        if (!Files.exists(motdConfigPath)) {
-            MOTDConfigHandler.saveConfig();
-        } else {
-            MOTDConfigHandler.loadConfig();
-        }
-
-        Path commandsDir = configDir.resolve("commands");
-        if (!Files.exists(commandsDir)) {
-            Files.createDirectories(commandsDir);
-        }
-
-        Path commandsConfig = commandsDir.resolve("example.json");
-        if (!Files.exists(commandsConfig)) {
-            Files.createFile(commandsConfig);
-            CMConfig.loadCommands();
-        }
-
-        Path mentionsConfig = configDir.resolve("mentions.toml");
-        if (!Files.exists(mentionsConfig)) {
-            Files.createFile(mentionsConfig);
-            MentionConfigHandler.loadConfig(MentionConfigHandler.SERVER_CONFIG, mentionsConfig.toString());
-            MentionConfigHandler.SERVER_CONFIG.save();
-        }
-        Path restartConfig = configDir.resolve("restarts.toml");
-        if (!Files.exists(restartConfig)) {
-            Files.createFile(restartConfig);
-            RestartConfigHandler.loadConfig(RestartConfigHandler.SERVER_CONFIG, restartConfig.toString());
-            RestartConfigHandler.SERVER_CONFIG.save();
-        }
-        Path chatConfig = configDir.resolve("chat.toml");
-        if (!Files.exists(chatConfig)) {
-            Files.createFile(chatConfig);
-            ChatConfigHandler.loadConfig(ChatConfigHandler.SERVER_CONFIG, chatConfig.toString());
-            ChatConfigHandler.SERVER_CONFIG.save();
-        }
-
+    private void createUtilityInstances() {
+        this.placeholdersInstance = new Placeholders();
+        this.messageParserInstance = new MessageParser(this.placeholdersInstance);
+        this.debugLoggerInstance = new DebugLogger(MainConfigHandler.CONFIG);
+        this.langInstance = new Lang(LOGGER, MainConfigHandler.CONFIG, this.messageParserInstance);
+        this.taskSchedulerInstance = new TaskScheduler(this.debugLoggerInstance);
+        this.cmConfigInstance = new CMConfig(this.debugLoggerInstance);
+        this.permissionsHandlerInstance = new PermissionsHandler(LOGGER, this.cmConfigInstance, this.debugLoggerInstance);
+        this.groupChatManagerInstance = new GroupChatManager();
     }
 
-    private void createCommandFolder() throws IOException {
-        Path commandsFolder = FMLPaths.GAMEDIR.get().resolve("config/forgeannouncements/commands");
-        if (!Files.exists(commandsFolder)) {
-            Files.createDirectories(commandsFolder);
-        }
+    private void initializeServices() {
+        this.services = new Services(
+                LOGGER,
+                MainConfigHandler.CONFIG,
+                AnnouncementsConfigHandler.CONFIG,
+                MOTDConfigHandler.getConfig(),
+                new MentionConfigHandler(),
+                RestartConfigHandler.CONFIG,
+                ChatConfigHandler.CONFIG,
+                this.cmConfigInstance,
+                this.groupChatManagerInstance,
+                this.debugLoggerInstance,
+                this.langInstance,
+                this.messageParserInstance,
+                this.permissionsHandlerInstance,
+                this.placeholdersInstance,
+                this.taskSchedulerInstance
+        );
+        this.groupChatManagerInstance.setServices(this.services);
     }
 
-    private void createLangFolder() throws IOException {
-        Path langFolder = FMLPaths.GAMEDIR.get().resolve("config/forgeannouncements/lang");
-        if (!Files.exists(langFolder)) {
-            Files.createDirectories(langFolder);
-        }
-        Lang.ensureDefaultLangFile();
+    private void registerModules() {
+        modules.add(new Announcements());
+        modules.add(new MOTD());
+        modules.add(new Mentions());
+        modules.add(new Restart());
+        modules.add(new StaffChat());
+        modules.add(new GroupChat(this.groupChatManagerInstance));
+        modules.add(new CommandManager());
+
+        LOGGER.info("ForgeAnnouncements: Registered {} modules.", modules.size());
     }
 
-    private void setup(final FMLCommonSetupEvent event) {
+    private void commonSetup(final FMLCommonSetupEvent event) {
+        event.enqueueWork(() -> {
+            modules.forEach(module -> {
+                if (module.isEnabled(services)) {
+                    LOGGER.info("ForgeAnnouncements: Enabling module: {}", module.getName());
+                    module.onEnable(services);
+                } else {
+                    LOGGER.info("ForgeAnnouncements: Module disabled by config: {}", module.getName());
+                }
+            });
+        });
+
         String version = ModLoadingContext.get().getActiveContainer().getModInfo().getVersion().toString();
         String displayName = ModLoadingContext.get().getActiveContainer().getModInfo().getDisplayName();
-
-        LOGGER.info("Forge Announcements mod has been enabled.");
-        LOGGER.info("=========================");
-        LOGGER.info(displayName);
-        LOGGER.info("Version " + version);
+        LOGGER.info("Forge Announcements mod has been set up.");
+        LOGGER.info("==================================================");
+        LOGGER.info("{} - Version {}", displayName, version);
         LOGGER.info("Author: Avalanche7CZ");
         LOGGER.info("Discord: https://discord.com/invite/qZDcQdEFqQ");
-        LOGGER.info("=========================");
-        UpdateChecker.checkForUpdates();
+        LOGGER.info("==================================================");
+        ForgeAnnouncements.UpdateChecker.checkForUpdates(version, LOGGER);
+    }
+
+    @SubscribeEvent
+    public void onServerStarting(ServerStartingEvent event) {
+        services.setServer(event.getServer());
+        modules.forEach(module -> {
+            if (module.isEnabled(services)) {
+                module.onServerStarting(event, services);
+            }
+        });
+    }
+
+    @SubscribeEvent
+    public void onRegisterCommands(RegisterCommandsEvent event) {
+        CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
+        modules.forEach(module -> {
+            if (module.isEnabled(services)) {
+                module.registerCommands(dispatcher, services);
+            }
+        });
+    }
+
+    @SubscribeEvent
+    public void onServerStopping(ServerStoppingEvent event) {
+        modules.forEach(module -> {
+            if (module.isEnabled(services)) {
+                module.onServerStopping(event, services);
+                module.onDisable(services);
+            }
+        });
+        if (this.taskSchedulerInstance != null) {
+            this.taskSchedulerInstance.onServerStopping();
+        }
+        LOGGER.info("Forge Announcements modules have been processed for server stop.");
     }
 
     public static class UpdateChecker {
-
         private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/ForgeAnnouncements/main/version.txt";
-        private static String CURRENT_VERSION;
 
-        public static void checkForUpdates() {
+        public static void checkForUpdates(String currentVersion, Logger logger) {
             try {
-                CURRENT_VERSION = ModLoadingContext.get().getActiveContainer().getModInfo().getVersion().toString();
-
                 URL url = new URL(LATEST_VERSION_URL);
-                BufferedReader reader = new BufferedReader(new InputStreamReader(url.openStream()));
-                String latestVersion = reader.readLine();
-                reader.close();
-
-                if (!CURRENT_VERSION.equals(latestVersion)) {
-                    LOGGER.info("A new version of the mod is available: " + latestVersion);
-                } else {
-                    LOGGER.info("You are running the latest version of the mod: " + CURRENT_VERSION);
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(url.openStream()))) {
+                    String latestVersion = reader.readLine();
+                    if (latestVersion != null && !currentVersion.equals(latestVersion.trim())) {
+                        logger.info("ForgeAnnouncements: A new version is available: {} (Current: {})", latestVersion.trim(), currentVersion);
+                        logger.info("ForgeAnnouncements: Please update at: https://www.curseforge.com/minecraft/mc-mods/forgeannouncements or https://modrinth.com/mod/forgeannouncements");
+                    } else if (latestVersion != null) {
+                        logger.info("ForgeAnnouncements: You are running the latest version: {}", currentVersion);
+                    } else {
+                        logger.info("ForgeAnnouncements: Could not determine the latest version.");
+                    }
                 }
             } catch (Exception e) {
-                LOGGER.info("Failed to check for updates.");
+                logger.warn("ForgeAnnouncements: Failed to check for updates: {}", e.getMessage());
             }
         }
     }

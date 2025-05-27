@@ -21,7 +21,11 @@ public class PlayerGroupData {
     }
 
     public void addInvitation(String groupName) {
-        invitations.add(groupName);
+        this.invitations.add(groupName);
+    }
+
+    public void removeInvitation(String groupName) {
+        this.invitations.remove(groupName);
     }
 
     public boolean isGroupChatToggled() {

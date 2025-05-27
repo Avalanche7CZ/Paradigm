@@ -5,14 +5,14 @@ import com.forgeessentials.api.permissions.DefaultPermissionLevel;
 import dev.ftb.mods.ftbranks.api.FTBRanksAPI;
 import eu.avalanche7.forgeannouncements.configs.CMConfig;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraftforge.event.server.ServerStartingEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.ModList;
-
-import java.util.logging.Logger;
+import org.slf4j.Logger;
 
 public class PermissionsHandler {
-    private static final Logger LOGGER = Logger.getLogger(PermissionsHandler.class.getName());
+    private final Logger logger;
+    private final CMConfig cmConfig;
+    private final DebugLogger debugLogger;
+
     public static final String MENTION_EVERYONE_PERMISSION = "forgeannouncements.mention.everyone";
     public static final String MENTION_PLAYER_PERMISSION = "forgeannouncements.mention.player";
     public static final String STAFF_CHAT_PERMISSION = "forgeannouncements.staff";
@@ -23,53 +23,73 @@ public class PermissionsHandler {
     public static final int TITLE_PERMISSION_LEVEL = 2;
     public static final int BOSSBAR_PERMISSION_LEVEL = 2;
 
-    private static PermissionChecker checker;
+    private PermissionChecker checker;
 
-    private static void initializeChecker() {
+    public PermissionsHandler(Logger logger, CMConfig cmConfig, DebugLogger debugLogger) {
+        this.logger = logger;
+        this.cmConfig = cmConfig;
+        this.debugLogger = debugLogger;
+    }
+
+    public void initialize() {
+        initializeChecker();
+        registerPermissions();
+    }
+
+    private void initializeChecker() {
         if (checker == null) {
             if (ModList.get().isLoaded("luckperms")) {
-                checker = new LuckPermsChecker();
-                LOGGER.info("Using LuckPermsChecker");
+                checker = new LuckPermsCheckerImpl();
+                logger.info("ForgeAnnouncements: Using LuckPermsChecker for permissions.");
             } else if (ModList.get().isLoaded("ftbranks")) {
-                checker = new FTBRanksChecker();
-                LOGGER.info("Using FTBRanksChecker");
+                checker = new FTBRanksCheckerImpl();
+                logger.info("ForgeAnnouncements: Using FTBRanksChecker for permissions.");
             } else if (ModList.get().isLoaded("forgeessentials")) {
                 try {
-                    checker = new ForgeEssentialsChecker();
-                    LOGGER.info("Using ForgeEssentialsChecker");
+                    checker = new ForgeEssentialsCheckerImpl();
+                    logger.info("ForgeAnnouncements: Using ForgeEssentialsChecker for permissions.");
                 } catch (NoClassDefFoundError e) {
-                    LOGGER.info("ForgeEssentials mod not found, falling back to ForgePermissionChecker");
-                    checker = new ForgePermissionChecker();
+                    logger.warn("ForgeAnnouncements: ForgeEssentials mod classes not found, falling back to vanilla OP checks.");
+                    checker = new ForgePermissionCheckerImpl();
                 }
             } else {
-                checker = new ForgePermissionChecker();
-                LOGGER.info("Using ForgePermissionChecker");
+                checker = new ForgePermissionCheckerImpl();
+                logger.info("ForgeAnnouncements: No compatible permissions mod found. Using vanilla OP level checks.");
             }
         }
     }
 
-    @SubscribeEvent
-    public static void onServerStarting(ServerStartingEvent event) {
-        initializeChecker();
-        if (checker instanceof ForgeEssentialsChecker) {
-            ((ForgeEssentialsChecker) checker).registerPermission(MENTION_EVERYONE_PERMISSION, "Allows mentioning everyone");
-            ((ForgeEssentialsChecker) checker).registerPermission(MENTION_PLAYER_PERMISSION, "Allows mentioning a player");
-            ((ForgeEssentialsChecker) checker).registerPermission(STAFF_CHAT_PERMISSION, "Allows access to staff chat");
+    private void registerPermissions() {
+        if (checker instanceof ForgeEssentialsCheckerImpl) {
+            ForgeEssentialsCheckerImpl feChecker = (ForgeEssentialsCheckerImpl) checker;
+            ForgeEssentialsCheckerImpl.registerPermission(MENTION_EVERYONE_PERMISSION, "Allows mentioning everyone");
+            ForgeEssentialsCheckerImpl.registerPermission(MENTION_PLAYER_PERMISSION, "Allows mentioning a player");
+            ForgeEssentialsCheckerImpl.registerPermission(STAFF_CHAT_PERMISSION, "Allows access to staff chat");
         } else {
-            DebugLogger.debugLog("Cannot register permissions. ForgeEssentials mod is not present [NOT ERROR].");
+            this.debugLogger.debugLog("PermissionsHandler: Cannot register FE permissions. ForgeEssentials mod is not present or checker is not ForgeEssentialsCheckerImpl.");
         }
-        // Dynamically register custom command permissions
-        CMConfig.getLoadedCommands().forEach(command -> {
-            if (command.isRequirePermission() && checker instanceof ForgeEssentialsChecker feChecker) {
-                String permissionDescription = command.getDescription() != null ? command.getDescription() : "No description available.";
-                feChecker.registerPermission(command.getPermission(), permissionDescription);
-                DebugLogger.debugLog("Registered custom permission: " + command.getPermission() + " - " + permissionDescription);
-            }
-        });
 
+        if (this.cmConfig != null && checker instanceof ForgeEssentialsCheckerImpl) {
+            this.cmConfig.getLoadedCommands().forEach(command -> {
+                if (command.isRequirePermission() && command.getPermission() != null && !command.getPermission().isEmpty()) {
+                    String permissionDescription = command.getDescription() != null ? command.getDescription() : "Execute the custom command: " + command.getName();
+                    ForgeEssentialsCheckerImpl.registerPermission(command.getPermission(), permissionDescription);
+                    this.debugLogger.debugLog("PermissionsHandler: Registered FE custom permission: " + command.getPermission() + " - " + permissionDescription);
+                }
+            });
+        }
     }
 
-    public static boolean hasPermission(ServerPlayer player, String permission) {
+    public boolean hasPermission(ServerPlayer player, String permission) {
+        if (player == null) return false;
+        if (checker == null) {
+            logger.warn("PermissionsHandler: Checker not initialized when hasPermission called for player {} and permission {}. Attempting to initialize.", player.getName().getString(), permission);
+            initialize();
+            if (checker == null) {
+                logger.error("PermissionsHandler: Checker is still null after re-initialization attempt. Defaulting to OP check (level 4).");
+                return player.hasPermissions(4);
+            }
+        }
         return checker.hasPermission(player, permission);
     }
 
@@ -77,7 +97,7 @@ public class PermissionsHandler {
         boolean hasPermission(ServerPlayer player, String permission);
     }
 
-    public static class LuckPermsChecker implements PermissionChecker {
+    public static class LuckPermsCheckerImpl implements PermissionChecker {
         @Override
         public boolean hasPermission(ServerPlayer player, String permission) {
             net.luckperms.api.LuckPerms api = net.luckperms.api.LuckPermsProvider.get();
@@ -92,14 +112,14 @@ public class PermissionsHandler {
         }
     }
 
-    public static class FTBRanksChecker implements PermissionChecker {
+    public static class FTBRanksCheckerImpl implements PermissionChecker {
         @Override
         public boolean hasPermission(ServerPlayer player, String permission) {
             FTBRanksAPI api = FTBRanksAPI.INSTANCE;
             return api.getPermissionValue(player, permission).asBoolean().orElse(false);
         }
     }
-    public static class ForgeEssentialsChecker implements PermissionChecker {
+    public static class ForgeEssentialsCheckerImpl implements PermissionChecker {
         @Override
         public boolean hasPermission(ServerPlayer player, String permission) {
             return APIRegistry.perms.checkPermission(player, permission);
@@ -111,17 +131,18 @@ public class PermissionsHandler {
         }
     }
 
-    public static class ForgePermissionChecker implements PermissionChecker {
+    public static class ForgePermissionCheckerImpl implements PermissionChecker {
         @Override
         public boolean hasPermission(ServerPlayer player, String permission) {
-            int permissionLevel = getPermissionLevel(permission);
+            int permissionLevel = getPermissionLevelForVanilla(permission);
             return player.hasPermissions(permissionLevel);
         }
 
-        private int getPermissionLevel(String permission) {
-            if (permission.equals(STAFF_CHAT_PERMISSION)) {
-                return 2;
-            }
+        private int getPermissionLevelForVanilla(String permission) {
+            if (STAFF_CHAT_PERMISSION.equals(permission)) return 2;
+            if (MENTION_EVERYONE_PERMISSION.equals(permission)) return MENTION_EVERYONE_PERMISSION_LEVEL;
+            if (MENTION_PLAYER_PERMISSION.equals(permission)) return MENTION_PLAYER_PERMISSION_LEVEL;
+            if ("forgeannouncements.broadcast".equals(permission)) return BROADCAST_PERMISSION_LEVEL;
             return 0;
         }
     }
