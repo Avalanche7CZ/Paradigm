@@ -16,7 +16,7 @@ public class Services {
     private final MentionConfigHandler mentionConfig;
     private final RestartConfigHandler.Config restartConfig;
     private final ChatConfigHandler.Config chatConfig;
-    private final CMConfig cmConfigInstance; // Renamed to avoid conflict with class name
+    private final CMConfig cmConfigInstance;
 
     private final DebugLogger debugLoggerInstance;
     private final Lang langInstance;
@@ -32,10 +32,10 @@ public class Services {
             MainConfigHandler.Config mainConfig,
             AnnouncementsConfigHandler.Config announcementsConfig,
             MOTDConfigHandler.Config motdConfig,
-            MentionConfigHandler mentionConfig, // This is the config handler class, not an instance of values usually
+            MentionConfigHandler mentionConfig, 
             RestartConfigHandler.Config restartConfig,
             ChatConfigHandler.Config chatConfig,
-            CMConfig cmConfig, // Pass the CMConfig instance
+            CMConfig cmConfig, 
             GroupChatManager groupChatManager,
             DebugLogger debugLogger,
             Lang lang,
