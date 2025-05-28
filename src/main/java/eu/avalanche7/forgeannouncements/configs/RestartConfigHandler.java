@@ -21,7 +21,6 @@ public class RestartConfigHandler {
     }
 
     public static class Config {
-        public final ForgeConfigSpec.ConfigValue<Boolean> debugEnabled;
         public final ForgeConfigSpec.ConfigValue<String> restartType;
         public final ForgeConfigSpec.ConfigValue<Double> restartInterval;
         public final ForgeConfigSpec.ConfigValue<List<? extends String>> realTimeInterval;
@@ -39,12 +38,8 @@ public class RestartConfigHandler {
         public final ForgeConfigSpec.ConfigValue<Double> playSoundFirstTime;
 
         public Config(ForgeConfigSpec.Builder builder) {
-            builder.comment("General settings")
-                    .push("general");
-
-            debugEnabled = builder
-                    .comment("Enable debug mode.")
-                    .define("debugEnabled", false);
+            builder.comment("Restart settings")
+                    .push("restart");
 
             restartType = builder
                     .comment("Type of automatic restart (Fixed, Realtime, None).")
@@ -88,7 +83,7 @@ public class RestartConfigHandler {
 
             playSoundString = builder
                     .comment("Sound to play on restart warnings.")
-                    .define("playSoundString", "NOTE_BLOCK_PLING");
+                    .define("playSoundString", "note_block_pling");
 
             playSoundFirstTime = builder
                     .comment("When to start playing notification sound (same as one of broadcast timers).")

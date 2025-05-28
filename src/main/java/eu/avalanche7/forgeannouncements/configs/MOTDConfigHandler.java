@@ -1,38 +1,85 @@
 package eu.avalanche7.forgeannouncements.configs;
 
-import com.electronwill.nightconfig.core.file.CommentedFileConfig;
-import net.minecraftforge.common.ForgeConfigSpec;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.mojang.logging.LogUtils;
 import net.minecraftforge.fml.common.Mod;
-import org.apache.commons.lang3.tuple.Pair;
+import org.slf4j.Logger;
+
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
 
 @Mod.EventBusSubscriber(modid = "forgeannouncements", bus = Mod.EventBusSubscriber.Bus.MOD)
 public class MOTDConfigHandler {
 
-    public static final ForgeConfigSpec SERVER_CONFIG;
-    public static final Config CONFIG;
+    private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
+    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final Path CONFIG_FILE_PATH = Path.of("config", "forgeannouncements", "motd.json");
+    private static Config config;
 
-    static {
-        final Pair<Config, ForgeConfigSpec> specPair = new ForgeConfigSpec.Builder().configure(Config::new);
-        SERVER_CONFIG = specPair.getRight();
-        CONFIG = specPair.getLeft();
-    }
-
-    public static class Config {
-        public final ForgeConfigSpec.ConfigValue<String> motdMessage;
-
-        public Config(ForgeConfigSpec.Builder builder) {
-            motdMessage = builder.comment("Message of the Day")
-                    .define("MOTD.Message", "§a[title=Welcome Message]\n§7[subtitle=Server Information]\n§aWelcome to the server!\n§7Visit our website: §c[link=http://example.com] \n§bType [command=/help] for commands\n§eHover over this message [hover=This is a hover text!] to see more info.\n§7[divider]");
+    public static void loadConfig() {
+        if (Files.exists(CONFIG_FILE_PATH)) {
+            try (FileReader reader = new FileReader(CONFIG_FILE_PATH.toFile())) {
+                config = GSON.fromJson(reader, Config.class);
+                if (config == null || config.motdLines == null) {
+                    LOGGER.warn("MOTD configuration is null or invalid. Reinitializing with default values.");
+                    config = new Config();
+                    saveConfig();
+                } else {
+                    LOGGER.info("MOTD configuration loaded successfully.");
+                }
+            } catch (IOException e) {
+                LOGGER.error("Failed to load MOTD configuration. Using default values.", e);
+                config = new Config();
+                saveConfig();
+            }
+        } else {
+            LOGGER.warn("MOTD configuration file not found. Creating a new onte with default values.");
+            config = new Config();
+            saveConfig();
         }
     }
 
-    public static void loadConfig(ForgeConfigSpec config, String path) {
-        final CommentedFileConfig file = CommentedFileConfig.builder(path)
-                .sync()
-                .autosave()
-                .writingMode(com.electronwill.nightconfig.core.io.WritingMode.REPLACE)
-                .build();
-        file.load();
-        config.setConfig(file);
+    public static void saveConfig() {
+        if (config == null) {
+            LOGGER.warn("Config object is null. Initializing with default values before saving.");
+            config = new Config();
+        }
+        try {
+            Files.createDirectories(CONFIG_FILE_PATH.getParent());
+            try (FileWriter writer = new FileWriter(CONFIG_FILE_PATH.toFile())) {
+                GSON.toJson(config, writer);
+                LOGGER.info("MOTD configuration saved successfully.");
+            }
+        } catch (IOException e) {
+            LOGGER.error("Failed to save MOTD configuration.", e);
+        }
+    }
+
+    public static Config getConfig() {
+        if (config == null) {
+            loadConfig();
+        }
+        return config;
+    }
+
+    public static class Config {
+        public List<String> motdLines;
+
+        public Config() {
+            this.motdLines = List.of(
+                    "§a[title=Welcome Message]",
+                    "§7[subtitle=Server Information]",
+                    "§aWelcome to the server!",
+                    "§7Visit our website: §c[link=http://example.com]",
+                    "§bType [command=help] for commands",
+                    "§eHover over this message [hover=This is a hover text!] to see more info.",
+                    "§7[divider]"
+            );
+        }
     }
 }

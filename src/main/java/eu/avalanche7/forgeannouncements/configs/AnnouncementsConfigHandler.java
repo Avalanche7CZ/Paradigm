@@ -14,7 +14,6 @@ public class AnnouncementsConfigHandler {
 
     public static final ForgeConfigSpec SERVER_CONFIG;
     public static final Config CONFIG;
-    private static final Logger LOGGER = LogUtils.getLogger();
 
     static {
         final Pair<Config, ForgeConfigSpec> specPair = new ForgeConfigSpec.Builder().configure(Config::new);
@@ -24,7 +23,6 @@ public class AnnouncementsConfigHandler {
 
     public static class Config {
         public final ForgeConfigSpec.ConfigValue<String> orderMode;
-
         public final ForgeConfigSpec.BooleanValue globalEnable;
         public final ForgeConfigSpec.BooleanValue headerAndFooter;
         public final ForgeConfigSpec.IntValue globalInterval;
@@ -85,7 +83,6 @@ public class AnnouncementsConfigHandler {
                             ),
                             obj -> obj instanceof String);
 
-            // Actionbar Messages
             actionbarEnable = builder.comment("Enable actionbar messages")
                     .define("Actionbar_Messages.Enable", true);
 

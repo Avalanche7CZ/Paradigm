@@ -1,0 +1,34 @@
+{
+  "group": {
+    "already_exists": "Group already exists.",
+    "created_successfully": "Group created successfully.",
+    "no_group_to_delete": "No group to delete.",
+    "not_owner": "You are not the owner of this group.",
+    "deleted_successfully": "Group deleted successfully.",
+    "no_groups_available": "No groups available.",
+    "available_groups": "Available groups:",
+    "group_not_found": "Group not found.",
+    "invited": "You have been invited to join the group: {group_name}.",
+    "joined": "Joined the group: {group_name}.",
+    "left": "Left the group: {group_name}.",
+    "no_group_to_send_message": "No group to send message to.",
+    "chat_enabled": "Group chat enabled. Your messages will now only go to your group.",
+    "chat_disabled": "Group chat disabled. Your messages will go to public chat.",
+    "help_title": "=== Group Chat Commands ===",
+    "help_create": "Create a new group.",
+    "help_delete": "Delete your current group.",
+    "help_invite": "Invite a player to your group.",
+    "help_join": "Join an existing group.",
+    "help_leave": "Leave your current group.",
+    "help_list": "List all groups.",
+    "help_info": "Get information about a group.",
+    "help_say": "Send a message to the group.",
+    "help_toggle": "Toggle group chat on or off."
+  },
+  "mention": {
+    "too_frequent_mention_everyone": "You are mentioning everyone too frequently. Please wait a while.",
+    "no_permission_everyone": "You do not have permission to mention everyone.",
+    "too_frequent_mention_player": "You are mentioning players too frequently. Please wait a while.",
+    "no_permission_player": "You do not have permission to mention players."
+  }
+}

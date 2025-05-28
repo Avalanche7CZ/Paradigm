@@ -1,7 +1,10 @@
-package eu.avalanche7.forgeannouncements.utils;
+package eu.avalanche7.forgeannouncements.modules;
 
 import eu.avalanche7.forgeannouncements.configs.MainConfigHandler;
 import eu.avalanche7.forgeannouncements.configs.MentionConfigHandler;
+import eu.avalanche7.forgeannouncements.utils.MessageParser;
+import eu.avalanche7.forgeannouncements.utils.DebugLogger;
+import eu.avalanche7.forgeannouncements.utils.PermissionsHandler;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
@@ -134,15 +137,15 @@ public class Mentions {
     }
 
     private static void sendMentionNotification(ServerPlayer player, String chatMessage, String titleMessage, String subtitleMessage) {
-        MutableComponent formattedChatMessage = ColorUtils.parseMessageWithColor(chatMessage);
+        MutableComponent formattedChatMessage = MessageParser.parseMessageWithColor(chatMessage);
         if (!subtitleMessage.isEmpty()) {
-            MutableComponent formattedSubtitleMessage = ColorUtils.parseMessageWithColor("- " + subtitleMessage);
+            MutableComponent formattedSubtitleMessage = MessageParser.parseMessageWithColor("- " + subtitleMessage);
             formattedChatMessage.append("\n").append(formattedSubtitleMessage);
         }
         player.displayClientMessage(formattedChatMessage, false);
-        player.connection.send(new ClientboundSetTitleTextPacket(ColorUtils.parseMessageWithColor(titleMessage)));
+        player.connection.send(new ClientboundSetTitleTextPacket(MessageParser.parseMessageWithColor(titleMessage)));
         if (!subtitleMessage.isEmpty()) {
-            player.connection.send(new ClientboundSetSubtitleTextPacket(ColorUtils.parseMessageWithColor(subtitleMessage)));
+            player.connection.send(new ClientboundSetSubtitleTextPacket(MessageParser.parseMessageWithColor(subtitleMessage)));
         }
         player.playNotifySound(SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0F, 1.0F);
     }

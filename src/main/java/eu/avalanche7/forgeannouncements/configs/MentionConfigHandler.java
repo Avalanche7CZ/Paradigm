@@ -54,6 +54,3 @@ public class MentionConfigHandler {
         config.setConfig(file);
     }
 }
-
-
-

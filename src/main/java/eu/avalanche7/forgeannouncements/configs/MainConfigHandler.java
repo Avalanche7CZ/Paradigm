@@ -1,6 +1,7 @@
 package eu.avalanche7.forgeannouncements.configs;
 
 import com.electronwill.nightconfig.core.file.CommentedFileConfig;
+import eu.avalanche7.forgeannouncements.utils.Lang;
 import net.minecraftforge.common.ForgeConfigSpec;
 
 public class MainConfigHandler {
@@ -19,6 +20,9 @@ public class MainConfigHandler {
         public final ForgeConfigSpec.BooleanValue mentionsEnable;
         public final ForgeConfigSpec.BooleanValue restartEnable;
         public final ForgeConfigSpec.BooleanValue debugEnable;
+        public final ForgeConfigSpec.ConfigValue<String> defaultLanguage;
+        public final ForgeConfigSpec.BooleanValue commandManagerEnable;
+
 
         public Config(ForgeConfigSpec.Builder builder) {
             builder.push("main");
@@ -42,6 +46,12 @@ public class MainConfigHandler {
             debugEnable = builder
                     .comment("Enable or disable debug mode")
                     .define("debugEnable", false);
+            defaultLanguage = builder
+                    .comment("Set the default language")
+                    .define("defaultLanguage", "en");
+            commandManagerEnable = builder
+                    .comment("Enable or disable CommandManager feature")
+                    .define("commandManagerEnable", true);
 
             builder.pop();
         }
