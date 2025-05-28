@@ -2,10 +2,8 @@ package eu.avalanche7.forgeannouncements.modules;
 
 import eu.avalanche7.forgeannouncements.core.ForgeAnnouncementModule;
 import eu.avalanche7.forgeannouncements.core.Services;
-import net.minecraft.Util;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.network.chat.TextComponent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
@@ -36,27 +34,37 @@ public class MOTD implements ForgeAnnouncementModule {
     @Override
     public void onLoad(FMLCommonSetupEvent event, Services services, IEventBus modEventBus) {
         this.services = services;
-        services.getDebugLogger().debugLog(NAME + " module loaded.");
+        if (services != null && services.getDebugLogger() != null) {
+            services.getDebugLogger().debugLog(NAME + " module loaded.");
+        }
     }
 
     @Override
     public void onServerStarting(ServerStartingEvent event, Services services) {
-        services.getDebugLogger().debugLog(NAME + " module: Server starting.");
+        if (services != null && services.getDebugLogger() != null) {
+            services.getDebugLogger().debugLog(NAME + " module: Server starting.");
+        }
     }
 
     @Override
     public void onEnable(Services services) {
-        services.getDebugLogger().debugLog(NAME + " module enabled.");
+        if (services != null && services.getDebugLogger() != null) {
+            services.getDebugLogger().debugLog(NAME + " module enabled.");
+        }
     }
 
     @Override
     public void onDisable(Services services) {
-        services.getDebugLogger().debugLog(NAME + " module disabled.");
+        if (services != null && services.getDebugLogger() != null) {
+            services.getDebugLogger().debugLog(NAME + " module disabled.");
+        }
     }
 
     @Override
     public void onServerStopping(ServerStoppingEvent event, Services services) {
-        services.getDebugLogger().debugLog(NAME + " module: Server stopping.");
+        if (services != null && services.getDebugLogger() != null) {
+            services.getDebugLogger().debugLog(NAME + " module: Server stopping.");
+        }
     }
 
     @Override
@@ -70,23 +78,36 @@ public class MOTD implements ForgeAnnouncementModule {
 
     @SubscribeEvent
     public void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
-        if (!isEnabled(this.services) || !(event.getEntity() instanceof ServerPlayer)) {
+        if (this.services == null || !isEnabled(this.services) || !(event.getEntity() instanceof ServerPlayer)) {
             return;
         }
         ServerPlayer player = (ServerPlayer) event.getEntity();
         Component motdMessage = createMOTDMessage(player, this.services);
-        player.sendMessage(motdMessage, Util.NIL_UUID);
+        player.sendSystemMessage(motdMessage);
         this.services.getDebugLogger().debugLog("Sent MOTD to " + player.getName().getString());
     }
 
     private Component createMOTDMessage(ServerPlayer player, Services services) {
+        if (services == null || services.getMotdConfig() == null) {
+            if(services != null && services.getDebugLogger() != null) {
+                services.getDebugLogger().debugLog("MOTDModule: Services or MOTDConfig is null in createMOTDMessage.");
+            }
+            return Component.empty();
+        }
         List<String> lines = services.getMotdConfig().motdLines;
         if (lines == null || lines.isEmpty()) {
-            return TextComponent.EMPTY;
+            return Component.empty();
         }
-        MutableComponent motdMessage = new TextComponent("");
+        MutableComponent motdMessage = Component.literal("");
         for (String line : lines) {
-            motdMessage.append(services.getMessageParser().parseMessage(line, player)).append("\n");
+            if (services.getMessageParser() != null) {
+                motdMessage.append(services.getMessageParser().parseMessage(line, player)).append(Component.literal("\n"));
+            } else {
+                if(services.getDebugLogger() != null) {
+                    services.getDebugLogger().debugLog("MOTDModule: MessageParser is null in createMOTDMessage loop.");
+                }
+                motdMessage.append(Component.literal(line)).append(Component.literal("\n"));
+            }
         }
         return motdMessage;
     }
