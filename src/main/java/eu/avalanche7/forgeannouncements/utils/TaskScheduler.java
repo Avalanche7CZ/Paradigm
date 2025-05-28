@@ -1,9 +1,6 @@
 package eu.avalanche7.forgeannouncements.utils;
 
 import net.minecraft.server.MinecraftServer;
-import net.minecraftforge.event.server.ServerStoppingEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-
 
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -19,9 +16,10 @@ public class TaskScheduler {
     public TaskScheduler(DebugLogger debugLogger) {
         this.debugLogger = debugLogger;
     }
+
     public void initialize(MinecraftServer serverInstance) {
         if (this.executorService == null || this.executorService.isShutdown()) {
-            this.executorService = Executors.newScheduledThreadPool(1); // Or a configurable size
+            this.executorService = Executors.newScheduledThreadPool(1);
             debugLogger.debugLog("TaskScheduler: Executor service created.");
         }
         this.serverRef.set(serverInstance);
@@ -53,12 +51,20 @@ public class TaskScheduler {
         if (currentServer != null && !currentServer.isStopped()) {
             currentServer.execute(task);
         } else {
-            debugLogger.debugLog("TaskScheduler: Server instance is null or stopped, unable to execute task synchronously.");
+            if (currentServer != null) {
+                debugLogger.debugLog("TaskScheduler: Server instance is stopped, unable to execute task synchronously.");
+            }
         }
     }
-
     public void onServerStopping() {
-        if (executorService == null) return;
+        if (executorService == null) {
+            debugLogger.debugLog("TaskScheduler: Executor service was null, nothing to shut down.");
+            return;
+        }
+        if (executorService.isShutdown()) {
+            debugLogger.debugLog("TaskScheduler: Executor service already shut down.");
+            return;
+        }
         debugLogger.debugLog("TaskScheduler: Server is stopping, shutting down scheduler...");
         executorService.shutdown();
         try {
@@ -74,6 +80,7 @@ public class TaskScheduler {
             Thread.currentThread().interrupt();
         }
     }
+
     public boolean isServerAvailable() {
         MinecraftServer currentServer = serverRef.get();
         return currentServer != null && !currentServer.isStopped();

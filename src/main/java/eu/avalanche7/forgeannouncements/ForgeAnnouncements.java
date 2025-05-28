@@ -3,7 +3,7 @@ package eu.avalanche7.forgeannouncements;
 import com.mojang.brigadier.CommandDispatcher;
 import eu.avalanche7.forgeannouncements.core.ForgeAnnouncementModule;
 import eu.avalanche7.forgeannouncements.core.Services;
-import eu.avalanche7.forgeannouncements.modules.*;
+import eu.avalanche7.forgeannouncements.modules.*; // Assuming your modules are here
 import eu.avalanche7.forgeannouncements.configs.*;
 import eu.avalanche7.forgeannouncements.utils.*;
 import com.mojang.logging.LogUtils;
@@ -47,9 +47,8 @@ public class ForgeAnnouncements {
     private GroupChatManager groupChatManagerInstance;
     private CMConfig cmConfigInstance;
 
-
     public ForgeAnnouncements() {
-        LOGGER.info("Initializing Forge Announcements Mod (Instance-Based Services)...");
+        LOGGER.info("Initializing Forge Announcements Mod for Minecraft 1.19.2 (Instance-Based Services)...");
         IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
         modEventBus.addListener(this::commonSetup);
 
@@ -62,23 +61,23 @@ public class ForgeAnnouncements {
         modules.forEach(module -> module.registerEventListeners(MinecraftForge.EVENT_BUS, services));
         modules.forEach(module -> module.onLoad(null, services, modEventBus));
 
-
         try {
             Path serverConfigDir = FMLPaths.GAMEDIR.get().resolve("config/" + MOD_ID);
             Files.createDirectories(serverConfigDir);
 
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, MainConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("main.toml").toString());
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, AnnouncementsConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("announcements.toml").toString());
+            // Ensure MentionConfigHandler.SERVER_CONFIG is correctly defined if it's a ForgeConfigSpec
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, MentionConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("mentions.toml").toString());
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, RestartConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("restarts.toml").toString());
             ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, ChatConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("chat.toml").toString());
 
-            MOTDConfigHandler.loadConfig();
+            MOTDConfigHandler.loadConfig(); // Assuming static load
             this.cmConfigInstance.loadCommands();
             this.langInstance.initializeLanguage();
 
         } catch (Exception e) {
-            LOGGER.error("Failed to register or load configuration", e);
+            LOGGER.error("Failed to register or load configuration for {}", MOD_ID, e);
             throw new RuntimeException("Configuration loading failed for " + MOD_ID, e);
         }
     }
@@ -99,8 +98,8 @@ public class ForgeAnnouncements {
                 LOGGER,
                 MainConfigHandler.CONFIG,
                 AnnouncementsConfigHandler.CONFIG,
-                MOTDConfigHandler.getConfig(),
-                new MentionConfigHandler(),
+                MOTDConfigHandler.getConfig(), // Assuming static getConfig()
+                new MentionConfigHandler(),    // If MentionConfigHandler is just a holder for ForgeConfigSpec
                 RestartConfigHandler.CONFIG,
                 ChatConfigHandler.CONFIG,
                 this.cmConfigInstance,
@@ -123,7 +122,6 @@ public class ForgeAnnouncements {
         modules.add(new StaffChat());
         modules.add(new GroupChat(this.groupChatManagerInstance));
         modules.add(new CommandManager());
-
         LOGGER.info("ForgeAnnouncements: Registered {} modules.", modules.size());
     }
 
@@ -141,7 +139,7 @@ public class ForgeAnnouncements {
 
         String version = ModLoadingContext.get().getActiveContainer().getModInfo().getVersion().toString();
         String displayName = ModLoadingContext.get().getActiveContainer().getModInfo().getDisplayName();
-        LOGGER.info("Forge Announcements mod has been set up.");
+        LOGGER.info("Forge Announcements mod (1.19.2) has been set up.");
         LOGGER.info("==================================================");
         LOGGER.info("{} - Version {}", displayName, version);
         LOGGER.info("Author: Avalanche7CZ");
@@ -181,11 +179,12 @@ public class ForgeAnnouncements {
         if (this.taskSchedulerInstance != null) {
             this.taskSchedulerInstance.onServerStopping();
         }
-        LOGGER.info("Forge Announcements modules have been processed for server stop.");
+        LOGGER.info("Forge Announcements modules (1.19.2) have been processed for server stop.");
     }
 
+    // UpdateChecker can remain mostly the same
     public static class UpdateChecker {
-        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/ForgeAnnouncements/main/version.txt";
+        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/ForgeAnnouncements/main/version.txt"; // Ensure this points to the correct version file
 
         public static void checkForUpdates(String currentVersion, Logger logger) {
             try {

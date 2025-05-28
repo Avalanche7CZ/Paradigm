@@ -10,14 +10,10 @@ import eu.avalanche7.forgeannouncements.configs.AnnouncementsConfigHandler;
 import eu.avalanche7.forgeannouncements.core.ForgeAnnouncementModule;
 import eu.avalanche7.forgeannouncements.core.Services;
 import eu.avalanche7.forgeannouncements.utils.PermissionsHandler;
-import net.minecraft.Util;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
-import net.minecraft.network.chat.ChatType;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.network.chat.TextComponent;
-import net.minecraft.network.protocol.game.ClientboundBossEventPacket;
 import net.minecraft.network.protocol.game.ClientboundClearTitlesPacket;
 import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
@@ -42,7 +38,7 @@ public class Announcements implements ForgeAnnouncementModule {
     private int actionbarMessageIndex = 0;
     private int titleMessageIndex = 0;
     private int bossbarMessageIndex = 0;
-    private Services services;
+
 
     @Override
     public String getName() {
@@ -56,7 +52,6 @@ public class Announcements implements ForgeAnnouncementModule {
 
     @Override
     public void onLoad(FMLCommonSetupEvent event, Services services, IEventBus modEventBus) {
-        this.services = services;
         services.getDebugLogger().debugLog(NAME + " module loaded.");
     }
 
@@ -182,12 +177,12 @@ public class Announcements implements ForgeAnnouncementModule {
             Component headerComp = services.getMessageParser().parseMessage(header, null);
             Component footerComp = services.getMessageParser().parseMessage(footer, null);
             server.getPlayerList().getPlayers().forEach(player -> {
-                player.sendMessage(headerComp, Util.NIL_UUID);
-                player.sendMessage(message, Util.NIL_UUID);
-                player.sendMessage(footerComp, Util.NIL_UUID);
+                player.sendSystemMessage(headerComp);
+                player.sendSystemMessage(message);
+                player.sendSystemMessage(footerComp);
             });
         } else {
-            server.getPlayerList().broadcastMessage(message, ChatType.SYSTEM, Util.NIL_UUID);
+            server.getPlayerList().broadcastSystemMessage(message, false);
         }
         services.getDebugLogger().debugLog(NAME + ": Broadcasted global message: {}", message.getString());
     }
@@ -233,16 +228,24 @@ public class Announcements implements ForgeAnnouncementModule {
 
         String[] parts = messageText.split(" \\|\\| ", 2);
         Component titleComponent = services.getMessageParser().parseMessage(parts[0], null);
-        Component subtitleComponent = parts.length > 1 ? services.getMessageParser().parseMessage(parts[1], null) : TextComponent.EMPTY;
+        Component subtitleComponent = parts.length > 1 ? services.getMessageParser().parseMessage(parts[1], null) : Component.empty();
 
 
         server.getPlayerList().getPlayers().forEach(player -> {
             player.connection.send(new ClientboundClearTitlesPacket(false));
             player.connection.send(new ClientboundSetTitleTextPacket(titleComponent));
-            if (parts.length > 1 && subtitleComponent instanceof MutableComponent && (!((MutableComponent)subtitleComponent).getString().isEmpty() || !((MutableComponent)subtitleComponent).getSiblings().isEmpty())) {
-                player.connection.send(new ClientboundSetSubtitleTextPacket(subtitleComponent));
-            } else if (parts.length > 1 && !(subtitleComponent instanceof MutableComponent) && subtitleComponent != TextComponent.EMPTY) {
-                player.connection.send(new ClientboundSetSubtitleTextPacket(subtitleComponent));
+            if (parts.length > 1 && subtitleComponent != Component.empty()) {
+                boolean hasContent = false;
+                if (subtitleComponent instanceof MutableComponent mc) {
+                    if (!mc.getString().isEmpty() || !mc.getSiblings().isEmpty()) {
+                        hasContent = true;
+                    }
+                } else if (!subtitleComponent.getString().isEmpty()){
+                    hasContent = true;
+                }
+                if(hasContent) {
+                    player.connection.send(new ClientboundSetSubtitleTextPacket(subtitleComponent));
+                }
             }
         });
         services.getDebugLogger().debugLog(NAME + ": Broadcasted title message: {}", messageText);
@@ -282,7 +285,8 @@ public class Announcements implements ForgeAnnouncementModule {
         services.getTaskScheduler().schedule(() -> {
             MinecraftServer currentServer = services.getMinecraftServer();
             if (currentServer != null) {
-                currentServer.getPlayerList().getPlayers().forEach(bossEvent::removePlayer);
+                bossEvent.removeAllPlayers();
+                bossEvent.setVisible(false);
                 services.getDebugLogger().debugLog(NAME + ": Removed bossbar message after {} seconds", bossbarTime);
             }
         }, bossbarTime, TimeUnit.SECONDS);
@@ -293,23 +297,31 @@ public class Announcements implements ForgeAnnouncementModule {
         MinecraftServer server = services.getMinecraftServer();
 
         if (server == null) {
-            source.sendFailure(new TextComponent("Server not available."));
+            source.sendFailure(Component.literal("Server not available."));
             return 0;
         }
 
         Component titleComponent = services.getMessageParser().parseMessage(title, null);
-        Component subtitleComponent = (subtitle != null && !subtitle.isEmpty()) ? services.getMessageParser().parseMessage(subtitle, null) : TextComponent.EMPTY;
+        Component subtitleComponent = (subtitle != null && !subtitle.isEmpty()) ? services.getMessageParser().parseMessage(subtitle, null) : Component.empty(); // Updated for 1.19.2+
 
         server.getPlayerList().getPlayers().forEach(player -> {
             player.connection.send(new ClientboundClearTitlesPacket(true));
             player.connection.send(new ClientboundSetTitleTextPacket(titleComponent));
-            if (subtitle != null && subtitleComponent instanceof MutableComponent && (!((MutableComponent)subtitleComponent).getString().isEmpty() || !((MutableComponent)subtitleComponent).getSiblings().isEmpty())) {
-                player.connection.send(new ClientboundSetSubtitleTextPacket(subtitleComponent));
-            } else if (subtitle != null && !(subtitleComponent instanceof MutableComponent) && subtitleComponent != TextComponent.EMPTY) {
-                player.connection.send(new ClientboundSetSubtitleTextPacket(subtitleComponent));
+            if (subtitle != null && subtitleComponent != Component.empty()) {
+                boolean hasContent = false;
+                if (subtitleComponent instanceof MutableComponent mc) {
+                    if (!mc.getString().isEmpty() || !mc.getSiblings().isEmpty()) {
+                        hasContent = true;
+                    }
+                } else if (!subtitleComponent.getString().isEmpty()){
+                    hasContent = true;
+                }
+                if(hasContent) {
+                    player.connection.send(new ClientboundSetSubtitleTextPacket(subtitleComponent));
+                }
             }
         });
-        source.sendSuccess(new TextComponent("Title broadcasted."), true);
+        source.sendSuccess(() -> Component.literal("Title broadcasted."), true);
         return 1;
     }
 
@@ -319,7 +331,7 @@ public class Announcements implements ForgeAnnouncementModule {
         MinecraftServer server = services.getMinecraftServer();
 
         if (server == null) {
-            source.sendFailure(new TextComponent("Server not available."));
+            source.sendFailure(Component.literal("Server not available."));
             return 0;
         }
 
@@ -334,20 +346,20 @@ public class Announcements implements ForgeAnnouncementModule {
                     Component headerMessage = services.getMessageParser().parseMessage(header, null);
                     Component footerMessage = services.getMessageParser().parseMessage(footer, null);
                     server.getPlayerList().getPlayers().forEach(player -> {
-                        player.sendMessage(headerMessage, Util.NIL_UUID);
-                        player.sendMessage(broadcastMessage, Util.NIL_UUID);
-                        player.sendMessage(footerMessage, Util.NIL_UUID);
+                        player.sendSystemMessage(headerMessage);
+                        player.sendSystemMessage(broadcastMessage);
+                        player.sendSystemMessage(footerMessage);
                     });
                 } else {
-                    server.getPlayerList().broadcastMessage(broadcastMessage, ChatType.SYSTEM, Util.NIL_UUID);
+                    server.getPlayerList().broadcastSystemMessage(broadcastMessage, false);
                 }
-                source.sendSuccess(new TextComponent("Global message broadcasted."), true);
+                source.sendSuccess(() -> Component.literal("Global message broadcasted."), true);
                 break;
             case "actionbar":
                 server.getPlayerList().getPlayers().forEach(player -> {
                     player.connection.send(new ClientboundSetActionBarTextPacket(broadcastMessage));
                 });
-                source.sendSuccess(new TextComponent("Actionbar message broadcasted."), true);
+                source.sendSuccess(() -> Component.literal("Actionbar message broadcasted."), true);
                 break;
             case "bossbar":
                 String colorStr = StringArgumentType.getString(context, "color");
@@ -356,19 +368,23 @@ public class Announcements implements ForgeAnnouncementModule {
                 try {
                     bossBarColor = BossEvent.BossBarColor.valueOf(colorStr.toUpperCase());
                 } catch (IllegalArgumentException e) {
-                    source.sendFailure(new TextComponent("Invalid bossbar color: " + colorStr));
+                    source.sendFailure(Component.literal("Invalid bossbar color: " + colorStr)); /
                     return 0;
                 }
                 ServerBossEvent bossEvent = new ServerBossEvent(broadcastMessage, bossBarColor, BossEvent.BossBarOverlay.PROGRESS);
+                bossEvent.setProgress(1.0f);
                 server.getPlayerList().getPlayers().forEach(bossEvent::addPlayer);
                 services.getTaskScheduler().schedule(() -> {
                     MinecraftServer currentServer = services.getMinecraftServer();
-                    if(currentServer != null) currentServer.getPlayerList().getPlayers().forEach(bossEvent::removePlayer);
+                    if(currentServer != null) {
+                        bossEvent.removeAllPlayers();
+                        bossEvent.setVisible(false);
+                    }
                 }, interval, TimeUnit.SECONDS);
-                source.sendSuccess(new TextComponent("Bossbar message broadcasted for " + interval + " seconds."), true);
+                source.sendSuccess(() -> Component.literal("Bossbar message broadcasted for " + interval + " seconds."), true);
                 break;
             default:
-                source.sendFailure(new TextComponent("Invalid message type for command: " + type));
+                source.sendFailure(Component.literal("Invalid message type for command: " + type));
                 return 0;
         }
         return 1;

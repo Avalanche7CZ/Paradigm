@@ -74,7 +74,7 @@ public class CommandManager implements ForgeAnnouncementModule {
                         .requires(source -> source.hasPermission(2))
                         .executes(ctx -> {
                             services.getCmConfig().reloadCommands();
-                            ctx.getSource().sendSuccess(services.getMessageParser().parseMessage("&aReloaded custom commands from config. You might need to rejoin or server restart for new commands to fully register in client autocomplete.", null), false);
+                            ctx.getSource().sendSuccess(() -> services.getMessageParser().parseMessage("&aReloaded custom commands from config. You might need to rejoin or server restart for new commands to fully register in client autocomplete.", null), false);
                             services.getDebugLogger().debugLog("Custom commands reloaded via command.");
                             return 1;
                         })
@@ -89,22 +89,21 @@ public class CommandManager implements ForgeAnnouncementModule {
         if (!command.isRequirePermission()) {
             return true;
         }
-        if (!(source.getEntity() instanceof ServerPlayer)) {
+        if (!(source.getEntity() instanceof ServerPlayer player)) {
             return true;
         }
-        ServerPlayer player = (ServerPlayer) source.getEntity();
         boolean hasPerm = services.getPermissionsHandler().hasPermission(player, command.getPermission());
         if (!hasPerm) {
             String errorMessage = command.getPermissionErrorMessage();
-            player.sendMessage(services.getMessageParser().parseMessage(errorMessage, player), player.getUUID());
+            player.sendSystemMessage(services.getMessageParser().parseMessage(errorMessage, player));
         }
         return hasPerm;
     }
 
     private void executeCustomCommand(CommandSourceStack source, CustomCommand command, Services services) {
         ServerPlayer player = null;
-        if (source.getEntity() instanceof ServerPlayer) {
-            player = (ServerPlayer) source.getEntity();
+        if (source.getEntity() instanceof ServerPlayer serverPlayer) {
+            player = serverPlayer;
         }
 
         for (CustomCommand.Action action : command.getActions()) {
@@ -113,7 +112,7 @@ public class CommandManager implements ForgeAnnouncementModule {
                     if (action.getText() != null) {
                         for (String line : action.getText()) {
                             Component formattedMessage = services.getMessageParser().parseMessage(line, player);
-                            source.sendSuccess(formattedMessage, false); // send to command source
+                            source.sendSuccess(() -> formattedMessage, false);
                         }
                     }
                     break;
@@ -131,7 +130,7 @@ public class CommandManager implements ForgeAnnouncementModule {
                     if (action.getCommands() != null) {
                         for (String cmd : action.getCommands()) {
                             String processedCmd = (player != null) ? services.getPlaceholders().replacePlaceholders(cmd, player) : cmd;
-                            services.getMinecraftServer().getCommands().performCommand(source, processedCmd);
+                            services.getMinecraftServer().getCommands().performPrefixedCommand(source, processedCmd);
                         }
                     }
                     break;
@@ -139,7 +138,7 @@ public class CommandManager implements ForgeAnnouncementModule {
                     if (action.getCommands() != null) {
                         for (String cmd : action.getCommands()) {
                             String processedCmd = (player != null) ? services.getPlaceholders().replacePlaceholders(cmd, player) : cmd;
-                            services.getMinecraftServer().getCommands().performCommand(
+                            services.getMinecraftServer().getCommands().performPrefixedCommand(
                                     services.getMinecraftServer().createCommandSourceStack().withPermission(4),
                                     processedCmd);
                         }

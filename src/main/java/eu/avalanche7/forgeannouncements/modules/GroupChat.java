@@ -11,9 +11,9 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
 import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.network.chat.TextComponent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.event.ServerChatEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
@@ -40,15 +40,12 @@ public class GroupChat implements ForgeAnnouncementModule {
 
     @Override
     public boolean isEnabled(Services services) {
-        // Assuming Group Chat doesn't have a dedicated enable/disable in main.toml
-        // If it does, use: return services.getMainConfig().groupChatEnable.get();
-        return true; // Or some other condition if applicable
+        return true;
     }
 
     @Override
     public void onLoad(FMLCommonSetupEvent event, Services services, IEventBus modEventBus) {
         this.services = services;
-        // Pass services to GroupChatManager if it needs them (e.g., for Lang)
         this.groupChatManager.setServices(services);
         services.getDebugLogger().debugLog(NAME + " module loaded.");
     }
@@ -66,7 +63,9 @@ public class GroupChat implements ForgeAnnouncementModule {
     @Override
     public void onDisable(Services services) {
         services.getDebugLogger().debugLog(NAME + " module disabled.");
-        this.groupChatManager.clearAllGroupsAndPlayerData(); // Clear data on disable
+        if (this.groupChatManager != null) {
+            this.groupChatManager.clearAllGroupsAndPlayerData();
+        }
     }
 
     @Override
@@ -128,14 +127,14 @@ public class GroupChat implements ForgeAnnouncementModule {
                                     groupChatManager.groupInfo(player, groupName);
                                     return 1;
                                 }))
-                        .executes(ctx -> { // Info for current group
+                        .executes(ctx -> { // Info pro aktuální skupinu
                             ServerPlayer player = ctx.getSource().getPlayerOrException();
                             PlayerGroupData data = groupChatManager.getPlayerData(player);
                             String currentGroup = data.getCurrentGroup();
                             if (currentGroup != null) {
                                 groupChatManager.groupInfo(player, currentGroup);
                             } else {
-                                player.sendMessage(services.getLang().translate("group.no_group_to_info"), player.getUUID());
+                                player.sendSystemMessage(services.getLang().translate("group.no_group_to_info"));
                             }
                             return 1;
                         }))
@@ -169,7 +168,7 @@ public class GroupChat implements ForgeAnnouncementModule {
 
     @SubscribeEvent
     public void onPlayerChat(ServerChatEvent event) {
-        if (!isEnabled(this.services)) return;
+        if (this.services == null || !isEnabled(this.services) || this.groupChatManager == null) return;
 
         ServerPlayer player = event.getPlayer();
         PlayerGroupData data = groupChatManager.getPlayerData(player);
@@ -181,16 +180,16 @@ public class GroupChat implements ForgeAnnouncementModule {
                 groupChatManager.sendMessageToGroup(player, groupName, event.getMessage());
                 services.getLogger().info("[GroupChat] [{}] {}: {}", groupName, player.getName().getString(), event.getMessage());
             } else {
-                player.sendMessage(services.getLang().translate("group.no_group_to_send_message"), player.getUUID());
+                player.sendSystemMessage(services.getLang().translate("group.no_group_to_send_message"));
                 groupChatManager.setGroupChatToggled(player, false);
-                player.sendMessage(services.getLang().translate("group.chat_disabled"), player.getUUID());
+                player.sendSystemMessage(services.getLang().translate("group.chat_disabled"));
             }
         }
     }
 
     private void displayHelp(ServerPlayer player, Services services) {
         String label = "groupchat";
-        player.sendMessage(services.getLang().translate("group.help_title"), player.getUUID());
+        player.sendSystemMessage(services.getLang().translate("group.help_title"));
         sendHelpMessage(player, label, "create <name>", services.getLang().translate("group.help_create").getString(), services);
         sendHelpMessage(player, label, "delete", services.getLang().translate("group.help_delete").getString(), services);
         sendHelpMessage(player, label, "invite <player>", services.getLang().translate("group.help_invite").getString(), services);
@@ -204,10 +203,10 @@ public class GroupChat implements ForgeAnnouncementModule {
 
     private void sendHelpMessage(ServerPlayer player, String label, String command, String description, Services services) {
         MutableComponent hoverText = services.getMessageParser().parseMessage(description, player).withStyle(ChatFormatting.AQUA);
-        MutableComponent message = new TextComponent(" §9> §e/" + label + " " + command)
+        MutableComponent message = Component.literal(" §9> §e/" + label + " " + command)
                 .withStyle(ChatFormatting.YELLOW)
                 .withStyle(style -> style.withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/" + label + " " + command)))
                 .withStyle(style -> style.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hoverText)));
-        player.sendMessage(message, player.getUUID());
+        player.sendSystemMessage(message);
     }
 }

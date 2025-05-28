@@ -4,7 +4,6 @@ import eu.avalanche7.forgeannouncements.core.Services;
 import eu.avalanche7.forgeannouncements.data.Group;
 import eu.avalanche7.forgeannouncements.data.PlayerGroupData;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.TextComponent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.MinecraftServer;
 
@@ -15,7 +14,7 @@ import java.util.UUID;
 public class GroupChatManager {
     private final Map<String, Group> groups = new HashMap<>();
     private final Map<UUID, PlayerGroupData> playerData = new HashMap<>();
-    private Services services; // ADDED
+    private Services services;
     public void setServices(Services services) {
         this.services = services;
     }
@@ -25,14 +24,14 @@ public class GroupChatManager {
             return this.services.getLang().translate(key);
         }
         this.services.getLogger().warn("GroupChatManager: Services or Lang service not available for key '{}'", key);
-        return new TextComponent(key);
+        return Component.literal(key);
     }
     private Component parseMessage(String message, ServerPlayer player) {
         if (this.services != null && this.services.getMessageParser() != null) {
             return this.services.getMessageParser().parseMessage(message, player);
         }
         this.services.getLogger().warn("GroupChatManager: Services or MessageParser service not available for message '{}'", message);
-        return new TextComponent(message);
+        return Component.literal(message);
     }
 
     private MinecraftServer getServer() {
@@ -48,20 +47,19 @@ public class GroupChatManager {
         }
     }
 
-
     public boolean createGroup(ServerPlayer player, String groupName) {
         if (groupName == null || groupName.trim().isEmpty() || groupName.length() > 32) {
-            player.sendMessage(translate("group.invalid_name"), player.getUUID());
+            player.sendSystemMessage(translate("group.invalid_name"));
             return false;
         }
         if (groups.containsKey(groupName)) {
-            player.sendMessage(translate("group.already_exists"), player.getUUID());
+            player.sendSystemMessage(translate("group.already_exists"));
             return false;
         }
         Group group = new Group(groupName, player.getUUID());
         groups.put(groupName, group);
         getPlayerData(player).setCurrentGroup(groupName);
-        player.sendMessage(translate("group.created_successfully"), player.getUUID());
+        player.sendSystemMessage(translate("group.created_successfully"));
         debugLog("Player " + player.getName().getString() + " created group: " + groupName);
         return true;
     }
@@ -70,12 +68,12 @@ public class GroupChatManager {
         PlayerGroupData data = getPlayerData(player);
         String groupName = data.getCurrentGroup();
         if (groupName == null || !groups.containsKey(groupName)) {
-            player.sendMessage(translate("group.no_group_to_delete"), player.getUUID());
+            player.sendSystemMessage(translate("group.no_group_to_delete"));
             return false;
         }
         Group group = groups.get(groupName);
         if (!group.getOwner().equals(player.getUUID())) {
-            player.sendMessage(translate("group.not_owner"), player.getUUID());
+            player.sendSystemMessage(translate("group.not_owner"));
             return false;
         }
 
@@ -87,36 +85,37 @@ public class GroupChatManager {
                 if (server != null) {
                     ServerPlayer memberPlayer = server.getPlayerList().getPlayer(memberUUID);
                     if (memberPlayer != null && !memberPlayer.equals(player)) {
-                        memberPlayer.sendMessage(parseMessage(translate("group.group_deleted_by_owner").getString().replace("{group_name}", groupName), memberPlayer), memberUUID);
+                        Component messageToMember = parseMessage(translate("group.group_deleted_by_owner").getString().replace("{group_name}", groupName), memberPlayer);
+                        memberPlayer.sendSystemMessage(messageToMember);
                     }
                 }
             }
         });
 
         groups.remove(groupName);
-        player.sendMessage(translate("group.deleted_successfully"), player.getUUID());
+        player.sendSystemMessage(translate("group.deleted_successfully"));
         debugLog("Player " + player.getName().getString() + " deleted group: " + groupName);
         return true;
     }
 
     public void listGroups(ServerPlayer player) {
         if (groups.isEmpty()) {
-            player.sendMessage(translate("group.no_groups_available"), player.getUUID());
+            player.sendSystemMessage(translate("group.no_groups_available"));
             return;
         }
-        player.sendMessage(translate("group.available_groups"), player.getUUID());
+        player.sendSystemMessage(translate("group.available_groups"));
         for (String groupName : groups.keySet()) {
-            player.sendMessage(new TextComponent("- " + groupName), player.getUUID());
+            player.sendSystemMessage(Component.literal("- " + groupName));
         }
     }
 
     public void groupInfo(ServerPlayer player, String groupName) {
         Group group = groups.get(groupName);
         if (group == null) {
-            player.sendMessage(translate("group.group_not_found"), player.getUUID());
+            player.sendSystemMessage(translate("group.group_not_found"));
             return;
         }
-        player.sendMessage(parseMessage("&6Group Information: &e" + groupName, player), player.getUUID());
+        player.sendSystemMessage(parseMessage("&6Group Information: &e" + groupName, player));
 
         String ownerName = "Unknown (Offline)";
         MinecraftServer server = getServer();
@@ -128,8 +127,8 @@ public class GroupChatManager {
                 ownerName = group.getOwner().toString().substring(0, Math.min(8, group.getOwner().toString().length())) + "... (Offline)";
             }
         }
-        player.sendMessage(parseMessage("&7Owner: &f" + ownerName, player), player.getUUID());
-        player.sendMessage(parseMessage("&7Members (" + group.getMembers().size() + "):", player), player.getUUID());
+        player.sendSystemMessage(parseMessage("&7Owner: &f" + ownerName, player));
+        player.sendSystemMessage(parseMessage("&7Members (" + group.getMembers().size() + "):", player));
 
         group.getMembers().forEach(memberUUID -> {
             String memberName = "Unknown (Offline)";
@@ -141,7 +140,7 @@ public class GroupChatManager {
                     memberName = memberUUID.toString().substring(0, Math.min(8, memberUUID.toString().length())) + "... (Offline)";
                 }
             }
-            player.sendMessage(new TextComponent("- " + memberName), player.getUUID());
+            player.sendSystemMessage(Component.literal("- " + memberName));
         });
     }
 
@@ -150,25 +149,27 @@ public class GroupChatManager {
         String groupName = inviterData.getCurrentGroup();
 
         if (groupName == null || !groups.containsKey(groupName)) {
-            inviter.sendMessage(translate("group.no_group_to_invite_from"), inviter.getUUID());
+            inviter.sendSystemMessage(translate("group.no_group_to_invite_from"));
             return false;
         }
         Group group = groups.get(groupName);
         if (!group.getOwner().equals(inviter.getUUID())) {
-            inviter.sendMessage(translate("group.not_owner_invite"), inviter.getUUID());
+            inviter.sendSystemMessage(translate("group.not_owner_invite"));
             return false;
         }
         if (group.getMembers().contains(target.getUUID())) {
-            inviter.sendMessage(parseMessage(translate("group.player_already_in_group").getString().replace("{player_name}", target.getName().getString()), inviter), inviter.getUUID()); // USE parseMessage & translate
+            Component alreadyInGroupMessage = parseMessage(translate("group.player_already_in_group").getString().replace("{player_name}", target.getName().getString()), inviter);
+            inviter.sendSystemMessage(alreadyInGroupMessage);
             return false;
         }
 
         PlayerGroupData targetData = getPlayerData(target);
         targetData.addInvitation(groupName);
 
-        Component inviteMessage = parseMessage(translate("group.invited").getString().replace("{group_name}", groupName).replace("{inviter_name}", inviter.getName().getString()), target); // USE parseMessage & translate
-        target.sendMessage(inviteMessage, target.getUUID());
-        inviter.sendMessage(parseMessage(translate("group.invite_sent").getString().replace("{player_name}", target.getName().getString()).replace("{group_name}", groupName), inviter), inviter.getUUID()); // USE parseMessage & translate
+        Component inviteMessage = parseMessage(translate("group.invited").getString().replace("{group_name}", groupName).replace("{inviter_name}", inviter.getName().getString()), target);
+        target.sendSystemMessage(inviteMessage);
+        Component inviteSentMessage = parseMessage(translate("group.invite_sent").getString().replace("{player_name}", target.getName().getString()).replace("{group_name}", groupName), inviter);
+        inviter.sendSystemMessage(inviteSentMessage);
         debugLog("Player " + inviter.getName().getString() + " invited " + target.getName().getString() + " to group: " + groupName);
         return true;
     }
@@ -178,7 +179,7 @@ public class GroupChatManager {
         Group group = groups.get(groupName);
 
         if (group == null) {
-            player.sendMessage(translate("group.group_not_found"), player.getUUID());
+            player.sendSystemMessage(translate("group.group_not_found"));
             return false;
         }
 
@@ -191,17 +192,17 @@ public class GroupChatManager {
         playerData.setCurrentGroup(groupName);
         playerData.removeInvitation(groupName);
 
-        Component joinedMessage = parseMessage(translate("group.joined").getString().replace("{group_name}", groupName), player); // USE parseMessage & translate
-        player.sendMessage(joinedMessage, player.getUUID());
+        Component joinedMessage = parseMessage(translate("group.joined").getString().replace("{group_name}", groupName), player);
+        player.sendSystemMessage(joinedMessage);
 
-        Component playerJoinedNotification = parseMessage(translate("group.player_joined_notification").getString().replace("{player_name}", player.getName().getString()), null); // USE parseMessage & translate
+        Component playerJoinedNotification = parseMessage(translate("group.player_joined_notification").getString().replace("{player_name}", player.getName().getString()), null);
         MinecraftServer server = getServer();
         if (server != null) {
             group.getMembers().forEach(memberUUID -> {
                 if (!memberUUID.equals(player.getUUID())) {
                     ServerPlayer member = server.getPlayerList().getPlayer(memberUUID);
                     if (member != null) {
-                        member.sendMessage(playerJoinedNotification, member.getUUID());
+                        member.sendSystemMessage(playerJoinedNotification);
                     }
                 }
             });
@@ -214,7 +215,7 @@ public class GroupChatManager {
         PlayerGroupData data = getPlayerData(player);
         String groupName = data.getCurrentGroup();
         if (groupName == null || !groups.containsKey(groupName)) {
-            player.sendMessage(translate("group.no_group_to_leave"), player.getUUID());
+            player.sendSystemMessage(translate("group.no_group_to_leave"));
             return false;
         }
         Group group = groups.get(groupName);
@@ -222,15 +223,15 @@ public class GroupChatManager {
         data.setCurrentGroup(null);
 
         Component leftMessage = parseMessage(translate("group.left").getString().replace("{group_name}", groupName), player);
-        player.sendMessage(leftMessage, player.getUUID());
+        player.sendSystemMessage(leftMessage);
 
-        Component playerLeftNotification = parseMessage(translate("group.player_left_notification").getString().replace("{player_name}", player.getName().getString()), null); // USE parseMessage & translate
+        Component playerLeftNotification = parseMessage(translate("group.player_left_notification").getString().replace("{player_name}", player.getName().getString()), null);
         MinecraftServer server = getServer();
         if (server != null) {
             group.getMembers().forEach(memberUUID -> {
                 ServerPlayer member = server.getPlayerList().getPlayer(memberUUID);
                 if (member != null) {
-                    member.sendMessage(playerLeftNotification, member.getUUID());
+                    member.sendSystemMessage(playerLeftNotification);
                 }
             });
         }
@@ -244,7 +245,7 @@ public class GroupChatManager {
                 group.setOwner(newOwner);
                 ServerPlayer newOwnerPlayer = server.getPlayerList().getPlayer(newOwner);
                 if(newOwnerPlayer != null) {
-                    newOwnerPlayer.sendMessage(translate("group.new_owner_notification"), newOwnerPlayer.getUUID());
+                    newOwnerPlayer.sendSystemMessage(translate("group.new_owner_notification"));
                     debugLog("Ownership of group " + groupName + " transferred to " + newOwnerPlayer.getName().getString());
                 }
             }
@@ -258,13 +259,13 @@ public class GroupChatManager {
         boolean currentToggleState = data.isGroupChatToggled();
 
         if (!currentToggleState && data.getCurrentGroup() == null) {
-            player.sendMessage(translate("group.must_be_in_group_to_toggle"), player.getUUID());
+            player.sendSystemMessage(translate("group.must_be_in_group_to_toggle"));
             return;
         }
 
         data.setGroupChatToggled(!currentToggleState);
         Component message = !currentToggleState ? translate("group.chat_enabled") : translate("group.chat_disabled");
-        player.sendMessage(message, player.getUUID());
+        player.sendSystemMessage(message);
         debugLog("Player " + player.getName().getString() + " toggled group chat to " + !currentToggleState);
     }
 
@@ -279,7 +280,7 @@ public class GroupChatManager {
     public void sendMessageToGroup(ServerPlayer sender, String groupName, String messageContent) {
         Group group = groups.get(groupName);
         if (group == null || !group.getMembers().contains(sender.getUUID())) {
-            sender.sendMessage(translate("group.not_in_group_or_not_exists"), sender.getUUID());
+            sender.sendSystemMessage(translate("group.not_in_group_or_not_exists"));
             return;
         }
 
@@ -295,7 +296,7 @@ public class GroupChatManager {
             group.getMembers().forEach(memberUUID -> {
                 ServerPlayer member = server.getPlayerList().getPlayer(memberUUID);
                 if (member != null) {
-                    member.sendMessage(finalMessage, sender.getUUID());
+                    member.sendSystemMessage(finalMessage);
                 }
             });
         }
@@ -305,7 +306,7 @@ public class GroupChatManager {
         PlayerGroupData data = getPlayerData(sender);
         String groupName = data.getCurrentGroup();
         if (groupName == null) {
-            sender.sendMessage(translate("group.no_group_to_send_message"), sender.getUUID());
+            sender.sendSystemMessage(translate("group.no_group_to_send_message"));
             return;
         }
         sendMessageToGroup(sender, groupName, messageContent);
