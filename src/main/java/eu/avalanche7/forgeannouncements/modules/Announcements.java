@@ -302,7 +302,7 @@ public class Announcements implements ForgeAnnouncementModule {
         }
 
         Component titleComponent = services.getMessageParser().parseMessage(title, null);
-        Component subtitleComponent = (subtitle != null && !subtitle.isEmpty()) ? services.getMessageParser().parseMessage(subtitle, null) : Component.empty(); // Updated for 1.19.2+
+        Component subtitleComponent = (subtitle != null && !subtitle.isEmpty()) ? services.getMessageParser().parseMessage(subtitle, null) : Component.empty();
 
         server.getPlayerList().getPlayers().forEach(player -> {
             player.connection.send(new ClientboundClearTitlesPacket(true));
@@ -321,7 +321,7 @@ public class Announcements implements ForgeAnnouncementModule {
                 }
             }
         });
-        source.sendSuccess(() -> Component.literal("Title broadcasted."), true);
+        //source.sendSuccess(() -> Component.literal("Title broadcasted."), true);
         return 1;
     }
 
@@ -353,13 +353,13 @@ public class Announcements implements ForgeAnnouncementModule {
                 } else {
                     server.getPlayerList().broadcastSystemMessage(broadcastMessage, false);
                 }
-                source.sendSuccess(() -> Component.literal("Global message broadcasted."), true);
+                //source.sendSuccess(() -> Component.literal("Global message broadcasted."), true);
                 break;
             case "actionbar":
                 server.getPlayerList().getPlayers().forEach(player -> {
                     player.connection.send(new ClientboundSetActionBarTextPacket(broadcastMessage));
                 });
-                source.sendSuccess(() -> Component.literal("Actionbar message broadcasted."), true);
+                //source.sendSuccess(() -> Component.literal("Actionbar message broadcasted."), true);
                 break;
             case "bossbar":
                 String colorStr = StringArgumentType.getString(context, "color");
@@ -368,7 +368,7 @@ public class Announcements implements ForgeAnnouncementModule {
                 try {
                     bossBarColor = BossEvent.BossBarColor.valueOf(colorStr.toUpperCase());
                 } catch (IllegalArgumentException e) {
-                    source.sendFailure(Component.literal("Invalid bossbar color: " + colorStr)); /
+                    source.sendFailure(Component.literal("Invalid bossbar color: " + colorStr));
                     return 0;
                 }
                 ServerBossEvent bossEvent = new ServerBossEvent(broadcastMessage, bossBarColor, BossEvent.BossBarOverlay.PROGRESS);
@@ -381,7 +381,7 @@ public class Announcements implements ForgeAnnouncementModule {
                         bossEvent.setVisible(false);
                     }
                 }, interval, TimeUnit.SECONDS);
-                source.sendSuccess(() -> Component.literal("Bossbar message broadcasted for " + interval + " seconds."), true);
+                //source.sendSuccess(() -> Component.literal("Bossbar message broadcasted for " + interval + " seconds."), true);
                 break;
             default:
                 source.sendFailure(Component.literal("Invalid message type for command: " + type));

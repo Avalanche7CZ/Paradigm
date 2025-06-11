@@ -10,12 +10,10 @@ import eu.avalanche7.forgeannouncements.utils.PermissionsHandler;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.TextComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerBossEvent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.BossEvent;
-import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.ServerChatEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
@@ -89,7 +87,7 @@ public class StaffChat implements ForgeAnnouncementModule {
         dispatcher.register(Commands.literal("sc")
                 .requires(source -> {
                     if (!(source.getEntity() instanceof ServerPlayer)) return false;
-                    return services.getPermissionsHandler().hasPermission((ServerPlayer) source.getEntity(), PermissionsHandler.STAFF_CHAT_PERMISSION);
+                    return this.services != null && this.services.getPermissionsHandler().hasPermission((ServerPlayer) source.getEntity(), PermissionsHandler.STAFF_CHAT_PERMISSION);
                 })
                 .then(Commands.literal("toggle")
                         .executes(context -> toggleStaffChatCmd(context.getSource(), services)))
@@ -114,7 +112,7 @@ public class StaffChat implements ForgeAnnouncementModule {
         ServerPlayer player = source.getPlayerOrException();
         MinecraftServer server = services.getMinecraftServer();
         if (server == null) {
-            source.sendFailure(new TextComponent("Server not available for staff chat message."));
+            source.sendFailure(Component.literal("Server not available for staff chat message."));
             return 0;
         }
         sendStaffChatMessage(player, message, server, services);
@@ -124,7 +122,7 @@ public class StaffChat implements ForgeAnnouncementModule {
     private void toggleStaffChat(ServerPlayer player, Services services) {
         boolean isCurrentlyEnabled = staffChatEnabledMap.getOrDefault(player.getUUID(), false);
         staffChatEnabledMap.put(player.getUUID(), !isCurrentlyEnabled);
-        player.sendMessage(new TextComponent("Staff chat " + (!isCurrentlyEnabled ? "§aenabled" : "§cdisabled")), player.getUUID());
+        player.sendSystemMessage(Component.literal("Staff chat " + (!isCurrentlyEnabled ? "§aenabled" : "§cdisabled")));
 
         if (!isCurrentlyEnabled) {
             showBossBar(player, services);
@@ -137,12 +135,12 @@ public class StaffChat implements ForgeAnnouncementModule {
     private void sendStaffChatMessage(ServerPlayer sender, String message, MinecraftServer server, Services services) {
         ChatConfigHandler.Config chatConfig = services.getChatConfig();
         String format = chatConfig.staffChatFormat.get();
-        String formattedMessage = String.format(format, sender.getName().getString(), message);
-        Component chatComponent = services.getMessageParser().parseMessage(formattedMessage, sender);
+        String rawFormattedMessage = String.format(format, sender.getName().getString(), message);
+        Component chatComponent = services.getMessageParser().parseMessage(rawFormattedMessage, sender);
 
         server.getPlayerList().getPlayers().forEach(onlinePlayer -> {
             if (services.getPermissionsHandler().hasPermission(onlinePlayer, PermissionsHandler.STAFF_CHAT_PERMISSION)) {
-                onlinePlayer.sendMessage(chatComponent, sender.getUUID());
+                onlinePlayer.sendSystemMessage(chatComponent);
             }
         });
         services.getLogger().info("(StaffChat) {}: {}", sender.getName().getString(), message);
@@ -150,7 +148,7 @@ public class StaffChat implements ForgeAnnouncementModule {
 
     @SubscribeEvent
     public void onServerChat(ServerChatEvent event) {
-        if (!isEnabled(this.services)) return;
+        if (this.services == null || !isEnabled(this.services)) return;
 
         ServerPlayer player = event.getPlayer();
         if (staffChatEnabledMap.getOrDefault(player.getUUID(), false)) {
@@ -159,7 +157,7 @@ public class StaffChat implements ForgeAnnouncementModule {
                 services.getLogger().warn("StaffChatModule: Server instance is null during ServerChatEvent for " + player.getName().getString());
                 return;
             }
-            sendStaffChatMessage(player, event.getMessage(), server, this.services);
+            sendStaffChatMessage(player, event.getMessage().getString(), server, this.services);
             event.setCanceled(true);
         }
     }
@@ -181,4 +179,3 @@ public class StaffChat implements ForgeAnnouncementModule {
         }
     }
 }
-

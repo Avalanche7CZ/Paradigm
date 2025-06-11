@@ -46,7 +46,9 @@ public class GroupChat implements ForgeAnnouncementModule {
     @Override
     public void onLoad(FMLCommonSetupEvent event, Services services, IEventBus modEventBus) {
         this.services = services;
-        this.groupChatManager.setServices(services);
+        if (this.groupChatManager != null) {
+            this.groupChatManager.setServices(services);
+        }
         services.getDebugLogger().debugLog(NAME + " module loaded.");
     }
 
@@ -127,7 +129,7 @@ public class GroupChat implements ForgeAnnouncementModule {
                                     groupChatManager.groupInfo(player, groupName);
                                     return 1;
                                 }))
-                        .executes(ctx -> { // Info pro aktuální skupinu
+                        .executes(ctx -> {
                             ServerPlayer player = ctx.getSource().getPlayerOrException();
                             PlayerGroupData data = groupChatManager.getPlayerData(player);
                             String currentGroup = data.getCurrentGroup();
@@ -177,8 +179,8 @@ public class GroupChat implements ForgeAnnouncementModule {
             String groupName = data.getCurrentGroup();
             if (groupName != null) {
                 event.setCanceled(true);
-                groupChatManager.sendMessageToGroup(player, groupName, event.getMessage());
-                services.getLogger().info("[GroupChat] [{}] {}: {}", groupName, player.getName().getString(), event.getMessage());
+                groupChatManager.sendMessageToGroup(player, groupName, event.getMessage().getString());
+                services.getLogger().info("[GroupChat] [{}] {}: {}", groupName, player.getName().getString(), event.getMessage().getString());
             } else {
                 player.sendSystemMessage(services.getLang().translate("group.no_group_to_send_message"));
                 groupChatManager.setGroupChatToggled(player, false);
@@ -202,7 +204,15 @@ public class GroupChat implements ForgeAnnouncementModule {
     }
 
     private void sendHelpMessage(ServerPlayer player, String label, String command, String description, Services services) {
-        MutableComponent hoverText = services.getMessageParser().parseMessage(description, player).withStyle(ChatFormatting.AQUA);
+        Component parsedDescription = services.getMessageParser().parseMessage(description, player);
+        MutableComponent hoverText;
+        if (parsedDescription instanceof MutableComponent) {
+            hoverText = (MutableComponent) parsedDescription;
+        } else {
+            hoverText = parsedDescription.copy();
+        }
+        hoverText.withStyle(ChatFormatting.AQUA);
+
         MutableComponent message = Component.literal(" §9> §e/" + label + " " + command)
                 .withStyle(ChatFormatting.YELLOW)
                 .withStyle(style -> style.withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/" + label + " " + command)))

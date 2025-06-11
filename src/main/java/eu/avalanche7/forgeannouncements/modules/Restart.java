@@ -221,7 +221,7 @@ public class Restart implements ForgeAnnouncementModule {
                     .replace("{seconds}", TIME_FORMATTER.format(seconds))
                     .replace("{time}", formattedTime);
             Component messageComponent = services.getMessageParser().parseMessage(customMessage, null);
-            server.getPlayerList().broadcastMessage(messageComponent, ChatType.SYSTEM, Util.NIL_UUID);
+            server.getPlayerList().broadcastSystemMessage(messageComponent, false);
         }
 
         if (config.titleEnabled.get()) {
@@ -286,9 +286,10 @@ public class Restart implements ForgeAnnouncementModule {
         if (server != null) {
             services.getDebugLogger().debugLog(NAME + ": Shutdown initiated at: " + new Date());
             try {
-                server.getPlayerList().broadcastMessage(services.getMessageParser().parseMessage(services.getRestartConfig().defaultRestartReason.get(),null), ChatType.SYSTEM, Util.NIL_UUID);
+                Component kickMessage = services.getMessageParser().parseMessage(services.getRestartConfig().defaultRestartReason.get(),null);
+                server.getPlayerList().broadcastSystemMessage(kickMessage, false);
                 server.saveEverything(true, true, true);
-                server.halt(false); // false for not initiating a new server process
+                server.halt(false);
                 services.getDebugLogger().debugLog(NAME + ": Server stopped successfully via halt(false).");
             } catch (Exception e) {
                 services.getDebugLogger().debugLog(NAME + ": Error during server shutdown", e);

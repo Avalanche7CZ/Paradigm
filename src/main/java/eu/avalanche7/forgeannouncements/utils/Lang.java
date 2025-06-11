@@ -3,7 +3,7 @@ package eu.avalanche7.forgeannouncements.utils;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import eu.avalanche7.forgeannouncements.configs.MainConfigHandler;
-import net.minecraft.network.chat.Component; // Změněno z MutableComponent na Component
+import net.minecraft.network.chat.Component;
 import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
