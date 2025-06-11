@@ -128,7 +128,7 @@ tasks.named('jar', Jar).configure {
                 "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
         ])
     }
-    archiveFileName = "ForgeAnnouncements-18-dev-${getCommitId()}.jar"
+    archiveFileName = "Paradigm-18-dev-${getCommitId()}.jar"
 
     finalizedBy 'reobfJar'
 }
