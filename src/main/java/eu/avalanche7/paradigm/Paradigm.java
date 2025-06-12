@@ -7,6 +7,7 @@ import eu.avalanche7.paradigm.modules.*;
 import eu.avalanche7.paradigm.configs.*;
 import eu.avalanche7.paradigm.utils.*;
 import com.mojang.logging.LogUtils;
+import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
@@ -14,12 +15,12 @@ import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.ModLoadingContext;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLPaths;
+import net.minecraftforge.fml.ModList;
 import org.slf4j.Logger;
 
 import java.io.BufferedReader;
@@ -29,6 +30,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+
+import static net.minecraft.commands.Commands.literal;
+import static net.minecraft.commands.Commands.argument;
 
 @Mod(Paradigm.MOD_ID)
 public class Paradigm {
@@ -47,9 +51,9 @@ public class Paradigm {
     private GroupChatManager groupChatManagerInstance;
     private CMConfig cmConfigInstance;
 
-    public Paradigm() {
-        LOGGER.info("Initializing Paradigm Mod for Minecraft 1.19.2 (Instance-Based Services)...");
-        IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
+    public Paradigm(FMLJavaModLoadingContext ctx) {
+        LOGGER.info("Initializing Paradigm Mod for Minecraft 1.21.1...");
+        IEventBus modEventBus = ctx.getModEventBus();
         modEventBus.addListener(this::commonSetup);
 
         MinecraftForge.EVENT_BUS.register(this);
@@ -65,11 +69,11 @@ public class Paradigm {
             Path serverConfigDir = FMLPaths.GAMEDIR.get().resolve("config/" + MOD_ID);
             Files.createDirectories(serverConfigDir);
 
-            ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, MainConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("main.toml").toString());
-            ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, AnnouncementsConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("announcements.toml").toString());
-            ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, MentionConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("mentions.toml").toString());
-            ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, RestartConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("restarts.toml").toString());
-            ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, ChatConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("chat.toml").toString());
+            ctx.registerConfig(ModConfig.Type.SERVER, MainConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("main.toml").toString());
+            ctx.registerConfig(ModConfig.Type.SERVER, AnnouncementsConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("announcements.toml").toString());
+            ctx.registerConfig(ModConfig.Type.SERVER, MentionConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("mentions.toml").toString());
+            ctx.registerConfig(ModConfig.Type.SERVER, RestartConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("restarts.toml").toString());
+            ctx.registerConfig(ModConfig.Type.SERVER, ChatConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("chat.toml").toString());
 
             MOTDConfigHandler.loadConfig();
             this.cmConfigInstance.loadCommands();
@@ -136,15 +140,18 @@ public class Paradigm {
             });
         });
 
-        String version = ModLoadingContext.get().getActiveContainer().getModInfo().getVersion().toString();
-        String displayName = ModLoadingContext.get().getActiveContainer().getModInfo().getDisplayName();
-        LOGGER.info("Paradigm mod (1.19.2) has been set up.");
-        LOGGER.info("==================================================");
-        LOGGER.info("{} - Version {}", displayName, version);
-        LOGGER.info("Author: Avalanche7CZ");
-        LOGGER.info("Discord: https://discord.com/invite/qZDcQdEFqQ");
-        LOGGER.info("==================================================");
-        Paradigm.UpdateChecker.checkForUpdates(version, LOGGER);
+        ModList.get().getModContainerById(MOD_ID).ifPresent(modContainer -> {
+            String version = modContainer.getModInfo().getVersion().toString();
+            String displayName = modContainer.getModInfo().getDisplayName();
+
+            LOGGER.info("Paradigm mod (1.21.1) has been set up.");
+            LOGGER.info("==================================================");
+            LOGGER.info("{} - Version {}", displayName, version);
+            LOGGER.info("Author: Avalanche7CZ");
+            LOGGER.info("Discord: https://discord.com/invite/qZDcQdEFqQ");
+            LOGGER.info("==================================================");
+            Paradigm.UpdateChecker.checkForUpdates(version, LOGGER);
+        });
     }
 
     @SubscribeEvent
@@ -178,9 +185,9 @@ public class Paradigm {
         if (this.taskSchedulerInstance != null) {
             this.taskSchedulerInstance.onServerStopping();
         }
-        LOGGER.info("Paradigm modules (1.19.2) have been processed for server stop.");
+        LOGGER.info("Paradigm modules (1.21.1) have been processed for server stop.");
     }
-    
+
     public static class UpdateChecker {
         private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/main/version.txt";
 
