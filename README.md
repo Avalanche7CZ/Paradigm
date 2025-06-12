@@ -1,18 +1,19 @@
-# Forge Announcements
-
+# Paradigm
+[![Minecraft 1.20.1](https://img.shields.io/badge/Minecraft-1.20.1-brightgreen)](https://www.minecraft.net/)
 [![Minecraft 1.19.2](https://img.shields.io/badge/Minecraft-1.19.2-brightgreen)](https://www.minecraft.net/)
 [![Minecraft 1.18.2](https://img.shields.io/badge/Minecraft-1.18.2-brightgreen)](https://www.minecraft.net/)
 [![Minecraft 1.12.2](https://img.shields.io/badge/Minecraft-1.12.2-brightgreen)](https://www.minecraft.net/)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L4Z8L38)
 
-Forge Announcements is a Minecraft mod designed for server administrators who want to automate broadcasting messages to players. This mod allows you to configure and schedule messages with ease, ensuring important information reaches all players without manual intervention.
+Paradigm is a Minecraft mod designed for server administrators who want to automate broadcasting messages to players. This mod allows you to configure and schedule messages with ease, ensuring important information reaches all players without manual intervention.
 
-| Version | Forge   | LuckPerms | ForgeEssentials | Status |                
-|:--------|:--------|:--------:|:--------------:|:--------------:|
-| 1.19.2  | 41.1.0  |     ✅    |              ❌  | ACTIVE | 
-| 1.18.2  | 40.2.21 |     ✅    |              ✅  | ACTIVE |
-| 1.12.2  | 14.23.5 |     ✅    |              ✅  | ACTIVE |
+| Version | Forge    | LuckPerms | ForgeEssentials | Status |                
+|:--------|:---------|:--------:|:--------------:|:--------------:|
+| 1.20.1  | 47.4.2+  |     ✅    |              ❌  | ACTIVE | 
+| 1.19.2  | 41.1.0+  |     ✅    |              ❌  | ACTIVE | 
+| 1.18.2  | 40.2.21+ |     ✅    |              ✅  | ACTIVE |
+| 1.12.2  | 14.23.5+ |     ✅    |              ✅  | ACTIVE |
 
 ## Features
 - Automated Broadcasts: Set up automated messages to be sent at specified intervals.
@@ -29,15 +30,15 @@ Forge Announcements is a Minecraft mod designed for server administrators who wa
 - Hex Color Support
 
 ## Installation
-1. Download the latest version of the mod from the [Releases page](https://github.com/Avalanche7CZ/ForgeAnnouncements/releases).
+1. Download the latest version of the mod from the [Releases page](https://github.com/Avalanche7CZ/Paradigm/releases).
 2. Place the downloaded .jar file into the `mods` folder of your Minecraft server directory.
 3. Run the server to generate the default configuration file.
 
 ## Configuration [1.12.2]
-The mod creates a configuration file located in `configs/forgeannouncements/` where you can find `announcements.cfg`, `mentions.cfg`, `motd.cfg`, `restarts.cfg`. You can edit this file to customize the behavior of the mod.
+The mod creates a configuration file located in `configs/paradigm/` where you can find `announcements.cfg`, `mentions.cfg`, `motd.cfg`, `restarts.cfg`. You can edit this file to customize the behavior of the mod.
 
 ## Configuration [1.18.2+]
-The mod creates a configuration file located in `world/serverconfigs/forgeannouncements/` where you can find `announcements.toml`, `mentions.toml`, `motd.toml`, `restarts.toml`. You can edit this file to customize the behavior of the mod.
+The mod creates a configuration file located in `configs/paradigm/` where you can find `announcements.toml`, `mentions.toml`, `motd.toml`, `restarts.toml`. You can edit this file to customize the behavior of the mod.
 
 Each of the features can be enabled or disabled in main configuration file `main.toml`.
 
@@ -46,4 +47,7 @@ You can get support on our [![Discord-Join-Us](https://img.shields.io/badge/disc
 
 ## Dev Builds
 You can find latest experimental/dev builds on our [Discord](https://discord.gg/bbqPQTzK7b)
+
+
+
 
