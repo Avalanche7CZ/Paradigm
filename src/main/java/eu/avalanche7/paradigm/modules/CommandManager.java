@@ -74,7 +74,7 @@ public class CommandManager implements ParadigmModule {
                         .requires(source -> source.hasPermission(2))
                         .executes(ctx -> {
                             services.getCmConfig().reloadCommands();
-                            ctx.getSource().sendSuccess(services.getMessageParser().parseMessage("&aReloaded custom commands from config. You might need to rejoin or server restart for new commands to fully register in client autocomplete.", null), false);
+                            ctx.getSource().sendSuccess(() -> services.getMessageParser().parseMessage("&aReloaded custom commands from config. You might need to rejoin or server restart for new commands to fully register in client autocomplete.", null), false);
                             services.getDebugLogger().debugLog("Custom commands reloaded via command.");
                             return 1;
                         })
@@ -112,7 +112,7 @@ public class CommandManager implements ParadigmModule {
                     if (action.getText() != null) {
                         for (String line : action.getText()) {
                             Component formattedMessage = services.getMessageParser().parseMessage(line, player);
-                            source.sendSuccess(formattedMessage, false);
+                            source.sendSuccess(() -> formattedMessage, false);
                         }
                     }
                     break;

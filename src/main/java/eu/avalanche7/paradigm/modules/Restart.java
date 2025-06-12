@@ -236,7 +236,7 @@ public class Restart implements ParadigmModule {
 
         if (config.playSoundEnabled.get()) {
             String soundString = config.playSoundString.get().toLowerCase();
-            SoundEvent soundEvent = ForgeRegistries.SOUND_EVENTS.getValue(new ResourceLocation(soundString));
+            SoundEvent soundEvent = ForgeRegistries.SOUND_EVENTS.getValue(ResourceLocation.parse(soundString));
             if (soundEvent != null) {
                 for (ServerPlayer player : server.getPlayerList().getPlayers()) {
                     player.playNotifySound(soundEvent, net.minecraft.sounds.SoundSource.MASTER, 1.0F, 1.0F);

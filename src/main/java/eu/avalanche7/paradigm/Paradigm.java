@@ -189,7 +189,7 @@ public class Paradigm {
     }
 
     public static class UpdateChecker {
-        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/main/version.txt";
+        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/1.21.1/version.txt";
 
         public static void checkForUpdates(String currentVersion, Logger logger) {
             try {

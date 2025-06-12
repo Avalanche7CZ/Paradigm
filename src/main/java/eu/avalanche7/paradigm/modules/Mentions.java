@@ -27,6 +27,7 @@ import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -202,7 +203,7 @@ public class Mentions implements ParadigmModule {
                 }
             } else { lastEveryoneMentionTime = System.currentTimeMillis(); }
             notifyEveryone(players, sender, message, isConsole, mentionConfig, everyoneMatcher.group(0));
-            source.sendSuccess(Component.literal("Mentioned everyone successfully."), !isConsole);
+            source.sendSuccess((Supplier<Component>) Component.literal("Mentioned everyone successfully."), !isConsole);
             return 1;
         }
 
@@ -226,8 +227,7 @@ public class Mentions implements ParadigmModule {
             Component formattedChat = services.getMessageParser().parseMessage(message, sender);
             Component finalMessage = Component.translatable("chat.type.text", senderDisplayName, formattedChat);
             world.getServer().getPlayerList().broadcastSystemMessage(finalMessage, false);
-
-            source.sendSuccess(Component.literal("Mentioned player(s) successfully."), !isConsole);
+            source.sendSuccess(() -> Component.literal("Mentioned player(s) successfully."), !isConsole);
         } else {
             source.sendFailure(Component.literal("No valid mentions found in the message."));
         }

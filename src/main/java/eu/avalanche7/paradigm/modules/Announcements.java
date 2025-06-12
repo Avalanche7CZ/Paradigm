@@ -321,7 +321,7 @@ public class Announcements implements ParadigmModule {
                 }
             }
         });
-        //source.sendSuccess(() -> Component.literal("Title broadcasted."), true);
+        source.sendSuccess(() -> Component.literal("Title broadcasted."), true);
         return 1;
     }
 
@@ -353,13 +353,13 @@ public class Announcements implements ParadigmModule {
                 } else {
                     server.getPlayerList().broadcastSystemMessage(broadcastMessage, false);
                 }
-                //source.sendSuccess(() -> Component.literal("Global message broadcasted."), true);
+                source.sendSuccess(() -> Component.literal("Global message broadcasted."), true);
                 break;
             case "actionbar":
                 server.getPlayerList().getPlayers().forEach(player -> {
                     player.connection.send(new ClientboundSetActionBarTextPacket(broadcastMessage));
                 });
-                //source.sendSuccess(() -> Component.literal("Actionbar message broadcasted."), true);
+                source.sendSuccess(() -> Component.literal("Actionbar message broadcasted."), true);
                 break;
             case "bossbar":
                 String colorStr = StringArgumentType.getString(context, "color");
@@ -381,7 +381,7 @@ public class Announcements implements ParadigmModule {
                         bossEvent.setVisible(false);
                     }
                 }, interval, TimeUnit.SECONDS);
-                //source.sendSuccess(() -> Component.literal("Bossbar message broadcasted for " + interval + " seconds."), true);
+                source.sendSuccess(() -> Component.literal("Bossbar message broadcasted for " + interval + " seconds."), true);
                 break;
             default:
                 source.sendFailure(Component.literal("Invalid message type for command: " + type));
