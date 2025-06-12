@@ -1,4 +1,5 @@
 # Paradigm
+[![Minecraft 1.20.1](https://img.shields.io/badge/Minecraft-1.21.1-brightgreen)](https://www.minecraft.net/)
 [![Minecraft 1.20.1](https://img.shields.io/badge/Minecraft-1.20.1-brightgreen)](https://www.minecraft.net/)
 [![Minecraft 1.19.2](https://img.shields.io/badge/Minecraft-1.19.2-brightgreen)](https://www.minecraft.net/)
 [![Minecraft 1.18.2](https://img.shields.io/badge/Minecraft-1.18.2-brightgreen)](https://www.minecraft.net/)
@@ -10,6 +11,7 @@ Paradigm is a Minecraft mod designed for server administrators who want to autom
 
 | Version | Forge    | LuckPerms | ForgeEssentials | Status |                
 |:--------|:---------|:--------:|:--------------:|:--------------:|
+| 1.21.1   | 52.1.0+  |     ✅    |              ❌  | ACTIVE | 
 | 1.20.1  | 47.4.2+  |     ✅    |              ❌  | ACTIVE | 
 | 1.19.2  | 41.1.0+  |     ✅    |              ❌  | ACTIVE | 
 | 1.18.2  | 40.2.21+ |     ✅    |              ✅  | ACTIVE |
@@ -47,6 +49,13 @@ You can get support on our [![Discord-Join-Us](https://img.shields.io/badge/disc
 
 ## Dev Builds
 You can find latest experimental/dev builds on our [Discord](https://discord.gg/bbqPQTzK7b)
+
+
+
+
+
+
+
 
 
 
