@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "paradigm",
+  "version": "${version}",
+  "name": "paradigm",
+  "description": "",
+  "authors": [],
+  "contact": {
+    "repo": "https://github.com/Avalanche7/Paradigm"
+  },
+  "license": "MIT",
+  "icon": "assets/paradigm/icon.png",
+  "environment": "server",
+  "entrypoints": {
+    "client": [
+      "eu.avalanche7.paradigm.client.paradigmClient"
+    ],
+    "main": [
+      "eu.avalanche7.paradigm.Paradigm"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric": "*",
+    "minecraft": "${minecraft_version}"
+  }
+}
