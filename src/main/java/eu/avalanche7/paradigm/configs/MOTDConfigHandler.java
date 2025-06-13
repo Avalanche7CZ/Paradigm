@@ -3,7 +3,6 @@ package eu.avalanche7.paradigm.configs;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.mojang.logging.LogUtils;
-import net.minecraftforge.fml.common.Mod;
 import org.slf4j.Logger;
 
 import java.io.FileReader;
@@ -13,7 +12,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 
-@Mod.EventBusSubscriber(modid = "paradigm", bus = Mod.EventBusSubscriber.Bus.MOD)
 public class MOTDConfigHandler {
 
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();

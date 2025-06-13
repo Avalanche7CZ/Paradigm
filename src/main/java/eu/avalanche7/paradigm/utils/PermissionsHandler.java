@@ -1,8 +1,8 @@
 package eu.avalanche7.paradigm.utils;
 
 import eu.avalanche7.paradigm.configs.CMConfig;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraftforge.fml.ModList;
+import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.server.network.ServerPlayerEntity;
 import org.slf4j.Logger;
 
 public class PermissionsHandler {
@@ -34,7 +34,7 @@ public class PermissionsHandler {
 
     private void initializeChecker() {
         if (checker == null) {
-            if (ModList.get().isLoaded("luckperms")) {
+            if (FabricLoader.getInstance().isModLoaded("luckperms")) {
                 this.checker = new LuckPermsCheckerImpl();
                 logger.info("Paradigm: Using LuckPerms for permission checks.");
             } else {
@@ -44,7 +44,7 @@ public class PermissionsHandler {
         }
     }
 
-    public boolean hasPermission(ServerPlayer player, String permission) {
+    public boolean hasPermission(ServerPlayerEntity player, String permission) {
         if (player == null) return false;
         if (checker == null) {
             logger.warn("PermissionsHandler: Checker not initialized. Attempting first-time initialization.");
@@ -54,18 +54,15 @@ public class PermissionsHandler {
     }
 
     public interface PermissionChecker {
-        boolean hasPermission(ServerPlayer player, String permission);
+        boolean hasPermission(ServerPlayerEntity player, String permission);
     }
 
-    /**
-     * Checks permissions using the LuckPerms API.
-     */
     public static class LuckPermsCheckerImpl implements PermissionChecker {
         @Override
-        public boolean hasPermission(ServerPlayer player, String permission) {
+        public boolean hasPermission(ServerPlayerEntity player, String permission) {
             try {
                 net.luckperms.api.LuckPerms api = net.luckperms.api.LuckPermsProvider.get();
-                net.luckperms.api.model.user.User user = api.getUserManager().getUser(player.getUUID());
+                net.luckperms.api.model.user.User user = api.getUserManager().getUser(player.getUuid());
                 if (user != null) {
                     return user.getCachedData().getPermissionData().checkPermission(permission).asBoolean();
                 }
@@ -76,24 +73,18 @@ public class PermissionsHandler {
         }
     }
 
-    /**
-     * Checks permissions using Minecraft's built-in operator levels as a fallback.
-     */
     private static class VanillaPermissionCheckerImpl implements PermissionChecker {
         @Override
-        public boolean hasPermission(ServerPlayer player, String permission) {
+        public boolean hasPermission(ServerPlayerEntity player, String permission) {
             int requiredLevel = getPermissionLevelForVanilla(permission);
-            return player.hasPermissions(requiredLevel);
+            return player.hasPermissionLevel(requiredLevel);
         }
 
         private int getPermissionLevelForVanilla(String permission) {
             if (permission == null) return 4;
 
             return switch (permission) {
-                case STAFF_CHAT_PERMISSION -> 2;
-                case MENTION_EVERYONE_PERMISSION -> MENTION_EVERYONE_PERMISSION_LEVEL;
-                case MENTION_PLAYER_PERMISSION -> MENTION_PLAYER_PERMISSION_LEVEL;
-                case "paradigm.broadcast" -> BROADCAST_PERMISSION_LEVEL;
+                case STAFF_CHAT_PERMISSION, MENTION_EVERYONE_PERMISSION, MENTION_PLAYER_PERMISSION, "paradigm.broadcast" -> 2;
                 default -> 0;
             };
         }

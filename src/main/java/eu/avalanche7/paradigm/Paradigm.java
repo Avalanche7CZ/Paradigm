@@ -6,39 +6,25 @@ import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.*;
 import eu.avalanche7.paradigm.configs.*;
 import eu.avalanche7.paradigm.utils.*;
-import com.mojang.logging.LogUtils;
-import net.minecraft.commands.CommandBuildContext;
-import net.minecraft.commands.CommandSourceStack;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.RegisterCommandsEvent;
-import net.minecraftforge.event.server.ServerStartingEvent;
-import net.minecraftforge.event.server.ServerStoppingEvent;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.config.ModConfig;
-import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import net.minecraftforge.fml.loading.FMLPaths;
-import net.minecraftforge.fml.ModList;
+import net.fabricmc.api.DedicatedServerModInitializer;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-import static net.minecraft.commands.Commands.literal;
-import static net.minecraft.commands.Commands.argument;
-
-@Mod(Paradigm.MOD_ID)
-public class Paradigm {
+public class Paradigm implements DedicatedServerModInitializer {
 
     public static final String MOD_ID = "paradigm";
-    private static final Logger LOGGER = LogUtils.getLogger();
+    private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
     private final List<ParadigmModule> modules = new ArrayList<>();
     private Services services;
 
@@ -51,39 +37,50 @@ public class Paradigm {
     private GroupChatManager groupChatManagerInstance;
     private CMConfig cmConfigInstance;
 
-    public Paradigm(FMLJavaModLoadingContext ctx) {
-        LOGGER.info("Initializing Paradigm Mod for Minecraft 1.21.1...");
-        IEventBus modEventBus = ctx.getModEventBus();
-        modEventBus.addListener(this::commonSetup);
-
-        MinecraftForge.EVENT_BUS.register(this);
+    @Override
+    public void onInitializeServer() {
+        LOGGER.info("Initializing Paradigm Mod for Fabric 1.21.1...");
 
         createUtilityInstances();
         initializeServices();
         registerModules();
 
-        modules.forEach(module -> module.registerEventListeners(MinecraftForge.EVENT_BUS, services));
-        modules.forEach(module -> module.onLoad(null, services, modEventBus));
+        modules.forEach(module -> module.registerEventListeners(null, services));
+        modules.forEach(module -> module.onLoad(null, services, null));
+        loadConfigurations();
 
+        registerFabricEvents();
+
+        FabricLoader.getInstance().getModContainer(MOD_ID).ifPresent(modContainer -> {
+            String version = modContainer.getMetadata().getVersion().getFriendlyString();
+            String displayName = modContainer.getMetadata().getName();
+
+            LOGGER.info("Paradigm Fabric mod (1.21.1) has been set up.");
+            LOGGER.info("==================================================");
+            LOGGER.info("{} - Version {}", displayName, version);
+            LOGGER.info("Author: Avalanche7CZ");
+            LOGGER.info("Discord: https://discord.com/invite/qZDcQdEFqQ");
+            LOGGER.info("==================================================");
+            UpdateChecker.checkForUpdates(version, LOGGER);
+        });
+    }
+
+    private void loadConfigurations() {
         try {
-            Path serverConfigDir = FMLPaths.GAMEDIR.get().resolve("config/" + MOD_ID);
-            Files.createDirectories(serverConfigDir);
-
-            ctx.registerConfig(ModConfig.Type.SERVER, MainConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("main.toml").toString());
-            ctx.registerConfig(ModConfig.Type.SERVER, AnnouncementsConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("announcements.toml").toString());
-            ctx.registerConfig(ModConfig.Type.SERVER, MentionConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("mentions.toml").toString());
-            ctx.registerConfig(ModConfig.Type.SERVER, RestartConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("restarts.toml").toString());
-            ctx.registerConfig(ModConfig.Type.SERVER, ChatConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("chat.toml").toString());
-
+            MainConfigHandler.load();
+            AnnouncementsConfigHandler.load();
+            MentionConfigHandler.load();
+            RestartConfigHandler.load();
+            ChatConfigHandler.load();
             MOTDConfigHandler.loadConfig();
             this.cmConfigInstance.loadCommands();
             this.langInstance.initializeLanguage();
-
         } catch (Exception e) {
-            LOGGER.error("Failed to register or load configuration for {}", MOD_ID, e);
+            LOGGER.error("Failed to load configuration for {}", MOD_ID, e);
             throw new RuntimeException("Configuration loading failed for " + MOD_ID, e);
         }
     }
+
 
     private void createUtilityInstances() {
         this.placeholdersInstance = new Placeholders();
@@ -128,57 +125,33 @@ public class Paradigm {
         LOGGER.info("Paradigm: Registered {} modules.", modules.size());
     }
 
-    private void commonSetup(final FMLCommonSetupEvent event) {
-        event.enqueueWork(() -> {
-            modules.forEach(module -> {
-                if (module.isEnabled(services)) {
-                    LOGGER.info("Paradigm: Enabling module: {}", module.getName());
-                    module.onEnable(services);
-                } else {
-                    LOGGER.info("Paradigm: Module disabled by config: {}", module.getName());
-                }
-            });
-        });
-
-        ModList.get().getModContainerById(MOD_ID).ifPresent(modContainer -> {
-            String version = modContainer.getModInfo().getVersion().toString();
-            String displayName = modContainer.getModInfo().getDisplayName();
-
-            LOGGER.info("Paradigm mod (1.21.1) has been set up.");
-            LOGGER.info("==================================================");
-            LOGGER.info("{} - Version {}", displayName, version);
-            LOGGER.info("Author: Avalanche7CZ");
-            LOGGER.info("Discord: https://discord.com/invite/qZDcQdEFqQ");
-            LOGGER.info("==================================================");
-            Paradigm.UpdateChecker.checkForUpdates(version, LOGGER);
-        });
+    private void registerFabricEvents() {
+        ServerLifecycleEvents.SERVER_STARTING.register(this::onServerStarting);
+        ServerLifecycleEvents.SERVER_STOPPING.register(this::onServerStopping);
+        CommandRegistrationCallback.EVENT.register(this::onRegisterCommands);
     }
 
-    @SubscribeEvent
-    public void onServerStarting(ServerStartingEvent event) {
-        services.setServer(event.getServer());
+    private void onServerStarting(MinecraftServer server) {
+        services.setServer(server);
         modules.forEach(module -> {
             if (module.isEnabled(services)) {
-                module.onServerStarting(event, services);
+                module.onServerStarting(null, services);
             }
         });
     }
 
-    @SubscribeEvent
-    public void onRegisterCommands(RegisterCommandsEvent event) {
-        CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
+    private void onRegisterCommands(CommandDispatcher<ServerCommandSource> dispatcher, net.minecraft.command.CommandRegistryAccess registryAccess, net.minecraft.server.command.CommandManager.RegistrationEnvironment environment) {
         modules.forEach(module -> {
             if (module.isEnabled(services)) {
-                module.registerCommands(dispatcher, services);
+                module.registerCommands(dispatcher, null, services);
             }
         });
     }
 
-    @SubscribeEvent
-    public void onServerStopping(ServerStoppingEvent event) {
+    private void onServerStopping(MinecraftServer server) {
         modules.forEach(module -> {
             if (module.isEnabled(services)) {
-                module.onServerStopping(event, services);
+                module.onServerStopping(null, services);
                 module.onDisable(services);
             }
         });
@@ -189,7 +162,7 @@ public class Paradigm {
     }
 
     public static class UpdateChecker {
-        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/1.21.1/version.txt";
+        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/Fabric/1.21.1/version.txt";
 
         public static void checkForUpdates(String currentVersion, Logger logger) {
             try {

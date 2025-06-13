@@ -4,15 +4,10 @@ import com.mojang.brigadier.CommandDispatcher;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.CustomCommand;
-import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.commands.Commands;
-import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerPlayer;
-
-import net.minecraftforge.event.server.ServerStartingEvent;
-import net.minecraftforge.event.server.ServerStoppingEvent;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.minecraft.command.CommandRegistryAccess;
+import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.text.Text;
 
 public class CommandManager implements ParadigmModule {
 
@@ -26,18 +21,18 @@ public class CommandManager implements ParadigmModule {
 
     @Override
     public boolean isEnabled(Services services) {
-        return services.getMainConfig().commandManagerEnable.get();
+        return services.getMainConfig().commandManagerEnable;
     }
 
     @Override
-    public void onLoad(FMLCommonSetupEvent event, Services services, IEventBus modEventBus) {
+    public void onLoad(Object event, Services services, Object modEventBus) {
         this.services = services;
         services.getDebugLogger().debugLog(NAME + " module loaded.");
         services.getCmConfig().loadCommands();
     }
 
     @Override
-    public void onServerStarting(ServerStartingEvent event, Services services) {
+    public void onServerStarting(Object event, Services services) {
         services.getDebugLogger().debugLog(NAME + " module: Server starting.");
     }
 
@@ -52,15 +47,15 @@ public class CommandManager implements ParadigmModule {
     }
 
     @Override
-    public void onServerStopping(ServerStoppingEvent event, Services services) {
+    public void onServerStopping(Object event, Services services) {
         services.getDebugLogger().debugLog(NAME + " module: Server stopping.");
     }
 
     @Override
-    public void registerCommands(CommandDispatcher<CommandSourceStack> dispatcher, Services services) {
+    public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {
         services.getCmConfig().getLoadedCommands().forEach(command -> {
             dispatcher.register(
-                    Commands.literal(command.getName())
+                    net.minecraft.server.command.CommandManager.literal(command.getName())
                             .requires(source -> hasPermissionForCommand(source, command, services))
                             .executes(ctx -> {
                                 executeCustomCommand(ctx.getSource(), command, services);
@@ -70,11 +65,11 @@ public class CommandManager implements ParadigmModule {
         });
         services.getDebugLogger().debugLog("Registered " + services.getCmConfig().getLoadedCommands().size() + " custom commands.");
         dispatcher.register(
-                Commands.literal("fareloadcommands")
-                        .requires(source -> source.hasPermission(2))
+                net.minecraft.server.command.CommandManager.literal("fareloadcommands")
+                        .requires(source -> source.hasPermissionLevel(2))
                         .executes(ctx -> {
                             services.getCmConfig().reloadCommands();
-                            ctx.getSource().sendSuccess(() -> services.getMessageParser().parseMessage("&aReloaded custom commands from config. You might need to rejoin or server restart for new commands to fully register in client autocomplete.", null), false);
+                            ctx.getSource().sendFeedback(() -> services.getMessageParser().parseMessage("&aReloaded custom commands from config. You might need to rejoin or server restart for new commands to fully register in client autocomplete.", null), false);
                             services.getDebugLogger().debugLog("Custom commands reloaded via command.");
                             return 1;
                         })
@@ -82,27 +77,27 @@ public class CommandManager implements ParadigmModule {
     }
 
     @Override
-    public void registerEventListeners(IEventBus forgeEventBus, Services services) {
+    public void registerEventListeners(Object eventBus, Services services) {
     }
 
-    private boolean hasPermissionForCommand(CommandSourceStack source, CustomCommand command, Services services) {
+    private boolean hasPermissionForCommand(ServerCommandSource source, CustomCommand command, Services services) {
         if (!command.isRequirePermission()) {
             return true;
         }
-        if (!(source.getEntity() instanceof ServerPlayer player)) {
+        if (!(source.getEntity() instanceof ServerPlayerEntity player)) {
             return true;
         }
         boolean hasPerm = services.getPermissionsHandler().hasPermission(player, command.getPermission());
         if (!hasPerm) {
             String errorMessage = command.getPermissionErrorMessage();
-            player.sendSystemMessage(services.getMessageParser().parseMessage(errorMessage, player));
+            player.sendMessage(services.getMessageParser().parseMessage(errorMessage, player));
         }
         return hasPerm;
     }
 
-    private void executeCustomCommand(CommandSourceStack source, CustomCommand command, Services services) {
-        ServerPlayer player = null;
-        if (source.getEntity() instanceof ServerPlayer serverPlayer) {
+    private void executeCustomCommand(ServerCommandSource source, CustomCommand command, Services services) {
+        ServerPlayerEntity player = null;
+        if (source.getEntity() instanceof ServerPlayerEntity serverPlayer) {
             player = serverPlayer;
         }
 
@@ -111,18 +106,18 @@ public class CommandManager implements ParadigmModule {
                 case "message":
                     if (action.getText() != null) {
                         for (String line : action.getText()) {
-                            Component formattedMessage = services.getMessageParser().parseMessage(line, player);
-                            source.sendSuccess(() -> formattedMessage, false);
+                            Text formattedMessage = services.getMessageParser().parseMessage(line, player);
+                            source.sendFeedback(() -> formattedMessage, false);
                         }
                     }
                     break;
                 case "teleport":
                     if (player != null && action.getX() != null && action.getY() != null && action.getZ() != null) {
-                        player.teleportTo(action.getX(), action.getY(), action.getZ());
+                        player.requestTeleport(action.getX(), action.getY(), action.getZ());
                     } else if (player == null) {
-                        source.sendFailure(services.getMessageParser().parseMessage("&cTeleport action can only be performed by a player.", null));
+                        source.sendError(services.getMessageParser().parseMessage("&cTeleport action can only be performed by a player.", null));
                     } else {
-                        source.sendFailure(services.getMessageParser().parseMessage("&cInvalid teleport coordinates for command '" + command.getName() + "'.", player));
+                        source.sendError(services.getMessageParser().parseMessage("&cInvalid teleport coordinates for command '" + command.getName() + "'.", player));
                     }
                     break;
                 case "run_command":
@@ -130,7 +125,7 @@ public class CommandManager implements ParadigmModule {
                     if (action.getCommands() != null) {
                         for (String cmd : action.getCommands()) {
                             String processedCmd = (player != null) ? services.getPlaceholders().replacePlaceholders(cmd, player) : cmd;
-                            services.getMinecraftServer().getCommands().performPrefixedCommand(source, processedCmd);
+                            services.getMinecraftServer().getCommandManager().executeWithPrefix(source, processedCmd);
                         }
                     }
                     break;
@@ -138,14 +133,14 @@ public class CommandManager implements ParadigmModule {
                     if (action.getCommands() != null) {
                         for (String cmd : action.getCommands()) {
                             String processedCmd = (player != null) ? services.getPlaceholders().replacePlaceholders(cmd, player) : cmd;
-                            services.getMinecraftServer().getCommands().performPrefixedCommand(
-                                    services.getMinecraftServer().createCommandSourceStack().withPermission(4),
+                            services.getMinecraftServer().getCommandManager().executeWithPrefix(
+                                    services.getMinecraftServer().getCommandSource().withLevel(4),
                                     processedCmd);
                         }
                     }
                     break;
                 default:
-                    source.sendFailure(services.getMessageParser().parseMessage("&cUnknown action type '" + action.getType() + "' in command '" + command.getName() + "'.", player));
+                    source.sendError(services.getMessageParser().parseMessage("&cUnknown action type '" + action.getType() + "' in command '" + command.getName() + "'.", player));
             }
         }
     }

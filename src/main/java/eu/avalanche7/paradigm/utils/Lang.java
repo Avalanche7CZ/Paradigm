@@ -2,15 +2,21 @@ package eu.avalanche7.paradigm.utils;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
+import eu.avalanche7.paradigm.Paradigm;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
-import net.minecraft.network.chat.Component;
-import net.minecraftforge.fml.loading.FMLPaths;
+import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.text.Text;
 import org.slf4j.Logger;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,7 +24,7 @@ import java.util.Map;
 public class Lang {
 
     private final Logger logger;
-    private final Path langFolder = FMLPaths.GAMEDIR.get().resolve("config/paradigm/lang");
+    private final Path langFolder = FabricLoader.getInstance().getConfigDir().resolve("paradigm/lang");
     private final Map<String, String> translations = new HashMap<>();
     private String currentLanguage;
     private final MainConfigHandler.Config mainConfig;
@@ -45,7 +51,7 @@ public class Lang {
             if (logger != null) logger.error("Lang: MainConfig or defaultLanguage setting is null. Cannot initialize language.");
             return;
         }
-        String language = mainConfig.defaultLanguage.get();
+        String language = mainConfig.defaultLanguage;
         if (logger != null) logger.info("Paradigm: Loaded language setting: {}", language);
         loadLanguage(language);
     }
@@ -92,12 +98,12 @@ public class Lang {
             }
         }
     }
-    public Component translate(String key) {
+    public Text translate(String key) {
         String translatedText = translations.getOrDefault(key, key);
         translatedText = translatedText.replace("&", "§");
         if (this.messageParser == null) {
             if (logger != null) logger.warn("Lang.translate: MessageParser is null for key '{}'. Returning literal text.", key);
-            return Component.literal(translatedText);
+            return Text.literal(translatedText);
         }
         return this.messageParser.parseMessage(translatedText, null);
     }
@@ -112,7 +118,7 @@ public class Lang {
             Path langFile = langFolder.resolve(langCode + ".json");
             if (!Files.exists(langFile)) {
                 if (logger != null) logger.warn("Language file missing: {}.json. Attempting to copy from resources.", langCode);
-                try (InputStream in = getClass().getResourceAsStream("/lang/" + langCode + ".json")) {
+                try (InputStream in = Paradigm.class.getResourceAsStream("/lang/" + langCode + ".json")) {
                     if (in == null) {
                         if (logger != null) logger.error("Default language file /lang/{}.json not found in JAR resources.", langCode);
                         continue;

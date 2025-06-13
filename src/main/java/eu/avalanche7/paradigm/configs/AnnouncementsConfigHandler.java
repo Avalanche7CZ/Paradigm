@@ -1,142 +1,79 @@
 package eu.avalanche7.paradigm.configs;
 
-import com.electronwill.nightconfig.core.file.CommentedFileConfig;
-import net.minecraftforge.common.ForgeConfigSpec;
-import net.minecraftforge.fml.common.Mod;
-import org.apache.commons.lang3.tuple.Pair;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import net.fabricmc.loader.api.FabricLoader;
 
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 
-@Mod.EventBusSubscriber(modid = "paradigm", bus = Mod.EventBusSubscriber.Bus.MOD)
 public class AnnouncementsConfigHandler {
 
-    public static final ForgeConfigSpec SERVER_CONFIG;
-    public static final Config CONFIG;
-
-    static {
-        final Pair<Config, ForgeConfigSpec> specPair = new ForgeConfigSpec.Builder().configure(Config::new);
-        SERVER_CONFIG = specPair.getRight();
-        CONFIG = specPair.getLeft();
-    }
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("paradigm/announcements.json");
+    public static Config CONFIG = new Config();
 
     public static class Config {
-        public final ForgeConfigSpec.ConfigValue<String> orderMode;
-        public final ForgeConfigSpec.BooleanValue globalEnable;
-        public final ForgeConfigSpec.BooleanValue headerAndFooter;
-        public final ForgeConfigSpec.IntValue globalInterval;
-        public final ForgeConfigSpec.ConfigValue<String> prefix;
-        public final ForgeConfigSpec.ConfigValue<String> header;
-        public final ForgeConfigSpec.ConfigValue<String> footer;
-        public final ForgeConfigSpec.ConfigValue<String> sound;
-        public final ForgeConfigSpec.ConfigValue<List<? extends String>> globalMessages;
+        public String orderMode = "RANDOM";
 
-        public final ForgeConfigSpec.BooleanValue actionbarEnable;
-        public final ForgeConfigSpec.IntValue actionbarInterval;
-        public final ForgeConfigSpec.ConfigValue<List<? extends String>> actionbarMessages;
+        public boolean globalEnable = true;
+        public boolean headerAndFooter = true;
+        public int globalInterval = 1800;
+        public String prefix = "§9§l[§b§lPREFIX§9§l]";
+        public String header = "§7*§7§m---------------------------------------------------§7*";
+        public String footer = "§7*§7§m---------------------------------------------------§7*";
+        public String sound = "";
+        public List<String> globalMessages = List.of(
+                "{Prefix} §7This is global message with link: https://link/."
+        );
 
-        public final ForgeConfigSpec.BooleanValue titleEnable;
-        public final ForgeConfigSpec.IntValue titleInterval;
-        public final ForgeConfigSpec.ConfigValue<List<? extends String>> titleMessages;
+        public boolean actionbarEnable = true;
+        public int actionbarInterval = 1800;
+        public List<String> actionbarMessages = List.of(
+                "{Prefix} §7This is an actionbar message."
+        );
 
-        public final ForgeConfigSpec.BooleanValue bossbarEnable;
-        public final ForgeConfigSpec.IntValue bossbarInterval;
-        public final ForgeConfigSpec.ConfigValue<String> bossbarColor;
-        public final ForgeConfigSpec.IntValue bossbarTime;
-        public final ForgeConfigSpec.ConfigValue<List<? extends String>> bossbarMessages;
+        public boolean titleEnable = true;
+        public int titleInterval = 1800;
+        public List<String> titleMessages = List.of(
+                "{Prefix} §7This is a title message."
+        );
 
-        public Config(ForgeConfigSpec.Builder builder) {
-
-            builder.comment("Auto Broadcast Settings")
-                    .push("Auto_Broadcast");
-
-            orderMode = builder.comment("Order mode for messages (RANDOM or SEQUENTIAL)")
-                    .define("Order_Mode", "RANDOM");
-
-            // Global Messages
-            globalEnable = builder.comment("Enable global messages")
-                    .define("Global_Messages.Enable", true);
-
-            headerAndFooter = builder.comment("Enable header and footer")
-                    .define("Global_Messages.Header_And_Footer", true);
-
-            globalInterval = builder.comment("Interval in seconds for global messages")
-                    .defineInRange("Global_Messages.Interval", 1800, 1, Integer.MAX_VALUE);
-
-            prefix = builder.comment("Prefix for messages")
-                    .define("Global_Messages.Prefix", "§9§l[§b§lPREFIX§9§l]");
-
-            header = builder.comment("Header for messages")
-                    .define("Global_Messages.Header", "§7*§7§m---------------------------------------------------§7*");
-
-            footer = builder.comment("Footer for messages")
-                    .define("Global_Messages.Footer", "§7*§7§m---------------------------------------------------§7*");
-
-            sound = builder.comment("Sound to play")
-                    .define("Global_Messages.Sound", "");
-
-            globalMessages = builder.comment("Global messages to broadcast")
-                    .defineList("Global_Messages.Messages",
-                            List.of(
-                                    "{Prefix} §7This is global message with link: https://link/."
-                            ),
-                            obj -> obj instanceof String);
-
-            actionbarEnable = builder.comment("Enable actionbar messages")
-                    .define("Actionbar_Messages.Enable", true);
-
-            actionbarInterval = builder.comment("Interval in seconds for actionbar messages")
-                    .defineInRange("Actionbar_Messages.Interval", 1800, 1, Integer.MAX_VALUE);
-
-            actionbarMessages = builder.comment("Actionbar messages to broadcast")
-                    .defineList("Actionbar_Messages.Messages",
-                            List.of(
-                                    "{Prefix} §7This is an actionbar message."
-                            ),
-                            obj -> obj instanceof String);
-
-            titleEnable = builder.comment("Enable title messages")
-                    .define("Title_Messages.Enable", true);
-
-            titleInterval = builder.comment("Interval in seconds for title messages")
-                    .defineInRange("Title_Messages.Interval", 1800, 1, Integer.MAX_VALUE);
-
-            titleMessages = builder.comment("Title messages to broadcast")
-                    .defineList("Title_Messages.Messages",
-                            List.of(
-                                    "{Prefix} §7This is a title message."
-                            ),
-                            obj -> obj instanceof String);
-
-            bossbarEnable = builder.comment("Enable bossbar messages")
-                    .define("Bossbar_Messages.Enable", true);
-
-            bossbarInterval = builder.comment("Interval in seconds for bossbar messages")
-                    .defineInRange("Bossbar_Messages.Interval", 1800, 1, Integer.MAX_VALUE);
-
-            bossbarTime = builder.comment("How long the bossbar stays on for (seconds)")
-                    .defineInRange("Bossbar.Bar_Time", 10, 1, Integer.MAX_VALUE);
-
-            bossbarColor = builder.comment("Color of the bossbar")
-                    .define("Bossbar_Messages.Color", "PURPLE");
-
-            bossbarMessages = builder.comment("Bossbar messages to broadcast")
-                    .defineList("Bossbar_Messages.Messages",
-                            List.of(
-                                    "{Prefix} §7This is a bossbar message."
-                            ),
-                            obj -> obj instanceof String);
-
-            builder.pop();
-        }
+        public boolean bossbarEnable = true;
+        public int bossbarInterval = 1800;
+        public String bossbarColor = "PURPLE";
+        public int bossbarTime = 10;
+        public List<String> bossbarMessages = List.of(
+                "{Prefix} §7This is a bossbar message."
+        );
     }
 
-    public static void loadConfig(ForgeConfigSpec config, String path) {
-        final CommentedFileConfig file = CommentedFileConfig.builder(path)
-                .sync()
-                .autosave()
-                .writingMode(com.electronwill.nightconfig.core.io.WritingMode.REPLACE)
-                .build();
-        file.load();
-        config.setConfig(file);
+    public static void load() {
+        if (Files.exists(CONFIG_PATH)) {
+            try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
+                Config loadedConfig = GSON.fromJson(reader, Config.class);
+                if (loadedConfig != null) {
+                    CONFIG = loadedConfig;
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Could not read Announcements config", e);
+            }
+        }
+        save();
+    }
+
+    public static void save() {
+        try {
+            Files.createDirectories(CONFIG_PATH.getParent());
+            try (FileWriter writer = new FileWriter(CONFIG_PATH.toFile())) {
+                GSON.toJson(CONFIG, writer);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Could not save Announcements config", e);
+        }
     }
 }

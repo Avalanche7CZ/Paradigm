@@ -1,58 +1,49 @@
 package eu.avalanche7.paradigm.configs;
 
-import com.electronwill.nightconfig.core.file.CommentedFileConfig;
-import net.minecraftforge.common.ForgeConfigSpec;
-import net.minecraftforge.fml.common.Mod;
-import org.apache.commons.lang3.tuple.Pair;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import net.fabricmc.loader.api.FabricLoader;
 
-@Mod.EventBusSubscriber(modid = "paradigm", bus = Mod.EventBusSubscriber.Bus.MOD)
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 public class ChatConfigHandler {
 
-    public static ForgeConfigSpec SERVER_CONFIG;
-    public static final ChatConfigHandler.Config CONFIG;
-
-    static {
-        final Pair<ChatConfigHandler.Config, ForgeConfigSpec> specPair = new ForgeConfigSpec.Builder().configure(ChatConfigHandler.Config::new);
-        SERVER_CONFIG = specPair.getRight();
-        CONFIG = specPair.getLeft();
-    }
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("paradigm/chat.json");
+    public static Config CONFIG = new Config();
 
     public static class Config {
-        public final ForgeConfigSpec.BooleanValue enableStaffChat;
-        public final ForgeConfigSpec.ConfigValue<String> staffChatFormat;
-        public final ForgeConfigSpec.BooleanValue enableStaffBossBar;
-
-        public Config(ForgeConfigSpec.Builder builder) {
-
-            builder.comment("Chat Module Settings")
-                    .push("Chat");
-
-            builder.comment("Staff Chat Settings")
-                    .push("staff_chat");
-
-            enableStaffChat = builder
-                    .comment("Enable staff chat feature")
-                    .define("enableStaffChat", true);
-
-            staffChatFormat = builder
-                    .comment("Format for staff chat messages")
-                    .define("staffChatFormat", "§f[§cStaff Chat§f] §d%s §7> §f%s");
-
-            enableStaffBossBar = builder
-                    .comment("Enable boss bar while staff chat is enabled")
-                    .define("enableStaffBossBar", true);
-
-            builder.pop();
-        }
+        public boolean enableStaffChat = true;
+        public String staffChatFormat = "§f[§cStaff Chat§f] §d%s §7> §f%s";
+        public boolean enableStaffBossBar = true;
     }
 
-    public static void loadConfig(ForgeConfigSpec config, String path) {
-        final CommentedFileConfig file = CommentedFileConfig.builder(path)
-                .sync()
-                .autosave()
-                .writingMode(com.electronwill.nightconfig.core.io.WritingMode.REPLACE)
-                .build();
-        file.load();
-        config.setConfig(file);
+    public static void load() {
+        if (Files.exists(CONFIG_PATH)) {
+            try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
+                Config loadedConfig = GSON.fromJson(reader, Config.class);
+                if (loadedConfig != null) {
+                    CONFIG = loadedConfig;
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Could not read Chat config", e);
+            }
+        }
+        save();
+    }
+
+    public static void save() {
+        try {
+            Files.createDirectories(CONFIG_PATH.getParent());
+            try (FileWriter writer = new FileWriter(CONFIG_PATH.toFile())) {
+                GSON.toJson(CONFIG, writer);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Could not save Chat config", e);
+        }
     }
 }

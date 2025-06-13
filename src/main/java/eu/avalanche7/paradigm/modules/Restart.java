@@ -4,21 +4,18 @@ import com.mojang.brigadier.CommandDispatcher;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.configs.RestartConfigHandler;
-import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.protocol.game.ClientboundBossEventPacket;
-import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.command.CommandRegistryAccess;
+import net.minecraft.entity.boss.BossBar;
+import net.minecraft.entity.boss.ServerBossBar;
+import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
+import net.minecraft.registry.Registries;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerBossEvent;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvent;
-import net.minecraft.world.BossEvent;
-import net.minecraftforge.event.server.ServerStartingEvent;
-import net.minecraftforge.event.server.ServerStoppingEvent;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.sound.SoundCategory;
+import net.minecraft.sound.SoundEvent;
+import net.minecraft.text.Text;
+import net.minecraft.util.Identifier;
 
 import java.text.DecimalFormat;
 import java.text.ParseException;
@@ -26,7 +23,6 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 public class Restart implements ParadigmModule {
@@ -42,17 +38,17 @@ public class Restart implements ParadigmModule {
 
     @Override
     public boolean isEnabled(Services services) {
-        return services.getMainConfig().restartEnable.get();
+        return services.getMainConfig().restartEnable;
     }
 
     @Override
-    public void onLoad(FMLCommonSetupEvent event, Services services, IEventBus modEventBus) {
+    public void onLoad(Object event, Services services, Object modEventBus) {
         this.services = services;
         services.getDebugLogger().debugLog(NAME + " module loaded.");
     }
 
     @Override
-    public void onServerStarting(ServerStartingEvent event, Services services) {
+    public void onServerStarting(Object event, Services services) {
         if (!isEnabled(services)) {
             services.getDebugLogger().debugLog(NAME + " feature is disabled.");
             return;
@@ -75,31 +71,31 @@ public class Restart implements ParadigmModule {
     }
 
     @Override
-    public void onServerStopping(ServerStoppingEvent event, Services services) {
+    public void onServerStopping(Object event, Services services) {
         services.getDebugLogger().debugLog(NAME + " module: Server stopping.");
     }
 
     @Override
-    public void registerCommands(CommandDispatcher<CommandSourceStack> dispatcher, Services services) {
+    public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {
     }
 
     @Override
-    public void registerEventListeners(IEventBus forgeEventBus, Services services) {
+    public void registerEventListeners(Object eventBus, Services services) {
     }
 
     private void scheduleConfiguredRestarts(Services services) {
         RestartConfigHandler.Config config = services.getRestartConfig();
-        String restartType = config.restartType.get();
+        String restartType = config.restartType;
         services.getDebugLogger().debugLog(NAME + ": Configured restart type: " + restartType);
 
         switch (restartType.toLowerCase()) {
             case "fixed":
-                double restartInterval = config.restartInterval.get();
+                double restartInterval = config.restartInterval;
                 services.getDebugLogger().debugLog(NAME + ": Fixed restart scheduled every " + restartInterval + " hours.");
                 scheduleFixedRestart(services, config);
                 break;
             case "realtime":
-                List<? extends String> realTimeIntervals = config.realTimeInterval.get();
+                List<String> realTimeIntervals = config.realTimeInterval;
                 services.getDebugLogger().debugLog(NAME + ": Real-time restarts will be scheduled with intervals: " + realTimeIntervals);
                 scheduleRealTimeRestarts(services, config);
                 break;
@@ -113,7 +109,7 @@ public class Restart implements ParadigmModule {
     }
 
     private void scheduleFixedRestart(Services services, RestartConfigHandler.Config config) {
-        double intervalHours = config.restartInterval.get();
+        double intervalHours = config.restartInterval;
         if (intervalHours <= 0) {
             services.getDebugLogger().debugLog(NAME + ": Invalid fixed restart interval: " + intervalHours);
             return;
@@ -128,7 +124,7 @@ public class Restart implements ParadigmModule {
     }
 
     private void scheduleRealTimeRestarts(Services services, RestartConfigHandler.Config config) {
-        List<? extends String> realTimeIntervals = config.realTimeInterval.get();
+        List<String> realTimeIntervals = config.realTimeInterval;
         if (realTimeIntervals == null || realTimeIntervals.isEmpty()) {
             services.getDebugLogger().debugLog(NAME + ": No valid real-time restart times found.");
             return;
@@ -176,7 +172,7 @@ public class Restart implements ParadigmModule {
     }
 
     private void broadcastWarningMessagesAndShutdown(double totalIntervalSeconds, Services services, RestartConfigHandler.Config config) {
-        List<? extends Integer> timerBroadcastTimes = config.timerBroadcast.get();
+        List<Integer> timerBroadcastTimes = config.timerBroadcast;
         long startTimestamp = System.currentTimeMillis();
 
         services.getDebugLogger().debugLog(NAME + ": Broadcasting warning messages for restart in " + totalIntervalSeconds + " seconds.");
@@ -211,71 +207,55 @@ public class Restart implements ParadigmModule {
         int seconds = (int) (timeLeftSeconds % 60);
         String formattedTime = String.format("%dh %sm %ss", hours, TIME_FORMATTER.format(minutes), TIME_FORMATTER.format(seconds));
 
-
-        if (config.timerUseChat.get()) {
-            String customMessage = config.BroadcastMessage.get()
+        if (config.timerUseChat) {
+            String customMessage = config.BroadcastMessage
                     .replace("{hours}", String.valueOf(hours))
                     .replace("{minutes}", TIME_FORMATTER.format(minutes))
                     .replace("{seconds}", TIME_FORMATTER.format(seconds))
                     .replace("{time}", formattedTime);
-            Component messageComponent = services.getMessageParser().parseMessage(customMessage, null);
-            server.getPlayerList().broadcastSystemMessage(messageComponent, false);
+            Text messageComponent = services.getMessageParser().parseMessage(customMessage, null);
+            server.getPlayerManager().broadcast(messageComponent, false);
         }
 
-        if (config.titleEnabled.get()) {
-            String titleMessage = config.titleMessage.get()
+        if (config.titleEnabled) {
+            String titleMessage = config.titleMessage
                     .replace("{hours}", String.valueOf(hours))
                     .replace("{minutes}", TIME_FORMATTER.format(minutes))
                     .replace("{seconds}", TIME_FORMATTER.format(seconds))
                     .replace("{time}", formattedTime);
-            Component titleComponent = services.getMessageParser().parseMessage(titleMessage, null);
-            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-                player.connection.send(new ClientboundSetTitleTextPacket(titleComponent));
+            Text titleComponent = services.getMessageParser().parseMessage(titleMessage, null);
+            for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
+                player.networkHandler.sendPacket(new TitleS2CPacket(titleComponent));
             }
         }
 
-        if (config.playSoundEnabled.get()) {
-            String soundString = config.playSoundString.get().toLowerCase();
-            SoundEvent soundEvent = ForgeRegistries.SOUND_EVENTS.getValue(ResourceLocation.parse(soundString));
-            if (soundEvent != null) {
-                for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-                    player.playNotifySound(soundEvent, net.minecraft.sounds.SoundSource.MASTER, 1.0F, 1.0F);
+        if (config.playSoundEnabled) {
+            String soundString = config.playSoundString.toLowerCase();
+            Registries.SOUND_EVENT.getOrEmpty(Identifier.of(soundString)).ifPresent(soundEvent -> {
+                for (ServerPlayerEntity player : server.getPlayerManager().getPlayerList()) {
+                    player.playSound(soundEvent);
                 }
-            } else {
-                services.getDebugLogger().debugLog(NAME + ": Could not find sound: " + soundString);
-            }
+            });
         }
 
-        if (config.bossbarEnabled.get()) {
-            String bossBarMessage = config.bossBarMessage.get()
+        if (config.bossbarEnabled) {
+            String bossBarMessage = config.bossBarMessage
                     .replace("{hours}", String.valueOf(hours))
                     .replace("{minutes}", TIME_FORMATTER.format(minutes))
                     .replace("{seconds}", TIME_FORMATTER.format(seconds))
                     .replace("{time}", formattedTime);
-            Component message = services.getMessageParser().parseMessage(bossBarMessage, null);
+            Text message = services.getMessageParser().parseMessage(bossBarMessage, null);
 
-            ServerBossEvent bossEvent = new ServerBossEvent(message, BossEvent.BossBarColor.RED, BossEvent.BossBarOverlay.PROGRESS);
+            ServerBossBar bossBar = new ServerBossBar(message, BossBar.Color.RED, BossBar.Style.PROGRESS);
             float progress = Math.max(0.0f, Math.min(1.0f, (float) timeLeftSeconds / Math.max(1, originalTotalIntervalSeconds)));
-            bossEvent.setProgress(progress);
+            bossBar.setPercent(progress);
 
-            ClientboundBossEventPacket addPacket = ClientboundBossEventPacket.createAddPacket(bossEvent);
-            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-                player.connection.send(addPacket);
-            }
+            server.getPlayerManager().getPlayerList().forEach(bossBar::addPlayer);
 
             long bossbarDisplayTime = 2;
             if (timeLeftSeconds <= 5 && timeLeftSeconds > 0) bossbarDisplayTime = 1;
 
-            final UUID bossEventId = bossEvent.getId();
-            services.getTaskScheduler().schedule(() -> {
-                ClientboundBossEventPacket removePacket = ClientboundBossEventPacket.createRemovePacket(bossEventId);
-                MinecraftServer currentServer = services.getMinecraftServer();
-                if(currentServer != null) {
-                    for (ServerPlayer player : currentServer.getPlayerList().getPlayers()) {
-                        player.connection.send(removePacket);
-                    }
-                }
-            }, bossbarDisplayTime, TimeUnit.SECONDS);
+            services.getTaskScheduler().schedule(bossBar::clearPlayers, bossbarDisplayTime, TimeUnit.SECONDS);
         }
     }
 
@@ -284,11 +264,11 @@ public class Restart implements ParadigmModule {
         if (server != null) {
             services.getDebugLogger().debugLog(NAME + ": Shutdown initiated at: " + new Date());
             try {
-                Component kickMessage = services.getMessageParser().parseMessage(services.getRestartConfig().defaultRestartReason.get(),null);
-                server.getPlayerList().broadcastSystemMessage(kickMessage, false);
-                server.saveEverything(true, true, true);
-                server.halt(false);
-                services.getDebugLogger().debugLog(NAME + ": Server stopped successfully via halt(false).");
+                Text kickMessage = services.getMessageParser().parseMessage(services.getRestartConfig().defaultRestartReason,null);
+                server.getPlayerManager().broadcast(kickMessage, false);
+                server.save(true, true, true);
+                server.stop(false);
+                services.getDebugLogger().debugLog(NAME + ": Server stopped successfully via stop(false).");
             } catch (Exception e) {
                 services.getDebugLogger().debugLog(NAME + ": Error during server shutdown", e);
             }

@@ -1,18 +1,14 @@
 package eu.avalanche7.paradigm.modules;
 
+import com.mojang.brigadier.CommandDispatcher;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraftforge.event.entity.player.PlayerEvent;
-import net.minecraftforge.event.server.ServerStartingEvent;
-import net.minecraftforge.event.server.ServerStoppingEvent;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
-import com.mojang.brigadier.CommandDispatcher;
-import net.minecraft.commands.CommandSourceStack;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import net.minecraft.command.CommandRegistryAccess;
+import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.text.MutableText;
+import net.minecraft.text.Text;
 
 import java.util.List;
 
@@ -28,11 +24,11 @@ public class MOTD implements ParadigmModule {
 
     @Override
     public boolean isEnabled(Services services) {
-        return services.getMainConfig().motdEnable.get();
+        return services.getMainConfig().motdEnable;
     }
 
     @Override
-    public void onLoad(FMLCommonSetupEvent event, Services services, IEventBus modEventBus) {
+    public void onLoad(Object event, Services services, Object modEventBus) {
         this.services = services;
         if (services != null && services.getDebugLogger() != null) {
             services.getDebugLogger().debugLog(NAME + " module loaded.");
@@ -40,7 +36,7 @@ public class MOTD implements ParadigmModule {
     }
 
     @Override
-    public void onServerStarting(ServerStartingEvent event, Services services) {
+    public void onServerStarting(Object event, Services services) {
         if (services != null && services.getDebugLogger() != null) {
             services.getDebugLogger().debugLog(NAME + " module: Server starting.");
         }
@@ -61,52 +57,56 @@ public class MOTD implements ParadigmModule {
     }
 
     @Override
-    public void onServerStopping(ServerStoppingEvent event, Services services) {
+    public void onServerStopping(Object event, Services services) {
         if (services != null && services.getDebugLogger() != null) {
             services.getDebugLogger().debugLog(NAME + " module: Server stopping.");
         }
     }
 
     @Override
-    public void registerCommands(CommandDispatcher<CommandSourceStack> dispatcher, Services services) {
+    public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {
     }
 
     @Override
-    public void registerEventListeners(IEventBus forgeEventBus, Services services) {
-        forgeEventBus.register(this);
+    public void registerEventListeners(Object eventBus, Services services) {
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
+            onPlayerJoin(handler.player, services);
+        });
     }
 
-    @SubscribeEvent
-    public void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
-        if (this.services == null || !isEnabled(this.services) || !(event.getEntity() instanceof ServerPlayer)) {
+    public void onPlayerJoin(ServerPlayerEntity player, Services services) {
+        if (this.services == null || !isEnabled(this.services)) {
             return;
         }
-        ServerPlayer player = (ServerPlayer) event.getEntity();
-        Component motdMessage = createMOTDMessage(player, this.services);
-        player.sendSystemMessage(motdMessage);
+        Text motdMessage = createMOTDMessage(player, this.services);
+        player.sendMessage(motdMessage);
         this.services.getDebugLogger().debugLog("Sent MOTD to " + player.getName().getString());
     }
 
-    private Component createMOTDMessage(ServerPlayer player, Services services) {
+    private Text createMOTDMessage(ServerPlayerEntity player, Services services) {
         if (services == null || services.getMotdConfig() == null) {
             if(services != null && services.getDebugLogger() != null) {
                 services.getDebugLogger().debugLog("MOTDModule: Services or MOTDConfig is null in createMOTDMessage.");
             }
-            return Component.empty();
+            return Text.empty();
         }
         List<String> lines = services.getMotdConfig().motdLines;
         if (lines == null || lines.isEmpty()) {
-            return Component.empty();
+            return Text.empty();
         }
-        MutableComponent motdMessage = Component.literal("");
-        for (String line : lines) {
+        MutableText motdMessage = Text.literal("");
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i);
             if (services.getMessageParser() != null) {
-                motdMessage.append(services.getMessageParser().parseMessage(line, player)).append(Component.literal("\n"));
+                motdMessage.append(services.getMessageParser().parseMessage(line, player));
             } else {
                 if(services.getDebugLogger() != null) {
                     services.getDebugLogger().debugLog("MOTDModule: MessageParser is null in createMOTDMessage loop.");
                 }
-                motdMessage.append(Component.literal(line)).append(Component.literal("\n"));
+                motdMessage.append(Text.literal(line));
+            }
+            if (i < lines.size() - 1) {
+                motdMessage.append(Text.literal("\n"));
             }
         }
         return motdMessage;

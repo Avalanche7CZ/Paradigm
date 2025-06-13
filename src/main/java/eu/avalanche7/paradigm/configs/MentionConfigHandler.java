@@ -1,56 +1,53 @@
 package eu.avalanche7.paradigm.configs;
 
-import com.electronwill.nightconfig.core.file.CommentedFileConfig;
-import com.electronwill.nightconfig.core.io.WritingMode;
-import net.minecraftforge.common.ForgeConfigSpec;
-import net.minecraftforge.fml.common.Mod;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import net.fabricmc.loader.api.FabricLoader;
 
-import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
-@Mod.EventBusSubscriber(modid = "paradigm", bus = Mod.EventBusSubscriber.Bus.MOD)
 public class MentionConfigHandler {
-    public static final String CATEGORY_GENERAL = "general";
-    public static final String SUBCATEGORY_MENTIONS = "mentions";
 
-    public static ForgeConfigSpec SERVER_CONFIG;
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("paradigm/mentions.json");
+    public static Config CONFIG = new Config();
 
-    public static ForgeConfigSpec.ConfigValue<String> MENTION_SYMBOL;
-    public static ForgeConfigSpec.ConfigValue<String> INDIVIDUAL_MENTION_MESSAGE;
-    public static ForgeConfigSpec.ConfigValue<String> EVERYONE_MENTION_MESSAGE;
-    public static ForgeConfigSpec.ConfigValue<String> INDIVIDUAL_TITLE_MESSAGE;
-    public static ForgeConfigSpec.ConfigValue<String> EVERYONE_TITLE_MESSAGE;
-    public static ForgeConfigSpec.IntValue INDIVIDUAL_MENTION_RATE_LIMIT;
-    public static ForgeConfigSpec.IntValue EVERYONE_MENTION_RATE_LIMIT;
-
-    static {
-        ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
-
-        builder.comment("General settings").push(CATEGORY_GENERAL);
-        builder.comment("Mentions settings").push(SUBCATEGORY_MENTIONS);
-
-        MENTION_SYMBOL = builder.comment("Symbol to mention players").define("mentionSymbol", "@");
-        INDIVIDUAL_MENTION_MESSAGE = builder.comment("Message displayed to a player when they are mentioned")
-                .define("individualMentionMessage", "§4%s §cmentioned you in chat!");
-        EVERYONE_MENTION_MESSAGE = builder.comment("Message displayed to everyone when @everyone is used")
-                .define("everyoneMentionMessage", "§4%s §cmentioned everyone in chat!");
-        INDIVIDUAL_TITLE_MESSAGE = builder.comment("Title message displayed to a player when they are mentioned")
-                .define("individualTitleMessage", "§4%s §cmentioned you!");
-        EVERYONE_TITLE_MESSAGE = builder.comment("Title message displayed to everyone when @everyone is used")
-                .define("everyoneTitleMessage", "§4%s §cmentioned everyone!");
-        INDIVIDUAL_MENTION_RATE_LIMIT = builder.comment("Rate limit for individual mentions in seconds")
-                .defineInRange("individualMentionRateLimit", 30, 0, Integer.MAX_VALUE);
-        EVERYONE_MENTION_RATE_LIMIT = builder.comment("Rate limit for @everyone mentions in seconds")
-                .defineInRange("everyoneMentionRateLimit", 60, 0, Integer.MAX_VALUE);
-
-        builder.pop();
-        builder.pop();
-
-        SERVER_CONFIG = builder.build();
+    public static class Config {
+        public String MENTION_SYMBOL = "@";
+        public String INDIVIDUAL_MENTION_MESSAGE = "§4%s §cmentioned you in chat!";
+        public String EVERYONE_MENTION_MESSAGE = "§4%s §cmentioned everyone in chat!";
+        public String INDIVIDUAL_TITLE_MESSAGE = "§4%s §cmentioned you!";
+        public String EVERYONE_TITLE_MESSAGE = "§4%s §cmentioned everyone!";
+        public int INDIVIDUAL_MENTION_RATE_LIMIT = 30;
+        public int EVERYONE_MENTION_RATE_LIMIT = 60;
     }
 
-    public static void loadConfig(ForgeConfigSpec config, String path) {
-        final CommentedFileConfig file = CommentedFileConfig.builder(new File(path)).sync().autosave().writingMode(WritingMode.REPLACE).build();
-        file.load();
-        config.setConfig(file);
+    public static void load() {
+        if (Files.exists(CONFIG_PATH)) {
+            try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
+                Config loadedConfig = GSON.fromJson(reader, Config.class);
+                if(loadedConfig != null) {
+                    CONFIG = loadedConfig;
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Could not read Mentions config", e);
+            }
+        }
+        save();
+    }
+
+    public static void save() {
+        try {
+            Files.createDirectories(CONFIG_PATH.getParent());
+            try (FileWriter writer = new FileWriter(CONFIG_PATH.toFile())) {
+                GSON.toJson(CONFIG, writer);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Could not save Mentions config", e);
+        }
     }
 }

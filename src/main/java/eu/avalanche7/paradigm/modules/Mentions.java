@@ -7,27 +7,23 @@ import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.configs.MentionConfigHandler;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
-import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.commands.Commands;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
-import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.level.Level;
-import net.minecraftforge.event.ServerChatEvent;
-import net.minecraftforge.event.server.ServerStartingEvent;
-import net.minecraftforge.event.server.ServerStoppingEvent;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
+import net.minecraft.command.CommandRegistryAccess;
+import net.minecraft.network.message.SignedMessage;
+import net.minecraft.network.packet.s2c.play.SubtitleS2CPacket;
+import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
+import net.minecraft.server.command.CommandManager;
+import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.sound.SoundCategory;
+import net.minecraft.sound.SoundEvents;
+import net.minecraft.text.MutableText;
+import net.minecraft.text.Text;
+import net.minecraft.world.World;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -46,21 +42,19 @@ public class Mentions implements ParadigmModule {
 
     @Override
     public boolean isEnabled(Services services) {
-        return services != null && services.getMainConfig() != null && services.getMainConfig().mentionsEnable.get();
+        return services != null && services.getMainConfig() != null && services.getMainConfig().mentionsEnable;
     }
 
     @Override
-    public void onLoad(FMLCommonSetupEvent event, Services services, IEventBus modEventBus) {
+    public void onLoad(Object event, Services services, Object modEventBus) {
         this.services = services;
         if (this.services != null && this.services.getDebugLogger() != null) {
             this.services.getDebugLogger().debugLog(NAME + " module loaded.");
-        } else {
-            System.out.println(NAME + " module loaded, but services or debug logger was null during onLoad.");
         }
     }
 
     @Override
-    public void onServerStarting(ServerStartingEvent event, Services services) {
+    public void onServerStarting(Object event, Services services) {
         if (this.services != null && this.services.getDebugLogger() != null) {
             this.services.getDebugLogger().debugLog(NAME + " module: Server starting.");
         }
@@ -81,82 +75,76 @@ public class Mentions implements ParadigmModule {
     }
 
     @Override
-    public void onServerStopping(ServerStoppingEvent event, Services services) {
+    public void onServerStopping(Object event, Services services) {
         if (this.services != null && this.services.getDebugLogger() != null) {
             this.services.getDebugLogger().debugLog(NAME + " module: Server stopping.");
         }
     }
 
     @Override
-    public void registerCommands(CommandDispatcher<CommandSourceStack> dispatcher, Services services) {
-        dispatcher.register(Commands.literal("mention")
-                .requires(source -> source.hasPermission(0))
-                .then(Commands.argument("message", StringArgumentType.greedyString())
+    public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {
+        dispatcher.register(CommandManager.literal("mention")
+                .requires(source -> source.hasPermissionLevel(0))
+                .then(CommandManager.argument("message", StringArgumentType.greedyString())
                         .executes(context -> executeMentionCommand(context, services))));
     }
 
     @Override
-    public void registerEventListeners(IEventBus forgeEventBus, Services services) {
-        forgeEventBus.register(this);
+    public void registerEventListeners(Object eventBus, Services services) {
+        ServerMessageEvents.CHAT_MESSAGE.register(this::onChatMessage);
     }
 
-    @SubscribeEvent
-    public void onChatMessage(ServerChatEvent event) {
-        if (this.services == null || !isEnabled(this.services)) return;
+    private boolean onChatMessage(SignedMessage signedMessage, ServerPlayerEntity sender, net.minecraft.network.message.MessageType.Parameters params) {
+        if (this.services == null || !isEnabled(this.services)) return true;
 
-        MentionConfigHandler mentionConfig = this.services.getMentionConfig();
-        if (mentionConfig == null || mentionConfig.MENTION_SYMBOL == null) return;
-
-        String rawMessage = event.getRawText();
-        ServerPlayer sender = event.getPlayer();
-        String mentionSymbol = mentionConfig.MENTION_SYMBOL.get();
+        MentionConfigHandler.Config mentionConfig = MentionConfigHandler.CONFIG;
+        String rawMessage = signedMessage.getContent().getString();
+        String mentionSymbol = mentionConfig.MENTION_SYMBOL;
 
         String everyoneMentionPlaceholder = mentionSymbol + "everyone";
         Pattern everyonePattern = Pattern.compile(Pattern.quote(everyoneMentionPlaceholder), Pattern.CASE_INSENSITIVE);
         Matcher everyoneMatcher = everyonePattern.matcher(rawMessage);
 
         if (everyoneMatcher.find()) {
-            handleEveryoneMention(event, sender, rawMessage, mentionConfig, everyoneMatcher.group(0));
+            return handleEveryoneMention(sender, rawMessage, mentionConfig, everyoneMatcher.group(0));
         } else {
-            handleIndividualMentions(event, sender, rawMessage, mentionConfig);
+            return handleIndividualMentions(sender, rawMessage, mentionConfig);
         }
     }
 
-    private void handleEveryoneMention(ServerChatEvent event, ServerPlayer sender, String rawMessage, MentionConfigHandler mentionConfig, String matchedEveryoneMention) {
+    private boolean handleEveryoneMention(ServerPlayerEntity sender, String rawMessage, MentionConfigHandler.Config mentionConfig, String matchedEveryoneMention) {
         if (!hasPermission(sender, PermissionsHandler.MENTION_EVERYONE_PERMISSION, PermissionsHandler.MENTION_EVERYONE_PERMISSION_LEVEL)) {
-            sender.sendSystemMessage(this.services.getLang().translate("mention.no_permission_everyone"));
-            event.setCanceled(true);
-            return;
+            sender.sendMessage(this.services.getLang().translate("mention.no_permission_everyone"));
+            return false;
         }
         if (!canMentionEveryone(sender, mentionConfig)) {
-            sender.sendSystemMessage(this.services.getLang().translate("mention.too_frequent_mention_everyone"));
-            event.setCanceled(true);
-            return;
+            sender.sendMessage(this.services.getLang().translate("mention.too_frequent_mention_everyone"));
+            return false;
         }
 
         this.services.getDebugLogger().debugLog("Mention everyone detected in chat by " + sender.getName().getString());
-        event.setCanceled(true);
-        notifyEveryone(sender.getServer().getPlayerList().getPlayers(), sender, rawMessage, false, mentionConfig, matchedEveryoneMention);
+        notifyEveryone(sender.getServer().getPlayerManager().getPlayerList(), sender, rawMessage, false, mentionConfig, matchedEveryoneMention);
+        return false;
     }
 
-    private void handleIndividualMentions(ServerChatEvent event, ServerPlayer sender, String rawMessage, MentionConfigHandler mentionConfig) {
-        String mentionSymbol = mentionConfig.MENTION_SYMBOL.get();
-        MutableComponent finalMessageComponent = Component.literal("");
+    private boolean handleIndividualMentions(ServerPlayerEntity sender, String rawMessage, MentionConfigHandler.Config mentionConfig) {
+        String mentionSymbol = mentionConfig.MENTION_SYMBOL;
+        MutableText finalMessageComponent = Text.literal("");
         int lastEnd = 0;
         boolean wasMentionFound = false;
-        List<ServerPlayer> players = sender.getServer().getPlayerList().getPlayers();
+        List<ServerPlayerEntity> players = sender.getServer().getPlayerManager().getPlayerList();
 
         Pattern allPlayersPattern = buildAllPlayersMentionPattern(players, mentionSymbol);
         Matcher mentionMatcher = allPlayersPattern.matcher(rawMessage);
 
-        while(mentionMatcher.find()){
+        while (mentionMatcher.find()) {
             wasMentionFound = true;
             String playerName = mentionMatcher.group(1);
-            ServerPlayer targetPlayer = sender.getServer().getPlayerList().getPlayerByName(playerName);
+            ServerPlayerEntity targetPlayer = sender.getServer().getPlayerManager().getPlayer(playerName);
 
             if (targetPlayer == null) continue;
 
-            finalMessageComponent.append(Component.literal(rawMessage.substring(lastEnd, mentionMatcher.start())));
+            finalMessageComponent.append(Text.literal(rawMessage.substring(lastEnd, mentionMatcher.start())));
 
             if (hasPermission(sender, PermissionsHandler.MENTION_PLAYER_PERMISSION, PermissionsHandler.MENTION_PLAYER_PERMISSION_LEVEL)
                     && canMentionPlayer(sender, targetPlayer, mentionConfig)) {
@@ -164,59 +152,64 @@ public class Mentions implements ParadigmModule {
                 notifyPlayer(targetPlayer, sender, rawMessage, false, mentionConfig, mentionMatcher.group(0));
                 finalMessageComponent.append(targetPlayer.getDisplayName());
             } else {
-                finalMessageComponent.append(Component.literal(mentionMatcher.group(0)));
+                finalMessageComponent.append(Text.literal(mentionMatcher.group(0)));
             }
             lastEnd = mentionMatcher.end();
         }
 
         if (wasMentionFound) {
-            event.setCanceled(true);
-            finalMessageComponent.append(Component.literal(rawMessage.substring(lastEnd)));
-            Component finalMessage = Component.translatable("chat.type.text", sender.getDisplayName(), finalMessageComponent);
-            sender.getServer().getPlayerList().broadcastSystemMessage(finalMessage, false);
+            finalMessageComponent.append(Text.literal(rawMessage.substring(lastEnd)));
+            Text finalMessage = Text.translatable("chat.type.text", sender.getDisplayName(), finalMessageComponent);
+            sender.getServer().getPlayerManager().broadcast(finalMessage, false);
+            return false;
         }
+        return true;
     }
 
-    private int executeMentionCommand(CommandContext<CommandSourceStack> context, Services services) {
-        CommandSourceStack source = context.getSource();
+    private int executeMentionCommand(CommandContext<ServerCommandSource> context, Services services) {
+        ServerCommandSource source = context.getSource();
         String message = StringArgumentType.getString(context, "message");
-        Level world = source.getLevel();
-        List<ServerPlayer> players = world.getServer().getPlayerList().getPlayers();
+        World world = source.getWorld();
+        List<ServerPlayerEntity> players = world.getServer().getPlayerManager().getPlayerList();
         boolean isConsole = source.getEntity() == null;
-        ServerPlayer sender = isConsole ? null : source.getPlayer();
-        MentionConfigHandler mentionConfig = services.getMentionConfig();
-        Component senderDisplayName = source.getDisplayName();
+        ServerPlayerEntity sender = isConsole ? null : source.getPlayer();
+        MentionConfigHandler.Config mentionConfig = MentionConfigHandler.CONFIG;
+        Text senderDisplayName = source.getDisplayName();
 
-        String everyoneMentionPlaceholder = mentionConfig.MENTION_SYMBOL.get() + "everyone";
+        String everyoneMentionPlaceholder = mentionConfig.MENTION_SYMBOL + "everyone";
         Pattern everyonePattern = Pattern.compile(Pattern.quote(everyoneMentionPlaceholder), Pattern.CASE_INSENSITIVE);
         Matcher everyoneMatcher = everyonePattern.matcher(message);
 
         if (everyoneMatcher.find()) {
             if (sender != null) {
                 if (!hasPermission(sender, PermissionsHandler.MENTION_EVERYONE_PERMISSION, PermissionsHandler.MENTION_EVERYONE_PERMISSION_LEVEL)) {
-                    sender.sendSystemMessage(services.getLang().translate("mention.no_permission_everyone"));
+                    sender.sendMessage(services.getLang().translate("mention.no_permission_everyone"));
                     return 0;
                 }
                 if (!canMentionEveryone(sender, mentionConfig)) {
-                    sender.sendSystemMessage(services.getLang().translate("mention.too_frequent_mention_everyone"));
+                    sender.sendMessage(services.getLang().translate("mention.too_frequent_mention_everyone"));
                     return 0;
                 }
-            } else { lastEveryoneMentionTime = System.currentTimeMillis(); }
+            } else {
+                lastEveryoneMentionTime = System.currentTimeMillis();
+            }
             notifyEveryone(players, sender, message, isConsole, mentionConfig, everyoneMatcher.group(0));
-            source.sendSuccess((Supplier<Component>) Component.literal("Mentioned everyone successfully."), !isConsole);
+            source.sendFeedback(() -> Text.literal("Mentioned everyone successfully."), !isConsole);
             return 1;
         }
 
         boolean mentionedSomeone = false;
-        for (ServerPlayer targetPlayer : players) {
-            String playerMentionPlaceholder = mentionConfig.MENTION_SYMBOL.get() + targetPlayer.getName().getString();
+        for (ServerPlayerEntity targetPlayer : players) {
+            String playerMentionPlaceholder = mentionConfig.MENTION_SYMBOL + targetPlayer.getName().getString();
             Pattern playerMentionPattern = Pattern.compile(Pattern.quote(playerMentionPlaceholder), Pattern.CASE_INSENSITIVE);
 
             if (playerMentionPattern.matcher(message).find()) {
                 if (sender != null) {
                     if (!hasPermission(sender, PermissionsHandler.MENTION_PLAYER_PERMISSION, PermissionsHandler.MENTION_PLAYER_PERMISSION_LEVEL)) continue;
                     if (!canMentionPlayer(sender, targetPlayer, mentionConfig)) continue;
-                } else { lastIndividualMentionTime.put(targetPlayer.getUUID(), System.currentTimeMillis()); }
+                } else {
+                    lastIndividualMentionTime.put(targetPlayer.getUuid(), System.currentTimeMillis());
+                }
 
                 notifyPlayer(targetPlayer, sender, message, isConsole, mentionConfig, playerMentionPlaceholder);
                 mentionedSomeone = true;
@@ -224,34 +217,34 @@ public class Mentions implements ParadigmModule {
         }
 
         if (mentionedSomeone) {
-            Component formattedChat = services.getMessageParser().parseMessage(message, sender);
-            Component finalMessage = Component.translatable("chat.type.text", senderDisplayName, formattedChat);
-            world.getServer().getPlayerList().broadcastSystemMessage(finalMessage, false);
-            source.sendSuccess(() -> Component.literal("Mentioned player(s) successfully."), !isConsole);
+            Text formattedChat = services.getMessageParser().parseMessage(message, sender);
+            Text finalMessage = Text.translatable("chat.type.text", senderDisplayName, formattedChat);
+            world.getServer().getPlayerManager().broadcast(finalMessage, false);
+            source.sendFeedback(() -> Text.literal("Mentioned player(s) successfully."), !isConsole);
         } else {
-            source.sendFailure(Component.literal("No valid mentions found in the message."));
+            source.sendError(Text.literal("No valid mentions found in the message."));
         }
         return mentionedSomeone ? 1 : 0;
     }
 
-    private void notifyEveryone(List<ServerPlayer> players, ServerPlayer sender, String originalMessage, boolean isConsole, MentionConfigHandler config, String matchedEveryoneMention) {
+    private void notifyEveryone(List<ServerPlayerEntity> players, ServerPlayerEntity sender, String originalMessage, boolean isConsole, MentionConfigHandler.Config config, String matchedEveryoneMention) {
         String senderName = isConsole || sender == null ? "Console" : sender.getName().getString();
-        String chatFormat = config.EVERYONE_MENTION_MESSAGE.get();
-        String titleFormat = config.EVERYONE_TITLE_MESSAGE.get();
+        String chatFormat = config.EVERYONE_MENTION_MESSAGE;
+        String titleFormat = config.EVERYONE_TITLE_MESSAGE;
         String content = originalMessage.substring(originalMessage.toLowerCase().indexOf(matchedEveryoneMention.toLowerCase()) + matchedEveryoneMention.length()).trim();
 
         String chatMessageText = String.format(chatFormat, senderName);
         String titleMessageText = String.format(titleFormat, senderName);
 
-        for (ServerPlayer targetPlayer : players) {
+        for (ServerPlayerEntity targetPlayer : players) {
             sendMentionNotification(targetPlayer, chatMessageText, titleMessageText, content, this.services);
         }
     }
 
-    private void notifyPlayer(ServerPlayer targetPlayer, ServerPlayer sender, String originalMessage, boolean isConsole, MentionConfigHandler config, String matchedPlayerMention) {
+    private void notifyPlayer(ServerPlayerEntity targetPlayer, ServerPlayerEntity sender, String originalMessage, boolean isConsole, MentionConfigHandler.Config config, String matchedPlayerMention) {
         String senderName = isConsole || sender == null ? "Console" : sender.getName().getString();
-        String chatFormat = config.INDIVIDUAL_MENTION_MESSAGE.get();
-        String titleFormat = config.INDIVIDUAL_TITLE_MESSAGE.get();
+        String chatFormat = config.INDIVIDUAL_MENTION_MESSAGE;
+        String titleFormat = config.INDIVIDUAL_TITLE_MESSAGE;
         String content = originalMessage.substring(originalMessage.toLowerCase().indexOf(matchedPlayerMention.toLowerCase()) + matchedPlayerMention.length()).trim();
 
         String chatMessageText = String.format(chatFormat, senderName);
@@ -260,28 +253,28 @@ public class Mentions implements ParadigmModule {
         sendMentionNotification(targetPlayer, chatMessageText, titleMessageText, content, this.services);
     }
 
-    private void sendMentionNotification(ServerPlayer targetPlayer, String chatMessage, String titleMessage, String contentMessage, Services services) {
-        MutableComponent finalChatMessage = services.getMessageParser().parseMessage(chatMessage, targetPlayer);
+    private void sendMentionNotification(ServerPlayerEntity targetPlayer, String chatMessage, String titleMessage, String contentMessage, Services services) {
+        MutableText finalChatMessage = services.getMessageParser().parseMessage(chatMessage, targetPlayer);
         if (contentMessage != null && !contentMessage.isEmpty()) {
-            MutableComponent contentComponent = services.getMessageParser().parseMessage("- " + contentMessage, targetPlayer);
-            finalChatMessage.append(Component.literal("\n")).append(contentComponent);
+            MutableText contentComponent = services.getMessageParser().parseMessage("- " + contentMessage, targetPlayer);
+            finalChatMessage.append(Text.literal("\n")).append(contentComponent);
         }
-        targetPlayer.displayClientMessage(finalChatMessage, false);
-        Component parsedTitleMessage = services.getMessageParser().parseMessage(titleMessage, targetPlayer);
-        targetPlayer.connection.send(new ClientboundSetTitleTextPacket(parsedTitleMessage));
+        targetPlayer.sendMessage(finalChatMessage, false);
+        Text parsedTitleMessage = services.getMessageParser().parseMessage(titleMessage, targetPlayer);
+        targetPlayer.networkHandler.sendPacket(new TitleS2CPacket(parsedTitleMessage));
         if (contentMessage != null && !contentMessage.isEmpty()) {
-            Component parsedSubtitleMessage = services.getMessageParser().parseMessage(contentMessage, targetPlayer);
-            targetPlayer.connection.send(new ClientboundSetSubtitleTextPacket(parsedSubtitleMessage));
+            Text parsedSubtitleMessage = services.getMessageParser().parseMessage(contentMessage, targetPlayer);
+            targetPlayer.networkHandler.sendPacket(new SubtitleS2CPacket(parsedSubtitleMessage));
         }
 
-        targetPlayer.playNotifySound(SoundEvents.PLAYER_LEVELUP, SoundSource.PLAYERS, 1.0F, 1.0F);
+        targetPlayer.playSound(SoundEvents.ENTITY_PLAYER_LEVELUP);
     }
 
-    private boolean hasPermission(ServerPlayer player, String permissionNode, int permissionLevel) {
-        return this.services.getPermissionsHandler().hasPermission(player, permissionNode) || player.hasPermissions(permissionLevel);
+    private boolean hasPermission(ServerPlayerEntity player, String permissionNode, int permissionLevel) {
+        return this.services.getPermissionsHandler().hasPermission(player, permissionNode) || player.hasPermissionLevel(permissionLevel);
     }
 
-    private Pattern buildAllPlayersMentionPattern(List<ServerPlayer> players, String mentionSymbol) {
+    private Pattern buildAllPlayersMentionPattern(List<ServerPlayerEntity> players, String mentionSymbol) {
         if (players.isEmpty()) {
             return Pattern.compile("a^");
         }
@@ -292,9 +285,9 @@ public class Mentions implements ParadigmModule {
         return Pattern.compile(Pattern.quote(mentionSymbol) + "(" + allPlayerNames + ")", Pattern.CASE_INSENSITIVE);
     }
 
-    private boolean canMentionEveryone(ServerPlayer sender, MentionConfigHandler config) {
-        if (sender != null && sender.hasPermissions(2)) return true;
-        int rateLimit = config.EVERYONE_MENTION_RATE_LIMIT.get();
+    private boolean canMentionEveryone(ServerPlayerEntity sender, MentionConfigHandler.Config config) {
+        if (sender != null && sender.hasPermissionLevel(2)) return true;
+        int rateLimit = config.EVERYONE_MENTION_RATE_LIMIT;
         if (rateLimit <= 0) return true;
         long currentTime = System.currentTimeMillis();
         if (currentTime - lastEveryoneMentionTime < rateLimit * 1000L) return false;
@@ -302,12 +295,12 @@ public class Mentions implements ParadigmModule {
         return true;
     }
 
-    private boolean canMentionPlayer(ServerPlayer sender, ServerPlayer targetPlayer, MentionConfigHandler config) {
-        if (sender != null && sender.hasPermissions(2)) return true;
-        int rateLimit = config.INDIVIDUAL_MENTION_RATE_LIMIT.get();
+    private boolean canMentionPlayer(ServerPlayerEntity sender, ServerPlayerEntity targetPlayer, MentionConfigHandler.Config config) {
+        if (sender != null && sender.hasPermissionLevel(2)) return true;
+        int rateLimit = config.INDIVIDUAL_MENTION_RATE_LIMIT;
         if (rateLimit <= 0) return true;
         long currentTime = System.currentTimeMillis();
-        UUID targetUUID = targetPlayer.getUUID();
+        UUID targetUUID = targetPlayer.getUuid();
         if (lastIndividualMentionTime.containsKey(targetUUID) && currentTime - lastIndividualMentionTime.get(targetUUID) < rateLimit * 1000L) return false;
         lastIndividualMentionTime.put(targetUUID, currentTime);
         return true;
