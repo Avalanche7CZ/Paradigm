@@ -162,7 +162,7 @@ public class Paradigm implements DedicatedServerModInitializer {
     }
 
     public static class UpdateChecker {
-        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/Fabric/1.21.1/version.txt";
+        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/Fabric/1.21.1/version.txt?v=1";
 
         public static void checkForUpdates(String currentVersion, Logger logger) {
             try {
