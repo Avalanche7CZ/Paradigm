@@ -1,4 +1,4 @@
-package eu.avalanche7.forgeannouncements.utils;
+package eu.avalanche7.paradigm.utils;
 
 import net.minecraft.util.text.*;
 import net.minecraft.util.text.event.ClickEvent;

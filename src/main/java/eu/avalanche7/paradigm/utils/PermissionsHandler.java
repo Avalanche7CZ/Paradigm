@@ -1,4 +1,4 @@
-package eu.avalanche7.forgeannouncements.utils;
+package eu.avalanche7.paradigm.utils;
 
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraftforge.fml.common.Loader;
@@ -11,12 +11,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 
-@Mod.EventBusSubscriber(modid = "forgeannouncements")
+@Mod.EventBusSubscriber(modid = "paradigm")
 public class PermissionsHandler {
 
     private static final Logger LOGGER = LogManager.getLogger();
-    public static final String MENTION_EVERYONE_PERMISSION = "forgeannouncements.mention.everyone";
-    public static final String MENTION_PLAYER_PERMISSION = "forgeannouncements.mention.player";
+    public static final String MENTION_EVERYONE_PERMISSION = "paradigm.mention.everyone";
+    public static final String MENTION_PLAYER_PERMISSION = "paradigm.mention.player";
     public static final int MENTION_EVERYONE_PERMISSION_LEVEL = 2;
     public static final int MENTION_PLAYER_PERMISSION_LEVEL = 2;
     public static final int BROADCAST_PERMISSION_LEVEL = 2;

@@ -1,15 +1,14 @@
-package eu.avalanche7.forgeannouncements.utils;
+package eu.avalanche7.paradigm.utils;
 
 import net.minecraft.server.MinecraftServer;
 import net.minecraftforge.fml.common.event.FMLServerStoppingEvent;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-@Mod.EventBusSubscriber(modid = "forgeannouncements")
+@Mod.EventBusSubscriber(modid = "paradigm")
 public class TaskScheduler {
 
     private static final ScheduledExecutorService executorService = Executors.newScheduledThreadPool(1);

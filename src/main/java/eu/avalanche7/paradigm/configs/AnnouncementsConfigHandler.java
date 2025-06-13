@@ -1,6 +1,6 @@
-package eu.avalanche7.forgeannouncements.configs;
+package eu.avalanche7.paradigm.configs;
 
-import eu.avalanche7.forgeannouncements.ForgeAnnouncements;
+import eu.avalanche7.paradigm.Paradigm;
 import net.minecraftforge.common.config.Configuration;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -10,7 +10,7 @@ import java.util.Arrays;
 
 public class AnnouncementsConfigHandler {
 
-    private static final Logger LOGGER = LogManager.getLogger(ForgeAnnouncements.MODID);
+    private static final Logger LOGGER = LogManager.getLogger(Paradigm.MODID);
     public static Configuration config;
     public static boolean globalEnable;
     public static boolean headerAndFooter;

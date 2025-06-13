@@ -1,7 +1,7 @@
-package eu.avalanche7.forgeannouncements.utils;
+package eu.avalanche7.paradigm.utils;
 
-import eu.avalanche7.forgeannouncements.configs.MainConfigHandler;
-import eu.avalanche7.forgeannouncements.configs.MentionConfigHandler;
+import eu.avalanche7.paradigm.configs.MainConfigHandler;
+import eu.avalanche7.paradigm.configs.MentionConfigHandler;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.network.play.server.SPacketTitle;
 import net.minecraft.util.SoundCategory;
@@ -18,7 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
 
-@Mod.EventBusSubscriber(modid = "forgeannouncements")
+@Mod.EventBusSubscriber(modid = "paradigm")
 public class Mentions {
 
     private static final HashMap<UUID, Long> lastIndividualMentionTime = new HashMap<>();

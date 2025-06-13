@@ -1,7 +1,7 @@
-package eu.avalanche7.forgeannouncements.utils;
+package eu.avalanche7.paradigm.utils;
 
-import eu.avalanche7.forgeannouncements.configs.MainConfigHandler;
-import eu.avalanche7.forgeannouncements.configs.RestartConfigHandler;
+import eu.avalanche7.paradigm.configs.MainConfigHandler;
+import eu.avalanche7.paradigm.configs.RestartConfigHandler;
 import net.minecraft.network.play.server.SPacketTitle;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.entity.player.EntityPlayerMP;
@@ -14,7 +14,6 @@ import net.minecraft.world.BossInfoServer;
 import net.minecraft.world.storage.WorldInfo;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.registry.ForgeRegistries;
 
 import java.text.DecimalFormat;
@@ -23,7 +22,7 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.*;
 
-@Mod.EventBusSubscriber(modid = "forgeannouncements")
+@Mod.EventBusSubscriber(modid = "paradigm")
 public class Restart {
     private static final DecimalFormat TIME_FORMATTER = new DecimalFormat("00");
     public static boolean isRestarting = false;

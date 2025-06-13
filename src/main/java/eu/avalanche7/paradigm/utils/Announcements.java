@@ -1,6 +1,6 @@
-package eu.avalanche7.forgeannouncements.utils;
+package eu.avalanche7.paradigm.utils;
 
-import eu.avalanche7.forgeannouncements.configs.AnnouncementsConfigHandler;
+import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.network.play.server.SPacketTitle;
 import net.minecraft.network.play.server.SPacketUpdateBossInfo;
@@ -11,13 +11,13 @@ import net.minecraft.world.BossInfo;
 import net.minecraft.world.BossInfoServer;
 import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
 import net.minecraftforge.fml.common.Mod;
-import eu.avalanche7.forgeannouncements.configs.MainConfigHandler;
+import eu.avalanche7.paradigm.configs.MainConfigHandler;
 
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
-@Mod.EventBusSubscriber(modid = "forgeannouncements")
+@Mod.EventBusSubscriber(modid = "paradigm")
 public class Announcements {
 
     private static final Random random = new Random();

@@ -1,8 +1,8 @@
-package eu.avalanche7.forgeannouncements;
+package eu.avalanche7.paradigm;
 
-import eu.avalanche7.forgeannouncements.commands.AnnouncementsCommand;
-import eu.avalanche7.forgeannouncements.configs.*;
-import eu.avalanche7.forgeannouncements.utils.*;
+import eu.avalanche7.paradigm.commands.AnnouncementsCommand;
+import eu.avalanche7.paradigm.configs.*;
+import eu.avalanche7.paradigm.utils.*;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import net.minecraftforge.common.MinecraftForge;
@@ -17,10 +17,10 @@ import java.io.InputStreamReader;
 import java.net.URL;
 
 
-@Mod(modid = ForgeAnnouncements.MODID, name = ForgeAnnouncements.NAME, version = ForgeAnnouncements.VERSION, acceptableRemoteVersions = "*")
-public class ForgeAnnouncements {
+@Mod(modid = Paradigm.MODID, name = Paradigm.NAME, version = Paradigm.VERSION, acceptableRemoteVersions = "*")
+public class Paradigm {
 
-    public static final String MODID = "forgeannouncements";
+    public static final String MODID = "paradigm";
     public static final String NAME = "Forge Announcements";
     public static final String VERSION = "12.0.4";
 
@@ -29,7 +29,7 @@ public class ForgeAnnouncements {
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
         LOGGER.info("Initializing Forge Announcements mod...");
-        File directory = new File(event.getSuggestedConfigurationFile().getParentFile(), "forgeannouncements");
+        File directory = new File(event.getSuggestedConfigurationFile().getParentFile(), "paradigm");
         if (!directory.exists()) {
             directory.mkdir();
         }
@@ -55,7 +55,7 @@ public class ForgeAnnouncements {
     public void serverStarting(FMLServerStartingEvent event) {
         LOGGER.info("Forge Announcements mod has been enabled.");
         LOGGER.info("=========================");
-        LOGGER.info("ForgeAnnouncements");
+        LOGGER.info("Paradigm");
         LOGGER.info("Version: " + VERSION);
         LOGGER.info("Author: Avalanche7CZ");
         LOGGER.info("Discord: https://discord.com/invite/qZDcQdEFqQ");

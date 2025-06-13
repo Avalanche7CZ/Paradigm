@@ -1,6 +1,6 @@
-package eu.avalanche7.forgeannouncements.utils;
+package eu.avalanche7.paradigm.utils;
 
-import eu.avalanche7.forgeannouncements.configs.MainConfigHandler;
+import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

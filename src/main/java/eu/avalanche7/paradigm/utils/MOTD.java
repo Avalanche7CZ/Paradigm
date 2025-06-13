@@ -1,7 +1,7 @@
-package eu.avalanche7.forgeannouncements.utils;
+package eu.avalanche7.paradigm.utils;
 
-import eu.avalanche7.forgeannouncements.configs.MOTDConfigHandler;
-import eu.avalanche7.forgeannouncements.configs.MainConfigHandler;
+import eu.avalanche7.paradigm.configs.MOTDConfigHandler;
+import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.network.play.server.SPacketTitle;
 import net.minecraft.util.text.*;
@@ -11,7 +11,7 @@ import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.PlayerEvent;
 
-@Mod.EventBusSubscriber(modid = "forgeannouncements")
+@Mod.EventBusSubscriber(modid = "paradigm")
 public class MOTD {
 
 

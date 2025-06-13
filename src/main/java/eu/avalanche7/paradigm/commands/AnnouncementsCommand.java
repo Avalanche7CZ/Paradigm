@@ -1,7 +1,7 @@
-package eu.avalanche7.forgeannouncements.commands;
+package eu.avalanche7.paradigm.commands;
 
-import eu.avalanche7.forgeannouncements.utils.PermissionsHandler;
-import eu.avalanche7.forgeannouncements.utils.TaskScheduler;
+import eu.avalanche7.paradigm.utils.PermissionsHandler;
+import eu.avalanche7.paradigm.utils.TaskScheduler;
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.ICommandSender;
 import net.minecraft.entity.player.EntityPlayerMP;
@@ -17,20 +17,18 @@ import net.minecraft.world.BossInfoServer;
 import net.minecraftforge.fml.common.event.FMLServerStartingEvent;
 import net.minecraftforge.fml.common.Mod;
 
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-@Mod.EventBusSubscriber(modid = "forgeannouncements")
+@Mod.EventBusSubscriber(modid = "paradigm")
 public class AnnouncementsCommand extends CommandBase {
     @Override
     public String getName() {
-        return "forgeannouncements";
+        return "paradigm";
     }
 
     @Override
     public String getUsage(ICommandSender sender) {
-        return "/forgeannouncements <broadcast|actionbar|title|bossbar> <message> [options]";
+        return "/paradigm <broadcast|actionbar|title|bossbar> <message> [options]";
     }
 
     @Override
@@ -71,7 +69,7 @@ public class AnnouncementsCommand extends CommandBase {
             case "bossbar":
                 requiredPermissionLevel = PermissionsHandler.BOSSBAR_PERMISSION_LEVEL;
                 if (args.length < 4) {
-                    sender.sendMessage(new TextComponentString("Usage: /forgeannouncements bossbar <interval> <color> <message>"));
+                    sender.sendMessage(new TextComponentString("Usage: /paradigm bossbar <interval> <color> <message>"));
                     return;
                 }
                 int interval;

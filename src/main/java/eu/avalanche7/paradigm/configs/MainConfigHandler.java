@@ -1,4 +1,4 @@
-package eu.avalanche7.forgeannouncements.configs;
+package eu.avalanche7.paradigm.configs;
 
 import net.minecraftforge.common.config.Configuration;
 
