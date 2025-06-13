@@ -41,18 +41,18 @@
 1.  Download and install **NeoForge**.
 2.  Download **[Sinytra Connector](https://www.curseforge.com/minecraft/mc-mods/sinytra-connector)** and place it in your `mods` folder.
 3.  Download **[Forgified Fabric API](https://www.curseforge.com/minecraft/mc-mods/forgified-fabric-api)** and place it in your `mods` folder.
-4.  Download the latest **Fabric** version of Paradigm from the [**Releases Page**](https://github.com/Avalanche7CZ/Paradigm/releases).
+4.  Download the latest **Fabric** version of Paradigm from the [**Releases Page**](https://modrinth.com/mod/paradigm).
 5.  Place the Paradigm **Fabric** `.jar` file into your `mods` folder.
 
 ### For Fabric
 1.  Download and install the **Fabric Loader**.
 2.  Download the **[Fabric API](https://www.curseforge.com/minecraft/mc-mods/fabric-api)** and place it in your `mods` folder. **This is required.**
-3.  Download the latest **Fabric** version of Paradigm from the [**Releases Page**](https://github.com/Avalanche7CZ/Paradigm/releases).
+3.  Download the latest **Fabric** version of Paradigm from the [**Releases Page**](https://modrinth.com/mod/paradigm).
 4.  Place the Paradigm `.jar` file into your server's `mods` folder.
 
 ### For Forge
 1.  Download and install the recommended version of **Minecraft Forge** for your game version.
-2.  Download the latest **Forge** version of Paradigm from the [**Releases Page**](https://github.com/Avalanche7CZ/Paradigm/releases).
+2.  Download the latest **Forge** version of Paradigm from the [**Releases Page**](https://modrinth.com/mod/paradigm).
 3.  Place the Paradigm `.jar` file into your server's `mods` folder.
 
 ---
