@@ -7,7 +7,6 @@ import eu.avalanche7.paradigm.modules.*;
 import eu.avalanche7.paradigm.configs.*;
 import eu.avalanche7.paradigm.utils.*;
 import com.mojang.logging.LogUtils;
-import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
@@ -16,23 +15,16 @@ import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import net.minecraftforge.fml.loading.FMLPaths;
 import net.minecraftforge.fml.ModList;
 import org.slf4j.Logger;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.URL;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-
-import static net.minecraft.commands.Commands.literal;
-import static net.minecraft.commands.Commands.argument;
 
 @Mod(Paradigm.MOD_ID)
 public class Paradigm {
@@ -52,12 +44,10 @@ public class Paradigm {
     private CMConfig cmConfigInstance;
 
     public Paradigm(FMLJavaModLoadingContext ctx) {
-        LOGGER.info("Initializing Paradigm Mod for Minecraft 1.21.1...");
+        LOGGER.info("Initializing Paradigm Mod for Forge 1.21.1...");
         IEventBus modEventBus = ctx.getModEventBus();
-        modEventBus.addListener(this::commonSetup);
 
-        MinecraftForge.EVENT_BUS.register(this);
-
+        loadAllConfigs();
         createUtilityInstances();
         initializeServices();
         registerModules();
@@ -65,23 +55,34 @@ public class Paradigm {
         modules.forEach(module -> module.registerEventListeners(MinecraftForge.EVENT_BUS, services));
         modules.forEach(module -> module.onLoad(null, services, modEventBus));
 
+        modEventBus.addListener(this::commonSetup);
+        MinecraftForge.EVENT_BUS.register(this);
+    }
+
+    private void loadAllConfigs() {
         try {
-            Path serverConfigDir = FMLPaths.GAMEDIR.get().resolve("config/" + MOD_ID);
-            Files.createDirectories(serverConfigDir);
-
-            ctx.registerConfig(ModConfig.Type.SERVER, MainConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("main.toml").toString());
-            ctx.registerConfig(ModConfig.Type.SERVER, AnnouncementsConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("announcements.toml").toString());
-            ctx.registerConfig(ModConfig.Type.SERVER, MentionConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("mentions.toml").toString());
-            ctx.registerConfig(ModConfig.Type.SERVER, RestartConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("restarts.toml").toString());
-            ctx.registerConfig(ModConfig.Type.SERVER, ChatConfigHandler.SERVER_CONFIG, serverConfigDir.resolve("chat.toml").toString());
-
+            MainConfigHandler.load();
+            AnnouncementsConfigHandler.load();
+            MentionConfigHandler.load();
+            RestartConfigHandler.load();
+            ChatConfigHandler.load();
             MOTDConfigHandler.loadConfig();
-            this.cmConfigInstance.loadCommands();
-            this.langInstance.initializeLanguage();
 
+            if (this.cmConfigInstance == null) {
+                this.cmConfigInstance = new CMConfig(new DebugLogger(MainConfigHandler.CONFIG));
+            }
+            this.cmConfigInstance.loadCommands();
+
+            if(this.langInstance == null) {
+                if (this.placeholdersInstance == null) this.placeholdersInstance = new Placeholders();
+                if (this.messageParserInstance == null) this.messageParserInstance = new MessageParser(this.placeholdersInstance);
+                if (this.debugLoggerInstance == null) this.debugLoggerInstance = new DebugLogger(MainConfigHandler.CONFIG);
+                this.langInstance = new Lang(LOGGER, MainConfigHandler.CONFIG, this.messageParserInstance);
+            }
+            this.langInstance.initializeLanguage();
         } catch (Exception e) {
-            LOGGER.error("Failed to register or load configuration for {}", MOD_ID, e);
-            throw new RuntimeException("Configuration loading failed for " + MOD_ID, e);
+            LOGGER.error("Failed to load one or more JSON configurations for {}", MOD_ID, e);
+            throw new RuntimeException("JSON configuration loading failed for " + MOD_ID, e);
         }
     }
 
@@ -89,9 +90,7 @@ public class Paradigm {
         this.placeholdersInstance = new Placeholders();
         this.messageParserInstance = new MessageParser(this.placeholdersInstance);
         this.debugLoggerInstance = new DebugLogger(MainConfigHandler.CONFIG);
-        this.langInstance = new Lang(LOGGER, MainConfigHandler.CONFIG, this.messageParserInstance);
         this.taskSchedulerInstance = new TaskScheduler(this.debugLoggerInstance);
-        this.cmConfigInstance = new CMConfig(this.debugLoggerInstance);
         this.permissionsHandlerInstance = new PermissionsHandler(LOGGER, this.cmConfigInstance, this.debugLoggerInstance);
         this.groupChatManagerInstance = new GroupChatManager();
     }
