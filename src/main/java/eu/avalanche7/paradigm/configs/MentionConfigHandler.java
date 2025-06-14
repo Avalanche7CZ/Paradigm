@@ -1,34 +1,79 @@
 package eu.avalanche7.paradigm.configs;
 
-import net.minecraftforge.common.config.Configuration;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 public class MentionConfigHandler {
-    private static Configuration mentionsConfig;
 
-    public static String MENTION_SYMBOL;
-    public static String INDIVIDUAL_MENTION_MESSAGE;
-    public static String EVERYONE_MENTION_MESSAGE;
-    public static String INDIVIDUAL_TITLE_MESSAGE;
-    public static String EVERYONE_TITLE_MESSAGE;
-    public static int INDIVIDUAL_MENTION_RATE_LIMIT;
-    public static int EVERYONE_MENTION_RATE_LIMIT;
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static Path configPath;
+    public static Config CONFIG = new Config();
 
-    public static void init(Configuration config) {
-        mentionsConfig = config;
-        loadConfig();
+    public static class Config {
+        public ConfigEntry<String> MENTION_SYMBOL = new ConfigEntry<>(
+                "@",
+                "Symbol to mention players"
+        );
+        public ConfigEntry<String> INDIVIDUAL_MENTION_MESSAGE = new ConfigEntry<>(
+                "§4%s §cmentioned you in chat!",
+                "Message displayed to a player when they are mentioned"
+        );
+        public ConfigEntry<String> EVERYONE_MENTION_MESSAGE = new ConfigEntry<>(
+                "§4%s §cmentioned everyone in chat!",
+                "Message displayed to everyone when @everyone is used"
+        );
+        public ConfigEntry<String> INDIVIDUAL_TITLE_MESSAGE = new ConfigEntry<>(
+                "§4%s §cmentioned you!",
+                "Title message displayed to a player when they are mentioned"
+        );
+        public ConfigEntry<String> EVERYONE_TITLE_MESSAGE = new ConfigEntry<>(
+                "§4%s §cmentioned everyone!",
+                "Title message displayed to everyone when @everyone is used"
+        );
+        public ConfigEntry<Integer> INDIVIDUAL_MENTION_RATE_LIMIT = new ConfigEntry<>(
+                60,
+                "Rate limit for individual mentions in seconds"
+        );
+        public ConfigEntry<Integer> EVERYONE_MENTION_RATE_LIMIT = new ConfigEntry<>(
+                300,
+                "Rate limit for everyone mentions in seconds"
+        );
     }
 
-    private static void loadConfig() {
-        MENTION_SYMBOL = mentionsConfig.getString("mentionSymbol", "general", "@", "Symbol to mention players");
-        INDIVIDUAL_MENTION_MESSAGE = mentionsConfig.getString("individualMentionMessage", "mentions", "§4%s §cmentioned you in chat!", "Message displayed to a player when they are mentioned");
-        EVERYONE_MENTION_MESSAGE = mentionsConfig.getString("everyoneMentionMessage", "mentions", "§4%s §cmentioned everyone in chat!", "Message displayed to everyone when @everyone is used");
-        INDIVIDUAL_TITLE_MESSAGE = mentionsConfig.getString("individualTitleMessage", "mentions", "§4%s §cmentioned you!", "Title message displayed to a player when they are mentioned");
-        EVERYONE_TITLE_MESSAGE = mentionsConfig.getString("everyoneTitleMessage", "mentions", "§4%s §cmentioned everyone!", "Title message displayed to everyone when @everyone is used");
-        INDIVIDUAL_MENTION_RATE_LIMIT = mentionsConfig.getInt("individualMentionRateLimit", "mentions", 60, 0, Integer.MAX_VALUE, "Rate limit for individual mentions in seconds");
-        EVERYONE_MENTION_RATE_LIMIT = mentionsConfig.getInt("everyoneMentionRateLimit", "mentions", 300, 0, Integer.MAX_VALUE, "Rate limit for everyone mentions in seconds");
+    public static void init(File configDir) {
+        configPath = configDir.toPath().resolve("mentions.json");
+        load();
+    }
 
-        if (mentionsConfig.hasChanged()) {
-            mentionsConfig.save();
+    public static void load() {
+        if (Files.exists(configPath)) {
+            try (FileReader reader = new FileReader(configPath.toFile())) {
+                Config loadedConfig = GSON.fromJson(reader, Config.class);
+                if (loadedConfig != null) {
+                    CONFIG = loadedConfig;
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Could not read Mentions config for 1.12.2", e);
+            }
+        }
+        save();
+    }
+
+    public static void save() {
+        try {
+            Files.createDirectories(configPath.getParent());
+            try (FileWriter writer = new FileWriter(configPath.toFile())) {
+                GSON.toJson(CONFIG, writer);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Could not save Mentions config for 1.12.2", e);
         }
     }
 }

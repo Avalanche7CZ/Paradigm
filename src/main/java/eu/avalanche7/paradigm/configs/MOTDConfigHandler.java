@@ -1,46 +1,83 @@
 package eu.avalanche7.paradigm.configs;
 
-import net.minecraftforge.common.config.Configuration;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.List;
 
 public class MOTDConfigHandler {
 
-    private static Configuration motdConfig;
-    public static String motdMessage;
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+    private static Path configPath;
+    public static Config CONFIG = new Config();
 
-    public static void init(Configuration config) {
-        motdConfig = config;
-        loadConfig();
+    public static class Config {
+        public ConfigEntry<List<String>> motdLines = new ConfigEntry<>(
+                Arrays.asList(
+                        "&6====================================================",
+                        "&a[center]&bWelcome to &dOur Awesome Server!&b[/center]",
+                        "&a[title=Welcome Message]",
+                        "&a[subtitle=Welcome Message]",
+                        "&aHello &b{player}&a, and welcome!",
+                        "&7This is the Message of the Day to inform you about server features.",
+                        "&3",
+                        "&9[divider]",
+                        "&bServer Website: &c[link=http://example.com]&b (Click to visit!)",
+                        "&bJoin our Discord: &c[link=https://discord.gg/yourdiscord]&b (For community & support)",
+                        "&9[divider]",
+                        "&3",
+                        "&eCommands to get started:",
+                        "&7- &bType &3[command=/rules] &7to see server rules.",
+                        "&7- &bType &3[command=/shop] &7to visit our webshop.",
+                        "&3",
+                        "&e[hover=&aServer Info]Hover over me to see server information![/hover]",
+                        "&dYour current health is: &f{player_health}&d/&f{max_player_health}",
+                        "&dYour level is: &f{player_level}",
+                        "&3",
+                        "&6===================================================="
+                ),
+                "The Message of the Day displayed to players on join. Each string is a new line."
+        );
     }
 
-    public static void loadConfig() {
-        String category = "MOTD";
-        motdConfig.addCustomCategoryComment(category, "MOTD Configuration");
-        String[] defaultMessageLines = getDefaultMotdMessage().split("\n");
-        StringBuilder defaultMessage = new StringBuilder();
-        for (String line : defaultMessageLines) {
-            defaultMessage.append(line.trim()).append("\\n");
+    public static void init(File configDir) {
+        configPath = configDir.toPath().resolve("motd.json");
+        load();
+    }
+
+    public static void load() {
+        if (Files.exists(configPath)) {
+            try (FileReader reader = new FileReader(configPath.toFile())) {
+                Config loadedConfig = GSON.fromJson(reader, Config.class);
+                if (loadedConfig != null) {
+                    CONFIG = loadedConfig;
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Could not read MOTD config for 1.12.2", e);
+            }
         }
+        save();
+    }
 
-        motdMessage = motdConfig.getString("Message", category, defaultMessage.toString(), "MOTD Message");
-
-        motdMessage = motdMessage.replace("\\n", "\n");
-
-        if (motdConfig.hasChanged()) {
-            motdConfig.save();
+    public static void save() {
+        try {
+            Files.createDirectories(configPath.getParent());
+            try (FileWriter writer = new FileWriter(configPath.toFile())) {
+                GSON.toJson(CONFIG, writer);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Could not save MOTD config for 1.12.2", e);
         }
     }
 
-    private static String getDefaultMotdMessage() {
-        return "§a[title=Welcome Message]\n" +
-                "§7[subtitle=Server Information]\n" +
-                "§aWelcome to the server!\n" +
-                "§7Visit our website: §c[link=http://example.com]\n" +
-                "§bType [command=/help] for commands\n" +
-                "§eHover over this message [hover=This is a hover text!] to see more info.\n" +
-                "§7[divider]";
-    }
-
-    public static Configuration getConfig() {
-        return motdConfig;
+    public static Config getConfig() {
+        return CONFIG;
     }
 }

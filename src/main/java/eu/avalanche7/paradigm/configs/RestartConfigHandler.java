@@ -1,60 +1,68 @@
 package eu.avalanche7.paradigm.configs;
 
-import net.minecraftforge.common.config.Configuration;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 public class RestartConfigHandler {
 
-    public static Configuration restartConfig;
-    public static String restartType;
-    public static double restartInterval;
-    public static List<String> realTimeInterval;
-    public static boolean bossbarEnabled;
-    public static String bossBarMessage;
-    public static boolean timerUseChat;
-    public static String broadcastMessage;
-    public static List<Integer> timerBroadcast;
-    public static String defaultRestartReason;
-    public static boolean playSoundEnabled;
-    public static String playSoundString;
-    public static double playSoundFirstTime;
-    public static boolean titleEnabled;
-    public static int titleStayTime;
-    public static String titleMessage;
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static Path configPath;
+    public static Config CONFIG = new Config();
 
-    public static void init(Configuration config) {
-        restartConfig = config;
-        loadConfig();
+    public static class Config {
+        public ConfigEntry<String> restartType = new ConfigEntry<>("Realtime", "Type of automatic restart (Fixed, Realtime, None).");
+        public ConfigEntry<Double> restartInterval = new ConfigEntry<>(6.0, "Interval for fixed restarts in hours.");
+        public ConfigEntry<List<String>> realTimeInterval = new ConfigEntry<>(Arrays.asList("00:00", "06:00", "12:00", "18:00"), "Times for real-time restarts (24-hour format).");
+        public ConfigEntry<Boolean> bossbarEnabled = new ConfigEntry<>(false, "Enable boss bar for restart countdown.");
+        public ConfigEntry<String> bossBarMessage = new ConfigEntry<>("The server will be restarting in {minutes}:{seconds}", "Message to display in boss bar on restart warnings.");
+        public ConfigEntry<Boolean> timerUseChat = new ConfigEntry<>(true, "Broadcast restart warnings in chat.");
+        public ConfigEntry<String> broadcastMessage = new ConfigEntry<>("The server will be restarting in {minutes}:{seconds}", "Custom broadcast message for restart warnings.");
+        public ConfigEntry<List<Integer>> timerBroadcast = new ConfigEntry<>(Arrays.asList(600, 300, 240, 180, 120, 60, 30, 5, 4, 3, 2, 1), "Warning times in seconds before reboot.");
+        public ConfigEntry<String> defaultRestartReason = new ConfigEntry<>("", "Default reason shown for a restart.");
+        public ConfigEntry<Boolean> playSoundEnabled = new ConfigEntry<>(true, "Enable notification sound on restart warnings.");
+        public ConfigEntry<String> playSoundString = new ConfigEntry<>("block.note.pling", "Sound to play on restart warnings. Use sound event IDs from Minecraft 1.12.2.");
+        public ConfigEntry<Double> playSoundFirstTime = new ConfigEntry<>(600.0, "When to start playing notification sound (same as one of broadcast timers).");
+        public ConfigEntry<Boolean> titleEnabled = new ConfigEntry<>(true, "Enable title message on restart warnings.");
+        public ConfigEntry<Integer> titleStayTime = new ConfigEntry<>(2, "Duration of title message display (in seconds).");
+        public ConfigEntry<String> titleMessage = new ConfigEntry<>("The server will be restarting in {minutes}:{seconds}", "Message to display in title on restart warnings.");
     }
 
-    public static void loadConfig() {
-        String category = "restart";
+    public static void init(File configDir) {
+        configPath = configDir.toPath().resolve("restarts.json");
+        load();
+    }
 
-        restartType = restartConfig.getString("restartType", category, "Realtime", "Type of automatic restart (Fixed, Realtime, None).");
-        restartInterval = restartConfig.getFloat("restartInterval", category, 6.0f, 0.0f, Float.MAX_VALUE, "Interval for fixed restarts in hours.");
-        realTimeInterval = Arrays.asList(restartConfig.getStringList("realTimeInterval", category, new String[]{"00:00", "06:00", "12:00", "18:00"}, "Times for real-time restarts (24-hour format)."));
-        bossbarEnabled = restartConfig.getBoolean("bossbarEnabled", category, false, "Enable boss bar for restart countdown.");
-        bossBarMessage = restartConfig.getString("bossBarMessage", category, "The server will be restarting in {minutes}:{seconds}", "Message to display in boss bar on restart warnings.");
-        timerUseChat = restartConfig.getBoolean("timerUseChat", category, true, "Broadcast restart warnings in chat.");
-        broadcastMessage = restartConfig.getString("BroadcastMessage", category, "The server will be restarting in {minutes}:{seconds}", "Custom broadcast message for restart warnings.");
-        timerBroadcast = IntStream.of(restartConfig.get(category, "timerBroadcast", new int[]{600, 300, 240, 180, 120, 60, 30, 5, 4, 3, 2, 1}, "Warning times in seconds before reboot.").getIntList())
-                .boxed()
-                .collect(Collectors.toList());
-        defaultRestartReason = restartConfig.getString("defaultRestartReason", category, "", "Default reason shown for a restart.");
-        playSoundEnabled = restartConfig.getBoolean("playSoundEnabled", category, true, "Enable notification sound on restart warnings.");
-        playSoundString = restartConfig.getString("playSoundString", category, "NOTE_BLOCK_PLING", "Sound to play on restart warnings.");
-        playSoundFirstTime = restartConfig.getFloat("playSoundFirstTime", category, 600.0f, 0.0f, Float.MAX_VALUE, "When to start playing notification sound (same as one of broadcast timers).");
-        titleEnabled = restartConfig.getBoolean("titleEnabled", category, true, "Enable title message on restart warnings.");
-        titleStayTime = restartConfig.getInt("titleStayTime", category, 2, 0, Integer.MAX_VALUE, "Duration of title message display (in seconds).");
-        titleMessage = restartConfig.getString("titleMessage", category, "The server will be restarting in {minutes}:{seconds}", "Message to display in title on restart warnings.");
+    public static void load() {
+        if (Files.exists(configPath)) {
+            try (FileReader reader = new FileReader(configPath.toFile())) {
+                Config loadedConfig = GSON.fromJson(reader, Config.class);
+                if (loadedConfig != null) {
+                    CONFIG = loadedConfig;
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Could not read Restart config for 1.12.2", e);
+            }
+        }
+        save();
+    }
 
-        if (restartConfig.hasChanged()) {
-            restartConfig.save();
+    public static void save() {
+        try {
+            Files.createDirectories(configPath.getParent());
+            try (FileWriter writer = new FileWriter(configPath.toFile())) {
+                GSON.toJson(CONFIG, writer);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Could not save Restart config for 1.12.2", e);
         }
     }
 }
-

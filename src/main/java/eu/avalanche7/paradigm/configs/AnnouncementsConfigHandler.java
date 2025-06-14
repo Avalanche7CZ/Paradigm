@@ -1,71 +1,89 @@
 package eu.avalanche7.paradigm.configs;
 
-import eu.avalanche7.paradigm.Paradigm;
-import net.minecraftforge.common.config.Configuration;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
-import java.util.List;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.List;
 
 public class AnnouncementsConfigHandler {
 
-    private static final Logger LOGGER = LogManager.getLogger(Paradigm.MODID);
-    public static Configuration config;
-    public static boolean globalEnable;
-    public static boolean headerAndFooter;
-    public static int globalInterval;
-    public static String prefix;
-    public static String header;
-    public static String footer;
-    public static String sound;
-    public static List<String> globalMessages;
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static Path configPath;
+    public static Config CONFIG = new Config();
 
-    public static boolean actionbarEnable;
-    public static int actionbarInterval;
-    public static List<String> actionbarMessages;
+    public static class Config {
+        public ConfigEntry<String> orderMode = new ConfigEntry<>("RANDOM", "Order mode for messages (RANDOM or SEQUENTIAL)");
 
-    public static boolean titleEnable;
-    public static int titleInterval;
-    public static List<String> titleMessages;
+        public ConfigEntry<Boolean> globalEnable = new ConfigEntry<>(true, "Enable global messages");
+        public ConfigEntry<Boolean> headerAndFooter = new ConfigEntry<>(true, "Enable header and footer");
+        public ConfigEntry<Integer> globalInterval = new ConfigEntry<>(1800, "Interval in seconds for global messages");
+        public ConfigEntry<String> prefix = new ConfigEntry<>("§9§l[§b§lPREFIX§9§l]", "Prefix for messages");
+        public ConfigEntry<String> header = new ConfigEntry<>("§7*§7§m---------------------------------------------------§7*", "Header for messages");
+        public ConfigEntry<String> footer = new ConfigEntry<>("§7*§7§m---------------------------------------------------§7*", "Footer for messages");
+        public ConfigEntry<String> sound = new ConfigEntry<>("", "Sound to play");
+        public ConfigEntry<List<String>> globalMessages = new ConfigEntry<>(
+                Arrays.asList("{Prefix} §7This is global message with link: https://link/."),
+                "Global messages to broadcast"
+        );
 
-    public static boolean bossbarEnable;
-    public static int bossbarInterval;
-    public static String bossbarColor;
-    public static int bossbarTime;
-    public static List<String> bossbarMessages;
+        public ConfigEntry<Boolean> actionbarEnable = new ConfigEntry<>(true, "Enable actionbar messages");
+        public ConfigEntry<Integer> actionbarInterval = new ConfigEntry<>(1800, "Interval in seconds for actionbar messages");
+        public ConfigEntry<List<String>> actionbarMessages = new ConfigEntry<>(
+                Arrays.asList("{Prefix} §7This is an actionbar message."),
+                "Actionbar messages to broadcast"
+        );
 
-    public static void init(Configuration config) {
-        AnnouncementsConfigHandler.config = config;
-        config.load();
+        public ConfigEntry<Boolean> titleEnable = new ConfigEntry<>(true, "Enable title messages");
+        public ConfigEntry<Integer> titleInterval = new ConfigEntry<>(1800, "Interval in seconds for title messages");
+        public ConfigEntry<List<String>> titleMessages = new ConfigEntry<>(
+                Arrays.asList("{Prefix} §7This is a title message."),
+                "Title messages to broadcast"
+        );
 
-        globalEnable = config.getBoolean("GlobalEnable", "Auto_Broadcast", true, "Enable global messages");
-        headerAndFooter = config.getBoolean("HeaderAndFooter", "Auto_Broadcast", true, "Enable header and footer");
-        globalInterval = config.getInt("GlobalInterval", "Auto_Broadcast", 1800, 1, Integer.MAX_VALUE, "Interval in seconds for global messages");
-        prefix = config.getString("Prefix", "Auto_Broadcast", "§9§l[§b§lPREFIX§9§l]", "Prefix for messages");
-        header = config.getString("Header", "Auto_Broadcast", "§7*§7§m---------------------------------------------------§7*", "Header for messages");
-        footer = config.getString("Footer", "Auto_Broadcast", "§7*§7§m---------------------------------------------------§7*", "Footer for messages");
-        sound = config.getString("Sound", "Auto_Broadcast", "", "Sound to play");
-        globalMessages = Arrays.asList(config.getStringList("GlobalMessages", "Auto_Broadcast", new String[]{"{Prefix} §7This is global message with link: https://link/."}, "Global messages to broadcast"));
+        public ConfigEntry<Boolean> bossbarEnable = new ConfigEntry<>(true, "Enable bossbar messages");
+        public ConfigEntry<Integer> bossbarInterval = new ConfigEntry<>(1800, "Interval in seconds for bossbar messages");
+        public ConfigEntry<String> bossbarColor = new ConfigEntry<>("PURPLE", "Color of the bossbar");
+        public ConfigEntry<Integer> bossbarTime = new ConfigEntry<>(10, "How long the bossbar stays on for (seconds)");
+        public ConfigEntry<List<String>> bossbarMessages = new ConfigEntry<>(
+                Arrays.asList("{Prefix} §7This is a bossbar message."),
+                "Bossbar messages to broadcast"
+        );
+    }
 
-        actionbarEnable = config.getBoolean("ActionbarEnable", "Auto_Broadcast", true, "Enable actionbar messages");
-        actionbarInterval = config.getInt("ActionbarInterval", "Auto_Broadcast", 1800, 1, Integer.MAX_VALUE, "Interval in seconds for actionbar messages");
-        actionbarMessages = Arrays.asList(config.getStringList("ActionbarMessages", "Auto_Broadcast", new String[]{"{Prefix} §7This is an actionbar message."}, "Actionbar messages to broadcast"));
+    public static void init(File configDir) {
+        configPath = configDir.toPath().resolve("announcements.json");
+        load();
+    }
 
-        titleEnable = config.getBoolean("TitleEnable", "Auto_Broadcast", true, "Enable title messages");
-        titleInterval = config.getInt("TitleInterval", "Auto_Broadcast", 1800, 1, Integer.MAX_VALUE, "Interval in seconds for title messages");
-        titleMessages = Arrays.asList(config.getStringList("TitleMessages", "Auto_Broadcast", new String[]{"{Prefix} §7This is a title message."}, "Title messages to broadcast"));
-
-        bossbarEnable = config.getBoolean("BossbarEnable", "Auto_Broadcast", true, "Enable bossbar messages");
-        bossbarInterval = config.getInt("BossbarInterval", "Auto_Broadcast", 1800, 1, Integer.MAX_VALUE, "Interval in seconds for bossbar messages");
-        bossbarTime = config.getInt("BossbarTime", "Auto_Broadcast", 10, 1, Integer.MAX_VALUE, "How long the bossbar stays on for (seconds)");
-        bossbarColor = config.getString("BossbarColor", "Auto_Broadcast", "PURPLE", "Color of the bossbar");
-        bossbarMessages = Arrays.asList(config.getStringList("BossbarMessages", "Auto_Broadcast", new String[]{"{Prefix} §7This is a bossbar message."}, "Bossbar messages to broadcast"));
-
-        if (config.hasChanged()) {
-            config.save();
+    public static void load() {
+        if (Files.exists(configPath)) {
+            try (FileReader reader = new FileReader(configPath.toFile())) {
+                Config loadedConfig = GSON.fromJson(reader, Config.class);
+                if (loadedConfig != null) {
+                    CONFIG = loadedConfig;
+                }
+            } catch (IOException e) {
+                throw new RuntimeException("Could not read Announcements config for 1.12.2", e);
+            }
         }
+        save();
+    }
 
-        LOGGER.info("Configuration loaded.");
+    public static void save() {
+        try {
+            Files.createDirectories(configPath.getParent());
+            try (FileWriter writer = new FileWriter(configPath.toFile())) {
+                GSON.toJson(CONFIG, writer);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Could not save Announcements config for 1.12.2", e);
+        }
     }
 }

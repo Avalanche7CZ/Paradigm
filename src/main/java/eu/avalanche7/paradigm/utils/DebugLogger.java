@@ -1,27 +1,32 @@
 package eu.avalanche7.paradigm.utils;
 
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
-import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 public class DebugLogger {
-    private static final Logger LOGGER = LogManager.getLogger();
+    private final Logger logger;
+    private final MainConfigHandler.Config mainConfig;
 
-    public static void debugLog(String message) {
-        if (MainConfigHandler.DEBUG_ENABLE) {
-            LOGGER.info(message);
+    public DebugLogger(Logger logger, MainConfigHandler.Config mainConfig) {
+        this.logger = logger;
+        this.mainConfig = mainConfig;
+    }
+
+    public void debugLog(String message) {
+        if (mainConfig != null && mainConfig.debugEnable.value) {
+            logger.info("[DEBUG] " + message);
         }
     }
 
-    public static void debugLog(String message, Exception e) {
-        if (MainConfigHandler.DEBUG_ENABLE) {
-            LOGGER.error(message, e);
+    public void debugLog(String message, Exception e) {
+        if (mainConfig != null && mainConfig.debugEnable.value) {
+            logger.error("[DEBUG] " + message, e);
         }
     }
 
-    public static void debugLog(String message, Object... args) {
-        if (MainConfigHandler.DEBUG_ENABLE) {
-            LOGGER.info(message, args);
+    public void debugLog(String message, Object... args) {
+        if (mainConfig != null && mainConfig.debugEnable.value) {
+            logger.info("[DEBUG] " + message, args);
         }
     }
 }

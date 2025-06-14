@@ -10,24 +10,20 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public class MainConfigHandler {
+public class ChatConfigHandler {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static Path configPath;
     public static Config CONFIG = new Config();
 
     public static class Config {
-        public ConfigEntry<Boolean> announcementsEnable = new ConfigEntry<>(true, "Enable or disable announcements feature");
-        public ConfigEntry<Boolean> motdEnable = new ConfigEntry<>(true, "Enable or disable MOTD feature");
-        public ConfigEntry<Boolean> mentionsEnable = new ConfigEntry<>(true, "Enable or disable mentions feature");
-        public ConfigEntry<Boolean> restartEnable = new ConfigEntry<>(true, "Enable or disable restart feature");
-        public ConfigEntry<Boolean> debugEnable = new ConfigEntry<>(false, "Enable or disable debug mode");
-        public ConfigEntry<Boolean> commandManagerEnable = new ConfigEntry<>(true, "Enable or disable CommandManager feature");
-        public ConfigEntry<String> defaultLanguage = new ConfigEntry<>("en", "Set the default language");
+        public ConfigEntry<Boolean> enableStaffChat = new ConfigEntry<>(true, "Enable staff chat feature");
+        public ConfigEntry<String> staffChatFormat = new ConfigEntry<>("§f[§cStaff Chat§f] §d%s §7> §f%s", "Format for staff chat messages");
+        public ConfigEntry<Boolean> enableStaffBossBar = new ConfigEntry<>(true, "Enable boss bar while staff chat is enabled");
     }
 
     public static void init(File configDir) {
-        configPath = configDir.toPath().resolve("main.json");
+        configPath = configDir.toPath().resolve("chat.json");
         load();
     }
 
@@ -39,7 +35,7 @@ public class MainConfigHandler {
                     CONFIG = loadedConfig;
                 }
             } catch (IOException e) {
-                throw new RuntimeException("Could not read Main config for 1.12.2", e);
+                throw new RuntimeException("Could not read Chat config for 1.12.2", e);
             }
         }
         save();
@@ -52,7 +48,8 @@ public class MainConfigHandler {
                 GSON.toJson(CONFIG, writer);
             }
         } catch (IOException e) {
-            throw new RuntimeException("Could not save Main config for 1.12.2", e);
+            throw new RuntimeException("Could not save Chat config for 1.12.2", e);
         }
     }
 }
+
