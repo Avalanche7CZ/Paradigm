@@ -24,7 +24,7 @@ public class Paradigm {
 
     public static final String MOD_ID = "paradigm";
     public static final String NAME = "Paradigm";
-    public static final String VERSION = "12.0.4";
+    public static final String VERSION = "12.0.5";
 
     private static final Logger LOGGER = LogManager.getLogger(MOD_ID);
     private final List<ParadigmModule> modules = new ArrayList<>();
@@ -59,7 +59,7 @@ public class Paradigm {
         Placeholders placeholdersInstance = new Placeholders();
         MessageParser messageParserInstance = new MessageParser(placeholdersInstance);
         CMConfig cmConfigInstance = new CMConfig(debugLoggerInstance);
-        cmConfigInstance.init(configDir); // Initialize with path
+        cmConfigInstance.init(configDir);
         Lang langInstance = new Lang(LOGGER, MainConfigHandler.CONFIG, messageParserInstance);
         langInstance.init(configDir);
         langInstance.initializeLanguage();
@@ -141,7 +141,7 @@ public class Paradigm {
     }
 
     public static class UpdateChecker {
-        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/1.12.2/version.txt";
+        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/1.12.2/version.txt?v=1";
 
         public static void checkForUpdates() {
             new Thread(() -> {
