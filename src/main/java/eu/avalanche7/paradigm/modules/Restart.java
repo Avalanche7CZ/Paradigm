@@ -182,7 +182,7 @@ public class Restart implements ParadigmModule {
         }
 
         services.getDebugLogger().debugLog(NAME + ": Next real-time restart sequence will begin in " + (minDelayMillis / 1000.0) + " seconds.");
-        long finalMinDelayMillis = minDelayMillis;
+        final long finalMinDelayMillis = minDelayMillis;
         services.getTaskScheduler().schedule(() -> {
             if (!tasksScheduled.get()) return;
             initiateRestartSequence(finalMinDelayMillis / 1000.0, services, config);
@@ -231,9 +231,27 @@ public class Restart implements ParadigmModule {
         int seconds = (int) (timeLeftSeconds % 60);
         String formattedTime = String.format("%dh %sm %ss", hours, TIME_FORMATTER.format(minutes), TIME_FORMATTER.format(seconds));
 
-        String finalMessage = config.broadcastMessage.value.replace("{time}", formattedTime);
-        String finalTitle = config.titleMessage.value.replace("{time}", formattedTime);
-        String finalBossBar = config.bossBarMessage.value.replace("{time}", formattedTime);
+        String broadcastMessage = config.broadcastMessage.value;
+        String titleMessage = config.titleMessage.value;
+        String bossBarMessage = config.bossBarMessage.value;
+
+        String finalMessage = broadcastMessage
+                .replace("{hours}", String.valueOf(hours))
+                .replace("{minutes}", TIME_FORMATTER.format(minutes))
+                .replace("{seconds}", TIME_FORMATTER.format(seconds))
+                .replace("{time}", formattedTime);
+
+        String finalTitle = titleMessage
+                .replace("{hours}", String.valueOf(hours))
+                .replace("{minutes}", TIME_FORMATTER.format(minutes))
+                .replace("{seconds}", TIME_FORMATTER.format(seconds))
+                .replace("{time}", formattedTime);
+
+        String finalBossBar = bossBarMessage
+                .replace("{hours}", String.valueOf(hours))
+                .replace("{minutes}", TIME_FORMATTER.format(minutes))
+                .replace("{seconds}", TIME_FORMATTER.format(seconds))
+                .replace("{time}", formattedTime);
 
         if (config.timerUseChat.value) {
             server.getPlayerList().sendMessage(services.getMessageParser().parseMessage(finalMessage, null));
