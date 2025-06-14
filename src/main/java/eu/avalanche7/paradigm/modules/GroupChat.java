@@ -6,7 +6,7 @@ import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.PlayerGroupData;
 import eu.avalanche7.paradigm.utils.GroupChatManager;
-import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
+import net.fabricmc.fabric.api.message.v1.ServerMessageDecoratorEvent;
 import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.command.argument.EntityArgumentType;
 import net.minecraft.server.command.CommandManager;
@@ -17,6 +17,7 @@ import net.minecraft.text.HoverEvent;
 import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
+import org.jetbrains.annotations.Nullable;
 
 public class GroupChat implements ParadigmModule {
 
@@ -74,7 +75,7 @@ public class GroupChat implements ParadigmModule {
     @Override
     public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {
         dispatcher.register(CommandManager.literal("groupchat")
-                .requires(source -> source.getPlayer() != null)
+                .requires(source -> source.isExecutedByPlayer())
                 .executes(ctx -> {
                     displayHelp(ctx.getSource().getPlayer(), services);
                     return 1;
@@ -144,28 +145,32 @@ public class GroupChat implements ParadigmModule {
     }
 
     @Override
-    public void registerEventListeners(Object forgeEventBus, Services services) {
-        ServerMessageEvents.CHAT_MESSAGE.register(this::onPlayerChat);
+    public void registerEventListeners(Object eventBus, Services services) {
+        ServerMessageDecoratorEvent.EVENT.register(this::decorateGroupChatMessage);
     }
 
-    private boolean onPlayerChat(net.minecraft.network.message.SignedMessage message, ServerPlayerEntity player, net.minecraft.network.message.MessageType.Parameters params) {
-        if (this.services == null || !isEnabled(this.services) || this.groupChatManager == null) return true;
-
-        PlayerGroupData data = groupChatManager.getPlayerData(player);
+    @Nullable
+    private Text decorateGroupChatMessage(ServerPlayerEntity player, Text message) {
+        if (this.services == null || !isEnabled(this.services) || this.groupChatManager == null) {
+            return message;
+        }
 
         if (groupChatManager.isGroupChatToggled(player)) {
+            PlayerGroupData data = groupChatManager.getPlayerData(player);
             String groupName = data.getCurrentGroup();
+
             if (groupName != null) {
-                groupChatManager.sendMessageToGroup(player, groupName, message.getContent().getString());
-                services.getLogger().info("[GroupChat] [{}] {}: {}", groupName, player.getName().getString(), message.getContent().getString());
-                return false;
+                groupChatManager.sendMessageToGroup(player, groupName, message.getString());
+                services.getLogger().info("[GroupChat] [{}] {}: {}", groupName, player.getName().getString(), message.getString());
+                return null;
             } else {
                 player.sendMessage(services.getLang().translate("group.no_group_to_send_message"));
                 groupChatManager.setGroupChatToggled(player, false);
                 player.sendMessage(services.getLang().translate("group.chat_disabled"));
             }
         }
-        return true;
+
+        return message;
     }
 
     private void displayHelp(ServerPlayerEntity player, Services services) {

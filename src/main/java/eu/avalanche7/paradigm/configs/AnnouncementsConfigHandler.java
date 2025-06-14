@@ -13,7 +13,7 @@ import java.util.List;
 
 public class AnnouncementsConfigHandler {
 
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("paradigm/announcements.json");
     public static Config CONFIG = new Config();
 

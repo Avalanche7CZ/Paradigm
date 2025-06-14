@@ -40,6 +40,7 @@ public class Paradigm implements DedicatedServerModInitializer {
     @Override
     public void onInitializeServer() {
         LOGGER.info("Initializing Paradigm Mod for Fabric 1.21.1...");
+        loadConfigurations();
 
         createUtilityInstances();
         initializeServices();
@@ -47,7 +48,6 @@ public class Paradigm implements DedicatedServerModInitializer {
 
         modules.forEach(module -> module.registerEventListeners(null, services));
         modules.forEach(module -> module.onLoad(null, services, null));
-        loadConfigurations();
 
         registerFabricEvents();
 
@@ -73,7 +73,16 @@ public class Paradigm implements DedicatedServerModInitializer {
             RestartConfigHandler.load();
             ChatConfigHandler.load();
             MOTDConfigHandler.loadConfig();
+            if (this.cmConfigInstance == null) {
+                this.cmConfigInstance = new CMConfig(new DebugLogger(MainConfigHandler.CONFIG));
+            }
             this.cmConfigInstance.loadCommands();
+            if(this.langInstance == null) {
+                if (this.placeholdersInstance == null) this.placeholdersInstance = new Placeholders();
+                if (this.messageParserInstance == null) this.messageParserInstance = new MessageParser(this.placeholdersInstance);
+                if (this.debugLoggerInstance == null) this.debugLoggerInstance = new DebugLogger(MainConfigHandler.CONFIG);
+                this.langInstance = new Lang(LOGGER, MainConfigHandler.CONFIG, this.messageParserInstance);
+            }
             this.langInstance.initializeLanguage();
         } catch (Exception e) {
             LOGGER.error("Failed to load configuration for {}", MOD_ID, e);
@@ -86,9 +95,7 @@ public class Paradigm implements DedicatedServerModInitializer {
         this.placeholdersInstance = new Placeholders();
         this.messageParserInstance = new MessageParser(this.placeholdersInstance);
         this.debugLoggerInstance = new DebugLogger(MainConfigHandler.CONFIG);
-        this.langInstance = new Lang(LOGGER, MainConfigHandler.CONFIG, this.messageParserInstance);
         this.taskSchedulerInstance = new TaskScheduler(this.debugLoggerInstance);
-        this.cmConfigInstance = new CMConfig(this.debugLoggerInstance);
         this.permissionsHandlerInstance = new PermissionsHandler(LOGGER, this.cmConfigInstance, this.debugLoggerInstance);
         this.groupChatManagerInstance = new GroupChatManager();
     }
@@ -135,6 +142,7 @@ public class Paradigm implements DedicatedServerModInitializer {
         services.setServer(server);
         modules.forEach(module -> {
             if (module.isEnabled(services)) {
+                module.onEnable(services);
                 module.onServerStarting(null, services);
             }
         });
@@ -143,7 +151,7 @@ public class Paradigm implements DedicatedServerModInitializer {
     private void onRegisterCommands(CommandDispatcher<ServerCommandSource> dispatcher, net.minecraft.command.CommandRegistryAccess registryAccess, net.minecraft.server.command.CommandManager.RegistrationEnvironment environment) {
         modules.forEach(module -> {
             if (module.isEnabled(services)) {
-                module.registerCommands(dispatcher, null, services);
+                module.registerCommands(dispatcher, registryAccess, services);
             }
         });
     }

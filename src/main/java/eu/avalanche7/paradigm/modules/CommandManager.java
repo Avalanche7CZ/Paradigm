@@ -65,7 +65,7 @@ public class CommandManager implements ParadigmModule {
         });
         services.getDebugLogger().debugLog("Registered " + services.getCmConfig().getLoadedCommands().size() + " custom commands.");
         dispatcher.register(
-                net.minecraft.server.command.CommandManager.literal("fareloadcommands")
+                net.minecraft.server.command.CommandManager.literal("customcommandsreload")
                         .requires(source -> source.hasPermissionLevel(2))
                         .executes(ctx -> {
                             services.getCmConfig().reloadCommands();
