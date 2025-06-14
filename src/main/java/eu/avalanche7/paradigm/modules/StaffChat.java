@@ -7,7 +7,7 @@ import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
-import net.fabricmc.fabric.api.message.v1.ServerMessageDecoratorEvent;
+import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.entity.boss.BossBar;
 import net.minecraft.entity.boss.ServerBossBar;
@@ -16,13 +16,11 @@ import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
-import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 public class StaffChat implements ParadigmModule {
 
@@ -38,28 +36,24 @@ public class StaffChat implements ParadigmModule {
 
     @Override
     public boolean isEnabled(Services services) {
-        return services.getChatConfig().enableStaffChat;
+        return services.getChatConfig().enableStaffChat.value;
     }
 
     @Override
     public void onLoad(Object event, Services services, Object modEventBus) {
         this.services = services;
-        services.getDebugLogger().debugLog(NAME + " module loaded.");
     }
 
     @Override
     public void onServerStarting(Object event, Services services) {
-        services.getDebugLogger().debugLog(NAME + " module: Server starting.");
     }
 
     @Override
     public void onEnable(Services services) {
-        services.getDebugLogger().debugLog(NAME + " module enabled.");
     }
 
     @Override
     public void onDisable(Services services) {
-        services.getDebugLogger().debugLog(NAME + " module disabled.");
         MinecraftServer server = services.getMinecraftServer();
         if (server != null) {
             staffChatEnabledMap.keySet().forEach(uuid -> {
@@ -75,7 +69,6 @@ public class StaffChat implements ParadigmModule {
 
     @Override
     public void onServerStopping(Object event, Services services) {
-        services.getDebugLogger().debugLog(NAME + " module: Server stopping.");
         onDisable(services);
     }
 
@@ -94,7 +87,7 @@ public class StaffChat implements ParadigmModule {
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
-        ServerMessageDecoratorEvent.EVENT.register(this::decorateStaffChatMessage);
+        ServerMessageEvents.CHAT_MESSAGE.register(this::onServerChat);
     }
 
     private int toggleStaffChatCmd(ServerCommandSource source) throws CommandSyntaxException {
@@ -122,13 +115,12 @@ public class StaffChat implements ParadigmModule {
         } else {
             removeBossBar(player);
         }
-        services.getDebugLogger().debugLog("Player " + player.getName().getString() + " toggled staff chat to " + newState);
     }
 
     private void sendStaffChatMessage(ServerPlayerEntity sender, String message, MinecraftServer server) {
         ChatConfigHandler.Config chatConfig = services.getChatConfig();
 
-        String formattedMessage = String.format(chatConfig.staffChatFormat, sender.getName().getString(), message);
+        String formattedMessage = String.format(chatConfig.staffChatFormat.value, sender.getName().getString(), message);
 
         Text chatComponent = services.getMessageParser().parseMessage(formattedMessage, sender);
 
@@ -139,18 +131,21 @@ public class StaffChat implements ParadigmModule {
         services.getLogger().info("(StaffChat) {}: {}", sender.getName().getString(), message);
     }
 
-    @Nullable
-    private Text decorateStaffChatMessage(ServerPlayerEntity player, Text message) {
-        if (isEnabled(this.services) && staffChatEnabledMap.getOrDefault(player.getUuid(), false)) {
-            services.getDebugLogger().debugLog("Intercepting chat message for Staff Chat from " + player.getName().getString());
-            sendStaffChatMessage(player, message.getString(), player.getServer());
-            return null;
+    private boolean onServerChat(net.minecraft.network.message.SignedMessage message, ServerPlayerEntity player, net.minecraft.network.message.MessageType.Parameters params) {
+        if (!isEnabled(this.services)) {
+            return true;
         }
-        return message;
+
+        if (staffChatEnabledMap.getOrDefault(player.getUuid(), false)) {
+            sendStaffChatMessage(player, message.getContent().getString(), player.getServer());
+            return false;
+        }
+
+        return true;
     }
 
     private void showBossBar(ServerPlayerEntity player) {
-        if (services.getChatConfig().enableStaffBossBar) {
+        if (services.getChatConfig().enableStaffBossBar.value) {
             removeBossBar(player);
             Text title = services.getMessageParser().parseMessage("§cStaff Chat Mode §aEnabled", player);
             ServerBossBar bossBar = new ServerBossBar(title, BossBar.Color.RED, BossBar.Style.NOTCHED_10);

@@ -17,6 +17,7 @@ public class Services {
     private final RestartConfigHandler.Config restartConfig;
     private final ChatConfigHandler.Config chatConfig;
     private final CMConfig cmConfigInstance;
+    private final ToastConfigHandler toastConfig;
 
     private final DebugLogger debugLoggerInstance;
     private final Lang langInstance;
@@ -25,6 +26,7 @@ public class Services {
     private final Placeholders placeholdersInstance;
     private final TaskScheduler taskSchedulerInstance;
     private final GroupChatManager groupChatManagerInstance;
+    private final CustomToastManager customToastManagerInstance;
 
 
     public Services(
@@ -35,6 +37,7 @@ public class Services {
             MentionConfigHandler mentionConfig,
             RestartConfigHandler.Config restartConfig,
             ChatConfigHandler.Config chatConfig,
+            ToastConfigHandler toastConfig,
             CMConfig cmConfig,
             GroupChatManager groupChatManager,
             DebugLogger debugLogger,
@@ -42,7 +45,8 @@ public class Services {
             MessageParser messageParser,
             PermissionsHandler permissionsHandler,
             Placeholders placeholders,
-            TaskScheduler taskScheduler
+            TaskScheduler taskScheduler,
+            CustomToastManager customToastManager
     ) {
         this.logger = logger;
         this.mainConfig = mainConfig;
@@ -51,6 +55,7 @@ public class Services {
         this.mentionConfig = mentionConfig;
         this.restartConfig = restartConfig;
         this.chatConfig = chatConfig;
+        this.toastConfig = toastConfig;
         this.cmConfigInstance = cmConfig;
         this.groupChatManagerInstance = groupChatManager;
         this.debugLoggerInstance = debugLogger;
@@ -59,6 +64,7 @@ public class Services {
         this.permissionsHandlerInstance = permissionsHandler;
         this.placeholdersInstance = placeholders;
         this.taskSchedulerInstance = taskScheduler;
+        this.customToastManagerInstance = customToastManager;
     }
 
     public void setServer(MinecraftServer server) {
@@ -76,6 +82,10 @@ public class Services {
             logger.warn("Paradigm Services: MinecraftServer instance requested before it was set!");
         }
         return server;
+    }
+
+    public CustomToastManager getCustomToastManager() {
+        return customToastManagerInstance;
     }
 
     public Logger getLogger() {
@@ -137,4 +147,5 @@ public class Services {
     public GroupChatManager getGroupChatManager() {
         return groupChatManagerInstance;
     }
+
 }
