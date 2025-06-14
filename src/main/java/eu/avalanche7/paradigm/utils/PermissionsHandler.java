@@ -1,9 +1,9 @@
 package eu.avalanche7.paradigm.utils;
 
-import eu.avalanche7.paradigm.configs.CMConfig;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.network.ServerPlayerEntity;
 import org.slf4j.Logger;
+import eu.avalanche7.paradigm.configs.CMConfig;
 
 public class PermissionsHandler {
     private final Logger logger;
@@ -13,12 +13,15 @@ public class PermissionsHandler {
     public static final String MENTION_EVERYONE_PERMISSION = "paradigm.mention.everyone";
     public static final String MENTION_PLAYER_PERMISSION = "paradigm.mention.player";
     public static final String STAFF_CHAT_PERMISSION = "paradigm.staff";
+    public static final String RESTART_MANAGE_PERMISSION = "paradigm.restart.manage";
+
     public static final int MENTION_EVERYONE_PERMISSION_LEVEL = 2;
     public static final int MENTION_PLAYER_PERMISSION_LEVEL = 2;
     public static final int BROADCAST_PERMISSION_LEVEL = 2;
     public static final int ACTIONBAR_PERMISSION_LEVEL = 2;
     public static final int TITLE_PERMISSION_LEVEL = 2;
     public static final int BOSSBAR_PERMISSION_LEVEL = 2;
+    public static final int RESTART_MANAGE_PERMISSION_LEVEL = 2;
 
     private PermissionChecker checker;
 
@@ -47,7 +50,6 @@ public class PermissionsHandler {
     public boolean hasPermission(ServerPlayerEntity player, String permission) {
         if (player == null) return false;
         if (checker == null) {
-            logger.warn("PermissionsHandler: Checker not initialized. Attempting first-time initialization.");
             initialize();
         }
         return checker.hasPermission(player, permission);
@@ -84,7 +86,7 @@ public class PermissionsHandler {
             if (permission == null) return 4;
 
             return switch (permission) {
-                case STAFF_CHAT_PERMISSION, MENTION_EVERYONE_PERMISSION, MENTION_PLAYER_PERMISSION, "paradigm.broadcast" -> 2;
+                case STAFF_CHAT_PERMISSION, MENTION_EVERYONE_PERMISSION, MENTION_PLAYER_PERMISSION, RESTART_MANAGE_PERMISSION, "paradigm.broadcast" -> 2;
                 default -> 0;
             };
         }

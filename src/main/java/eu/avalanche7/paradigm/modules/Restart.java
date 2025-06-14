@@ -4,12 +4,14 @@ import com.mojang.brigadier.CommandDispatcher;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.configs.RestartConfigHandler;
+import eu.avalanche7.paradigm.utils.PermissionsHandler;
 import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.entity.boss.BossBar;
 import net.minecraft.entity.boss.ServerBossBar;
 import net.minecraft.network.packet.s2c.play.TitleFadeS2CPacket;
 import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.sound.SoundCategory;
@@ -22,7 +24,6 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
-import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -84,7 +85,34 @@ public class Restart implements ParadigmModule {
     }
 
     @Override
-    public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {}
+    public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {
+        dispatcher.register(CommandManager.literal("restart")
+                .requires(source -> source.isExecutedByPlayer() &&
+                        services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.RESTART_MANAGE_PERMISSION))
+                .then(CommandManager.literal("now")
+                        .executes(context -> {
+                            ServerCommandSource source = context.getSource();
+                            source.sendFeedback(() -> Text.literal("Initiating immediate 60-second restart sequence."), true);
+
+                            cleanup();
+                            tasksScheduled.set(true);
+
+                            initiateRestartSequence(60.0, services, services.getRestartConfig());
+                            return 1;
+                        }))
+                .then(CommandManager.literal("cancel")
+                        .executes(context -> {
+                            ServerCommandSource source = context.getSource();
+                            if (tasksScheduled.get()) {
+                                cleanup();
+                                source.sendFeedback(() -> Text.literal("The active server restart has been cancelled."), true);
+                            } else {
+                                source.sendError(Text.literal("No restart is currently scheduled to be cancelled."));
+                            }
+                            return 1;
+                        }))
+        );
+    }
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {}
@@ -148,6 +176,7 @@ public class Restart implements ParadigmModule {
                     minDelayMillis = delay;
                 }
             } catch (ParseException e) {
+                // Ignored
             }
         }
         if (minDelayMillis == Long.MAX_VALUE) {
