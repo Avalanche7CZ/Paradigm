@@ -3,7 +3,8 @@ package eu.avalanche7.paradigm.utils;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
-import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.TextComponent;
 import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 
@@ -31,28 +32,37 @@ public class Lang {
         try {
             ensureDefaultLangFiles();
         } catch (Exception e) {
-            this.logger.error("Failed to initialize Lang class", e);
+            if (this.logger != null) {
+                this.logger.error("Failed to initialize Lang class", e);
+            } else {
+                System.err.println("Failed to initialize Lang class and logger is null: " + e.getMessage());
+                e.printStackTrace();
+            }
         }
     }
 
     public void initializeLanguage() {
+        if (mainConfig == null || mainConfig.defaultLanguage == null) {
+            if (logger != null) logger.error("Lang: MainConfig or defaultLanguage setting is null. Cannot initialize language.");
+            return;
+        }
         String language = mainConfig.defaultLanguage.get();
-        logger.info("Paradigm: Loaded language setting: {}", language);
+        if (logger != null) logger.info("Paradigm: Loaded language setting: {}", language);
         loadLanguage(language);
     }
 
     public void loadLanguage(String language) {
-        logger.info("Paradigm: Attempting to load language: {}", language);
+        if (logger != null) logger.info("Paradigm: Attempting to load language: {}", language);
         Gson gson = new Gson();
         Type type = new TypeToken<Map<String, Object>>() {}.getType();
         Path langFile = langFolder.resolve(language + ".json");
 
         if (!Files.exists(langFile)) {
-            logger.error("Language file not found: {}. Attempting to use 'en'.", langFile);
+            if (logger != null) logger.error("Language file not found: {}. Attempting to use 'en'.", langFile);
             if (!language.equals("en")) {
                 loadLanguage("en");
             } else {
-                logger.error("English language file also missing. Translations will not work.");
+                if (logger != null) logger.error("English language file also missing. Translations will not work.");
             }
             return;
         }
@@ -62,9 +72,9 @@ public class Lang {
             translations.clear();
             flattenMap("", rawMap);
             currentLanguage = language;
-            logger.info("Paradigm: Successfully loaded language: {}", language);
+            if (logger != null) logger.info("Paradigm: Successfully loaded language: {}", language);
         } catch (Exception e) {
-            logger.error("Paradigm: Failed to load language file: " + language, e);
+            if (logger != null) logger.error("Paradigm: Failed to load language file: " + language, e);
         }
     }
 
@@ -83,11 +93,18 @@ public class Lang {
             }
         }
     }
-
-    public MutableComponent translate(String key) {
+    public Component translate(String key) {
         String translatedText = translations.getOrDefault(key, key);
         translatedText = translatedText.replace("&", "§");
+        if (this.messageParser == null) {
+            if (logger != null) logger.warn("Lang.translate: MessageParser is null for key '{}'. Returning literal text.", key);
+            return new TextComponent(translatedText);
+        }
         return this.messageParser.parseMessage(translatedText, null);
+    }
+
+    public String getRawTranslation(String key) {
+        return translations.getOrDefault(key, key);
     }
 
     private void ensureDefaultLangFiles() throws IOException {
@@ -99,16 +116,16 @@ public class Lang {
         for (String langCode : availableLanguages) {
             Path langFile = langFolder.resolve(langCode + ".json");
             if (!Files.exists(langFile)) {
-                logger.warn("Language file missing: {}.json. Attempting to copy from resources.", langCode);
+                if (logger != null) logger.warn("Language file missing: {}.json. Attempting to copy from resources.", langCode);
                 try (InputStream in = getClass().getResourceAsStream("/lang/" + langCode + ".json")) {
                     if (in == null) {
-                        logger.error("Default language file /lang/{}.json not found in JAR resources.", langCode);
+                        if (logger != null) logger.error("Default language file /lang/{}.json not found in JAR resources.", langCode);
                         continue;
                     }
                     Files.copy(in, langFile, StandardCopyOption.REPLACE_EXISTING);
-                    logger.info("Copied default language file for: {}", langCode);
+                    if (logger != null) logger.info("Copied default language file for: {}", langCode);
                 } catch (Exception e) {
-                    logger.warn("Failed to copy default language file for: " + langCode, e);
+                    if (logger != null) logger.warn("Failed to copy default language file for: " + langCode, e);
                 }
             }
         }

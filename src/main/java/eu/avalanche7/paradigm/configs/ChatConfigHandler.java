@@ -1,58 +1,66 @@
 package eu.avalanche7.paradigm.configs;
 
-import com.electronwill.nightconfig.core.file.CommentedFileConfig;
-import net.minecraftforge.common.ForgeConfigSpec;
-import net.minecraftforge.fml.common.Mod;
-import org.apache.commons.lang3.tuple.Pair;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import eu.avalanche7.paradigm.Paradigm;
+import net.minecraftforge.fml.loading.FMLPaths;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-@Mod.EventBusSubscriber(modid = "paradigm", bus = Mod.EventBusSubscriber.Bus.MOD)
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 public class ChatConfigHandler {
 
-    public static ForgeConfigSpec SERVER_CONFIG;
-    public static final ChatConfigHandler.Config CONFIG;
-
-    static {
-        final Pair<ChatConfigHandler.Config, ForgeConfigSpec> specPair = new ForgeConfigSpec.Builder().configure(ChatConfigHandler.Config::new);
-        SERVER_CONFIG = specPair.getRight();
-        CONFIG = specPair.getLeft();
-    }
+    private static final Logger LOGGER = LoggerFactory.getLogger(Paradigm.MOD_ID);
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+    private static final Path CONFIG_PATH = FMLPaths.CONFIGDIR.get().resolve("paradigm/chat.json");
+    public static Config CONFIG = new Config();
 
     public static class Config {
-        public final ForgeConfigSpec.BooleanValue enableStaffChat;
-        public final ForgeConfigSpec.ConfigValue<String> staffChatFormat;
-        public final ForgeConfigSpec.BooleanValue enableStaffBossBar;
-
-        public Config(ForgeConfigSpec.Builder builder) {
-
-            builder.comment("Chat Module Settings")
-                    .push("Chat");
-
-            builder.comment("Staff Chat Settings")
-                    .push("staff_chat");
-
-            enableStaffChat = builder
-                    .comment("Enable staff chat feature")
-                    .define("enableStaffChat", true);
-
-            staffChatFormat = builder
-                    .comment("Format for staff chat messages")
-                    .define("staffChatFormat", "§f[§cStaff Chat§f] §d%s §7> §f%s");
-
-            enableStaffBossBar = builder
-                    .comment("Enable boss bar while staff chat is enabled")
-                    .define("enableStaffBossBar", true);
-
-            builder.pop();
-        }
+        public ConfigEntry<Boolean> enableStaffChat = new ConfigEntry<>(
+                true,
+                "Enables or disables the entire Staff Chat module."
+        );
+        public ConfigEntry<String> staffChatFormat = new ConfigEntry<>(
+                "&f[&cStaff Chat&f] &d%s &7> &f%s",
+                "The format for messages in staff chat. %s is for the player's name, the second %s is for the message."
+        );
+        public ConfigEntry<Boolean> enableStaffBossBar = new ConfigEntry<>(
+                true,
+                "Shows a boss bar at the top of the screen when a staff member has staff chat toggled on."
+        );
+        public ConfigEntry<Boolean> enableGroupChatToasts = new ConfigEntry<>(
+                true,
+                "Enable toast notifications for group chat events (invites, joins, etc.)."
+        );
     }
 
-    public static void loadConfig(ForgeConfigSpec config, String path) {
-        final CommentedFileConfig file = CommentedFileConfig.builder(path)
-                .sync()
-                .autosave()
-                .writingMode(com.electronwill.nightconfig.core.io.WritingMode.REPLACE)
-                .build();
-        file.load();
-        config.setConfig(file);
+    public static void load() {
+        if (Files.exists(CONFIG_PATH)) {
+            try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
+                Config loadedConfig = GSON.fromJson(reader, Config.class);
+                if (loadedConfig != null) {
+                    CONFIG = loadedConfig;
+                }
+            } catch (Exception e) {
+                LOGGER.warn("[Paradigm] Could not parse chat.json, it may be corrupt or from an old version. A new one will be generated with defaults.", e);
+            }
+        }
+        save();
+    }
+
+    public static void save() {
+        try {
+            Files.createDirectories(CONFIG_PATH.getParent());
+            try (FileWriter writer = new FileWriter(CONFIG_PATH.toFile())) {
+                GSON.toJson(CONFIG, writer);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Could not save Chat config", e);
+        }
     }
 }

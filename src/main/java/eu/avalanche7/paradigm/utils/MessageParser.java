@@ -1,28 +1,31 @@
 package eu.avalanche7.paradigm.utils;
 
+import eu.avalanche7.paradigm.platform.IPlatformAdapter;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.*;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.network.protocol.game.*;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.Map;
+
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.ArrayList;
-import java.util.function.BiConsumer;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.BiConsumer;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class MessageParser {
 
     private final Pattern hexPattern = Pattern.compile("&#([A-Fa-f0-9]{6})");
-    private final Pattern urlPattern = Pattern.compile("https://?://\\S+");
+    private final Pattern urlPattern = Pattern.compile("https?://\\S+");
     private final Map<Pattern, BiConsumer<Matcher, TagContext>> tagHandlers;
     private final Map<String, MutableComponent> messageCache = new ConcurrentHashMap<>();
     private final Placeholders placeholders;
+    private final IPlatformAdapter platformAdapter;
 
-    public MessageParser(Placeholders placeholders) {
+    public MessageParser(Placeholders placeholders, IPlatformAdapter platformAdapter) {
         this.placeholders = placeholders;
+        this.platformAdapter = platformAdapter;
         this.tagHandlers = new LinkedHashMap<>();
         initializeTagHandlers();
     }
@@ -58,15 +61,15 @@ public class MessageParser {
             if (context.getPlayer() != null) {
                 String titleText = matcher.group(1);
                 MutableComponent titleComponent = parseTitleOrSubtitle(titleText, context.getCurrentStyle(), context.getPlayer());
-                context.getPlayer().connection.send(new ClientboundClearTitlesPacket(true));
-                context.getPlayer().connection.send(new ClientboundSetTitleTextPacket(titleComponent));
+                platformAdapter.clearTitles(context.getPlayer());
+                platformAdapter.sendTitle(context.getPlayer(), titleComponent, new TextComponent(""));
             }
         });
         tagHandlers.put(Pattern.compile("\\[subtitle=(.*?)\\]", Pattern.DOTALL), (matcher, context) -> {
             if (context.getPlayer() != null) {
                 String subtitleText = matcher.group(1);
                 MutableComponent subtitleComponent = parseTitleOrSubtitle(subtitleText, context.getCurrentStyle(), context.getPlayer());
-                context.getPlayer().connection.send(new ClientboundSetSubtitleTextPacket(subtitleComponent));
+                platformAdapter.sendSubtitle(context.getPlayer(), subtitleComponent);
             }
         });
         tagHandlers.put(Pattern.compile("\\[center\\](.*?)\\[/center\\]", Pattern.DOTALL), (matcher, context) -> {
@@ -110,7 +113,6 @@ public class MessageParser {
         }
 
         String processedMessage = this.placeholders.replacePlaceholders(rawMessage, player);
-
         Matcher hexMatcher = hexPattern.matcher(processedMessage);
         StringBuffer sb = new StringBuffer();
         while (hexMatcher.find()) {
@@ -119,7 +121,6 @@ public class MessageParser {
         }
         hexMatcher.appendTail(sb);
         processedMessage = sb.toString();
-
         String messageForParsing = processedMessage.replace("&", "§");
 
         final String finalCacheKey = messageForParsing + "_style_" + initialStyle.hashCode() + (player != null ? player.getUUID().toString() : "null_player");
@@ -144,18 +145,15 @@ public class MessageParser {
             int nextTagStart = textToParse.indexOf('[', currentIndex);
             boolean nextUrlFound = urlMatcher.find(currentIndex);
             int nextUrlStart = nextUrlFound ? urlMatcher.start() : -1;
-
             int firstEventIndex = length;
             if (nextLegacyFormat != -1) firstEventIndex = Math.min(firstEventIndex, nextLegacyFormat);
             if (nextTagStart != -1) firstEventIndex = Math.min(firstEventIndex, nextTagStart);
-            if (nextUrlFound && nextUrlStart != -1) firstEventIndex = Math.min(firstEventIndex, nextUrlStart);
-
+            if (nextUrlFound) firstEventIndex = Math.min(firstEventIndex, nextUrlStart);
             if (firstEventIndex > currentIndex) {
                 parentComponent.append(new TextComponent(textToParse.substring(currentIndex, firstEventIndex)).setStyle(currentStyle));
             }
             currentIndex = firstEventIndex;
             if (currentIndex == length) break;
-
             if (nextLegacyFormat == currentIndex) {
                 if (currentIndex + 1 < length) {
                     char formatChar = textToParse.charAt(currentIndex + 1);
@@ -179,7 +177,7 @@ public class MessageParser {
                             currentStyle = currentStyle.applyFormat(format);
                             if (format == ChatFormatting.RESET) currentStyle = Style.EMPTY;
                         } else {
-                            parentComponent.append(new TextComponent("§").setStyle(currentStyle)); // Append the unknown char as literal
+                            parentComponent.append(new TextComponent("§").setStyle(currentStyle));
                         }
                         currentIndex += 2;
                     }
@@ -187,7 +185,8 @@ public class MessageParser {
                     parentComponent.append(new TextComponent("§").setStyle(currentStyle));
                     currentIndex += 1;
                 }
-            } else if (nextTagStart == currentIndex) {
+            }
+            else if (nextTagStart == currentIndex) {
                 boolean tagHandled = false;
                 for (Map.Entry<Pattern, BiConsumer<Matcher, TagContext>> entry : tagHandlers.entrySet()) {
                     Pattern tagPattern = entry.getKey();
@@ -204,7 +203,8 @@ public class MessageParser {
                     parentComponent.append(new TextComponent("[").setStyle(currentStyle));
                     currentIndex += 1;
                 }
-            } else if (nextUrlFound && nextUrlStart == currentIndex) {
+            }
+            else if (nextUrlFound && nextUrlStart == currentIndex) {
                 String url = urlMatcher.group(0);
                 Style urlStyle = currentStyle.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, formatUrl(url)));
                 parentComponent.append(new TextComponent(url).setStyle(urlStyle));
@@ -241,7 +241,7 @@ public class MessageParser {
 
     private String formatUrl(String url) {
         if (url != null && !url.toLowerCase().startsWith("http://") && !url.toLowerCase().startsWith("https://")) {
-            return "http://" + url;
+            return "https://" + url;
         }
         return url;
     }

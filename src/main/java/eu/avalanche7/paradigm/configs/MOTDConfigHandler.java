@@ -38,7 +38,7 @@ public class MOTDConfigHandler {
                 saveConfig();
             }
         } else {
-            LOGGER.warn("MOTD configuration file not found. Creating a new onte with default values.");
+            LOGGER.warn("MOTD configuration file not found. Creating a new one with default values.");
             config = new Config();
             saveConfig();
         }
@@ -72,13 +72,27 @@ public class MOTDConfigHandler {
 
         public Config() {
             this.motdLines = List.of(
-                "§a[title=Welcome Message]",
-                "§7[subtitle=Server Information]",
-                "§aWelcome to the server!",
-                "§7Visit our website: §c[link=http://example.com]",
-                "§bType [command=help] for commands",
-                "§eHover over this message [hover=This is a hover text!] to see more info.",
-                "§7[divider]"
+                    "&6====================================================",
+                    "&a[center]&bWelcome to &dOur Awesome Server!&b[/center]",
+                    "&a[title=Welcome Message]",
+                    "&a[subtitle=Welcome Message]",
+                    "&aHello &b{player}&a, and welcome!",
+                    "&7This is the Message of the Day to inform you about server features.",
+                    "&3",
+                    "&9[divider]",
+                    "&bServer Website: &c[link=http://example.com]&b (Click to visit!)",
+                    "&bJoin our Discord: &c[link=https://discord.gg/yourdiscord]&b (For community & support)",
+                    "&9[divider]",
+                    "&3",
+                    "&eCommands to get started:",
+                    "&7- &bType &3[command=rules] &7to see server rules.",
+                    "&7- &bType &3[command=shop] &7to visit our webshop.",
+                    "&3",
+                    "&e[hover=&aServer Info]Hover over me to see server information![/hover]",
+                    "&dYour current health is: &f{player_health}&d/&f{max_player_health}",
+                    "&dYour level is: &f{player_level}",
+                    "&3",
+                    "&6===================================================="
             );
         }
     }

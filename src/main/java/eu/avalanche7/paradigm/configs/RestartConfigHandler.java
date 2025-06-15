@@ -1,117 +1,112 @@
 package eu.avalanche7.paradigm.configs;
 
-import com.electronwill.nightconfig.core.file.CommentedFileConfig;
-import net.minecraftforge.common.ForgeConfigSpec;
-import net.minecraftforge.fml.common.Mod;
-import org.apache.commons.lang3.tuple.Pair;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import eu.avalanche7.paradigm.Paradigm;
+import net.minecraftforge.fml.loading.FMLPaths;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
 
-@Mod.EventBusSubscriber(modid = "paradigm", bus = Mod.EventBusSubscriber.Bus.MOD)
 public class RestartConfigHandler {
 
-    public static ForgeConfigSpec SERVER_CONFIG;
-    public static final RestartConfigHandler.Config CONFIG;
-
-    static {
-        final Pair<RestartConfigHandler.Config, ForgeConfigSpec> specPair = new ForgeConfigSpec.Builder().configure(RestartConfigHandler.Config::new);
-        SERVER_CONFIG = specPair.getRight();
-        CONFIG = specPair.getLeft();
-    }
+    private static final Logger LOGGER = LoggerFactory.getLogger(Paradigm.MOD_ID);
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+    private static final Path CONFIG_PATH = FMLPaths.CONFIGDIR.get().resolve("paradigm/restarts.json");
+    public static Config CONFIG = new Config();
 
     public static class Config {
-        public final ForgeConfigSpec.ConfigValue<String> restartType;
-        public final ForgeConfigSpec.ConfigValue<Double> restartInterval;
-        public final ForgeConfigSpec.ConfigValue<List<? extends String>> realTimeInterval;
-        public final ForgeConfigSpec.ConfigValue<Boolean> bossbarEnabled;
-        public final ForgeConfigSpec.ConfigValue<String> bossBarMessage;
-        public final ForgeConfigSpec.ConfigValue<Boolean> timerUseChat;
-        public final ForgeConfigSpec.ConfigValue<String> BroadcastMessage;
-        public final ForgeConfigSpec.ConfigValue<List<? extends Integer>> timerBroadcast;
-        public final ForgeConfigSpec.ConfigValue<String> defaultRestartReason;
-        public final ForgeConfigSpec.ConfigValue<Boolean> playSoundEnabled;
-        public final ForgeConfigSpec.ConfigValue<Boolean> titleEnabled;
-        public final ForgeConfigSpec.ConfigValue<Integer> titleStayTime;
-        public final ForgeConfigSpec.ConfigValue<String> titleMessage;
-        public final ForgeConfigSpec.ConfigValue<String> playSoundString;
-        public final ForgeConfigSpec.ConfigValue<Double> playSoundFirstTime;
-
-        public Config(ForgeConfigSpec.Builder builder) {
-            builder.comment("Restart settings")
-                    .push("restart");
-
-            restartType = builder
-                    .comment("Type of automatic restart (Fixed, Realtime, None).")
-                    .define("restartType", "Realtime");
-
-            restartInterval = builder
-                    .comment("Interval for fixed restarts in hours.")
-                    .define("restartInterval", 6.0);
-
-            realTimeInterval = builder
-                    .comment("Times for real-time restarts (24-hour format).")
-                    .defineList("realTimeInterval", Arrays.asList("00:00", "06:00", "12:00", "18:00"), obj -> obj instanceof String);
-
-            bossbarEnabled = builder
-                    .comment("Enable boss bar for restart countdown.")
-                    .define("bossbarEnabled", false);
-
-            bossBarMessage = builder
-                    .comment("Message to display in boss bar on restart warnings.")
-                    .define("bossBarMessage", "The server will be restarting in {minutes}:{seconds}");
-
-            timerUseChat = builder
-                    .comment("Broadcast restart warnings in chat.")
-                    .define("timerUseChat", true);
-
-            BroadcastMessage = builder
-                    .comment("Custom broadcast message for restart warnings.")
-                    .define("BroadcastMessage", "The server will be restarting in {minutes}:{seconds}");
-
-            timerBroadcast = builder
-                    .comment("Warning times in seconds before reboot.")
-                    .defineList("timerBroadcast", Arrays.asList(600, 300, 240, 180, 120, 60, 30, 5, 4, 3, 2, 1), obj -> obj instanceof Integer);
-
-            defaultRestartReason = builder
-                    .comment("Default reason shown for a restart.")
-                    .define("defaultRestartReason", "");
-
-            playSoundEnabled = builder
-                    .comment("Enable notification sound on restart warnings.")
-                    .define("playSoundEnabled", true);
-
-            playSoundString = builder
-                    .comment("Sound to play on restart warnings.")
-                    .define("playSoundString", "note_block_pling");
-
-            playSoundFirstTime = builder
-                    .comment("When to start playing notification sound (same as one of broadcast timers).")
-                    .define("playSoundFirstTime", 600.0);
-
-            titleEnabled = builder
-                    .comment("Enable title message on restart warnings.")
-                    .define("titleEnabled", true);
-
-            titleStayTime = builder
-                    .comment("Duration of title message display (in seconds).")
-                    .define("titleStayTime", 2);
-
-            titleMessage = builder
-                    .comment("Message to display in title on restart warnings.")
-                    .define("titleMessage", "The server will be restarting in {minutes}:{seconds}");
-
-            builder.pop();
-        }
+        public ConfigEntry<String> restartType = new ConfigEntry<>(
+                "Realtime",
+                "The method for scheduling restarts. Use \"Fixed\" for intervals, \"Realtime\" for specific times, or \"None\"."
+        );
+        public ConfigEntry<Double> restartInterval = new ConfigEntry<>(
+                6.0,
+                "If restartType is \"Fixed\", this is the interval in hours between restarts."
+        );
+        public ConfigEntry<List<String>> realTimeInterval = new ConfigEntry<>(
+                Arrays.asList("00:00", "06:00", "12:00", "18:00"),
+                "If restartType is \"Realtime\", this is a list of times (in HH:mm 24-hour format) to restart the server."
+        );
+        public ConfigEntry<Boolean> bossbarEnabled = new ConfigEntry<>(
+                true,
+                "Enable a boss bar for the restart countdown."
+        );
+        public ConfigEntry<String> bossBarMessage = new ConfigEntry<>(
+                "&cThe server will be restarting in {minutes}:{seconds}",
+                "Message for the boss bar. Placeholders: {hours}, {minutes}, {seconds}, {time}."
+        );
+        public ConfigEntry<Boolean> timerUseChat = new ConfigEntry<>(
+                true,
+                "Broadcast restart warnings in chat."
+        );
+        public ConfigEntry<String> BroadcastMessage = new ConfigEntry<>(
+                "&cThe server will be restarting in &e{time}",
+                "Custom message for chat warnings. Placeholders: {hours}, {minutes}, {seconds}, {time}."
+        );
+        public ConfigEntry<List<Integer>> timerBroadcast = new ConfigEntry<>(
+                Arrays.asList(3600, 1800, 600, 300, 120, 60, 30, 10, 5, 4, 3, 2, 1),
+                "A list of times in seconds before a restart to broadcast a warning."
+        );
+        public ConfigEntry<String> defaultRestartReason = new ConfigEntry<>(
+                "&6The server is restarting!",
+                "The kick message shown to players when the server restarts."
+        );
+        public ConfigEntry<Boolean> playSoundEnabled = new ConfigEntry<>(
+                true,
+                "Enable notification sounds for restart warnings."
+        );
+        public ConfigEntry<String> playSoundString = new ConfigEntry<>(
+                "minecraft:block.note_block.pling",
+                "The sound event ID to play for warnings (e.g., 'minecraft:entity.player.levelup')."
+        );
+        public ConfigEntry<Double> playSoundFirstTime = new ConfigEntry<>(
+                60.0,
+                "Time in seconds before restart to begin playing warning sounds."
+        );
+        public ConfigEntry<Boolean> titleEnabled = new ConfigEntry<>(
+                true,
+                "Enable title messages for restart warnings."
+        );
+        public ConfigEntry<Integer> titleStayTime = new ConfigEntry<>(
+                2,
+                "Duration in seconds for the title message to stay on screen."
+        );
+        public ConfigEntry<String> titleMessage = new ConfigEntry<>(
+                "&cRestarting in {minutes}:{seconds}",
+                "Message for the title warning. Use '\\n' for a subtitle."
+        );
     }
 
-    public static void loadConfig(ForgeConfigSpec config, String path) {
-        final CommentedFileConfig file = CommentedFileConfig.builder(path)
-                .sync()
-                .autosave()
-                .writingMode(com.electronwill.nightconfig.core.io.WritingMode.REPLACE)
-                .build();
-        file.load();
-        config.setConfig(file);
+    public static void load() {
+        if (Files.exists(CONFIG_PATH)) {
+            try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
+                Config loadedConfig = GSON.fromJson(reader, Config.class);
+                if (loadedConfig != null) {
+                    CONFIG = loadedConfig;
+                }
+            } catch (Exception e) {
+                LOGGER.warn("[Paradigm] Could not parse restarts.json, it may be corrupt. A new one will be generated.", e);
+            }
+        }
+        save();
+    }
+
+    public static void save() {
+        try {
+            Files.createDirectories(CONFIG_PATH.getParent());
+            try (FileWriter writer = new FileWriter(CONFIG_PATH.toFile())) {
+                GSON.toJson(CONFIG, writer);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("Could not save Restart config", e);
+        }
     }
 }

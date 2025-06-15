@@ -41,7 +41,7 @@ public class CustomCommand {
     }
 
     public String getPermissionErrorMessage() {
-        return permissionErrorMessage != null ? permissionErrorMessage : "&cYou do not have permission to execute this command."; // Default error message
+        return permissionErrorMessage != null ? permissionErrorMessage : "&cYou do not have permission to execute this command.";
     }
 
     public static class Action {
@@ -85,6 +85,3 @@ public class CustomCommand {
         }
     }
 }
-
-
-

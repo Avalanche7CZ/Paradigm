@@ -18,4 +18,3 @@ public interface ParadigmModule {
     void registerEventListeners(IEventBus forgeEventBus, Services services);
     boolean isEnabled(Services services);
 }
-

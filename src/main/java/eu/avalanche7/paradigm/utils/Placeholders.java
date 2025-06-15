@@ -20,7 +20,6 @@ public class Placeholders {
         replacedText = replacedText.replace("{player_level}", String.valueOf(player.experienceLevel));
         replacedText = replacedText.replace("{player_health}", String.format("%.1f", player.getHealth()));
         replacedText = replacedText.replace("{max_player_health}", String.format("%.1f", player.getMaxHealth()));
-
         return replacedText;
     }
 }
