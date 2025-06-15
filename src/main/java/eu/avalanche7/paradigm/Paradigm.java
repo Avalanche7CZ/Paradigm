@@ -115,7 +115,12 @@ public class Paradigm {
 
         ModList.get().getModContainerById(MOD_ID).ifPresent(modContainer -> {
             String version = modContainer.getModInfo().getVersion().toString();
-            LOGGER.info("Paradigm mod (v{}) by Avalanche7CZ is running.", version);
+            String displayName = modContainer.getModInfo().getDisplayName.toString();
+            LOGGER.info("==================================================");
+            LOGGER.info("{} - Version {}", displayName, version);
+            LOGGER.info("Author: Avalanche7CZ");
+            LOGGER.info("Discord: https://discord.com/invite/qZDcQdEFqQ");
+            LOGGER.info("==================================================");
             UpdateChecker.checkForUpdates(version, LOGGER);
         });
     }
