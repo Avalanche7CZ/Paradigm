@@ -4,7 +4,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.data.PlayerGroupData;
+import eu.avalanche7.paradigm.platform.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.GroupChatManager;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
@@ -22,11 +22,11 @@ import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 
-
 public class GroupChat implements ParadigmModule {
 
     private static final String NAME = "GroupChat";
     private GroupChatManager groupChatManager;
+    private IPlatformAdapter platform;
     private Services services;
 
     public GroupChat(GroupChatManager groupChatManager) {
@@ -46,25 +46,18 @@ public class GroupChat implements ParadigmModule {
     @Override
     public void onLoad(FMLCommonSetupEvent event, Services services, IEventBus modEventBus) {
         this.services = services;
-        if (this.groupChatManager != null) {
-            this.groupChatManager.setServices(services);
-        }
+        this.platform = services.getPlatformAdapter();
         services.getDebugLogger().debugLog(NAME + " module loaded.");
     }
 
     @Override
-    public void onServerStarting(ServerStartingEvent event, Services services) {
-        services.getDebugLogger().debugLog(NAME + " module: Server starting.");
-    }
+    public void onServerStarting(ServerStartingEvent event, Services services) {}
 
     @Override
-    public void onEnable(Services services) {
-        services.getDebugLogger().debugLog(NAME + " module enabled.");
-    }
+    public void onEnable(Services services) {}
 
     @Override
     public void onDisable(Services services) {
-        services.getDebugLogger().debugLog(NAME + " module disabled.");
         if (this.groupChatManager != null) {
             this.groupChatManager.clearAllGroupsAndPlayerData();
         }
@@ -72,7 +65,6 @@ public class GroupChat implements ParadigmModule {
 
     @Override
     public void onServerStopping(ServerStoppingEvent event, Services services) {
-        services.getDebugLogger().debugLog(NAME + " module: Server stopping.");
         onDisable(services);
     }
 
@@ -80,84 +72,57 @@ public class GroupChat implements ParadigmModule {
     public void registerCommands(CommandDispatcher<CommandSourceStack> dispatcher, Services services) {
         dispatcher.register(Commands.literal("groupchat")
                 .executes(ctx -> {
-                    ServerPlayer player = ctx.getSource().getPlayerOrException();
-                    displayHelp(player, services);
+                    displayHelp(ctx.getSource().getPlayerOrException());
                     return 1;
                 })
                 .then(Commands.literal("create")
                         .then(Commands.argument("name", StringArgumentType.string())
-                                .executes(ctx -> {
-                                    ServerPlayer player = ctx.getSource().getPlayerOrException();
-                                    String groupName = StringArgumentType.getString(ctx, "name");
-                                    return groupChatManager.createGroup(player, groupName) ? 1 : 0;
-                                })))
+                                .executes(ctx -> groupChatManager.createGroup(ctx.getSource().getPlayerOrException(), StringArgumentType.getString(ctx, "name")) ? 1 : 0)))
                 .then(Commands.literal("delete")
-                        .executes(ctx -> {
-                            ServerPlayer player = ctx.getSource().getPlayerOrException();
-                            return groupChatManager.deleteGroup(player) ? 1 : 0;
-                        }))
+                        .executes(ctx -> groupChatManager.deleteGroup(ctx.getSource().getPlayerOrException()) ? 1 : 0))
                 .then(Commands.literal("invite")
                         .then(Commands.argument("player", EntityArgument.player())
-                                .executes(ctx -> {
-                                    ServerPlayer inviter = ctx.getSource().getPlayerOrException();
-                                    ServerPlayer target = EntityArgument.getPlayer(ctx, "player");
-                                    return groupChatManager.invitePlayer(inviter, target) ? 1 : 0;
-                                })))
+                                .executes(ctx -> groupChatManager.invitePlayer(ctx.getSource().getPlayerOrException(), EntityArgument.getPlayer(ctx, "player")) ? 1 : 0)))
                 .then(Commands.literal("join")
                         .then(Commands.argument("name", StringArgumentType.string())
-                                .executes(ctx -> {
-                                    ServerPlayer player = ctx.getSource().getPlayerOrException();
-                                    String groupName = StringArgumentType.getString(ctx, "name");
-                                    return groupChatManager.joinGroup(player, groupName) ? 1 : 0;
-                                })))
+                                .executes(ctx -> groupChatManager.joinGroup(ctx.getSource().getPlayerOrException(), StringArgumentType.getString(ctx, "name")) ? 1 : 0)))
                 .then(Commands.literal("leave")
-                        .executes(ctx -> {
-                            ServerPlayer player = ctx.getSource().getPlayerOrException();
-                            return groupChatManager.leaveGroup(player) ? 1 : 0;
-                        }))
+                        .executes(ctx -> groupChatManager.leaveGroup(ctx.getSource().getPlayerOrException()) ? 1 : 0))
                 .then(Commands.literal("list")
                         .executes(ctx -> {
-                            ServerPlayer player = ctx.getSource().getPlayerOrException();
-                            groupChatManager.listGroups(player);
+                            groupChatManager.listGroups(ctx.getSource().getPlayerOrException());
                             return 1;
                         }))
                 .then(Commands.literal("info")
                         .then(Commands.argument("name", StringArgumentType.string())
                                 .executes(ctx -> {
-                                    ServerPlayer player = ctx.getSource().getPlayerOrException();
-                                    String groupName = StringArgumentType.getString(ctx, "name");
-                                    groupChatManager.groupInfo(player, groupName);
+                                    groupChatManager.groupInfo(ctx.getSource().getPlayerOrException(), StringArgumentType.getString(ctx, "name"));
                                     return 1;
                                 }))
                         .executes(ctx -> {
                             ServerPlayer player = ctx.getSource().getPlayerOrException();
-                            PlayerGroupData data = groupChatManager.getPlayerData(player);
-                            String currentGroup = data.getCurrentGroup();
+                            String currentGroup = groupChatManager.getPlayerData(player).getCurrentGroup();
                             if (currentGroup != null) {
                                 groupChatManager.groupInfo(player, currentGroup);
                             } else {
-                                player.sendSystemMessage(services.getLang().translate("group.no_group_to_info"));
+                                platform.sendSystemMessage(player, services.getLang().translate("group.no_group_to_info"));
                             }
                             return 1;
                         }))
                 .then(Commands.literal("say")
                         .then(Commands.argument("message", StringArgumentType.greedyString())
                                 .executes(ctx -> {
-                                    ServerPlayer player = ctx.getSource().getPlayerOrException();
-                                    String message = StringArgumentType.getString(ctx, "message");
-                                    groupChatManager.sendMessageFromCommand(player, message);
+                                    groupChatManager.sendMessageFromCommand(ctx.getSource().getPlayerOrException(), StringArgumentType.getString(ctx, "message"));
                                     return 1;
                                 })))
                 .then(Commands.literal("toggle")
                         .executes(ctx -> {
-                            ServerPlayer player = ctx.getSource().getPlayerOrException();
-                            groupChatManager.toggleGroupChat(player);
+                            groupChatManager.toggleGroupChat(ctx.getSource().getPlayerOrException());
                             return 1;
                         }))
                 .then(Commands.literal("help")
                         .executes(ctx -> {
-                            ServerPlayer player = ctx.getSource().getPlayerOrException();
-                            displayHelp(player, services);
+                            displayHelp(ctx.getSource().getPlayerOrException());
                             return 1;
                         }))
         );
@@ -173,50 +138,43 @@ public class GroupChat implements ParadigmModule {
         if (this.services == null || !isEnabled(this.services) || this.groupChatManager == null) return;
 
         ServerPlayer player = event.getPlayer();
-        PlayerGroupData data = groupChatManager.getPlayerData(player);
-
         if (groupChatManager.isGroupChatToggled(player)) {
-            String groupName = data.getCurrentGroup();
+            String groupName = groupChatManager.getPlayerData(player).getCurrentGroup();
             if (groupName != null) {
                 event.setCanceled(true);
                 groupChatManager.sendMessageToGroup(player, groupName, event.getMessage().getString());
                 services.getLogger().info("[GroupChat] [{}] {}: {}", groupName, player.getName().getString(), event.getMessage().getString());
             } else {
-                player.sendSystemMessage(services.getLang().translate("group.no_group_to_send_message"));
+                platform.sendSystemMessage(player, services.getLang().translate("group.no_group_to_send_message"));
                 groupChatManager.setGroupChatToggled(player, false);
-                player.sendSystemMessage(services.getLang().translate("group.chat_disabled"));
+                platform.sendSystemMessage(player, services.getLang().translate("group.chat_disabled"));
             }
         }
     }
 
-    private void displayHelp(ServerPlayer player, Services services) {
+    private void displayHelp(ServerPlayer player) {
         String label = "groupchat";
-        player.sendSystemMessage(services.getLang().translate("group.help_title"));
-        sendHelpMessage(player, label, "create <name>", services.getLang().translate("group.help_create").getString(), services);
-        sendHelpMessage(player, label, "delete", services.getLang().translate("group.help_delete").getString(), services);
-        sendHelpMessage(player, label, "invite <player>", services.getLang().translate("group.help_invite").getString(), services);
-        sendHelpMessage(player, label, "join <group_name>", services.getLang().translate("group.help_join").getString(), services);
-        sendHelpMessage(player, label, "leave", services.getLang().translate("group.help_leave").getString(), services);
-        sendHelpMessage(player, label, "list", services.getLang().translate("group.help_list").getString(), services);
-        sendHelpMessage(player, label, "info [group_name]", services.getLang().translate("group.help_info").getString(), services);
-        sendHelpMessage(player, label, "say <message>", services.getLang().translate("group.help_say").getString(), services);
-        sendHelpMessage(player, label, "toggle", services.getLang().translate("group.help_toggle").getString(), services);
+        platform.sendSystemMessage(player, services.getLang().translate("group.help_title"));
+        sendHelpMessage(player, label, "create <name>", "group.help_create");
+        sendHelpMessage(player, label, "delete", "group.help_delete");
+        sendHelpMessage(player, label, "invite <player>", "group.help_invite");
+        sendHelpMessage(player, label, "join <group_name>", "group.help_join");
+        sendHelpMessage(player, label, "leave", "group.help_leave");
+        sendHelpMessage(player, label, "list", "group.help_list");
+        sendHelpMessage(player, label, "info [group_name]", "group.help_info");
+        sendHelpMessage(player, label, "say <message>", "group.help_say");
+        sendHelpMessage(player, label, "toggle", "group.help_toggle");
     }
 
-    private void sendHelpMessage(ServerPlayer player, String label, String command, String description, Services services) {
-        Component parsedDescription = services.getMessageParser().parseMessage(description, player);
-        MutableComponent hoverText;
-        if (parsedDescription instanceof MutableComponent) {
-            hoverText = (MutableComponent) parsedDescription;
-        } else {
-            hoverText = parsedDescription.copy();
-        }
+    private void sendHelpMessage(ServerPlayer player, String label, String command, String descriptionKey) {
+        MutableComponent hoverText = services.getLang().translate(descriptionKey).copy();
         hoverText.withStyle(ChatFormatting.AQUA);
 
         MutableComponent message = Component.literal(" §9> §e/" + label + " " + command)
                 .withStyle(ChatFormatting.YELLOW)
                 .withStyle(style -> style.withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/" + label + " " + command)))
                 .withStyle(style -> style.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hoverText)));
-        player.sendSystemMessage(message);
+
+        platform.sendSystemMessage(player, message);
     }
 }

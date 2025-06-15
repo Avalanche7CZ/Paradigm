@@ -5,6 +5,8 @@ import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.*;
 import eu.avalanche7.paradigm.configs.*;
+import eu.avalanche7.paradigm.platform.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.PlatformAdapterImpl;
 import eu.avalanche7.paradigm.utils.*;
 import com.mojang.logging.LogUtils;
 import net.minecraft.commands.CommandSourceStack;
@@ -34,22 +36,11 @@ public class Paradigm {
     private final List<ParadigmModule> modules = new ArrayList<>();
     private Services services;
 
-    private DebugLogger debugLoggerInstance;
-    private Lang langInstance;
-    private MessageParser messageParserInstance;
-    private PermissionsHandler permissionsHandlerInstance;
-    private Placeholders placeholdersInstance;
-    private TaskScheduler taskSchedulerInstance;
-    private GroupChatManager groupChatManagerInstance;
-    private CMConfig cmConfigInstance;
-
     public Paradigm(FMLJavaModLoadingContext ctx) {
-        LOGGER.info("Initializing Paradigm Mod for Forge 1.21.1...");
         IEventBus modEventBus = ctx.getModEventBus();
 
-        loadAllConfigs();
-        createUtilityInstances();
-        initializeServices();
+        this.services = this.initialize();
+
         registerModules();
 
         modules.forEach(module -> module.registerEventListeners(MinecraftForge.EVENT_BUS, services));
@@ -59,44 +50,33 @@ public class Paradigm {
         MinecraftForge.EVENT_BUS.register(this);
     }
 
-    private void loadAllConfigs() {
-        try {
-            MainConfigHandler.load();
-            AnnouncementsConfigHandler.load();
-            MentionConfigHandler.load();
-            RestartConfigHandler.load();
-            ChatConfigHandler.load();
-            MOTDConfigHandler.loadConfig();
+    private Services initialize() {
+        MainConfigHandler.load();
+        AnnouncementsConfigHandler.load();
+        MentionConfigHandler.load();
+        RestartConfigHandler.load();
+        ChatConfigHandler.load();
+        MOTDConfigHandler.loadConfig();
 
-            if (this.cmConfigInstance == null) {
-                this.cmConfigInstance = new CMConfig(new DebugLogger(MainConfigHandler.CONFIG));
-            }
-            this.cmConfigInstance.loadCommands();
+        DebugLogger debugLogger = new DebugLogger(MainConfigHandler.CONFIG);
+        CMConfig cmConfig = new CMConfig(debugLogger);
+        cmConfig.loadCommands();
+        Placeholders placeholders = new Placeholders();
+        TaskScheduler taskScheduler = new TaskScheduler(debugLogger);
+        PermissionsHandler permissionsHandler = new PermissionsHandler(LOGGER, cmConfig, debugLogger);
 
-            if(this.langInstance == null) {
-                if (this.placeholdersInstance == null) this.placeholdersInstance = new Placeholders();
-                if (this.messageParserInstance == null) this.messageParserInstance = new MessageParser(this.placeholdersInstance);
-                if (this.debugLoggerInstance == null) this.debugLoggerInstance = new DebugLogger(MainConfigHandler.CONFIG);
-                this.langInstance = new Lang(LOGGER, MainConfigHandler.CONFIG, this.messageParserInstance);
-            }
-            this.langInstance.initializeLanguage();
-        } catch (Exception e) {
-            LOGGER.error("Failed to load one or more JSON configurations for {}", MOD_ID, e);
-            throw new RuntimeException("JSON configuration loading failed for " + MOD_ID, e);
-        }
-    }
+        IPlatformAdapter platformAdapter = new PlatformAdapterImpl(permissionsHandler, placeholders, taskScheduler);
 
-    private void createUtilityInstances() {
-        this.placeholdersInstance = new Placeholders();
-        this.messageParserInstance = new MessageParser(this.placeholdersInstance);
-        this.debugLoggerInstance = new DebugLogger(MainConfigHandler.CONFIG);
-        this.taskSchedulerInstance = new TaskScheduler(this.debugLoggerInstance);
-        this.permissionsHandlerInstance = new PermissionsHandler(LOGGER, this.cmConfigInstance, this.debugLoggerInstance);
-        this.groupChatManagerInstance = new GroupChatManager();
-    }
+        MessageParser messageParser = new MessageParser(placeholders, platformAdapter);
 
-    private void initializeServices() {
-        this.services = new Services(
+        platformAdapter.provideMessageParser(messageParser);
+
+        Lang lang = new Lang(LOGGER, MainConfigHandler.CONFIG, messageParser);
+        lang.initializeLanguage();
+
+        GroupChatManager groupChatManager = new GroupChatManager(platformAdapter, lang, debugLogger, messageParser);
+
+        return new Services(
                 LOGGER,
                 MainConfigHandler.CONFIG,
                 AnnouncementsConfigHandler.CONFIG,
@@ -104,16 +84,16 @@ public class Paradigm {
                 new MentionConfigHandler(),
                 RestartConfigHandler.CONFIG,
                 ChatConfigHandler.CONFIG,
-                this.cmConfigInstance,
-                this.groupChatManagerInstance,
-                this.debugLoggerInstance,
-                this.langInstance,
-                this.messageParserInstance,
-                this.permissionsHandlerInstance,
-                this.placeholdersInstance,
-                this.taskSchedulerInstance
+                cmConfig,
+                groupChatManager,
+                debugLogger,
+                lang,
+                messageParser,
+                permissionsHandler,
+                placeholders,
+                taskScheduler,
+                platformAdapter
         );
-        this.groupChatManagerInstance.setServices(this.services);
     }
 
     private void registerModules() {
@@ -122,40 +102,29 @@ public class Paradigm {
         modules.add(new Mentions());
         modules.add(new Restart());
         modules.add(new StaffChat());
-        modules.add(new GroupChat(this.groupChatManagerInstance));
+        modules.add(new GroupChat(services.getGroupChatManager()));
         modules.add(new CommandManager());
-        LOGGER.info("Paradigm: Registered {} modules.", modules.size());
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        event.enqueueWork(() -> {
-            modules.forEach(module -> {
-                if (module.isEnabled(services)) {
-                    LOGGER.info("Paradigm: Enabling module: {}", module.getName());
-                    module.onEnable(services);
-                } else {
-                    LOGGER.info("Paradigm: Module disabled by config: {}", module.getName());
-                }
-            });
-        });
+        event.enqueueWork(() -> modules.forEach(module -> {
+            if (module.isEnabled(services)) {
+                module.onEnable(services);
+            }
+        }));
 
         ModList.get().getModContainerById(MOD_ID).ifPresent(modContainer -> {
             String version = modContainer.getModInfo().getVersion().toString();
-            String displayName = modContainer.getModInfo().getDisplayName();
-
-            LOGGER.info("Paradigm mod (1.21.1) has been set up.");
-            LOGGER.info("==================================================");
-            LOGGER.info("{} - Version {}", displayName, version);
-            LOGGER.info("Author: Avalanche7CZ");
-            LOGGER.info("Discord: https://discord.com/invite/qZDcQdEFqQ");
-            LOGGER.info("==================================================");
-            Paradigm.UpdateChecker.checkForUpdates(version, LOGGER);
+            LOGGER.info("Paradigm mod (v{}) by Avalanche7CZ is running.", version);
+            UpdateChecker.checkForUpdates(version, LOGGER);
         });
     }
 
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
-        services.setServer(event.getServer());
+        services.getPlatformAdapter().setMinecraftServer(event.getServer());
+        services.getTaskScheduler().initialize(event.getServer());
+        services.getPermissionsHandler().initialize();
         modules.forEach(module -> {
             if (module.isEnabled(services)) {
                 module.onServerStarting(event, services);
@@ -165,10 +134,9 @@ public class Paradigm {
 
     @SubscribeEvent
     public void onRegisterCommands(RegisterCommandsEvent event) {
-        CommandDispatcher<CommandSourceStack> dispatcher = event.getDispatcher();
         modules.forEach(module -> {
             if (module.isEnabled(services)) {
-                module.registerCommands(dispatcher, services);
+                module.registerCommands(event.getDispatcher(), services);
             }
         });
     }
@@ -181,31 +149,20 @@ public class Paradigm {
                 module.onDisable(services);
             }
         });
-        if (this.taskSchedulerInstance != null) {
-            this.taskSchedulerInstance.onServerStopping();
-        }
-        LOGGER.info("Paradigm modules (1.21.1) have been processed for server stop.");
+        services.getTaskScheduler().onServerStopping();
     }
 
     public static class UpdateChecker {
         private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/1.21.1/version.txt";
 
         public static void checkForUpdates(String currentVersion, Logger logger) {
-            try {
-                URL url = new URL(LATEST_VERSION_URL);
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(url.openStream()))) {
-                    String latestVersion = reader.readLine();
-                    if (latestVersion != null && !currentVersion.equals(latestVersion.trim())) {
-                        logger.info("Paradigm: A new version is available: {} (Current: {})", latestVersion.trim(), currentVersion);
-                        logger.info("Paradigm: Please update at: https://www.curseforge.com/minecraft/mc-mods/paradigm or https://modrinth.com/mod/paradigm");
-                    } else if (latestVersion != null) {
-                        logger.info("Paradigm: You are running the latest version: {}", currentVersion);
-                    } else {
-                        logger.info("Paradigm: Could not determine the latest version.");
-                    }
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(new URL(LATEST_VERSION_URL).openStream()))) {
+                String latestVersion = reader.readLine();
+                if (latestVersion != null && !currentVersion.equals(latestVersion.trim())) {
+                    logger.info("Paradigm: A new version is available: {} (Current: {})", latestVersion.trim(), currentVersion);
                 }
             } catch (Exception e) {
-                logger.warn("Paradigm: Failed to check for updates: {}", e.getMessage());
+                logger.warn("Paradigm: Failed to check for updates.");
             }
         }
     }

@@ -1,10 +1,8 @@
 package eu.avalanche7.paradigm.utils;
 
+import eu.avalanche7.paradigm.platform.IPlatformAdapter;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.*;
-import net.minecraft.network.protocol.game.ClientboundClearTitlesPacket;
-import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
-import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.ArrayList;
@@ -23,9 +21,11 @@ public class MessageParser {
     private final Map<Pattern, BiConsumer<Matcher, TagContext>> tagHandlers;
     private final Map<String, MutableComponent> messageCache = new ConcurrentHashMap<>();
     private final Placeholders placeholders;
+    private final IPlatformAdapter platformAdapter;
 
-    public MessageParser(Placeholders placeholders) {
+    public MessageParser(Placeholders placeholders, IPlatformAdapter platformAdapter) {
         this.placeholders = placeholders;
+        this.platformAdapter = platformAdapter;
         this.tagHandlers = new LinkedHashMap<>();
         initializeTagHandlers();
     }
@@ -61,15 +61,15 @@ public class MessageParser {
             if (context.getPlayer() != null) {
                 String titleText = matcher.group(1);
                 MutableComponent titleComponent = parseTitleOrSubtitle(titleText, context.getCurrentStyle(), context.getPlayer());
-                context.getPlayer().connection.send(new ClientboundClearTitlesPacket(true));
-                context.getPlayer().connection.send(new ClientboundSetTitleTextPacket(titleComponent));
+                platformAdapter.clearTitles(context.getPlayer());
+                platformAdapter.sendTitle(context.getPlayer(), titleComponent, Component.empty());
             }
         });
         tagHandlers.put(Pattern.compile("\\[subtitle=(.*?)\\]", Pattern.DOTALL), (matcher, context) -> {
             if (context.getPlayer() != null) {
                 String subtitleText = matcher.group(1);
                 MutableComponent subtitleComponent = parseTitleOrSubtitle(subtitleText, context.getCurrentStyle(), context.getPlayer());
-                context.getPlayer().connection.send(new ClientboundSetSubtitleTextPacket(subtitleComponent));
+                platformAdapter.sendSubtitle(context.getPlayer(), subtitleComponent);
             }
         });
         tagHandlers.put(Pattern.compile("\\[center\\](.*?)\\[/center\\]", Pattern.DOTALL), (matcher, context) -> {

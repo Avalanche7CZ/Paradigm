@@ -1,15 +1,13 @@
 package eu.avalanche7.paradigm.core;
 
 import eu.avalanche7.paradigm.configs.*;
+import eu.avalanche7.paradigm.platform.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.*;
-import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
 
 public class Services {
 
-    private MinecraftServer server;
     private final Logger logger;
-
     private final MainConfigHandler.Config mainConfig;
     private final AnnouncementsConfigHandler.Config announcementsConfig;
     private final MOTDConfigHandler.Config motdConfig;
@@ -17,7 +15,6 @@ public class Services {
     private final RestartConfigHandler.Config restartConfig;
     private final ChatConfigHandler.Config chatConfig;
     private final CMConfig cmConfigInstance;
-
     private final DebugLogger debugLoggerInstance;
     private final Lang langInstance;
     private final MessageParser messageParserInstance;
@@ -25,7 +22,7 @@ public class Services {
     private final Placeholders placeholdersInstance;
     private final TaskScheduler taskSchedulerInstance;
     private final GroupChatManager groupChatManagerInstance;
-
+    private final IPlatformAdapter platformAdapter;
 
     public Services(
             Logger logger,
@@ -42,7 +39,8 @@ public class Services {
             MessageParser messageParser,
             PermissionsHandler permissionsHandler,
             Placeholders placeholders,
-            TaskScheduler taskScheduler
+            TaskScheduler taskScheduler,
+            IPlatformAdapter platformAdapter
     ) {
         this.logger = logger;
         this.mainConfig = mainConfig;
@@ -59,23 +57,7 @@ public class Services {
         this.permissionsHandlerInstance = permissionsHandler;
         this.placeholdersInstance = placeholders;
         this.taskSchedulerInstance = taskScheduler;
-    }
-
-    public void setServer(MinecraftServer server) {
-        this.server = server;
-        if (this.server != null && this.taskSchedulerInstance != null) {
-            this.taskSchedulerInstance.initialize(this.server);
-        }
-        if (this.permissionsHandlerInstance != null) {
-            this.permissionsHandlerInstance.initialize();
-        }
-    }
-
-    public MinecraftServer getMinecraftServer() {
-        if (this.server == null && logger != null) {
-            logger.warn("Paradigm Services: MinecraftServer instance requested before it was set!");
-        }
-        return server;
+        this.platformAdapter = platformAdapter;
     }
 
     public Logger getLogger() {
@@ -136,5 +118,9 @@ public class Services {
 
     public GroupChatManager getGroupChatManager() {
         return groupChatManagerInstance;
+    }
+
+    public IPlatformAdapter getPlatformAdapter() {
+        return platformAdapter;
     }
 }
