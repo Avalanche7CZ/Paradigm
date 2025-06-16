@@ -1,14 +1,17 @@
 package eu.avalanche7.paradigm.platform;
 
 import eu.avalanche7.paradigm.data.CustomCommand;
-import eu.avalanche7.paradigm.utils.MessageParser;
-import eu.avalanche7.paradigm.utils.PermissionsHandler;
-import eu.avalanche7.paradigm.utils.Placeholders;
-import eu.avalanche7.paradigm.utils.TaskScheduler;
+import eu.avalanche7.paradigm.utils.*;
+import net.minecraft.advancements.*;
+import net.minecraft.advancements.critereon.ImpossibleTrigger;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.network.protocol.game.*;
+import net.minecraft.network.protocol.game.ClientboundClearTitlesPacket;
+import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundUpdateAdvancementsPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerBossEvent;
@@ -16,13 +19,11 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.BossEvent;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraftforge.registries.ForgeRegistries;
-
 import javax.annotation.Nullable;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public class PlatformAdapterImpl implements IPlatformAdapter {
@@ -32,17 +33,20 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     private final PermissionsHandler permissionsHandler;
     private final Placeholders placeholders;
     private final TaskScheduler taskScheduler;
+    private final DebugLogger debugLogger;
     private final Map<UUID, ServerBossEvent> persistentBossBars = new HashMap<>();
     private ServerBossEvent restartBossBar;
 
     public PlatformAdapterImpl(
             PermissionsHandler permissionsHandler,
             Placeholders placeholders,
-            TaskScheduler taskScheduler
+            TaskScheduler taskScheduler,
+            DebugLogger debugLogger
     ) {
         this.permissionsHandler = permissionsHandler;
         this.placeholders = placeholders;
         this.taskScheduler = taskScheduler;
+        this.debugLogger = debugLogger;
     }
 
     @Override
@@ -50,6 +54,59 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         this.messageParser = messageParser;
     }
 
+    private AdvancementType toMinecraftFrame(AdvancementFrame frame) {
+        return AdvancementType.valueOf(frame.name());
+    }
+
+    @Override
+    public void displayToast(ServerPlayer player, ResourceLocation id, ItemStack icon, @Nullable Component title, Component subtitle, AdvancementFrame frame) {
+        try {
+            Component finalTitle;
+            if (title == null) {
+                String translationKey = switch (frame) {
+                    case GOAL -> "advancements.goal.title";
+                    case CHALLENGE -> "advancements.challenge.title";
+                    case TASK -> "advancements.task.title";
+                };
+                finalTitle = this.createTranslatableComponent(translationKey);
+            } else {
+                finalTitle = title;
+            }
+
+            DisplayInfo displayInfo = new DisplayInfo(icon, finalTitle, subtitle, Optional.empty(), toMinecraftFrame(frame), true, false, false);
+            Map<String, Criterion<?>> criteria = Map.of("trigger", new Criterion<>(new ImpossibleTrigger(), new ImpossibleTrigger.TriggerInstance()));
+            AdvancementRequirements requirements = AdvancementRequirements.allOf(Collections.singleton("trigger"));
+            Advancement advancement = new Advancement(Optional.empty(), Optional.of(displayInfo), AdvancementRewards.EMPTY, criteria, requirements, false);
+            AdvancementHolder advancementHolder = new AdvancementHolder(id, advancement);
+            AdvancementProgress advancementProgress = new AdvancementProgress();
+            advancementProgress.update(advancement.requirements());
+            advancementProgress.getCriterion("trigger").grant();
+            Map<ResourceLocation, AdvancementProgress> progressMap = Map.of(id, advancementProgress);
+            ClientboundUpdateAdvancementsPacket addPacket = new ClientboundUpdateAdvancementsPacket(false, List.of(advancementHolder), Set.of(), progressMap);
+            player.connection.send(addPacket);
+        } catch (Exception e) {
+            debugLogger.debugLog("Paradigm: Failed to create or send toast packet.", e);
+        }
+    }
+
+    @Override
+    public void revokeToast(ServerPlayer player, ResourceLocation id) {
+        try {
+            if (player.connection != null) {
+                ClientboundUpdateAdvancementsPacket removePacket = new ClientboundUpdateAdvancementsPacket(true, List.of(), Set.of(id), Map.of());
+                player.connection.send(removePacket);
+            }
+        } catch (Exception e) {
+            debugLogger.debugLog("Paradigm: Failed to revoke toast.", e);
+        }
+    }
+
+    @Override
+    public MutableComponent createTranslatableComponent(String key, Object... args) {
+        return Component.translatable(key, args);
+    }
+
+    // ... the rest of your PlatformAdapterImpl methods remain unchanged
     private BossEvent.BossBarColor toMinecraftColor(BossBarColor color) {
         return BossEvent.BossBarColor.valueOf(color.name());
     }
@@ -88,6 +145,22 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public String getPlayerName(ServerPlayer player) {
         return player.getName().getString();
+    }
+
+    @Override
+    public Component getPlayerDisplayName(ServerPlayer player) {
+        return player.getDisplayName();
+    }
+
+    @Override
+    public MutableComponent createLiteralComponent(String text) {
+        return Component.literal(text);
+    }
+
+    @Override
+    public ItemStack createItemStack(String itemId) {
+        var item = ForgeRegistries.ITEMS.getValue(ResourceLocation.parse(itemId));
+        return item != null ? new ItemStack(item) : new ItemStack(Items.STONE);
     }
 
     @Override

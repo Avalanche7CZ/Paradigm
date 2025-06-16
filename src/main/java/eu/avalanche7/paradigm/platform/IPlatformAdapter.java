@@ -5,9 +5,10 @@ import eu.avalanche7.paradigm.utils.MessageParser;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
-
+import net.minecraft.world.item.ItemStack;
 import javax.annotation.Nullable;
 import java.util.List;
 import java.util.UUID;
@@ -16,6 +17,7 @@ public interface IPlatformAdapter {
 
     enum BossBarColor { PINK, BLUE, RED, GREEN, YELLOW, PURPLE, WHITE }
     enum BossBarOverlay { PROGRESS, NOTCHED_6, NOTCHED_10, NOTCHED_12, NOTCHED_20 }
+    enum AdvancementFrame { TASK, CHALLENGE, GOAL }
 
     void provideMessageParser(MessageParser messageParser);
     MinecraftServer getMinecraftServer();
@@ -24,6 +26,10 @@ public interface IPlatformAdapter {
     @Nullable ServerPlayer getPlayerByName(String name);
     @Nullable ServerPlayer getPlayerByUuid(UUID uuid);
     String getPlayerName(ServerPlayer player);
+    Component getPlayerDisplayName(ServerPlayer player);
+    MutableComponent createLiteralComponent(String text);
+    MutableComponent createTranslatableComponent(String key, Object... args);
+    ItemStack createItemStack(String itemId);
     boolean hasPermission(ServerPlayer player, String permissionNode);
     boolean hasPermission(ServerPlayer player, String permissionNode, int vanillaLevel);
     void sendSystemMessage(ServerPlayer player, Component message);
@@ -38,6 +44,8 @@ public interface IPlatformAdapter {
     void removePersistentBossBar(ServerPlayer player);
     void createOrUpdateRestartBossBar(Component message, BossBarColor color, float progress);
     void removeRestartBossBar();
+    void displayToast(ServerPlayer player, ResourceLocation id, ItemStack icon, Component title, Component subtitle, AdvancementFrame frame);
+    void revokeToast(ServerPlayer player, ResourceLocation id);
     void clearTitles(ServerPlayer player);
     void playSound(ServerPlayer player, String soundId, float volume, float pitch);
     void executeCommandAs(CommandSourceStack source, String command);

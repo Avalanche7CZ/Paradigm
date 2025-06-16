@@ -57,6 +57,7 @@ public class Paradigm {
         RestartConfigHandler.load();
         ChatConfigHandler.load();
         MOTDConfigHandler.loadConfig();
+        ToastConfigHandler.load();
 
         DebugLogger debugLogger = new DebugLogger(MainConfigHandler.CONFIG);
         CMConfig cmConfig = new CMConfig(debugLogger);
@@ -65,16 +66,14 @@ public class Paradigm {
         TaskScheduler taskScheduler = new TaskScheduler(debugLogger);
         PermissionsHandler permissionsHandler = new PermissionsHandler(LOGGER, cmConfig, debugLogger);
 
-        IPlatformAdapter platformAdapter = new PlatformAdapterImpl(permissionsHandler, placeholders, taskScheduler);
-
+        IPlatformAdapter platformAdapter = new PlatformAdapterImpl(permissionsHandler, placeholders, taskScheduler, debugLogger);
         MessageParser messageParser = new MessageParser(placeholders, platformAdapter);
-
         platformAdapter.provideMessageParser(messageParser);
 
         Lang lang = new Lang(LOGGER, MainConfigHandler.CONFIG, messageParser);
         lang.initializeLanguage();
-
         GroupChatManager groupChatManager = new GroupChatManager(platformAdapter, lang, debugLogger, messageParser);
+        CustomToastManager customToastManager = new CustomToastManager(platformAdapter, messageParser, taskScheduler, debugLogger);
 
         return new Services(
                 LOGGER,
@@ -86,6 +85,7 @@ public class Paradigm {
                 ChatConfigHandler.CONFIG,
                 cmConfig,
                 groupChatManager,
+                customToastManager,
                 debugLogger,
                 lang,
                 messageParser,
@@ -104,6 +104,7 @@ public class Paradigm {
         modules.add(new StaffChat());
         modules.add(new GroupChat(services.getGroupChatManager()));
         modules.add(new CommandManager());
+        modules.add(new CustomToasts());
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
@@ -115,7 +116,7 @@ public class Paradigm {
 
         ModList.get().getModContainerById(MOD_ID).ifPresent(modContainer -> {
             String version = modContainer.getModInfo().getVersion().toString();
-            String displayName = modContainer.getModInfo().getDisplayName.toString();
+            String displayName = modContainer.getModInfo().getDisplayName();
             LOGGER.info("==================================================");
             LOGGER.info("{} - Version {}", displayName, version);
             LOGGER.info("Author: Avalanche7CZ");

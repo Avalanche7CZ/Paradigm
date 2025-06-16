@@ -22,6 +22,7 @@ public class Services {
     private final Placeholders placeholdersInstance;
     private final TaskScheduler taskSchedulerInstance;
     private final GroupChatManager groupChatManagerInstance;
+    private final CustomToastManager customToastManagerInstance;
     private final IPlatformAdapter platformAdapter;
 
     public Services(
@@ -34,6 +35,7 @@ public class Services {
             ChatConfigHandler.Config chatConfig,
             CMConfig cmConfig,
             GroupChatManager groupChatManager,
+            CustomToastManager customToastManager,
             DebugLogger debugLogger,
             Lang lang,
             MessageParser messageParser,
@@ -51,6 +53,7 @@ public class Services {
         this.chatConfig = chatConfig;
         this.cmConfigInstance = cmConfig;
         this.groupChatManagerInstance = groupChatManager;
+        this.customToastManagerInstance = customToastManager;
         this.debugLoggerInstance = debugLogger;
         this.langInstance = lang;
         this.messageParserInstance = messageParser;
@@ -58,6 +61,10 @@ public class Services {
         this.placeholdersInstance = placeholders;
         this.taskSchedulerInstance = taskScheduler;
         this.platformAdapter = platformAdapter;
+    }
+
+    public CustomToastManager getCustomToastManager() {
+        return customToastManagerInstance;
     }
 
     public Logger getLogger() {
