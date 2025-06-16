@@ -25,8 +25,8 @@ public class ToastConfigHandler {
 
     public static class ToastDefinition {
         public String icon = "minecraft:stone";
-        public String title_override;
-        public String title = "Sample Description";
+        public String title = "Sample Title";
+        public String description = "Sample Description";
         public String frame = "TASK";
     }
 
@@ -51,18 +51,19 @@ public class ToastConfigHandler {
     private static void createDefaultConfig() {
         TOASTS.clear();
 
-        ToastDefinition defaultTitleToast = new ToastDefinition();
-        defaultTitleToast.icon = "minecraft:sunflower";
-        defaultTitleToast.title = "&eThanks for Voting!";
-        defaultTitleToast.frame = "GOAL";
-        TOASTS.put("default_title_toast", defaultTitleToast);
+        ToastDefinition simpleToast = new ToastDefinition();
+        simpleToast.icon = "minecraft:sunflower";
+        simpleToast.title = "&eGoal Reached!";
+        simpleToast.description = "&eThanks for Voting!";
+        simpleToast.frame = "GOAL";
+        TOASTS.put("vote_reward", simpleToast);
 
-        ToastDefinition customTitleToast = new ToastDefinition();
-        customTitleToast.icon = "minecraft:stone";
-        customTitleToast.title_override = "&aWelcome!";
-        customTitleToast.title = "&fWe hope you enjoy your stay.";
-        customTitleToast.frame = "TASK";
-        TOASTS.put("custom_title_toast", customTitleToast);
+        ToastDefinition welcomeToast = new ToastDefinition();
+        welcomeToast.icon = "minecraft:stone";
+        welcomeToast.title = "&aWelcome!";
+        welcomeToast.description = "&fWe hope you enjoy your stay.";
+        welcomeToast.frame = "TASK";
+        TOASTS.put("welcome_toast", welcomeToast);
     }
 
     public static void save() {

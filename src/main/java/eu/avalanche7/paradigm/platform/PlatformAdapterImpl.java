@@ -61,19 +61,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public void displayToast(ServerPlayer player, ResourceLocation id, ItemStack icon, @Nullable Component title, Component subtitle, AdvancementFrame frame) {
         try {
-            Component finalTitle;
-            if (title == null) {
-                String translationKey = switch (frame) {
-                    case GOAL -> "advancements.goal.title";
-                    case CHALLENGE -> "advancements.challenge.title";
-                    case TASK -> "advancements.task.title";
-                };
-                finalTitle = this.createTranslatableComponent(translationKey);
-            } else {
-                finalTitle = title;
-            }
-
-            DisplayInfo displayInfo = new DisplayInfo(icon, finalTitle, subtitle, Optional.empty(), toMinecraftFrame(frame), true, false, false);
+            DisplayInfo displayInfo = new DisplayInfo(icon, title, subtitle, Optional.empty(), toMinecraftFrame(frame), true, false, false);
             Map<String, Criterion<?>> criteria = Map.of("trigger", new Criterion<>(new ImpossibleTrigger(), new ImpossibleTrigger.TriggerInstance()));
             AdvancementRequirements requirements = AdvancementRequirements.allOf(Collections.singleton("trigger"));
             Advancement advancement = new Advancement(Optional.empty(), Optional.of(displayInfo), AdvancementRewards.EMPTY, criteria, requirements, false);
@@ -99,20 +87,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         } catch (Exception e) {
             debugLogger.debugLog("Paradigm: Failed to revoke toast.", e);
         }
-    }
-
-    @Override
-    public MutableComponent createTranslatableComponent(String key, Object... args) {
-        return Component.translatable(key, args);
-    }
-
-    // ... the rest of your PlatformAdapterImpl methods remain unchanged
-    private BossEvent.BossBarColor toMinecraftColor(BossBarColor color) {
-        return BossEvent.BossBarColor.valueOf(color.name());
-    }
-
-    private BossEvent.BossBarOverlay toMinecraftOverlay(BossBarOverlay overlay) {
-        return BossEvent.BossBarOverlay.valueOf(overlay.name());
     }
 
     @Override
@@ -155,6 +129,11 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public MutableComponent createLiteralComponent(String text) {
         return Component.literal(text);
+    }
+
+    @Override
+    public MutableComponent createTranslatableComponent(String key, Object... args) {
+        return Component.translatable(key, args);
     }
 
     @Override
@@ -222,6 +201,14 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public void sendActionBar(ServerPlayer player, Component message) {
         player.connection.send(new ClientboundSetActionBarTextPacket(message));
+    }
+
+    private BossEvent.BossBarColor toMinecraftColor(BossBarColor color) {
+        return BossEvent.BossBarColor.valueOf(color.name());
+    }
+
+    private BossEvent.BossBarOverlay toMinecraftOverlay(BossBarOverlay overlay) {
+        return BossEvent.BossBarOverlay.valueOf(overlay.name());
     }
 
     @Override

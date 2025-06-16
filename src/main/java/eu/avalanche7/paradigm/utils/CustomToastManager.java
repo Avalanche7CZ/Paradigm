@@ -41,14 +41,12 @@ public class CustomToastManager {
                 frame = IPlatformAdapter.AdvancementFrame.TASK;
             }
 
-            Component titleComponent;
-            if (definition.title_override != null && !definition.title_override.isEmpty()) {
-                titleComponent = messageParser.parseMessage(definition.title_override, player);
-            } else {
-                titleComponent = null;
-            }
+            Component titleComponent = messageParser.parseMessage(definition.title, player);
 
-            Component descriptionComponent = messageParser.parseMessage(definition.title, player);
+            Component descriptionComponent = Component.empty();
+            if(definition.description != null && !definition.description.isEmpty()) {
+                descriptionComponent = messageParser.parseMessage(definition.description, player);
+            }
 
             platform.displayToast(player, id, icon, titleComponent, descriptionComponent, frame);
             taskScheduler.schedule(() -> platform.revokeToast(player, id), 5, TimeUnit.SECONDS);
