@@ -90,7 +90,21 @@ public class RestartConfigHandler {
             try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
                 Config loadedConfig = GSON.fromJson(reader, Config.class);
                 if (loadedConfig != null) {
-                    CONFIG = loadedConfig;
+                    CONFIG.restartType = loadedConfig.restartType != null ? loadedConfig.restartType : CONFIG.restartType;
+                    CONFIG.restartInterval = loadedConfig.restartInterval != null ? loadedConfig.restartInterval : CONFIG.restartInterval;
+                    CONFIG.realTimeInterval = loadedConfig.realTimeInterval != null ? loadedConfig.realTimeInterval : CONFIG.realTimeInterval;
+                    CONFIG.bossbarEnabled = loadedConfig.bossbarEnabled != null ? loadedConfig.bossbarEnabled : CONFIG.bossbarEnabled;
+                    CONFIG.bossBarMessage = loadedConfig.bossBarMessage != null ? loadedConfig.bossBarMessage : CONFIG.bossBarMessage;
+                    CONFIG.timerUseChat = loadedConfig.timerUseChat != null ? loadedConfig.timerUseChat : CONFIG.timerUseChat;
+                    CONFIG.BroadcastMessage = loadedConfig.BroadcastMessage != null ? loadedConfig.BroadcastMessage : CONFIG.BroadcastMessage;
+                    CONFIG.timerBroadcast = loadedConfig.timerBroadcast != null ? loadedConfig.timerBroadcast : CONFIG.timerBroadcast;
+                    CONFIG.defaultRestartReason = loadedConfig.defaultRestartReason != null ? loadedConfig.defaultRestartReason : CONFIG.defaultRestartReason;
+                    CONFIG.playSoundEnabled = loadedConfig.playSoundEnabled != null ? loadedConfig.playSoundEnabled : CONFIG.playSoundEnabled;
+                    CONFIG.playSoundString = loadedConfig.playSoundString != null ? loadedConfig.playSoundString : CONFIG.playSoundString;
+                    CONFIG.playSoundFirstTime = loadedConfig.playSoundFirstTime != null ? loadedConfig.playSoundFirstTime : CONFIG.playSoundFirstTime;
+                    CONFIG.titleEnabled = loadedConfig.titleEnabled != null ? loadedConfig.titleEnabled : CONFIG.titleEnabled;
+                    CONFIG.titleStayTime = loadedConfig.titleStayTime != null ? loadedConfig.titleStayTime : CONFIG.titleStayTime;
+                    CONFIG.titleMessage = loadedConfig.titleMessage != null ? loadedConfig.titleMessage : CONFIG.titleMessage;
                 }
             } catch (Exception e) {
                 LOGGER.warn("[Paradigm] Could not parse restarts.json, it may be corrupt. A new one will be generated.", e);

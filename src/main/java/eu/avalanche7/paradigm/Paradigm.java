@@ -5,6 +5,7 @@ import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.*;
 import eu.avalanche7.paradigm.configs.*;
 import eu.avalanche7.paradigm.modules.chat.GroupChat;
+import eu.avalanche7.paradigm.modules.chat.JoinLeaveMessages;
 import eu.avalanche7.paradigm.modules.chat.MOTD;
 import eu.avalanche7.paradigm.modules.chat.StaffChat;
 import eu.avalanche7.paradigm.platform.IPlatformAdapter;
@@ -106,6 +107,7 @@ public class Paradigm {
         modules.add(new GroupChat(services.getGroupChatManager()));
         modules.add(new CommandManager());
         modules.add(new CustomToasts());
+        modules.add(new JoinLeaveMessages());
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {

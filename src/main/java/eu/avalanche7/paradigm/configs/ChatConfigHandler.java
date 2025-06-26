@@ -37,6 +37,26 @@ public class ChatConfigHandler {
                 true,
                 "Enable toast notifications for group chat events (invites, joins, etc.)."
         );
+        public ConfigEntry<Boolean> enableJoinLeaveMessages = new ConfigEntry<>(
+                true,
+                "Enables or disables custom join and leave messages."
+        );
+        public ConfigEntry<String> joinMessageFormat = new ConfigEntry<>(
+                "&a{player_name} &ehas joined the server!",
+                "The format for join messages. Placeholders: {player_name}, {player_uuid}, {player_level}, {player_health}, {max_player_health}."
+        );
+        public ConfigEntry<String> leaveMessageFormat = new ConfigEntry<>(
+                "&c{player_name} &ehas left the server!",
+                "The format for leave messages. Placeholders: {player_name}, {player_uuid}, {player_level}, {player_health}, {max_player_health}."
+        );
+        public ConfigEntry<Boolean> enableFirstJoinMessage = new ConfigEntry<>(
+                true,
+                "Enables a special message for a player's very first join."
+        );
+        public ConfigEntry<String> firstJoinMessageFormat = new ConfigEntry<>(
+                "&dWelcome, {player_name}, to the server for the first time!",
+                "The format for the first join message. Same placeholders as regular join."
+        );
     }
 
     public static void load() {
@@ -44,7 +64,15 @@ public class ChatConfigHandler {
             try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
                 Config loadedConfig = GSON.fromJson(reader, Config.class);
                 if (loadedConfig != null) {
-                    CONFIG = loadedConfig;
+                    CONFIG.enableStaffChat = loadedConfig.enableStaffChat != null ? loadedConfig.enableStaffChat : CONFIG.enableStaffChat;
+                    CONFIG.staffChatFormat = loadedConfig.staffChatFormat != null ? loadedConfig.staffChatFormat : CONFIG.staffChatFormat;
+                    CONFIG.enableStaffBossBar = loadedConfig.enableStaffBossBar != null ? loadedConfig.enableStaffBossBar : CONFIG.enableStaffBossBar;
+                    CONFIG.enableGroupChatToasts = loadedConfig.enableGroupChatToasts != null ? loadedConfig.enableGroupChatToasts : CONFIG.enableGroupChatToasts;
+                    CONFIG.enableJoinLeaveMessages = loadedConfig.enableJoinLeaveMessages != null ? loadedConfig.enableJoinLeaveMessages : CONFIG.enableJoinLeaveMessages;
+                    CONFIG.joinMessageFormat = loadedConfig.joinMessageFormat != null ? loadedConfig.joinMessageFormat : CONFIG.joinMessageFormat;
+                    CONFIG.leaveMessageFormat = loadedConfig.leaveMessageFormat != null ? loadedConfig.leaveMessageFormat : CONFIG.leaveMessageFormat;
+                    CONFIG.enableFirstJoinMessage = loadedConfig.enableFirstJoinMessage != null ? loadedConfig.enableFirstJoinMessage : CONFIG.enableFirstJoinMessage;
+                    CONFIG.firstJoinMessageFormat = loadedConfig.firstJoinMessageFormat != null ? loadedConfig.firstJoinMessageFormat : CONFIG.firstJoinMessageFormat;
                 }
             } catch (Exception e) {
                 LOGGER.warn("[Paradigm] Could not parse chat.json, it may be corrupt or from an old version. A new one will be generated with defaults.", e);
