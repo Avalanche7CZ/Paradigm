@@ -58,24 +58,56 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         return AdvancementType.valueOf(frame.name());
     }
 
+
     @Override
-    public void displayToast(ServerPlayer player, ResourceLocation id, ItemStack icon, @Nullable Component title, Component subtitle, AdvancementFrame frame) {
+    public void displayToast(ServerPlayer player, ResourceLocation id, ItemStack icon, @Nullable Component title, Component unused, AdvancementFrame frame) {
         try {
-            DisplayInfo displayInfo = new DisplayInfo(icon, title, subtitle, Optional.empty(), toMinecraftFrame(frame), true, false, false);
-            Map<String, Criterion<?>> criteria = Map.of("trigger", new Criterion<>(new ImpossibleTrigger(), new ImpossibleTrigger.TriggerInstance()));
+            DisplayInfo displayInfo = new DisplayInfo(
+                    icon,
+                    title != null ? title : Component.empty(),
+                    Component.empty(),
+                    Optional.empty(),
+                    toMinecraftFrame(frame),
+                    true,
+                    true,
+                    false
+            );
+
+            Map<String, Criterion<?>> criteria = Map.of(
+                    "trigger", new Criterion<>(new ImpossibleTrigger(), new ImpossibleTrigger.TriggerInstance())
+            );
             AdvancementRequirements requirements = AdvancementRequirements.allOf(Collections.singleton("trigger"));
-            Advancement advancement = new Advancement(Optional.empty(), Optional.of(displayInfo), AdvancementRewards.EMPTY, criteria, requirements, false);
-            AdvancementHolder advancementHolder = new AdvancementHolder(id, advancement);
-            AdvancementProgress advancementProgress = new AdvancementProgress();
-            advancementProgress.update(advancement.requirements());
-            advancementProgress.getCriterion("trigger").grant();
-            Map<ResourceLocation, AdvancementProgress> progressMap = Map.of(id, advancementProgress);
-            ClientboundUpdateAdvancementsPacket addPacket = new ClientboundUpdateAdvancementsPacket(false, List.of(advancementHolder), Set.of(), progressMap);
-            player.connection.send(addPacket);
+
+            Advancement advancement = new Advancement(
+                    Optional.empty(),
+                    Optional.of(displayInfo),
+                    AdvancementRewards.EMPTY,
+                    criteria,
+                    requirements,
+                    false
+            );
+            AdvancementHolder holder = new AdvancementHolder(id, advancement);
+
+            AdvancementProgress progress = new AdvancementProgress();
+            progress.update(requirements);
+            progress.getCriterion("trigger").grant();
+
+            ClientboundUpdateAdvancementsPacket packet = new ClientboundUpdateAdvancementsPacket(
+                    false,
+                    List.of(holder),
+                    Set.of(),
+                    Map.of(id, progress)
+            );
+
+            player.connection.send(packet);
+
+            taskScheduler.schedule(() -> revokeToast(player, id), 5, TimeUnit.SECONDS);
+
         } catch (Exception e) {
-            debugLogger.debugLog("Paradigm: Failed to create or send toast packet.", e);
+            debugLogger.debugLog("Paradigm: Failed to send simplified toast.", e);
         }
     }
+
 
     @Override
     public void revokeToast(ServerPlayer player, ResourceLocation id) {

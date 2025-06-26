@@ -37,7 +37,7 @@ public class MainConfigHandler {
                 false, "Enables verbose debug logging in the console for development."
         );
         public ConfigEntry<String> defaultLanguage = new ConfigEntry<>(
-                "en_us", "Default language file to use (e.g., 'en_us', 'de_de'). Must match a file in the lang folder."
+                "en", "Default language file to use (e.g., 'en', 'cs'). Must match a file in the lang folder."
         );
         public ConfigEntry<Boolean> commandManagerEnable = new ConfigEntry<>(
                 true, "Enables the custom commands module."

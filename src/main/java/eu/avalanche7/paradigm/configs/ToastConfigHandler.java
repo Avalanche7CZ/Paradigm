@@ -7,6 +7,7 @@ import eu.avalanche7.paradigm.Paradigm;
 import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -26,7 +27,6 @@ public class ToastConfigHandler {
     public static class ToastDefinition {
         public String icon = "minecraft:stone";
         public String title = "Sample Title";
-        public String description = "Sample Description";
         public String frame = "TASK";
     }
 
@@ -39,7 +39,7 @@ public class ToastConfigHandler {
                     TOASTS = loadedToasts;
                 }
             } catch (Exception e) {
-                LOGGER.warn("[Paradigm] Could not parse toasts.json, it may be corrupt. Generating a new one with defaults.", e);
+                LOGGER.warn("[Paradigm] Could not parse toasts.json, it may be corrupt. Generating a new one.", e);
                 createDefaultConfig();
             }
         } else {
@@ -51,17 +51,15 @@ public class ToastConfigHandler {
     private static void createDefaultConfig() {
         TOASTS.clear();
 
-        ToastDefinition simpleToast = new ToastDefinition();
-        simpleToast.icon = "minecraft:sunflower";
-        simpleToast.title = "&eGoal Reached!";
-        simpleToast.description = "&eThanks for Voting!";
-        simpleToast.frame = "GOAL";
-        TOASTS.put("vote_reward", simpleToast);
+        ToastDefinition voteToast = new ToastDefinition();
+        voteToast.icon = "minecraft:sunflower";
+        voteToast.title = "&eThanks for Voting!";
+        voteToast.frame = "GOAL";
+        TOASTS.put("vote_reward", voteToast);
 
         ToastDefinition welcomeToast = new ToastDefinition();
         welcomeToast.icon = "minecraft:stone";
-        welcomeToast.title = "&aWelcome!";
-        welcomeToast.description = "&fWe hope you enjoy your stay.";
+        welcomeToast.title = "&aWelcome to the server!";
         welcomeToast.frame = "TASK";
         TOASTS.put("welcome_toast", welcomeToast);
     }

@@ -1,4 +1,4 @@
-package eu.avalanche7.paradigm.modules;
+package eu.avalanche7.paradigm.modules.chat;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;

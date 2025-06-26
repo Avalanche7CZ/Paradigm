@@ -1,4 +1,4 @@
-package eu.avalanche7.paradigm.modules;
+package eu.avalanche7.paradigm.modules.chat;
 
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;

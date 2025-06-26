@@ -6,6 +6,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
+
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -31,6 +32,7 @@ public class CustomToastManager {
                 return false;
             }
 
+            Component titleComponent = messageParser.parseMessage(definition.title, player);
             ResourceLocation id = ResourceLocation.fromNamespaceAndPath("paradigm", "toast/" + UUID.randomUUID());
             ItemStack icon = platform.createItemStack(definition.icon);
 
@@ -41,14 +43,7 @@ public class CustomToastManager {
                 frame = IPlatformAdapter.AdvancementFrame.TASK;
             }
 
-            Component titleComponent = messageParser.parseMessage(definition.title, player);
-
-            Component descriptionComponent = Component.empty();
-            if(definition.description != null && !definition.description.isEmpty()) {
-                descriptionComponent = messageParser.parseMessage(definition.description, player);
-            }
-
-            platform.displayToast(player, id, icon, titleComponent, descriptionComponent, frame);
+            platform.displayToast(player, id, icon, titleComponent, Component.empty(), frame);
             taskScheduler.schedule(() -> platform.revokeToast(player, id), 5, TimeUnit.SECONDS);
 
             return true;

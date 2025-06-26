@@ -1,15 +1,16 @@
 package eu.avalanche7.paradigm;
 
-import com.mojang.brigadier.CommandDispatcher;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.*;
 import eu.avalanche7.paradigm.configs.*;
+import eu.avalanche7.paradigm.modules.chat.GroupChat;
+import eu.avalanche7.paradigm.modules.chat.MOTD;
+import eu.avalanche7.paradigm.modules.chat.StaffChat;
 import eu.avalanche7.paradigm.platform.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.PlatformAdapterImpl;
 import eu.avalanche7.paradigm.utils.*;
 import com.mojang.logging.LogUtils;
-import net.minecraft.commands.CommandSourceStack;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
