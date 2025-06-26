@@ -56,4 +56,6 @@ public interface IPlatformAdapter {
     void sendSuccess(CommandSourceStack source, Component message, boolean toOps);
     void sendFailure(CommandSourceStack source, Component message);
     void teleportPlayer(ServerPlayer player, double x, double y, double z);
+    boolean playerHasItem(ServerPlayer player, String itemId, int amount);
+    boolean isPlayerInArea(ServerPlayer player, String worldId, List<Integer> corner1, List<Integer> corner2);
 }

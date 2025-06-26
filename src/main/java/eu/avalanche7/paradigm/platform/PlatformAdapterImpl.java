@@ -5,6 +5,7 @@ import eu.avalanche7.paradigm.utils.*;
 import net.minecraft.advancements.*;
 import net.minecraft.advancements.critereon.ImpossibleTrigger;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.protocol.game.ClientboundClearTitlesPacket;
@@ -12,6 +13,7 @@ import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundUpdateAdvancementsPacket;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerBossEvent;
@@ -19,8 +21,11 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.BossEvent;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.registries.ForgeRegistries;
 import javax.annotation.Nullable;
 import java.util.*;
@@ -359,5 +364,44 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public void teleportPlayer(ServerPlayer player, double x, double y, double z) {
         player.teleportTo(x, y, z);
+    }
+
+    @Override
+    public boolean playerHasItem(ServerPlayer player, String itemId, int amount) {
+        if (player == null || itemId == null) {
+            return false;
+        }
+        Item item = ForgeRegistries.ITEMS.getValue(ResourceLocation.parse(itemId));
+        if (item == null || item == Items.AIR) {
+            debugLogger.debugLog("PlatformAdapter: Could not find item with ID: " + itemId);
+            return false;
+        }
+        return player.getInventory().countItem(item) >= amount;
+    }
+
+    @Override
+    public boolean isPlayerInArea(ServerPlayer player, String worldId, List<Integer> corner1, List<Integer> corner2) {
+        if (player == null || worldId == null || corner1 == null || corner2 == null || corner1.size() != 3 || corner2.size() != 3) {
+            return false;
+        }
+
+        ResourceKey<Level> targetWorldKey = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(worldId));
+        if (!player.level().dimension().equals(targetWorldKey)) {
+            return false;
+        }
+
+        Vec3 pos = player.position();
+        double pX = pos.x();
+        double pY = pos.y();
+        double pZ = pos.z();
+
+        double x1 = Math.min(corner1.get(0), corner2.get(0));
+        double y1 = Math.min(corner1.get(1), corner2.get(1));
+        double z1 = Math.min(corner1.get(2), corner2.get(2));
+        double x2 = Math.max(corner1.get(0), corner2.get(0));
+        double y2 = Math.max(corner1.get(1), corner2.get(1));
+        double z2 = Math.max(corner1.get(2), corner2.get(2));
+
+        return pX >= x1 && pX <= x2 && pY >= y1 && pY <= y2 && pZ >= z1 && pZ <= z2;
     }
 }

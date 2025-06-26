@@ -77,6 +77,9 @@ public class Paradigm {
         GroupChatManager groupChatManager = new GroupChatManager(platformAdapter, lang, debugLogger, messageParser);
         CustomToastManager customToastManager = new CustomToastManager(platformAdapter, messageParser, taskScheduler, debugLogger);
 
+        CooldownConfigHandler cooldownConfigHandler = new CooldownConfigHandler(debugLogger);
+        cooldownConfigHandler.loadCooldowns();
+
         return new Services(
                 LOGGER,
                 MainConfigHandler.CONFIG,
@@ -94,7 +97,8 @@ public class Paradigm {
                 permissionsHandler,
                 placeholders,
                 taskScheduler,
-                platformAdapter
+                platformAdapter,
+                cooldownConfigHandler
         );
     }
 
@@ -159,10 +163,11 @@ public class Paradigm {
             }
         });
         services.getTaskScheduler().onServerStopping();
+        services.getCooldownConfigHandler().saveCooldowns();
     }
 
     public static class UpdateChecker {
-        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/1.21.1/version.txt";
+        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/1.21.1/version.txt?v=1";
 
         public static void checkForUpdates(String currentVersion, Logger logger) {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(new URL(LATEST_VERSION_URL).openStream()))) {

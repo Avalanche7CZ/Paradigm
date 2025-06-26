@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.utils.DebugLogger;
@@ -90,27 +91,70 @@ public class CMConfig {
         List<CustomCommand> defaultCommands = new ArrayList<>();
 
         List<CustomCommand.Action> actions1 = new ArrayList<>();
-        List<String> welcomeText = new ArrayList<>();
-        welcomeText.add("&aHello &6{player}! &bWelcome to the server!");
-        welcomeText.add("&aEnjoy your stay and check out our rules.");
-        actions1.add(new CustomCommand.Action("message", welcomeText, null, null, null, null));
-
-        defaultCommands.add(new CustomCommand("example", "Sends a greeting to the player.", "example.custom.permissions", false, actions1));
+        List<String> welcomeText = List.of("&aHello &6{player}! &bWelcome to the server!", "&aEnjoy your stay and check out our rules.");
+        actions1.add(new CustomCommand.Action("message", welcomeText, null, null, null, null, null, null, null));
+        defaultCommands.add(new CustomCommand("example", "Sends a greeting to the player.", "example.custom.permissions", false, null, actions1));
 
         List<CustomCommand.Action> actions2 = new ArrayList<>();
-        actions2.add(new CustomCommand.Action("teleport", null, 100, 64, 100, null));
-        List<String> spawnText = new ArrayList<>();
-        spawnText.add("&aYou have been teleported to spawn!");
-        actions2.add(new CustomCommand.Action("message", spawnText, null, null, null, null));
-        defaultCommands.add(new CustomCommand("example2", "Teleports the player to spawn.", "example2.custom.permissions", false, actions2));
+        actions2.add(new CustomCommand.Action("teleport", null, 100, 64, 100, null, null, null, null));
+        List<String> spawnText = List.of("&aYou have been teleported to spawn!");
+        actions2.add(new CustomCommand.Action("message", spawnText, null, null, null, null, null, null, null));
+        defaultCommands.add(new CustomCommand("example2", "Teleports the player to spawn.", "example2.custom.permissions", false, null, actions2));
 
         List<CustomCommand.Action> actions3 = new ArrayList<>();
-        List<String> cmds = new ArrayList<>();
-        cmds.add("say Hello world!");
-        cmds.add("give @p minecraft:diamond 1");
-        actions3.add(new CustomCommand.Action("runcmd", null, null, null, null, cmds));
+        List<String> cmds = List.of("say Hello world!", "give @p minecraft:diamond 1");
+        actions3.add(new CustomCommand.Action("runcmd", null, null, null, null, cmds, null, null, null));
+        defaultCommands.add(new CustomCommand("example3", "Runs multiple commands for admins.", "example3.custom.permissions", true, null, actions3));
 
-        defaultCommands.add(new CustomCommand("example3", "Runs multiple commands for admins.", "example3.custom.permissions", true, actions3));
+        List<CustomCommand.Action> successActions = new ArrayList<>();
+        successActions.add(new CustomCommand.Action("message", List.of("&aSuccess! You had the required item."), null, null, null, null, null, null, null));
+        successActions.add(new CustomCommand.Action("run_console", null, null, null, null, List.of("say {player} has at least 5 diamonds!"), null, null, null));
+
+        List<CustomCommand.Action> failureActions = new ArrayList<>();
+        failureActions.add(new CustomCommand.Action("message", List.of("&cFailure! You need at least 5 diamonds to use this command."), null, null, null, null, null, null, null));
+
+        List<CustomCommand.Condition> conditions = new ArrayList<>();
+        conditions.add(new CustomCommand.Condition("has_item", "minecraft:diamond", 5, false));
+
+        List<CustomCommand.Action> conditionalActionList = new ArrayList<>();
+        conditionalActionList.add(new CustomCommand.Action("conditional", null, null, null, null, null, conditions, successActions, failureActions));
+
+        defaultCommands.add(new CustomCommand("checkdiamond", "Checks if you have 5 diamonds.", "paradigm.checkdiamond", false, null, conditionalActionList));
+
+        List<CustomCommand.Action> cooldownActions = new ArrayList<>();
+        cooldownActions.add(new CustomCommand.Action("message", List.of("&aYou successfully used the cooldown command!"), null, null, null, null, null, null, null));
+        defaultCommands.add(new CustomCommand(
+                "cooldown_test",
+                "A command with a 30-second cooldown.",
+                "paradigm.cooldown.test",
+                false,
+                null,
+                cooldownActions,
+                30,
+                "&cThis command is on cooldown! Please wait &e{remaining_time} &cseconds."
+        ));
+
+        List<CustomCommand.Action> areaActions = new ArrayList<>();
+        areaActions.add(new CustomCommand.Action("message", List.of("&aYou have found the secret altar!"), null, null, null, null, null, null, null));
+
+        CustomCommand.AreaRestriction restriction = new CustomCommand.AreaRestriction(
+                "minecraft:overworld",
+                Arrays.asList(0, 60, 0),
+                Arrays.asList(10, 70, 10),
+                "&cYou must be at the secret altar to use this command."
+        );
+
+        defaultCommands.add(new CustomCommand(
+                "altar_ritual",
+                "A command that only works in a specific area.",
+                "paradigm.altar.use",
+                false,
+                null,
+                areaActions,
+                60,
+                "&cThe altar's magic needs time to recharge.",
+                restriction
+        ));
 
         this.loadedCommands = defaultCommands;
         saveCommands();

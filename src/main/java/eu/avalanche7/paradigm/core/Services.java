@@ -24,6 +24,7 @@ public class Services {
     private final GroupChatManager groupChatManagerInstance;
     private final CustomToastManager customToastManagerInstance;
     private final IPlatformAdapter platformAdapter;
+    private final CooldownConfigHandler cooldownConfigHandler;
 
     public Services(
             Logger logger,
@@ -42,7 +43,8 @@ public class Services {
             PermissionsHandler permissionsHandler,
             Placeholders placeholders,
             TaskScheduler taskScheduler,
-            IPlatformAdapter platformAdapter
+            IPlatformAdapter platformAdapter,
+            CooldownConfigHandler cooldownConfigHandler
     ) {
         this.logger = logger;
         this.mainConfig = mainConfig;
@@ -61,6 +63,7 @@ public class Services {
         this.placeholdersInstance = placeholders;
         this.taskSchedulerInstance = taskScheduler;
         this.platformAdapter = platformAdapter;
+        this.cooldownConfigHandler = cooldownConfigHandler;
     }
 
     public CustomToastManager getCustomToastManager() {
@@ -129,5 +132,9 @@ public class Services {
 
     public IPlatformAdapter getPlatformAdapter() {
         return platformAdapter;
+    }
+
+    public CooldownConfigHandler getCooldownConfigHandler() {
+        return cooldownConfigHandler;
     }
 }
