@@ -60,13 +60,8 @@
 
 After running the server once with the mod, configuration files will be generated in your server's `config` folder.
 
-### Fabric & NeoForge Version
+### Settings
 * All settings are located in a config folder: `config/Paradigm/...json`.
-
-### Forge Version
-* **1.18.2 and newer:** Settings are split into multiple `.toml` files inside the `config/paradigm/` folder (e.g., `announcements.toml`, `main.toml`).
-* **1.12.2:** Settings are split into multiple `.cfg` files inside the `config/paradigm/` folder.
-
 ---
 ## Support & Community
 
