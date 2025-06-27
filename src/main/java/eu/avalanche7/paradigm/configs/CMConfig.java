@@ -2,6 +2,8 @@ package eu.avalanche7.paradigm.configs;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import eu.avalanche7.paradigm.data.CustomCommand;
+import eu.avalanche7.paradigm.utils.DebugLogger;
 
 import java.io.FileReader;
 import java.io.FileWriter;
@@ -10,8 +12,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import eu.avalanche7.paradigm.data.CustomCommand;
-import eu.avalanche7.paradigm.utils.DebugLogger;
 import java.util.stream.Stream;
 
 public class CMConfig {

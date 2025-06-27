@@ -21,7 +21,7 @@ public class CommandManager implements ParadigmModule {
 
     @Override
     public boolean isEnabled(Services services) {
-        return services.getMainConfig().commandManagerEnable;
+        return services.getMainConfig().commandManagerEnable.value;
     }
 
     @Override

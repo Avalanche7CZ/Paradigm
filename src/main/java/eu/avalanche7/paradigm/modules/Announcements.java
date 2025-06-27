@@ -20,8 +20,6 @@ import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 
 import java.util.List;
@@ -37,7 +35,6 @@ public class Announcements implements ParadigmModule {
     private int titleMessageIndex = 0;
     private int bossbarMessageIndex = 0;
 
-
     @Override
     public String getName() {
         return NAME;
@@ -45,7 +42,7 @@ public class Announcements implements ParadigmModule {
 
     @Override
     public boolean isEnabled(Services services) {
-        return services.getAnnouncementsConfig().globalEnable;
+        return services.getAnnouncementsConfig().globalEnable.value;
     }
 
     @Override
@@ -126,26 +123,26 @@ public class Announcements implements ParadigmModule {
             return;
         }
 
-        if (config.globalEnable) {
-            long globalInterval = config.globalInterval;
+        if (config.globalEnable.value) {
+            long globalInterval = config.globalInterval.value;
             services.getTaskScheduler().scheduleAtFixedRate(() -> broadcastGlobalMessages(services), globalInterval, globalInterval, TimeUnit.SECONDS);
             services.getDebugLogger().debugLog(NAME + ": Scheduled global messages with interval: {} seconds", globalInterval);
         }
 
-        if (config.actionbarEnable) {
-            long actionbarInterval = config.actionbarInterval;
+        if (config.actionbarEnable.value) {
+            long actionbarInterval = config.actionbarInterval.value;
             services.getTaskScheduler().scheduleAtFixedRate(() -> broadcastActionbarMessages(services), actionbarInterval, actionbarInterval, TimeUnit.SECONDS);
             services.getDebugLogger().debugLog(NAME + ": Scheduled actionbar messages with interval: {} seconds", actionbarInterval);
         }
 
-        if (config.titleEnable) {
-            long titleInterval = config.titleInterval;
+        if (config.titleEnable.value) {
+            long titleInterval = config.titleInterval.value;
             services.getTaskScheduler().scheduleAtFixedRate(() -> broadcastTitleMessages(services), titleInterval, titleInterval, TimeUnit.SECONDS);
             services.getDebugLogger().debugLog(NAME + ": Scheduled title messages with interval: {} seconds", titleInterval);
         }
 
-        if (config.bossbarEnable) {
-            long bossbarInterval = config.bossbarInterval;
+        if (config.bossbarEnable.value) {
+            long bossbarInterval = config.bossbarInterval.value;
             services.getTaskScheduler().scheduleAtFixedRate(() -> broadcastBossbarMessages(services), bossbarInterval, bossbarInterval, TimeUnit.SECONDS);
             services.getDebugLogger().debugLog(NAME + ": Scheduled bossbar messages with interval: {} seconds", bossbarInterval);
         }
@@ -154,15 +151,15 @@ public class Announcements implements ParadigmModule {
     private void broadcastGlobalMessages(Services services) {
         MinecraftServer server = services.getMinecraftServer();
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
-        if (server == null || config.globalMessages.isEmpty()) return;
+        if (server == null || config.globalMessages.value.isEmpty()) return;
 
-        List<String> messages = config.globalMessages;
-        String prefix = config.prefix + "§r";
-        String header = config.header;
-        String footer = config.footer;
+        List<String> messages = config.globalMessages.value;
+        String prefix = config.prefix.value + "§r";
+        String header = config.header.value;
+        String footer = config.footer.value;
 
         String messageText;
-        if ("SEQUENTIAL".equalsIgnoreCase(config.orderMode)) {
+        if ("SEQUENTIAL".equalsIgnoreCase(config.orderMode.value)) {
             messageText = messages.get(globalMessageIndex).replace("{Prefix}", prefix);
             globalMessageIndex = (globalMessageIndex + 1) % messages.size();
         } else {
@@ -171,7 +168,7 @@ public class Announcements implements ParadigmModule {
 
         Text message = services.getMessageParser().parseMessage(messageText, null);
 
-        if (config.headerAndFooter) {
+        if (config.headerAndFooter.value) {
             Text headerComp = services.getMessageParser().parseMessage(header, null);
             Text footerComp = services.getMessageParser().parseMessage(footer, null);
             server.getPlayerManager().getPlayerList().forEach(player -> {
@@ -188,13 +185,13 @@ public class Announcements implements ParadigmModule {
     private void broadcastActionbarMessages(Services services) {
         MinecraftServer server = services.getMinecraftServer();
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
-        if (server == null || config.actionbarMessages.isEmpty()) return;
+        if (server == null || config.actionbarMessages.value.isEmpty()) return;
 
-        List<String> messages = config.actionbarMessages;
-        String prefix = config.prefix + "§r";
+        List<String> messages = config.actionbarMessages.value;
+        String prefix = config.prefix.value + "§r";
 
         String messageText;
-        if ("SEQUENTIAL".equalsIgnoreCase(config.orderMode)) {
+        if ("SEQUENTIAL".equalsIgnoreCase(config.orderMode.value)) {
             messageText = messages.get(actionbarMessageIndex).replace("{Prefix}", prefix);
             actionbarMessageIndex = (actionbarMessageIndex + 1) % messages.size();
         } else {
@@ -211,13 +208,13 @@ public class Announcements implements ParadigmModule {
     private void broadcastTitleMessages(Services services) {
         MinecraftServer server = services.getMinecraftServer();
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
-        if (server == null || config.titleMessages.isEmpty()) return;
+        if (server == null || config.titleMessages.value.isEmpty()) return;
 
-        List<String> messages = config.titleMessages;
-        String prefix = config.prefix + "§r";
+        List<String> messages = config.titleMessages.value;
+        String prefix = config.prefix.value + "§r";
 
         String messageText;
-        if ("SEQUENTIAL".equalsIgnoreCase(config.orderMode)) {
+        if ("SEQUENTIAL".equalsIgnoreCase(config.orderMode.value)) {
             messageText = messages.get(titleMessageIndex).replace("{Prefix}", prefix);
             titleMessageIndex = (titleMessageIndex + 1) % messages.size();
         } else {
@@ -227,7 +224,6 @@ public class Announcements implements ParadigmModule {
         String[] parts = messageText.split(" \\|\\| ", 2);
         Text titleComponent = services.getMessageParser().parseMessage(parts[0], null);
         Text subtitleComponent = parts.length > 1 ? services.getMessageParser().parseMessage(parts[1], null) : Text.empty();
-
 
         server.getPlayerManager().getPlayerList().forEach(player -> {
             player.networkHandler.sendPacket(new ClearTitleS2CPacket(false));
@@ -242,21 +238,21 @@ public class Announcements implements ParadigmModule {
     private void broadcastBossbarMessages(Services services) {
         MinecraftServer server = services.getMinecraftServer();
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
-        if (server == null || config.bossbarMessages.isEmpty()) return;
+        if (server == null || config.bossbarMessages.value.isEmpty()) return;
 
-        List<String> messages = config.bossbarMessages;
-        String prefix = config.prefix + "§r";
-        int bossbarTime = config.bossbarTime;
+        List<String> messages = config.bossbarMessages.value;
+        String prefix = config.prefix.value + "§r";
+        int bossbarTime = config.bossbarTime.value;
         BossBar.Color bossbarColor;
         try {
-            bossbarColor = BossBar.Color.valueOf(config.bossbarColor.toUpperCase());
+            bossbarColor = BossBar.Color.valueOf(config.bossbarColor.value.toUpperCase());
         } catch (IllegalArgumentException e) {
-            services.getDebugLogger().debugLog(NAME + ": Invalid bossbar color: {}. Defaulting to PURPLE.", config.bossbarColor);
+            services.getDebugLogger().debugLog(NAME + ": Invalid bossbar color: {}. Defaulting to PURPLE.", config.bossbarColor.value);
             bossbarColor = BossBar.Color.PURPLE;
         }
 
         String messageText;
-        if ("SEQUENTIAL".equalsIgnoreCase(config.orderMode)) {
+        if ("SEQUENTIAL".equalsIgnoreCase(config.orderMode.value)) {
             messageText = messages.get(bossbarMessageIndex).replace("{Prefix}", prefix);
             bossbarMessageIndex = (bossbarMessageIndex + 1) % messages.size();
         } else {
@@ -316,8 +312,8 @@ public class Announcements implements ParadigmModule {
             case "broadcast":
                 boolean headerFooter = BoolArgumentType.getBool(context, "header_footer");
                 if (headerFooter) {
-                    String header = services.getAnnouncementsConfig().header;
-                    String footer = services.getAnnouncementsConfig().footer;
+                    String header = services.getAnnouncementsConfig().header.value;
+                    String footer = services.getAnnouncementsConfig().footer.value;
                     Text headerMessage = services.getMessageParser().parseMessage(header, null);
                     Text footerMessage = services.getMessageParser().parseMessage(footer, null);
                     server.getPlayerManager().getPlayerList().forEach(player -> {
@@ -328,13 +324,11 @@ public class Announcements implements ParadigmModule {
                 } else {
                     server.getPlayerManager().broadcast(broadcastMessage, false);
                 }
-                //source.sendFeedback(() -> Text.literal("Global message broadcasted."), true);
                 break;
             case "actionbar":
                 server.getPlayerManager().getPlayerList().forEach(player -> {
                     player.networkHandler.sendPacket(new OverlayMessageS2CPacket(broadcastMessage));
                 });
-                //source.sendFeedback(() -> Text.literal("Actionbar message broadcasted."), true);
                 break;
             case "bossbar":
                 String colorStr = StringArgumentType.getString(context, "color");
@@ -350,7 +344,6 @@ public class Announcements implements ParadigmModule {
                 bossBar.setPercent(1.0f);
                 server.getPlayerManager().getPlayerList().forEach(bossBar::addPlayer);
                 services.getTaskScheduler().schedule(bossBar::clearPlayers, interval, TimeUnit.SECONDS);
-                //source.sendFeedback(() -> Text.literal("Bossbar message broadcasted for " + interval + " seconds."), true);
                 break;
             default:
                 source.sendError(Text.literal("Invalid message type for command: " + type));

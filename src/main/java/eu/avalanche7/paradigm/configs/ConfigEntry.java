@@ -13,4 +13,12 @@ public class ConfigEntry<T> {
         this.value = value;
         this.description = description;
     }
+
+    /**
+     * Gets the configured value.
+     * @return The value of the configuration entry.
+     */
+    public T get() {
+        return this.value;
+    }
 }

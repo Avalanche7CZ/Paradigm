@@ -50,7 +50,7 @@ public class Lang {
             if (logger != null) logger.error("Lang: MainConfig or defaultLanguage setting is null. Cannot initialize language.");
             return;
         }
-        String language = mainConfig.defaultLanguage;
+        String language = mainConfig.defaultLanguage.value;
         if (logger != null) logger.info("Paradigm: Loaded language setting: {}", language);
         loadLanguage(language);
     }

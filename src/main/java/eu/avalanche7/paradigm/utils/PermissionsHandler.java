@@ -1,9 +1,9 @@
 package eu.avalanche7.paradigm.utils;
 
+import eu.avalanche7.paradigm.configs.CMConfig;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.network.ServerPlayerEntity;
 import org.slf4j.Logger;
-import eu.avalanche7.paradigm.configs.CMConfig;
 
 public class PermissionsHandler {
     private final Logger logger;

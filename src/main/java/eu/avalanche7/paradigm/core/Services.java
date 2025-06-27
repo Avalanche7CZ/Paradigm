@@ -1,8 +1,8 @@
 package eu.avalanche7.paradigm.core;
 
 import eu.avalanche7.paradigm.configs.*;
-import eu.avalanche7.paradigm.utils.*;
 import eu.avalanche7.paradigm.platform.IPlatformAdapter;
+import eu.avalanche7.paradigm.utils.*;
 import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
 

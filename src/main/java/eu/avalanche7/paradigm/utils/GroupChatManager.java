@@ -1,9 +1,9 @@
 package eu.avalanche7.paradigm.utils;
 
-import net.minecraft.advancement.AdvancementFrame;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.Group;
 import eu.avalanche7.paradigm.data.PlayerGroupData;
+import net.minecraft.advancement.AdvancementFrame;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;

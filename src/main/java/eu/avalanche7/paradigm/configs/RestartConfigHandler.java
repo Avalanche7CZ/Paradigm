@@ -2,7 +2,10 @@ package eu.avalanche7.paradigm.configs;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import eu.avalanche7.paradigm.Paradigm;
 import net.fabricmc.loader.api.FabricLoader;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.FileReader;
 import java.io.FileWriter;
@@ -14,6 +17,7 @@ import java.util.List;
 
 public class RestartConfigHandler {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(Paradigm.MOD_ID);
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("paradigm/restarts.json");
     public static Config CONFIG = new Config();
@@ -95,10 +99,23 @@ public class RestartConfigHandler {
             try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
                 Config loadedConfig = GSON.fromJson(reader, Config.class);
                 if (loadedConfig != null) {
-                    CONFIG = loadedConfig;
+                    if (loadedConfig.restartType != null) CONFIG.restartType = loadedConfig.restartType;
+                    if (loadedConfig.restartInterval != null) CONFIG.restartInterval = loadedConfig.restartInterval;
+                    if (loadedConfig.realTimeInterval != null) CONFIG.realTimeInterval = loadedConfig.realTimeInterval;
+                    if (loadedConfig.bossbarEnabled != null) CONFIG.bossbarEnabled = loadedConfig.bossbarEnabled;
+                    if (loadedConfig.bossBarMessage != null) CONFIG.bossBarMessage = loadedConfig.bossBarMessage;
+                    if (loadedConfig.timerUseChat != null) CONFIG.timerUseChat = loadedConfig.timerUseChat;
+                    if (loadedConfig.BroadcastMessage != null) CONFIG.BroadcastMessage = loadedConfig.BroadcastMessage;
+                    if (loadedConfig.timerBroadcast != null) CONFIG.timerBroadcast = loadedConfig.timerBroadcast;
+                    if (loadedConfig.defaultRestartReason != null) CONFIG.defaultRestartReason = loadedConfig.defaultRestartReason;
+                    if (loadedConfig.playSoundEnabled != null) CONFIG.playSoundEnabled = loadedConfig.playSoundEnabled;
+                    if (loadedConfig.playSoundFirstTime != null) CONFIG.playSoundFirstTime = loadedConfig.playSoundFirstTime;
+                    if (loadedConfig.titleEnabled != null) CONFIG.titleEnabled = loadedConfig.titleEnabled;
+                    if (loadedConfig.titleStayTime != null) CONFIG.titleStayTime = loadedConfig.titleStayTime;
+                    if (loadedConfig.titleMessage != null) CONFIG.titleMessage = loadedConfig.titleMessage;
                 }
-            } catch (IOException e) {
-                throw new RuntimeException("Could not read Restart config", e);
+            } catch (Exception e) {
+                LOGGER.warn("[Paradigm] Could not parse restarts.json, it may be corrupt. A new one will be generated.", e);
             }
         }
         save();

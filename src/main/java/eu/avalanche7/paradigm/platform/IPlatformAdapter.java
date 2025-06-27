@@ -2,14 +2,13 @@ package eu.avalanche7.paradigm.platform;
 
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.utils.MessageParser;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.text.Text;
-import net.minecraft.text.MutableText;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.item.ItemStack;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.text.MutableText;
+import net.minecraft.text.Text;
 import org.jetbrains.annotations.Nullable;
-
 
 import java.util.List;
 import java.util.UUID;

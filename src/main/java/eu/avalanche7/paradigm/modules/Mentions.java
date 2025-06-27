@@ -3,9 +3,9 @@ package eu.avalanche7.paradigm.modules;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
+import eu.avalanche7.paradigm.configs.MentionConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.configs.MentionConfigHandler;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.minecraft.command.CommandRegistryAccess;
@@ -15,7 +15,6 @@ import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.sound.SoundCategory;
 import net.minecraft.sound.SoundEvents;
 import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
@@ -42,7 +41,7 @@ public class Mentions implements ParadigmModule {
 
     @Override
     public boolean isEnabled(Services services) {
-        return services != null && services.getMainConfig() != null && services.getMainConfig().mentionsEnable;
+        return services != null && services.getMainConfig() != null && services.getMainConfig().mentionsEnable.value;
     }
 
     @Override

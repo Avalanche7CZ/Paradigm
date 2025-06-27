@@ -1,4 +1,4 @@
-package eu.avalanche7.paradigm.modules;
+package eu.avalanche7.paradigm.modules.chat;
 
 import com.mojang.brigadier.CommandDispatcher;
 import eu.avalanche7.paradigm.core.ParadigmModule;
@@ -24,7 +24,7 @@ public class MOTD implements ParadigmModule {
 
     @Override
     public boolean isEnabled(Services services) {
-        return services.getMainConfig().motdEnable;
+        return services.getMainConfig().motdEnable.value;
     }
 
     @Override

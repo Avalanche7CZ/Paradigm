@@ -2,12 +2,7 @@ package eu.avalanche7.paradigm.utils;
 
 import eu.avalanche7.paradigm.configs.ToastConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
-import net.minecraft.advancement.Advancement;
-import net.minecraft.advancement.AdvancementCriterion;
-import net.minecraft.advancement.AdvancementDisplay;
-import net.minecraft.advancement.AdvancementEntry;
-import net.minecraft.advancement.AdvancementFrame;
-import net.minecraft.advancement.AdvancementProgress;
+import net.minecraft.advancement.*;
 import net.minecraft.advancement.criterion.Criteria;
 import net.minecraft.advancement.criterion.ImpossibleCriterion;
 import net.minecraft.item.ItemStack;

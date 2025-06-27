@@ -16,7 +16,7 @@ public class DebugLogger {
     public DebugLogger(MainConfigHandler.Config mainConfig) {
         this.mainConfig = mainConfig;
         if (!hasLoggedStatus.getAndSet(true)) {
-            boolean debugEnabledInConfig = mainConfig != null && mainConfig.debugEnable;
+            boolean debugEnabledInConfig = mainConfig != null && mainConfig.debugEnable.value;
 
             if (debugEnabledInConfig) {
                 Configurator.setLevel("eu.avalanche7.paradigm", Level.DEBUG);
@@ -29,17 +29,17 @@ public class DebugLogger {
     }
 
     public void debugLog(String message) {
-        if (mainConfig != null && mainConfig.debugEnable) {
+        if (mainConfig != null && mainConfig.debugEnable.value) {
             SLF4J_LOGGER.debug("[Paradigm-Debug] " + message);
         }
     }
     public void debugLog(String message, Exception e) {
-        if (mainConfig != null && mainConfig.debugEnable) {
+        if (mainConfig != null && mainConfig.debugEnable.value) {
             SLF4J_LOGGER.warn("[Paradigm-Debug] " + message, e);
         }
     }
     public void debugLog(String message, Object... args) {
-        if (mainConfig != null && mainConfig.debugEnable) {
+        if (mainConfig != null && mainConfig.debugEnable.value) {
             SLF4J_LOGGER.debug("[Paradigm-Debug] " + message, args);
         }
     }

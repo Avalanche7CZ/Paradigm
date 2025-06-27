@@ -1,19 +1,22 @@
 package eu.avalanche7.paradigm;
 
 import com.mojang.brigadier.CommandDispatcher;
+import eu.avalanche7.paradigm.configs.*;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.*;
-import eu.avalanche7.paradigm.configs.*;
-import eu.avalanche7.paradigm.utils.*;
+import eu.avalanche7.paradigm.modules.chat.GroupChat;
+import eu.avalanche7.paradigm.modules.chat.MOTD;
+import eu.avalanche7.paradigm.modules.chat.StaffChat;
 import eu.avalanche7.paradigm.platform.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.PlatformAdapterImpl;
+import eu.avalanche7.paradigm.utils.*;
 import net.fabricmc.api.DedicatedServerModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.command.ServerCommandSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
