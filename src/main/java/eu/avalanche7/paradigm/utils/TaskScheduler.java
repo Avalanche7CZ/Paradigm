@@ -4,6 +4,7 @@ import net.minecraft.server.MinecraftServer;
 
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -19,7 +20,7 @@ public class TaskScheduler {
 
     public void initialize(MinecraftServer serverInstance) {
         if (this.executorService == null || this.executorService.isShutdown()) {
-            this.executorService = Executors.newScheduledThreadPool(1);
+            this.executorService = Executors.newScheduledThreadPool(2);
             debugLogger.debugLog("TaskScheduler: Executor service created.");
         }
         this.serverRef.set(serverInstance);
@@ -30,20 +31,28 @@ public class TaskScheduler {
         }
     }
 
-    public void scheduleAtFixedRate(Runnable task, long initialDelay, long period, TimeUnit unit) {
+    public ScheduledFuture<?> scheduleAtFixedRate(Runnable task, long initialDelay, long period, TimeUnit unit) {
         if (executorService == null || executorService.isShutdown()) {
             debugLogger.debugLog("TaskScheduler: Cannot schedule task, executor service is not running.");
-            return;
+            return null;
         }
-        executorService.scheduleAtFixedRate(() -> syncExecute(task), initialDelay, period, unit);
+        return executorService.scheduleAtFixedRate(() -> syncExecute(task), initialDelay, period, unit);
     }
 
-    public void schedule(Runnable task, long delay, TimeUnit unit) {
+    public ScheduledFuture<?> schedule(Runnable task, long delay, TimeUnit unit) {
         if (executorService == null || executorService.isShutdown()) {
             debugLogger.debugLog("TaskScheduler: Cannot schedule task, executor service is not running.");
-            return;
+            return null;
         }
-        executorService.schedule(() -> syncExecute(task), delay, unit);
+        return executorService.schedule(() -> syncExecute(task), delay, unit);
+    }
+
+    public ScheduledFuture<?> scheduleRaw(Runnable task, long delay, TimeUnit unit) {
+        if (executorService == null || executorService.isShutdown()) {
+            debugLogger.debugLog("TaskScheduler: Cannot schedule raw task, executor service is not running.");
+            return null;
+        }
+        return executorService.schedule(task, delay, unit);
     }
 
     private void syncExecute(Runnable task) {

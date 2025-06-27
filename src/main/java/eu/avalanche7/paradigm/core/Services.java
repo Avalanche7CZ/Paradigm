@@ -2,6 +2,7 @@ package eu.avalanche7.paradigm.core;
 
 import eu.avalanche7.paradigm.configs.*;
 import eu.avalanche7.paradigm.utils.*;
+import eu.avalanche7.paradigm.platform.IPlatformAdapter;
 import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
 
@@ -27,6 +28,7 @@ public class Services {
     private final TaskScheduler taskSchedulerInstance;
     private final GroupChatManager groupChatManagerInstance;
     private final CustomToastManager customToastManagerInstance;
+    private final IPlatformAdapter platformAdapter;
 
 
     public Services(
@@ -46,7 +48,8 @@ public class Services {
             PermissionsHandler permissionsHandler,
             Placeholders placeholders,
             TaskScheduler taskScheduler,
-            CustomToastManager customToastManager
+            CustomToastManager customToastManager,
+            IPlatformAdapter platformAdapter
     ) {
         this.logger = logger;
         this.mainConfig = mainConfig;
@@ -65,6 +68,7 @@ public class Services {
         this.placeholdersInstance = placeholders;
         this.taskSchedulerInstance = taskScheduler;
         this.customToastManagerInstance = customToastManager;
+        this.platformAdapter = platformAdapter;
     }
 
     public void setServer(MinecraftServer server) {
@@ -74,6 +78,10 @@ public class Services {
         }
         if (this.permissionsHandlerInstance != null) {
             this.permissionsHandlerInstance.initialize();
+        }
+        if (this.platformAdapter != null) {
+            this.platformAdapter.setMinecraftServer(server);
+            this.platformAdapter.provideMessageParser(this.messageParserInstance);
         }
     }
 
@@ -86,6 +94,10 @@ public class Services {
 
     public CustomToastManager getCustomToastManager() {
         return customToastManagerInstance;
+    }
+
+    public IPlatformAdapter getPlatformAdapter() {
+        return platformAdapter;
     }
 
     public Logger getLogger() {
@@ -147,5 +159,4 @@ public class Services {
     public GroupChatManager getGroupChatManager() {
         return groupChatManagerInstance;
     }
-
 }

@@ -6,6 +6,8 @@ import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.*;
 import eu.avalanche7.paradigm.configs.*;
 import eu.avalanche7.paradigm.utils.*;
+import eu.avalanche7.paradigm.platform.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.PlatformAdapterImpl;
 import net.fabricmc.api.DedicatedServerModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -36,7 +38,8 @@ public class Paradigm implements DedicatedServerModInitializer {
     private TaskScheduler taskSchedulerInstance;
     private GroupChatManager groupChatManagerInstance;
     private CMConfig cmConfigInstance;
-    private CustomToastManager customToastManagerInstance; // New Instance
+    private CustomToastManager customToastManagerInstance;
+    private IPlatformAdapter platformAdapterInstance;
 
     @Override
     public void onInitializeServer() {
@@ -73,7 +76,7 @@ public class Paradigm implements DedicatedServerModInitializer {
             MentionConfigHandler.load();
             RestartConfigHandler.load();
             ChatConfigHandler.load();
-            ToastConfigHandler.load(); // Load the new toast config
+            ToastConfigHandler.load();
             MOTDConfigHandler.loadConfig();
             if (this.cmConfigInstance == null) {
                 this.cmConfigInstance = new CMConfig(new DebugLogger(MainConfigHandler.CONFIG));
@@ -96,11 +99,17 @@ public class Paradigm implements DedicatedServerModInitializer {
     private void createUtilityInstances() {
         this.placeholdersInstance = new Placeholders();
         this.messageParserInstance = new MessageParser(this.placeholdersInstance);
-        this.customToastManagerInstance = new CustomToastManager(this.messageParserInstance); // New Instance
+        this.customToastManagerInstance = new CustomToastManager(this.messageParserInstance);
         this.debugLoggerInstance = new DebugLogger(MainConfigHandler.CONFIG);
         this.taskSchedulerInstance = new TaskScheduler(this.debugLoggerInstance);
         this.permissionsHandlerInstance = new PermissionsHandler(LOGGER, this.cmConfigInstance, this.debugLoggerInstance);
         this.groupChatManagerInstance = new GroupChatManager();
+        this.platformAdapterInstance = new PlatformAdapterImpl(
+                this.permissionsHandlerInstance,
+                this.placeholdersInstance,
+                this.taskSchedulerInstance,
+                this.debugLoggerInstance
+        );
     }
 
     private void initializeServices() {
@@ -112,7 +121,7 @@ public class Paradigm implements DedicatedServerModInitializer {
                 new MentionConfigHandler(),
                 RestartConfigHandler.CONFIG,
                 ChatConfigHandler.CONFIG,
-                new ToastConfigHandler(), // Pass the new config
+                new ToastConfigHandler(),
                 this.cmConfigInstance,
                 this.groupChatManagerInstance,
                 this.debugLoggerInstance,
@@ -121,7 +130,8 @@ public class Paradigm implements DedicatedServerModInitializer {
                 this.permissionsHandlerInstance,
                 this.placeholdersInstance,
                 this.taskSchedulerInstance,
-                this.customToastManagerInstance // Pass the new service
+                this.customToastManagerInstance,
+                this.platformAdapterInstance
         );
         this.groupChatManagerInstance.setServices(this.services);
     }
@@ -134,7 +144,7 @@ public class Paradigm implements DedicatedServerModInitializer {
         modules.add(new StaffChat());
         modules.add(new GroupChat(this.groupChatManagerInstance));
         modules.add(new CommandManager());
-        modules.add(new CustomToasts()); // Register the new module
+        modules.add(new CustomToasts());
         LOGGER.info("Paradigm: Registered {} modules.", modules.size());
     }
 
