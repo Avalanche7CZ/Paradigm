@@ -32,6 +32,8 @@ public class Paradigm implements DedicatedServerModInitializer {
     private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
     private final List<ParadigmModule> modules = new ArrayList<>();
     private Services services;
+    private static Services servicesInstance;
+
 
     private DebugLogger debugLoggerInstance;
     private Lang langInstance;
@@ -43,6 +45,7 @@ public class Paradigm implements DedicatedServerModInitializer {
     private CMConfig cmConfigInstance;
     private CustomToastManager customToastManagerInstance;
     private IPlatformAdapter platformAdapterInstance;
+    private CooldownConfigHandler cooldownConfigHandlerInstance;
 
     @Override
     public void onInitializeServer() {
@@ -52,6 +55,7 @@ public class Paradigm implements DedicatedServerModInitializer {
         createUtilityInstances();
         initializeServices();
         registerModules();
+        servicesInstance = services;
 
         modules.forEach(module -> module.registerEventListeners(null, services));
         modules.forEach(module -> module.onLoad(null, services, null));
@@ -81,6 +85,7 @@ public class Paradigm implements DedicatedServerModInitializer {
             ChatConfigHandler.load();
             ToastConfigHandler.load();
             MOTDConfigHandler.loadConfig();
+            CooldownConfigHandler.load();
             if (this.cmConfigInstance == null) {
                 this.cmConfigInstance = new CMConfig(new DebugLogger(MainConfigHandler.CONFIG));
             }
@@ -134,7 +139,8 @@ public class Paradigm implements DedicatedServerModInitializer {
                 this.placeholdersInstance,
                 this.taskSchedulerInstance,
                 this.customToastManagerInstance,
-                this.platformAdapterInstance
+                this.platformAdapterInstance,
+                this.cooldownConfigHandlerInstance
         );
         this.groupChatManagerInstance.setServices(this.services);
     }
@@ -173,6 +179,10 @@ public class Paradigm implements DedicatedServerModInitializer {
                 module.registerCommands(dispatcher, registryAccess, services);
             }
         });
+    }
+
+    public static Services getServices() {
+        return servicesInstance;
     }
 
     private void onServerStopping(MinecraftServer server) {

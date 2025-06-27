@@ -19,6 +19,7 @@ public class Services {
     private final ChatConfigHandler.Config chatConfig;
     private final CMConfig cmConfigInstance;
     private final ToastConfigHandler toastConfig;
+    private final CooldownConfigHandler cooldownConfigHandler;
 
     private final DebugLogger debugLoggerInstance;
     private final Lang langInstance;
@@ -49,7 +50,8 @@ public class Services {
             Placeholders placeholders,
             TaskScheduler taskScheduler,
             CustomToastManager customToastManager,
-            IPlatformAdapter platformAdapter
+            IPlatformAdapter platformAdapter,
+            CooldownConfigHandler cooldownConfigHandler
     ) {
         this.logger = logger;
         this.mainConfig = mainConfig;
@@ -69,6 +71,7 @@ public class Services {
         this.taskSchedulerInstance = taskScheduler;
         this.customToastManagerInstance = customToastManager;
         this.platformAdapter = platformAdapter;
+        this.cooldownConfigHandler = cooldownConfigHandler;
     }
 
     public void setServer(MinecraftServer server) {
@@ -90,6 +93,10 @@ public class Services {
             logger.warn("Paradigm Services: MinecraftServer instance requested before it was set!");
         }
         return server;
+    }
+
+    public CooldownConfigHandler getCooldownConfigHandler() {
+        return cooldownConfigHandler;
     }
 
     public CustomToastManager getCustomToastManager() {
