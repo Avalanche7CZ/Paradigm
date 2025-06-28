@@ -97,8 +97,8 @@ public class Restart implements ParadigmModule {
                         .executes(context -> {
                             ServerCommandSource source = context.getSource();
                             services.getDebugLogger().debugLog(NAME + ": /restart now command executed by " + source.getDisplayName().getString());
+                            initiateRestartSequence(60, services, services.getRestartConfig());
                             source.sendFeedback(() -> Text.literal("Initiating immediate 60-second restart sequence."), true);
-                            initiateRestartSequence(60.0, services, services.getRestartConfig());
                             return 1;
                         }))
                 .then(CommandManager.literal("cancel")
@@ -192,7 +192,7 @@ public class Restart implements ParadigmModule {
         services.getDebugLogger().debugLog(NAME + ": Next real-time restart is scheduled for " + nextRestartTime + " (in " + finalMinDelayMillis + "ms).");
         mainRestartTaskFuture = services.getTaskScheduler().schedule(() -> {
             services.getDebugLogger().debugLog(NAME + ": Real-time restart scheduled time reached. Initiating shutdown sequence.");
-            initiateRestartSequence(finalMinDelayMillis / 1000.0, services, config);
+            scheduleConfiguredRestarts(services);
         }, minDelayMillis, TimeUnit.MILLISECONDS);
     }
 
@@ -202,13 +202,15 @@ public class Restart implements ParadigmModule {
             return;
         }
 
-        cleanup();
-        restartInProgress.set(true);
+        services.getPlatformAdapter().removeRestartBossBar();
 
         services.getDebugLogger().debugLog(NAME + ": Initiating restart sequence. Total duration: " + totalIntervalSeconds + " seconds.");
         long totalIntervalMillis = (long) (totalIntervalSeconds * 1000);
         MinecraftServer server = services.getMinecraftServer();
-        if (server == null) return;
+        if (server == null) {
+            restartInProgress.set(false);
+            return;
+        }
 
         List<Integer> broadcastTimes = new ArrayList<>(config.timerBroadcast.value);
         Collections.sort(broadcastTimes, Collections.reverseOrder());
@@ -242,7 +244,7 @@ public class Restart implements ParadigmModule {
                                     .replace("{hours}", String.valueOf((int) (timeLeftSeconds / 3600)))
                                     .replace("{minutes}", TIME_FORMATTER.format((timeLeftSeconds % 3600) / 60))
                                     .replace("{seconds}", TIME_FORMATTER.format(timeLeftSeconds % 60))
-                                    .replace("{time}", String.format("%dh %sm %ss", (int) (timeLeftSeconds / 3600), TIME_FORMATTER.format((timeLeftSeconds % 3600) / 60), TIME_FORMATTER.format(timeLeftSeconds % 60))),
+                                    .replace("{time}", String.format("%dh %sm %ss", (int) (timeLeftSeconds / 3600), (timeLeftSeconds % 3600) / 60, timeLeftSeconds % 60)),
                             null
                     ),
                     IPlatformAdapter.BossBarColor.RED,
