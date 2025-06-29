@@ -3,7 +3,21 @@ plugins {
     id 'maven-publish'
 }
 
-version = project.mod_version
+def getGitCommitHash = { ->
+    try {
+        def stdout = new ByteArrayOutputStream()
+        exec {
+            commandLine 'git', 'rev-parse', '--short', 'HEAD'
+            standardOutput = stdout
+        }
+        return stdout.toString().trim()
+    } catch (Exception e) {
+        return "unknown"
+    }
+}
+
+
+version = "${project.mod_version}-${getGitCommitHash()}"
 group = project.maven_group
 
 base {
