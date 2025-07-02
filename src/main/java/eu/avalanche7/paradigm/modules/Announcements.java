@@ -34,6 +34,7 @@ public class Announcements implements ParadigmModule {
     private int actionbarMessageIndex = 0;
     private int titleMessageIndex = 0;
     private int bossbarMessageIndex = 0;
+    private boolean tasksScheduled = false;
 
     @Override
     public String getName() {
@@ -69,11 +70,13 @@ public class Announcements implements ParadigmModule {
     @Override
     public void onDisable(Services services) {
         services.getDebugLogger().debugLog(NAME + " module disabled. Tasks should be implicitly stopped by TaskScheduler shutdown.");
+        tasksScheduled = false;
     }
 
     @Override
     public void onServerStopping(Object event, Services services) {
         services.getDebugLogger().debugLog(NAME + " module: Server stopping.");
+        tasksScheduled = false;
     }
 
     @Override
@@ -116,6 +119,10 @@ public class Announcements implements ParadigmModule {
     }
 
     private void scheduleConfiguredAnnouncements(Services services) {
+        if (tasksScheduled) {
+            services.getDebugLogger().debugLog(NAME + ": Tasks already scheduled, skipping.");
+            return;
+        }
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
         MinecraftServer server = services.getMinecraftServer();
         if (server == null) {
@@ -146,6 +153,7 @@ public class Announcements implements ParadigmModule {
             services.getTaskScheduler().scheduleAtFixedRate(() -> broadcastBossbarMessages(services), bossbarInterval, bossbarInterval, TimeUnit.SECONDS);
             services.getDebugLogger().debugLog(NAME + ": Scheduled bossbar messages with interval: {} seconds", bossbarInterval);
         }
+        tasksScheduled = true;
     }
 
     private void broadcastGlobalMessages(Services services) {
