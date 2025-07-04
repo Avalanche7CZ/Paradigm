@@ -56,13 +56,13 @@ public class MainConfigHandler {
             try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
                 Config loadedConfig = GSON.fromJson(reader, Config.class);
                 if (loadedConfig != null) {
-                    if (loadedConfig.announcementsEnable != null) CONFIG.announcementsEnable = loadedConfig.announcementsEnable;
-                    if (loadedConfig.motdEnable != null) CONFIG.motdEnable = loadedConfig.motdEnable;
-                    if (loadedConfig.mentionsEnable != null) CONFIG.mentionsEnable = loadedConfig.mentionsEnable;
-                    if (loadedConfig.restartEnable != null) CONFIG.restartEnable = loadedConfig.restartEnable;
-                    if (loadedConfig.debugEnable != null) CONFIG.debugEnable = loadedConfig.debugEnable;
-                    if (loadedConfig.defaultLanguage != null) CONFIG.defaultLanguage = loadedConfig.defaultLanguage;
-                    if (loadedConfig.commandManagerEnable != null) CONFIG.commandManagerEnable = loadedConfig.commandManagerEnable;
+                    if (loadedConfig.announcementsEnable != null && loadedConfig.announcementsEnable.value != null) CONFIG.announcementsEnable = loadedConfig.announcementsEnable;
+                    if (loadedConfig.motdEnable != null && loadedConfig.motdEnable.value != null) CONFIG.motdEnable = loadedConfig.motdEnable;
+                    if (loadedConfig.mentionsEnable != null && loadedConfig.mentionsEnable.value != null) CONFIG.mentionsEnable = loadedConfig.mentionsEnable;
+                    if (loadedConfig.restartEnable != null && loadedConfig.restartEnable.value != null) CONFIG.restartEnable = loadedConfig.restartEnable;
+                    if (loadedConfig.debugEnable != null && loadedConfig.debugEnable.value != null) CONFIG.debugEnable = loadedConfig.debugEnable;
+                    if (loadedConfig.defaultLanguage != null && loadedConfig.defaultLanguage.value != null) CONFIG.defaultLanguage = loadedConfig.defaultLanguage;
+                    if (loadedConfig.commandManagerEnable != null && loadedConfig.commandManagerEnable.value != null) CONFIG.commandManagerEnable = loadedConfig.commandManagerEnable;
                 }
             } catch (Exception e) {
                 LOGGER.warn("[Paradigm] Could not parse main.json, it may be corrupt. A new one will be generated.", e);

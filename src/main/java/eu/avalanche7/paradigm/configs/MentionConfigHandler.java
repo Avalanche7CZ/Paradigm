@@ -31,7 +31,13 @@ public class MentionConfigHandler {
             try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
                 Config loadedConfig = GSON.fromJson(reader, Config.class);
                 if(loadedConfig != null) {
-                    CONFIG = loadedConfig;
+                    if (loadedConfig.MENTION_SYMBOL != null) CONFIG.MENTION_SYMBOL = loadedConfig.MENTION_SYMBOL;
+                    if (loadedConfig.INDIVIDUAL_MENTION_MESSAGE != null) CONFIG.INDIVIDUAL_MENTION_MESSAGE = loadedConfig.INDIVIDUAL_MENTION_MESSAGE;
+                    if (loadedConfig.EVERYONE_MENTION_MESSAGE != null) CONFIG.EVERYONE_MENTION_MESSAGE = loadedConfig.EVERYONE_MENTION_MESSAGE;
+                    if (loadedConfig.INDIVIDUAL_TITLE_MESSAGE != null) CONFIG.INDIVIDUAL_TITLE_MESSAGE = loadedConfig.INDIVIDUAL_TITLE_MESSAGE;
+                    if (loadedConfig.EVERYONE_TITLE_MESSAGE != null) CONFIG.EVERYONE_TITLE_MESSAGE = loadedConfig.EVERYONE_TITLE_MESSAGE;
+                    if (loadedConfig.INDIVIDUAL_MENTION_RATE_LIMIT != 0) CONFIG.INDIVIDUAL_MENTION_RATE_LIMIT = loadedConfig.INDIVIDUAL_MENTION_RATE_LIMIT;
+                    if (loadedConfig.EVERYONE_MENTION_RATE_LIMIT != 0) CONFIG.EVERYONE_MENTION_RATE_LIMIT = loadedConfig.EVERYONE_MENTION_RATE_LIMIT;
                 }
             } catch (IOException e) {
                 throw new RuntimeException("Could not read Mentions config", e);
