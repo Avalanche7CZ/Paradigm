@@ -54,7 +54,7 @@ public class PlayerManagerMixin {
         }
     }
 
-    @Inject(method = "remove", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "remove", at = @At("HEAD"))
     private void onPlayerRemoveMixin(ServerPlayerEntity player, CallbackInfo ci) {
         Services services = Paradigm.getServices();
         if (services == null) return;
@@ -70,7 +70,6 @@ public class PlayerManagerMixin {
         if (leaveMessageFormat != null && !leaveMessageFormat.isEmpty()) {
             Text formattedMessage = services.getMessageParser().parseMessage(leaveMessageFormat, player);
             platform.broadcastSystemMessage(formattedMessage);
-            ci.cancel();
         }
     }
 }
