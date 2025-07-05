@@ -162,9 +162,9 @@ public class Announcements implements ParadigmModule {
         if (server == null || config.globalMessages.value.isEmpty()) return;
 
         List<String> messages = config.globalMessages.value;
-        String prefix = config.prefix.value + "§r";
-        String header = config.header.value;
-        String footer = config.footer.value;
+        String prefix = config.prefix.value != null ? config.prefix.value + "§r" : "";
+        String header = config.header.value != null ? config.header.value : "";
+        String footer = config.footer.value != null ? config.footer.value : "";
 
         String messageText;
         if ("SEQUENTIAL".equalsIgnoreCase(config.orderMode.value)) {
@@ -196,7 +196,8 @@ public class Announcements implements ParadigmModule {
         if (server == null || config.actionbarMessages.value.isEmpty()) return;
 
         List<String> messages = config.actionbarMessages.value;
-        String prefix = config.prefix.value + "§r";
+        if (messages == null || messages.isEmpty()) return;
+        String prefix = config.prefix.value != null ? config.prefix.value + "§r" : "";
 
         String messageText;
         if ("SEQUENTIAL".equalsIgnoreCase(config.orderMode.value)) {
@@ -219,7 +220,8 @@ public class Announcements implements ParadigmModule {
         if (server == null || config.titleMessages.value.isEmpty()) return;
 
         List<String> messages = config.titleMessages.value;
-        String prefix = config.prefix.value + "§r";
+        if (messages == null || messages.isEmpty()) return;
+        String prefix = config.prefix.value != null ? config.prefix.value + "§r" : "";
 
         String messageText;
         if ("SEQUENTIAL".equalsIgnoreCase(config.orderMode.value)) {
@@ -249,11 +251,12 @@ public class Announcements implements ParadigmModule {
         if (server == null || config.bossbarMessages.value.isEmpty()) return;
 
         List<String> messages = config.bossbarMessages.value;
-        String prefix = config.prefix.value + "§r";
-        int bossbarTime = config.bossbarTime.value;
+        if (messages == null || messages.isEmpty()) return;
+        String prefix = config.prefix.value != null ? config.prefix.value + "§r" : "";
+        int bossbarTime = config.bossbarTime.value != null ? config.bossbarTime.value : 10;
         BossBar.Color bossbarColor;
         try {
-            bossbarColor = BossBar.Color.valueOf(config.bossbarColor.value.toUpperCase());
+            bossbarColor = config.bossbarColor.value != null ? BossBar.Color.valueOf(config.bossbarColor.value.toUpperCase()) : BossBar.Color.PURPLE;
         } catch (IllegalArgumentException e) {
             services.getDebugLogger().debugLog(NAME + ": Invalid bossbar color: {}. Defaulting to PURPLE.", config.bossbarColor.value);
             bossbarColor = BossBar.Color.PURPLE;

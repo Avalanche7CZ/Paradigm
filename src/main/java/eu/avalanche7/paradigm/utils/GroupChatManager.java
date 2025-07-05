@@ -24,6 +24,8 @@ public class GroupChatManager {
     private Text translate(String key) {
         if (this.services != null && this.services.getLang() != null) {
             return this.services.getLang().translate(key);
+        } else if (this.services != null && this.services.getDebugLogger() != null) {
+            this.services.getDebugLogger().debugLog("GroupChatManager: Services or Lang is null for key '{}'. Returning literal text.", key);
         }
         return Text.literal(key);
     }
@@ -31,6 +33,8 @@ public class GroupChatManager {
     private Text parseMessage(String message, ServerPlayerEntity player) {
         if (this.services != null && this.services.getMessageParser() != null) {
             return this.services.getMessageParser().parseMessage(message, player);
+        } else if (this.services != null && this.services.getDebugLogger() != null) {
+            this.services.getDebugLogger().debugLog("GroupChatManager: Services or MessageParser is null for message '{}'. Returning literal text.", message);
         }
         return Text.literal(message);
     }
@@ -60,7 +64,7 @@ public class GroupChatManager {
     }
 
     public boolean createGroup(ServerPlayerEntity player, String groupName) {
-        if (groupName == null || groupName.trim().isEmpty() || groupName.length() > 32) {
+        if (groupName == null || groupName.trim().isEmpty() || groupName.length() > 16) { // Max 16 characters for group name
             player.sendMessage(translate("group.invalid_name"));
             return false;
         }
@@ -289,16 +293,17 @@ public class GroupChatManager {
         getPlayerData(player).setGroupChatToggled(toggled);
     }
 
-    public void sendMessageToGroup(ServerPlayerEntity sender, String groupName, String messageContent) {
+    public boolean sendMessageToGroup(ServerPlayerEntity sender, String groupName, String messageContent) {
         Group group = groups.get(groupName);
         if (group == null || !group.getMembers().contains(sender.getUuid())) {
             sender.sendMessage(translate("group.not_in_group_or_not_exists"));
-            return;
+            return false;
         }
         String format = "&9[Group: %s] &r%s &7> &f%s";
         String preFormatted = String.format(format, groupName, sender.getName().getString(), messageContent);
         Text finalMessage = parseMessage(preFormatted, sender);
         broadcastToGroup(group, finalMessage, null);
+        return true;
     }
 
     public void sendMessageFromCommand(ServerPlayerEntity sender, String messageContent) {

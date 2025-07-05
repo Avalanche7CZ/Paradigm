@@ -112,6 +112,7 @@ public class Paradigm implements DedicatedServerModInitializer {
         this.taskSchedulerInstance = new TaskScheduler(this.debugLoggerInstance);
         this.permissionsHandlerInstance = new PermissionsHandler(LOGGER, this.cmConfigInstance, this.debugLoggerInstance);
         this.groupChatManagerInstance = new GroupChatManager();
+        this.cooldownConfigHandlerInstance = new CooldownConfigHandler();
         this.platformAdapterInstance = new PlatformAdapterImpl(
                 this.permissionsHandlerInstance,
                 this.placeholdersInstance,

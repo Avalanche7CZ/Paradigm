@@ -211,11 +211,12 @@ public class CommandManager implements ParadigmModule {
             case "is_op":
                 if (player != null) {
                     int level = 2;
-                    try {
-                        if (condition.getValue() != null) {
+                    if (condition.getValue() != null) {
+                        try {
                             level = Integer.parseInt(condition.getValue());
+                        } catch (NumberFormatException ignored) {
+                            services.getDebugLogger().debugLog("CommandManager: Invalid number format for is_op condition value: " + condition.getValue());
                         }
-                    } catch (NumberFormatException ignored) {
                     }
                     result = player.hasPermissionLevel(level);
                 }

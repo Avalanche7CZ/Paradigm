@@ -42,9 +42,6 @@ public class GroupChat implements ParadigmModule {
     @Override
     public void onLoad(Object event, Services services, Object modEventBus) {
         this.services = services;
-        if (this.groupChatManager != null) {
-            this.groupChatManager.setServices(services);
-        }
         services.getDebugLogger().debugLog(NAME + " module loaded.");
     }
 
@@ -160,9 +157,15 @@ public class GroupChat implements ParadigmModule {
             String groupName = data.getCurrentGroup();
 
             if (groupName != null) {
-                groupChatManager.sendMessageToGroup(player, groupName, message.getString());
-                services.getLogger().info("[GroupChat] [{}] {}: {}", groupName, player.getName().getString(), message.getString());
-                return null;
+                boolean sentToGroup = groupChatManager.sendMessageToGroup(player, groupName, message.getString());
+                if (sentToGroup) {
+                    services.getLogger().info("[GroupChat] [{}] {}: {}", groupName, player.getName().getString(), message.getString());
+                    return null;
+                } else {
+                    groupChatManager.setGroupChatToggled(player, false);
+                    player.sendMessage(services.getLang().translate("group.chat_disabled"));
+                    return message;
+                }
             } else {
                 player.sendMessage(services.getLang().translate("group.no_group_to_send_message"));
                 groupChatManager.setGroupChatToggled(player, false);

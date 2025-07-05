@@ -75,7 +75,10 @@ public class MOTD implements ParadigmModule {
     }
 
     public void onPlayerJoin(ServerPlayerEntity player, Services services) {
-        if (this.services == null || !isEnabled(this.services)) {
+        if (this.services == null || !isEnabled(this.services) || this.services.getMotdConfig() == null) {
+            if (this.services != null && this.services.getDebugLogger() != null) {
+                this.services.getDebugLogger().debugLog("MOTDModule: Services, MOTD module not enabled, or MOTDConfig is null. Skipping MOTD for " + player.getName().getString());
+            }
             return;
         }
         Text motdMessage = createMOTDMessage(player, this.services);

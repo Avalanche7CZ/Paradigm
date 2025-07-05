@@ -216,12 +216,33 @@ public class Restart implements ParadigmModule {
     }
 
     private void sendRestartWarning(long timeLeftSeconds, Services services, RestartConfigHandler.Config config, double originalTotalIntervalSeconds) {
-        if (services.getMinecraftServer() == null) return;
+        if (services.getMinecraftServer() == null) {
+            services.getDebugLogger().debugLog(NAME + ": Server instance is null, cannot send restart warning.");
+            return;
+        }
         services.getDebugLogger().debugLog(NAME + ": Sending restart warning. Time left: " + timeLeftSeconds + "s.");
 
-        List<ServerPlayerEntity> players = new ArrayList<>(services.getMinecraftServer().getPlayerManager().getPlayerList());
-        if (!players.isEmpty()) {
-            sendWarningToPlayerAtIndex(players, 0, timeLeftSeconds, services, config);
+        List<ServerPlayerEntity> players = services.getMinecraftServer().getPlayerManager().getPlayerList();
+
+        for (ServerPlayerEntity player : players) {
+            IPlatformAdapter platform = services.getPlatformAdapter();
+            final int hours = (int) (timeLeftSeconds / 3600);
+            final int minutes = (int) ((timeLeftSeconds % 3600) / 60);
+            final int seconds = (int) (timeLeftSeconds % 60);
+            final String formattedTime = String.format("%dh %sm %ss", hours, TIME_FORMATTER.format(minutes), TIME_FORMATTER.format(seconds));
+            final String chatMessage = config.BroadcastMessage.value != null ? config.BroadcastMessage.value.replace("{time}", formattedTime).replace("{minutes}", TIME_FORMATTER.format(minutes)).replace("{seconds}", TIME_FORMATTER.format(seconds)) : "";
+            final String titleMessage = config.titleMessage.value != null ? config.titleMessage.value.replace("{time}", formattedTime).replace("{minutes}", TIME_FORMATTER.format(minutes)).replace("{seconds}", TIME_FORMATTER.format(seconds)) : "";
+
+            if (config.timerUseChat.value) {
+                player.sendMessage(services.getMessageParser().parseMessage(chatMessage, player), false);
+            }
+            if (config.titleEnabled.value) {
+                platform.sendTitle(player, services.getMessageParser().parseMessage(titleMessage, player), Text.empty());
+            }
+
+            if (config.playSoundEnabled.value && timeLeftSeconds <= config.playSoundFirstTime.value) {
+                platform.playSound(player, "minecraft:block.note_block.pling", 1.0f, 1.0f);
+            }
         }
 
         if (config.bossbarEnabled.value) {
@@ -230,36 +251,12 @@ public class Restart implements ParadigmModule {
             int seconds = (int) (timeLeftSeconds % 60);
             String formattedTime = String.format("%dh %sm %ss", hours, TIME_FORMATTER.format(minutes), TIME_FORMATTER.format(seconds));
             float progress = Math.max(0.0f, (float) timeLeftSeconds / (float) Math.max(1.0, originalTotalIntervalSeconds));
-            String bossBarMessage = config.bossBarMessage.value.replace("{time}", formattedTime).replace("{minutes}", TIME_FORMATTER.format(minutes)).replace("{seconds}", TIME_FORMATTER.format(seconds));
+            String bossBarMessage = config.bossBarMessage.value != null ? config.bossBarMessage.value.replace("{time}", formattedTime).replace("{minutes}", TIME_FORMATTER.format(minutes)).replace("{seconds}", TIME_FORMATTER.format(seconds)) : "";
             services.getPlatformAdapter().createOrUpdateRestartBossBar(services.getMessageParser().parseMessage(bossBarMessage, null), IPlatformAdapter.BossBarColor.RED, progress);
         }
     }
 
-    private void sendWarningToPlayerAtIndex(final List<ServerPlayerEntity> players, final int index, final long timeLeftSeconds, final Services services, final RestartConfigHandler.Config config) {
-        if (index >= players.size() || !restartInProgress.get()) {
-            return;
-        }
-
-        ServerPlayerEntity player = players.get(index);
-        IPlatformAdapter platform = services.getPlatformAdapter();
-        final int hours = (int) (timeLeftSeconds / 3600);
-        final int minutes = (int) ((timeLeftSeconds % 3600) / 60);
-        final int seconds = (int) (timeLeftSeconds % 60);
-        final String formattedTime = String.format("%dh %sm %ss", hours, TIME_FORMATTER.format(minutes), TIME_FORMATTER.format(seconds));
-        final String chatMessage = config.BroadcastMessage.value.replace("{time}", formattedTime).replace("{minutes}", TIME_FORMATTER.format(minutes)).replace("{seconds}", TIME_FORMATTER.format(seconds));
-        final String titleMessage = config.titleMessage.value.replace("{time}", formattedTime).replace("{minutes}", TIME_FORMATTER.format(minutes)).replace("{seconds}", TIME_FORMATTER.format(seconds));
-
-        if (config.timerUseChat.value) {
-            player.sendMessage(services.getMessageParser().parseMessage(chatMessage, player), false);
-        }
-        if (config.titleEnabled.value) {
-            platform.sendTitle(player, services.getMessageParser().parseMessage(titleMessage, player), Text.empty());
-        }
-        // Sound logic would go here in future
-
-        final int nextIndex = index + 1;
-        services.getTaskScheduler().schedule(() -> sendWarningToPlayerAtIndex(players, nextIndex, timeLeftSeconds, services, config), 50, TimeUnit.MILLISECONDS);
-    }
+    
 
     private void performShutdown(Services services, RestartConfigHandler.Config config) {
         if (!restartInProgress.get()) return;

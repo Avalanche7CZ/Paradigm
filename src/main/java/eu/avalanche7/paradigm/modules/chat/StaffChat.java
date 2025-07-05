@@ -8,6 +8,7 @@ import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
+import net.fabricmc.fabric.api.message.v1.ServerMessageEvents.AllowChatMessage;
 import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.entity.boss.BossBar;
 import net.minecraft.entity.boss.ServerBossBar;
@@ -16,16 +17,17 @@ import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
+import net.minecraft.network.message.MessageType;
+import net.minecraft.network.message.SignedMessage;
 
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class StaffChat implements ParadigmModule {
 
     private static final String NAME = "StaffChat";
-    private final Map<UUID, Boolean> staffChatEnabledMap = new HashMap<>();
-    private final Map<UUID, ServerBossBar> bossBarsMap = new HashMap<>();
+    private final ConcurrentHashMap<UUID, Boolean> staffChatEnabledMap = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, ServerBossBar> bossBarsMap = new ConcurrentHashMap<>();
     private Services services;
 
     @Override
@@ -86,7 +88,7 @@ public class StaffChat implements ParadigmModule {
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
-        ServerMessageEvents.CHAT_MESSAGE.register(this::onServerChat);
+        ServerMessageEvents.ALLOW_CHAT_MESSAGE.register(this::onAllowChatMessage);
     }
 
     private int toggleStaffChatCmd(ServerCommandSource source) throws CommandSyntaxException {
@@ -130,7 +132,7 @@ public class StaffChat implements ParadigmModule {
         services.getLogger().info("(StaffChat) {}: {}", sender.getName().getString(), message);
     }
 
-    private boolean onServerChat(net.minecraft.network.message.SignedMessage message, ServerPlayerEntity player, net.minecraft.network.message.MessageType.Parameters params) {
+    private boolean onAllowChatMessage(SignedMessage message, ServerPlayerEntity player, MessageType.Parameters params) {
         if (!isEnabled(this.services)) {
             return true;
         }
@@ -147,7 +149,7 @@ public class StaffChat implements ParadigmModule {
         if (services.getChatConfig().enableStaffBossBar.value) {
             removeBossBar(player);
             Text title = services.getMessageParser().parseMessage("§cStaff Chat Mode §aEnabled", player);
-            ServerBossBar bossBar = new ServerBossBar(title, BossBar.Color.RED, BossBar.Style.NOTCHED_10);
+            ServerBossBar bossBar = new ServerBossBar(title, BossBar.Color.RED, BossBar.Style.PROGRESS);
             bossBar.addPlayer(player);
             bossBarsMap.put(player.getUuid(), bossBar);
         }
