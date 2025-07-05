@@ -232,7 +232,7 @@ public class Mentions implements ParadigmModule {
                 : Component.empty();
 
         platform.sendTitle(targetPlayer, parsedTitleMessage, parsedSubtitleMessage);
-        platform.playSound(targetPlayer, "minecraft:entity.player.levelup", 1.0F, 1.0F);
+        platform.playSound(targetPlayer, "minecraft:entity.player.levelup", net.minecraft.sounds.SoundSource.PLAYERS, 1.0F, 1.0F);
     }
 
     private Pattern buildAllPlayersMentionPattern(List<ServerPlayer> players, String mentionSymbol) {

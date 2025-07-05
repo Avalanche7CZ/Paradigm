@@ -301,10 +301,10 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
-    public void playSound(ServerPlayer player, String soundId, float volume, float pitch) {
+    public void playSound(ServerPlayer player, String soundId, net.minecraft.sounds.SoundSource category, float volume, float pitch) {
         SoundEvent soundEvent = ForgeRegistries.SOUND_EVENTS.getValue(ResourceLocation.parse(soundId));
         if (soundEvent != null) {
-            player.playNotifySound(soundEvent, SoundSource.MASTER, volume, pitch);
+            player.playNotifySound(soundEvent, category, volume, pitch);
         }
     }
 

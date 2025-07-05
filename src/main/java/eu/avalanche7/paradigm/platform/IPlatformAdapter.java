@@ -47,7 +47,7 @@ public interface IPlatformAdapter {
     void displayToast(ServerPlayer player, ResourceLocation id, ItemStack icon, Component title, Component subtitle, AdvancementFrame frame);
     void revokeToast(ServerPlayer player, ResourceLocation id);
     void clearTitles(ServerPlayer player);
-    void playSound(ServerPlayer player, String soundId, float volume, float pitch);
+    void playSound(ServerPlayer player, String soundId, net.minecraft.sounds.SoundSource category, float volume, float pitch);
     void executeCommandAs(CommandSourceStack source, String command);
     void executeCommandAsConsole(String command);
     String replacePlaceholders(String text, @Nullable ServerPlayer player);
