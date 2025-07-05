@@ -44,7 +44,7 @@ public interface IPlatformAdapter {
     void createOrUpdateRestartBossBar(Text message, BossBarColor color, float progress);
     void removeRestartBossBar();
     void clearTitles(ServerPlayerEntity player);
-    void playSound(ServerPlayerEntity player, String soundId, float volume, float pitch);
+    void playSound(ServerPlayerEntity player, String soundId, net.minecraft.sound.SoundCategory category, float volume, float pitch);
     void executeCommandAs(ServerCommandSource source, String command);
     void executeCommandAsConsole(String command);
     String replacePlaceholders(String text, @Nullable ServerPlayerEntity player);

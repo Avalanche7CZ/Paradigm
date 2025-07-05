@@ -257,7 +257,7 @@ public class Mentions implements ParadigmModule {
             targetPlayer.networkHandler.sendPacket(new SubtitleS2CPacket(parsedSubtitleMessage));
         }
 
-        targetPlayer.playSound(net.minecraft.sound.SoundEvents.ENTITY_EXPERIENCE_ORB_PICKUP);
+        this.services.getPlatformAdapter().playSound(targetPlayer, "minecraft:entity.experience_orb.pickup", net.minecraft.sound.SoundCategory.PLAYERS, 1.0f, 1.0f);
     }
 
     private boolean hasPermission(ServerPlayerEntity player, String permissionNode, int permissionLevel) {

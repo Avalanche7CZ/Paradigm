@@ -9,6 +9,7 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.network.packet.s2c.play.ClearTitleS2CPacket;
 import net.minecraft.network.packet.s2c.play.OverlayMessageS2CPacket;
+import net.minecraft.network.packet.s2c.play.PlaySoundS2CPacket;
 import net.minecraft.network.packet.s2c.play.SubtitleS2CPacket;
 import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
 import net.minecraft.registry.Registries;
@@ -233,10 +234,15 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
-    public void playSound(ServerPlayerEntity player, String soundId, float volume, float pitch) {
+    public void playSound(ServerPlayerEntity player, String soundId, net.minecraft.sound.SoundCategory category, float volume, float pitch) {
         SoundEvent soundEvent = Registries.SOUND_EVENT.get(Identifier.of(soundId));
         if (soundEvent != null) {
-            player.playSound(soundEvent);
+            player.networkHandler.sendPacket(new PlaySoundS2CPacket(
+                    Registries.SOUND_EVENT.getEntry(soundEvent),
+                    category,
+                    player.getX(), player.getY(), player.getZ(),
+                    volume, pitch, player.getWorld().getRandom().nextLong()
+            ));
         }
     }
 

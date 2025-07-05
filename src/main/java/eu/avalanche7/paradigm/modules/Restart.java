@@ -241,7 +241,7 @@ public class Restart implements ParadigmModule {
             }
 
             if (config.playSoundEnabled.value && timeLeftSeconds <= config.playSoundFirstTime.value) {
-                platform.playSound(player, "minecraft:block.note_block.pling", 1.0f, 1.0f);
+                platform.playSound(player, "minecraft:block.note_block.pling", net.minecraft.sound.SoundCategory.MASTER, 1.0f, 1.0f);
             }
         }
 
