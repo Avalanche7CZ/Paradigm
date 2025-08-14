@@ -80,13 +80,11 @@ public class Mentions implements ParadigmModule {
     @SubscribeEvent
     public void onChatMessage(ServerChatEvent event) {
         if (this.services == null || !isEnabled(this.services)) return;
-
         String rawMessage = event.getRawText();
         ServerPlayer sender = event.getPlayer();
         String mentionSymbol = MentionConfigHandler.CONFIG.MENTION_SYMBOL.get();
         String everyoneMentionPlaceholder = mentionSymbol + "everyone";
         Pattern everyonePattern = Pattern.compile(Pattern.quote(everyoneMentionPlaceholder), Pattern.CASE_INSENSITIVE);
-
         if (everyonePattern.matcher(rawMessage).find()) {
             handleEveryoneMention(event, sender, rawMessage, everyoneMentionPlaceholder);
         } else {
@@ -114,19 +112,14 @@ public class Mentions implements ParadigmModule {
         MutableComponent finalMessageComponent = Component.literal("");
         int lastEnd = 0;
         boolean wasMentionFound = false;
-
         Pattern allPlayersPattern = buildAllPlayersMentionPattern(platform.getOnlinePlayers(), mentionSymbol);
         Matcher mentionMatcher = allPlayersPattern.matcher(rawMessage);
-
         while (mentionMatcher.find()) {
             wasMentionFound = true;
             String playerName = mentionMatcher.group(1);
             ServerPlayer targetPlayer = platform.getPlayerByName(playerName);
-
             if (targetPlayer == null) continue;
-
             finalMessageComponent.append(Component.literal(rawMessage.substring(lastEnd, mentionMatcher.start())));
-
             if (platform.hasPermission(sender, PermissionsHandler.MENTION_PLAYER_PERMISSION, PermissionsHandler.MENTION_PLAYER_PERMISSION_LEVEL)
                     && canMentionPlayer(sender, targetPlayer)) {
                 notifyPlayer(targetPlayer, sender, rawMessage, false, mentionMatcher.group(0));
@@ -136,7 +129,6 @@ public class Mentions implements ParadigmModule {
             }
             lastEnd = mentionMatcher.end();
         }
-
         if (wasMentionFound) {
             event.setCanceled(true);
             finalMessageComponent.append(Component.literal(rawMessage.substring(lastEnd)));
@@ -150,7 +142,6 @@ public class Mentions implements ParadigmModule {
         String message = StringArgumentType.getString(context, "message");
         boolean isConsole = source.getEntity() == null;
         ServerPlayer sender = isConsole ? null : source.getPlayer();
-
         String everyoneMentionPlaceholder = MentionConfigHandler.CONFIG.MENTION_SYMBOL.get() + "everyone";
         if (Pattern.compile(Pattern.quote(everyoneMentionPlaceholder), Pattern.CASE_INSENSITIVE).matcher(message).find()) {
             if (sender != null) {
@@ -163,12 +154,10 @@ public class Mentions implements ParadigmModule {
                     return 0;
                 }
             } else { lastEveryoneMentionTime = System.currentTimeMillis(); }
-
             notifyEveryone(platform.getOnlinePlayers(), sender, message, isConsole, everyoneMentionPlaceholder);
             platform.sendSuccess(source, Component.literal("Mentioned everyone successfully."), !isConsole);
             return 1;
         }
-
         boolean mentionedSomeone = false;
         for (ServerPlayer targetPlayer : platform.getOnlinePlayers()) {
             String playerMentionPlaceholder = MentionConfigHandler.CONFIG.MENTION_SYMBOL.get() + targetPlayer.getName().getString();
@@ -177,12 +166,10 @@ public class Mentions implements ParadigmModule {
                     if (!platform.hasPermission(sender, PermissionsHandler.MENTION_PLAYER_PERMISSION, PermissionsHandler.MENTION_PLAYER_PERMISSION_LEVEL)) continue;
                     if (!canMentionPlayer(sender, targetPlayer)) continue;
                 } else { lastIndividualMentionTime.put(targetPlayer.getUUID(), System.currentTimeMillis()); }
-
                 notifyPlayer(targetPlayer, sender, message, isConsole, playerMentionPlaceholder);
                 mentionedSomeone = true;
             }
         }
-
         if (mentionedSomeone) {
             Component formattedChat = services.getMessageParser().parseMessage(message, sender);
             Component finalMessage = Component.translatable("chat.type.text", source.getDisplayName(), formattedChat);
@@ -198,10 +185,10 @@ public class Mentions implements ParadigmModule {
         String senderName = isConsole || sender == null ? "Console" : sender.getName().getString();
         String chatFormat = MentionConfigHandler.CONFIG.EVERYONE_MENTION_MESSAGE.get();
         String titleFormat = MentionConfigHandler.CONFIG.EVERYONE_TITLE_MESSAGE.get();
-        String content = originalMessage.substring(originalMessage.toLowerCase().indexOf(matchedEveryoneMention.toLowerCase()) + matchedEveryoneMention.length()).trim();
+        String content = originalMessage.substring(originalMessage.toLowerCase().indexOf(matchedEveryoneMention.toLowerCase()) + matchedEveryoneMention.length())
+                .replaceAll("[\\r\\n]+", " ").trim();
         String chatMessageText = String.format(chatFormat, senderName);
         String titleMessageText = String.format(titleFormat, senderName);
-
         for (ServerPlayer targetPlayer : players) {
             sendMentionNotification(targetPlayer, chatMessageText, titleMessageText, content);
         }
@@ -211,10 +198,10 @@ public class Mentions implements ParadigmModule {
         String senderName = isConsole || sender == null ? "Console" : sender.getName().getString();
         String chatFormat = MentionConfigHandler.CONFIG.INDIVIDUAL_MENTION_MESSAGE.get();
         String titleFormat = MentionConfigHandler.CONFIG.INDIVIDUAL_TITLE_MESSAGE.get();
-        String content = originalMessage.substring(originalMessage.toLowerCase().indexOf(matchedPlayerMention.toLowerCase()) + matchedPlayerMention.length()).trim();
+        String content = originalMessage.substring(originalMessage.toLowerCase().indexOf(matchedPlayerMention.toLowerCase()) + matchedPlayerMention.length())
+                .replaceAll("[\\r\\n]+", " ").trim();
         String chatMessageText = String.format(chatFormat, senderName);
         String titleMessageText = String.format(titleFormat, senderName);
-
         sendMentionNotification(targetPlayer, chatMessageText, titleMessageText, content);
     }
 
@@ -225,12 +212,10 @@ public class Mentions implements ParadigmModule {
             finalChatMessage.append(Component.literal("\n")).append(contentComponent);
         }
         platform.sendSystemMessage(targetPlayer, finalChatMessage);
-
         Component parsedTitleMessage = services.getMessageParser().parseMessage(titleMessage, targetPlayer);
         Component parsedSubtitleMessage = (contentMessage != null && !contentMessage.isEmpty())
                 ? services.getMessageParser().parseMessage(contentMessage, targetPlayer)
                 : Component.empty();
-
         platform.sendTitle(targetPlayer, parsedTitleMessage, parsedSubtitleMessage);
         platform.playSound(targetPlayer, "minecraft:entity.player.levelup", net.minecraft.sounds.SoundSource.PLAYERS, 1.0F, 1.0F);
     }
