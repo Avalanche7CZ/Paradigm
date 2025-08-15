@@ -30,6 +30,11 @@ public class Announcements implements ParadigmModule {
     private int actionbarMessageIndex = 0;
     private int titleMessageIndex = 0;
     private int bossbarMessageIndex = 0;
+    private int lastGlobalRandomIndex = -1;
+    private int lastActionbarRandomIndex = -1;
+    private int lastTitleRandomIndex = -1;
+    private int lastBossbarRandomIndex = -1;
+    private boolean announcementsScheduled = false;
     private IPlatformAdapter platform;
     private Services services;
 
@@ -52,7 +57,7 @@ public class Announcements implements ParadigmModule {
 
     @Override
     public void onServerStarting(ServerStartingEvent event, Services services) {
-        if (isEnabled(services)) {
+        if (isEnabled(services) && !announcementsScheduled) {
             services.getDebugLogger().debugLog("{}: Server is starting, scheduling announcements.", NAME);
             scheduleConfiguredAnnouncements();
         }
@@ -60,7 +65,7 @@ public class Announcements implements ParadigmModule {
 
     @Override
     public void onEnable(Services services) {
-        if (platform.getMinecraftServer() != null && isEnabled(services)) {
+        if (platform.getMinecraftServer() != null && isEnabled(services) && !announcementsScheduled) {
             services.getDebugLogger().debugLog("{}: Module enabled, scheduling announcements.", NAME);
             scheduleConfiguredAnnouncements();
         }
@@ -69,6 +74,7 @@ public class Announcements implements ParadigmModule {
     @Override
     public void onDisable(Services services) {
         services.getDebugLogger().debugLog("{}: Module disabled. Scheduled announcement tasks will be terminated.", NAME);
+        announcementsScheduled = false;
     }
 
     @Override
@@ -108,6 +114,11 @@ public class Announcements implements ParadigmModule {
     public void registerEventListeners(IEventBus forgeEventBus, Services services) {}
 
     private void scheduleConfiguredAnnouncements() {
+        if (announcementsScheduled) {
+            services.getDebugLogger().debugLog("{}: Announcements already scheduled, skipping duplicate scheduling.", NAME);
+            return;
+        }
+
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
         if (platform.getMinecraftServer() == null) {
             services.getDebugLogger().debugLog("{}: Server not available, skipping announcement scheduling.", NAME);
@@ -135,6 +146,9 @@ public class Announcements implements ParadigmModule {
             services.getDebugLogger().debugLog("{}: Scheduling bossbar announcements every {} seconds.", NAME, interval);
             services.getTaskScheduler().scheduleAtFixedRate(this::broadcastBossbarMessages, interval, interval, TimeUnit.SECONDS);
         }
+
+        announcementsScheduled = true;
+        services.getDebugLogger().debugLog("{}: All announcements successfully scheduled.", NAME);
     }
 
     private void broadcastGlobalMessages() {
@@ -237,7 +251,28 @@ public class Announcements implements ParadigmModule {
             messageText = messages.get(index);
             services.getDebugLogger().debugLog("{}: Picked sequential message for type '{}' at index {}: \"{}\"", NAME, type, index, messageText);
         } else {
-            int index = random.nextInt(messages.size());
+            int index;
+            int lastIndex;
+            switch (type) {
+                case "global" -> lastIndex = lastGlobalRandomIndex;
+                case "actionbar" -> lastIndex = lastActionbarRandomIndex;
+                case "title" -> lastIndex = lastTitleRandomIndex;
+                case "bossbar" -> lastIndex = lastBossbarRandomIndex;
+                default -> lastIndex = -1;
+            }
+            if (messages.size() > 1) {
+                do {
+                    index = random.nextInt(messages.size());
+                } while (index == lastIndex);
+            } else {
+                index = 0;
+            }
+            switch (type) {
+                case "global" -> lastGlobalRandomIndex = index;
+                case "actionbar" -> lastActionbarRandomIndex = index;
+                case "title" -> lastTitleRandomIndex = index;
+                case "bossbar" -> lastBossbarRandomIndex = index;
+            }
             messageText = messages.get(index);
             services.getDebugLogger().debugLog("{}: Picked random message for type '{}' at index {}: \"{}\"", NAME, type, index, messageText);
         }
