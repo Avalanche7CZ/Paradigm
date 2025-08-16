@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "id": "paradigm",
-  "version": "f21.0.beta4",
+  "version": "f21.0.beta5",
   "name": "Paradigm",
-  "description": "Your mod description here.",
+  "description": "Sever side Mod - Announcements, Restarting, and more!",
   "authors": [
     "Avalanche7CZ"
   ],
