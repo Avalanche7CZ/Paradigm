@@ -24,6 +24,7 @@ import net.minecraft.text.Text;
 
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 public class Announcements implements ParadigmModule {
@@ -35,6 +36,10 @@ public class Announcements implements ParadigmModule {
     private int titleMessageIndex = 0;
     private int bossbarMessageIndex = 0;
     private boolean tasksScheduled = false;
+    private ScheduledFuture<?> globalTask = null;
+    private ScheduledFuture<?> actionbarTask = null;
+    private ScheduledFuture<?> titleTask = null;
+    private ScheduledFuture<?> bossbarTask = null;
 
     @Override
     public String getName() {
@@ -62,21 +67,18 @@ public class Announcements implements ParadigmModule {
     @Override
     public void onEnable(Services services) {
         services.getDebugLogger().debugLog(NAME + " module enabled.");
-        if (services.getMinecraftServer() != null && isEnabled(services)) {
-            scheduleConfiguredAnnouncements(services);
-        }
     }
 
     @Override
     public void onDisable(Services services) {
-        services.getDebugLogger().debugLog(NAME + " module disabled. Tasks should be implicitly stopped by TaskScheduler shutdown.");
-        tasksScheduled = false;
+        services.getDebugLogger().debugLog(NAME + " module disabled. Cancelling scheduled tasks.");
+        cancelAllTasks(services);
     }
 
     @Override
     public void onServerStopping(Object event, Services services) {
         services.getDebugLogger().debugLog(NAME + " module: Server stopping.");
-        tasksScheduled = false;
+        cancelAllTasks(services);
     }
 
     @Override
@@ -123,6 +125,9 @@ public class Announcements implements ParadigmModule {
             services.getDebugLogger().debugLog(NAME + ": Tasks already scheduled, skipping.");
             return;
         }
+
+        cancelAllTasks(services);
+
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
         MinecraftServer server = services.getMinecraftServer();
         if (server == null) {
@@ -132,28 +137,55 @@ public class Announcements implements ParadigmModule {
 
         if (config.globalEnable.value) {
             long globalInterval = config.globalInterval.value;
-            services.getTaskScheduler().scheduleAtFixedRate(() -> broadcastGlobalMessages(services), globalInterval, globalInterval, TimeUnit.SECONDS);
+            globalTask = services.getTaskScheduler().scheduleAtFixedRate(() -> broadcastGlobalMessages(services), globalInterval, globalInterval, TimeUnit.SECONDS);
             services.getDebugLogger().debugLog(NAME + ": Scheduled global messages with interval: {} seconds", globalInterval);
         }
 
         if (config.actionbarEnable.value) {
             long actionbarInterval = config.actionbarInterval.value;
-            services.getTaskScheduler().scheduleAtFixedRate(() -> broadcastActionbarMessages(services), actionbarInterval, actionbarInterval, TimeUnit.SECONDS);
+            actionbarTask = services.getTaskScheduler().scheduleAtFixedRate(() -> broadcastActionbarMessages(services), actionbarInterval, actionbarInterval, TimeUnit.SECONDS);
             services.getDebugLogger().debugLog(NAME + ": Scheduled actionbar messages with interval: {} seconds", actionbarInterval);
         }
 
         if (config.titleEnable.value) {
             long titleInterval = config.titleInterval.value;
-            services.getTaskScheduler().scheduleAtFixedRate(() -> broadcastTitleMessages(services), titleInterval, titleInterval, TimeUnit.SECONDS);
+            titleTask = services.getTaskScheduler().scheduleAtFixedRate(() -> broadcastTitleMessages(services), titleInterval, titleInterval, TimeUnit.SECONDS);
             services.getDebugLogger().debugLog(NAME + ": Scheduled title messages with interval: {} seconds", titleInterval);
         }
 
         if (config.bossbarEnable.value) {
             long bossbarInterval = config.bossbarInterval.value;
-            services.getTaskScheduler().scheduleAtFixedRate(() -> broadcastBossbarMessages(services), bossbarInterval, bossbarInterval, TimeUnit.SECONDS);
+            bossbarTask = services.getTaskScheduler().scheduleAtFixedRate(() -> broadcastBossbarMessages(services), bossbarInterval, bossbarInterval, TimeUnit.SECONDS);
             services.getDebugLogger().debugLog(NAME + ": Scheduled bossbar messages with interval: {} seconds", bossbarInterval);
         }
         tasksScheduled = true;
+    }
+
+    private void cancelAllTasks(Services services) {
+        if (globalTask != null && !globalTask.isCancelled()) {
+            globalTask.cancel(false);
+            globalTask = null;
+            services.getDebugLogger().debugLog(NAME + ": Cancelled global messages task.");
+        }
+        if (actionbarTask != null && !actionbarTask.isCancelled()) {
+            actionbarTask.cancel(false);
+            actionbarTask = null;
+            services.getDebugLogger().debugLog(NAME + ": Cancelled actionbar messages task.");
+        }
+        if (titleTask != null && !titleTask.isCancelled()) {
+            titleTask.cancel(false);
+            titleTask = null;
+            services.getDebugLogger().debugLog(NAME + ": Cancelled title messages task.");
+        }
+        if (bossbarTask != null && !bossbarTask.isCancelled()) {
+            bossbarTask.cancel(false);
+            bossbarTask = null;
+            services.getDebugLogger().debugLog(NAME + ": Cancelled bossbar messages task.");
+        }
+        tasksScheduled = false;
+        if (services != null) {
+            services.getDebugLogger().debugLog(NAME + ": All scheduled tasks have been cancelled.");
+        }
     }
 
     private void broadcastGlobalMessages(Services services) {
@@ -363,3 +395,4 @@ public class Announcements implements ParadigmModule {
         return 1;
     }
 }
+
