@@ -43,7 +43,7 @@ public class CustomToastManager {
                 frame = IPlatformAdapter.AdvancementFrame.TASK;
             }
 
-            platform.displayToast(player, id, icon, titleComponent, Component.empty(), frame);
+            platform.displayToast(player, id, icon, titleComponent, platform.createLiteralComponent(""), frame);
             taskScheduler.schedule(() -> platform.revokeToast(player, id), 5, TimeUnit.SECONDS);
 
             return true;

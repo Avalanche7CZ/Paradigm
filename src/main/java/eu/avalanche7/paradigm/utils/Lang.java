@@ -3,6 +3,7 @@ package eu.avalanche7.paradigm.utils;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
+import eu.avalanche7.paradigm.platform.IPlatformAdapter;
 import net.minecraft.network.chat.Component;
 import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
@@ -23,11 +24,13 @@ public class Lang {
     private String currentLanguage;
     private final MainConfigHandler.Config mainConfig;
     private final MessageParser messageParser;
+    private final IPlatformAdapter platformAdapter;
 
-    public Lang(Logger logger, MainConfigHandler.Config mainConfig, MessageParser messageParser) {
+    public Lang(Logger logger, MainConfigHandler.Config mainConfig, MessageParser messageParser, IPlatformAdapter platformAdapter) {
         this.logger = logger;
         this.mainConfig = mainConfig;
         this.messageParser = messageParser;
+        this.platformAdapter = platformAdapter;
         try {
             ensureDefaultLangFiles();
         } catch (Exception e) {
@@ -97,7 +100,7 @@ public class Lang {
         translatedText = translatedText.replace("&", "§");
         if (this.messageParser == null) {
             if (logger != null) logger.warn("Lang.translate: MessageParser is null for key '{}'. Returning literal text.", key);
-            return Component.literal(translatedText);
+            return platformAdapter.createLiteralComponent(translatedText);
         }
         return this.messageParser.parseMessage(translatedText, null);
     }

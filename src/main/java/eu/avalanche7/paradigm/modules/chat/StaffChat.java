@@ -100,7 +100,7 @@ public class StaffChat implements ParadigmModule {
 
     private int sendStaffChatMessageCmd(CommandSourceStack source, String message) throws CommandSyntaxException {
         if (platform.getMinecraftServer() == null) {
-            platform.sendFailure(source, Component.literal("Server not available."));
+            platform.sendFailure(source, platform.createLiteralComponent("Server not available."));
             return 0;
         }
         sendStaffChatMessage(source.getPlayerOrException(), message);

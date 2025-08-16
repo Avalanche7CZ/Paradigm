@@ -167,10 +167,10 @@ public class GroupChat implements ParadigmModule {
     }
 
     private void sendHelpMessage(ServerPlayer player, String label, String command, String descriptionKey) {
-        MutableComponent hoverText = services.getLang().translate(descriptionKey).copy();
-        hoverText.withStyle(ChatFormatting.AQUA);
+        MutableComponent hoverText = platform.createTranslatableComponent(descriptionKey)
+                .withStyle(ChatFormatting.AQUA);
 
-        MutableComponent message = Component.literal(" §9> §e/" + label + " " + command)
+        MutableComponent message = platform.createLiteralComponent(" §9> §e/" + label + " " + command)
                 .withStyle(ChatFormatting.YELLOW)
                 .withStyle(style -> style.withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/" + label + " " + command)))
                 .withStyle(style -> style.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hoverText)));

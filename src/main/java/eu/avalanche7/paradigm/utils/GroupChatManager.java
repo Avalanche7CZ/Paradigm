@@ -93,7 +93,7 @@ public class GroupChatManager {
         }
         platform.sendSystemMessage(player, translate("group.available_groups"));
         for (String groupName : groups.keySet()) {
-            platform.sendSystemMessage(player, Component.literal("- " + groupName));
+            platform.sendSystemMessage(player, platform.createLiteralComponent("- " + groupName));
         }
     }
 
@@ -123,7 +123,7 @@ public class GroupChatManager {
             } else {
                 memberName = "Unknown (Offline)";
             }
-            platform.sendSystemMessage(player, Component.literal("- " + memberName));
+            platform.sendSystemMessage(player, platform.createLiteralComponent("- " + memberName));
         });
     }
 

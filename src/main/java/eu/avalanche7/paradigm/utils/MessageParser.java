@@ -33,28 +33,28 @@ public class MessageParser {
     private void initializeTagHandlers() {
         tagHandlers.put(Pattern.compile("\\[link=(.*?)\\]"), (matcher, context) -> {
             String url = matcher.group(1);
-            context.getComponent().append(Component.literal(url)
+            context.getComponent().append(platformAdapter.createLiteralComponent(url)
                             .setStyle(context.getCurrentStyle().withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, formatUrl(url)))))
-                    .append(Component.literal(" ").setStyle(context.getCurrentStyle()));
+                    .append(platformAdapter.createLiteralComponent(" ").setStyle(context.getCurrentStyle()));
         });
         tagHandlers.put(Pattern.compile("\\[command=(.*?)\\]"), (matcher, context) -> {
             String command = matcher.group(1);
             String fullCommand = command.startsWith("/") ? command : "/" + command;
-            context.getComponent().append(Component.literal(fullCommand)
+            context.getComponent().append(platformAdapter.createLiteralComponent(fullCommand)
                             .setStyle(context.getCurrentStyle().withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, fullCommand))))
-                    .append(Component.literal(" ").setStyle(context.getCurrentStyle()));
+                    .append(platformAdapter.createLiteralComponent(" ").setStyle(context.getCurrentStyle()));
         });
         tagHandlers.put(Pattern.compile("\\[hover=(.*?)\\](.*?)\\[/hover\\]", Pattern.DOTALL), (matcher, context) -> {
             String hoverTextContent = matcher.group(1);
             String mainTextContent = matcher.group(2);
             MutableComponent hoverComponent = parseMessageInternal(hoverTextContent, context.getPlayer(), Style.EMPTY);
-            MutableComponent textWithHover = Component.literal("");
+            MutableComponent textWithHover = platformAdapter.createLiteralComponent("");
             parseTextRecursive(mainTextContent, textWithHover, context.getCurrentStyle(), context.getPlayer());
             applyHoverToComponent(textWithHover, new HoverEvent(HoverEvent.Action.SHOW_TEXT, hoverComponent));
             context.getComponent().append(textWithHover);
         });
         tagHandlers.put(Pattern.compile("\\[divider\\]"), (matcher, context) -> {
-            context.getComponent().append(Component.literal("--------------------")
+            context.getComponent().append(platformAdapter.createLiteralComponent("--------------------")
                     .setStyle(context.getCurrentStyle().withColor(TextColor.fromLegacyFormat(ChatFormatting.GRAY))));
         });
         tagHandlers.put(Pattern.compile("\\[title=(.*?)\\]", Pattern.DOTALL), (matcher, context) -> {
@@ -62,7 +62,7 @@ public class MessageParser {
                 String titleText = matcher.group(1);
                 MutableComponent titleComponent = parseTitleOrSubtitle(titleText, context.getCurrentStyle(), context.getPlayer());
                 platformAdapter.clearTitles(context.getPlayer());
-                platformAdapter.sendTitle(context.getPlayer(), titleComponent, Component.empty());
+                platformAdapter.sendTitle(context.getPlayer(), titleComponent, platformAdapter.createLiteralComponent(""));
             }
         });
         tagHandlers.put(Pattern.compile("\\[subtitle=(.*?)\\]", Pattern.DOTALL), (matcher, context) -> {
@@ -88,7 +88,7 @@ public class MessageParser {
                 }
             }
             if (!paddingSpaces.isEmpty()) {
-                context.getComponent().append(Component.literal(paddingSpaces).setStyle(context.getCurrentStyle()));
+                context.getComponent().append(platformAdapter.createLiteralComponent(paddingSpaces).setStyle(context.getCurrentStyle()));
             }
             context.getComponent().append(innerComponent);
         });
@@ -109,7 +109,7 @@ public class MessageParser {
 
     private MutableComponent parseMessageInternal(String rawMessage, ServerPlayer player, Style initialStyle) {
         if (rawMessage == null) {
-            return Component.literal("").setStyle(initialStyle);
+            return platformAdapter.createLiteralComponent("").setStyle(initialStyle);
         }
 
         String processedMessage = this.placeholders.replacePlaceholders(rawMessage, player);
@@ -128,7 +128,7 @@ public class MessageParser {
             return messageCache.get(finalCacheKey).copy();
         }
 
-        MutableComponent rootComponent = Component.literal("");
+        MutableComponent rootComponent = platformAdapter.createLiteralComponent("");
         parseTextRecursive(messageForParsing, rootComponent, initialStyle, player);
 
         messageCache.put(finalCacheKey, rootComponent);
@@ -150,7 +150,7 @@ public class MessageParser {
             if (nextTagStart != -1) firstEventIndex = Math.min(firstEventIndex, nextTagStart);
             if (nextUrlFound) firstEventIndex = Math.min(firstEventIndex, nextUrlStart);
             if (firstEventIndex > currentIndex) {
-                parentComponent.append(Component.literal(textToParse.substring(currentIndex, firstEventIndex)).setStyle(currentStyle));
+                parentComponent.append(platformAdapter.createLiteralComponent(textToParse.substring(currentIndex, firstEventIndex)).setStyle(currentStyle));
             }
             currentIndex = firstEventIndex;
             if (currentIndex == length) break;
@@ -164,11 +164,11 @@ public class MessageParser {
                                 currentStyle = currentStyle.withColor(TextColor.fromRgb(Integer.parseInt(hex, 16)));
                                 currentIndex += 8;
                             } catch (NumberFormatException e) {
-                                parentComponent.append(Component.literal(textToParse.substring(currentIndex, currentIndex + 2)).setStyle(currentStyle));
+                                parentComponent.append(platformAdapter.createLiteralComponent(textToParse.substring(currentIndex, currentIndex + 2)).setStyle(currentStyle));
                                 currentIndex += 2;
                             }
                         } else {
-                            parentComponent.append(Component.literal(textToParse.substring(currentIndex, currentIndex + 1)).setStyle(currentStyle));
+                            parentComponent.append(platformAdapter.createLiteralComponent(textToParse.substring(currentIndex, currentIndex + 1)).setStyle(currentStyle));
                             currentIndex += 1;
                         }
                     } else {
@@ -177,12 +177,12 @@ public class MessageParser {
                             currentStyle = currentStyle.applyFormat(format);
                             if (format == ChatFormatting.RESET) currentStyle = Style.EMPTY;
                         } else {
-                            parentComponent.append(Component.literal("§").setStyle(currentStyle));
+                            parentComponent.append(platformAdapter.createLiteralComponent("§").setStyle(currentStyle));
                         }
                         currentIndex += 2;
                     }
                 } else {
-                    parentComponent.append(Component.literal("§").setStyle(currentStyle));
+                    parentComponent.append(platformAdapter.createLiteralComponent("§").setStyle(currentStyle));
                     currentIndex += 1;
                 }
             }
@@ -200,18 +200,18 @@ public class MessageParser {
                     }
                 }
                 if (!tagHandled) {
-                    parentComponent.append(Component.literal("[").setStyle(currentStyle));
+                    parentComponent.append(platformAdapter.createLiteralComponent("[").setStyle(currentStyle));
                     currentIndex += 1;
                 }
             }
             else if (nextUrlFound && nextUrlStart == currentIndex) {
                 String url = urlMatcher.group(0);
                 Style urlStyle = currentStyle.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, formatUrl(url)));
-                parentComponent.append(Component.literal(url).setStyle(urlStyle));
+                parentComponent.append(platformAdapter.createLiteralComponent(url).setStyle(urlStyle));
                 currentIndex = urlMatcher.end();
             } else {
                 if (currentIndex < length) {
-                    parentComponent.append(Component.literal(textToParse.substring(currentIndex, currentIndex + 1)).setStyle(currentStyle));
+                    parentComponent.append(platformAdapter.createLiteralComponent(textToParse.substring(currentIndex, currentIndex + 1)).setStyle(currentStyle));
                     currentIndex += 1;
                 }
             }
@@ -262,3 +262,4 @@ public class MessageParser {
         public ServerPlayer getPlayer() { return player; }
     }
 }
+

@@ -200,7 +200,7 @@ public class Announcements implements ParadigmModule {
         platform.getOnlinePlayers().forEach(player -> {
             String[] parts = messageText.split(" \\|\\| ", 2);
             Component title = services.getMessageParser().parseMessage(parts[0], player);
-            Component subtitle = parts.length > 1 ? services.getMessageParser().parseMessage(parts[1], player) : Component.empty();
+            Component subtitle = parts.length > 1 ? services.getMessageParser().parseMessage(parts[1], player) : platform.createLiteralComponent("");
             platform.clearTitles(player);
             platform.sendTitle(player, title, subtitle);
         });
@@ -288,12 +288,12 @@ public class Announcements implements ParadigmModule {
 
         platform.getOnlinePlayers().forEach(target -> {
             Component title = services.getMessageParser().parseMessage(parts[0], target);
-            Component subtitle = parts.length > 1 ? services.getMessageParser().parseMessage(parts[1], target) : Component.empty();
+            Component subtitle = parts.length > 1 ? services.getMessageParser().parseMessage(parts[1], target) : platform.createLiteralComponent("");
             platform.clearTitles(target);
             platform.sendTitle(target, title, subtitle);
         });
 
-        platform.sendSuccess(context.getSource(), Component.literal("Title broadcasted."), true);
+        platform.sendSuccess(context.getSource(), platform.createLiteralComponent("Title broadcasted."), true);
         return 1;
     }
 
@@ -324,7 +324,7 @@ public class Announcements implements ParadigmModule {
                 });
             }
         }
-        platform.sendSuccess(context.getSource(), Component.literal(commandName + " broadcasted."), true);
+        platform.sendSuccess(context.getSource(), platform.createLiteralComponent(commandName + " broadcasted."), true);
         return 1;
     }
 }

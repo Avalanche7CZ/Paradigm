@@ -92,7 +92,7 @@ public class Restart implements ParadigmModule {
                 .then(Commands.literal("now")
                         .executes(context -> {
                             initiateRestartSequence(60.0, services.getRestartConfig());
-                            context.getSource().sendSuccess(() -> Component.literal("Server restart initiated for 60 seconds."), true);
+                            platform.sendSuccess(context.getSource(), platform.createLiteralComponent("Server restart initiated for 60 seconds."), true);
                             return 1;
                         }))
                 .then(Commands.literal("cancel")
@@ -100,9 +100,9 @@ public class Restart implements ParadigmModule {
                             if (restartInProgress.get()) {
                                 cancelAndCleanup();
                                 scheduleNextRestart();
-                                context.getSource().sendSuccess(() -> Component.literal("Scheduled server restart has been cancelled."), true);
+                                platform.sendSuccess(context.getSource(), platform.createLiteralComponent("Scheduled server restart has been cancelled."), true);
                             } else {
-                                context.getSource().sendFailure(Component.literal("No restart is currently scheduled to be cancelled."));
+                                platform.sendFailure(context.getSource(), platform.createLiteralComponent("No restart is currently scheduled to be cancelled."));
                             }
                             return 1;
                         }))

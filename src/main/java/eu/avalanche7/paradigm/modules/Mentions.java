@@ -109,7 +109,7 @@ public class Mentions implements ParadigmModule {
 
     private void handleIndividualMentions(ServerChatEvent event, ServerPlayer sender, String rawMessage) {
         String mentionSymbol = MentionConfigHandler.CONFIG.MENTION_SYMBOL.get();
-        MutableComponent finalMessageComponent = Component.literal("");
+        MutableComponent finalMessageComponent = platform.createLiteralComponent("");
         int lastEnd = 0;
         boolean wasMentionFound = false;
         Pattern allPlayersPattern = buildAllPlayersMentionPattern(platform.getOnlinePlayers(), mentionSymbol);
@@ -119,20 +119,20 @@ public class Mentions implements ParadigmModule {
             String playerName = mentionMatcher.group(1);
             ServerPlayer targetPlayer = platform.getPlayerByName(playerName);
             if (targetPlayer == null) continue;
-            finalMessageComponent.append(Component.literal(rawMessage.substring(lastEnd, mentionMatcher.start())));
+            finalMessageComponent.append(platform.createLiteralComponent(rawMessage.substring(lastEnd, mentionMatcher.start())));
             if (platform.hasPermission(sender, PermissionsHandler.MENTION_PLAYER_PERMISSION, PermissionsHandler.MENTION_PLAYER_PERMISSION_LEVEL)
                     && canMentionPlayer(sender, targetPlayer)) {
                 notifyPlayer(targetPlayer, sender, rawMessage, false, mentionMatcher.group(0));
-                finalMessageComponent.append(targetPlayer.getDisplayName());
+                finalMessageComponent.append(platform.getPlayerDisplayName(targetPlayer));
             } else {
-                finalMessageComponent.append(Component.literal(mentionMatcher.group(0)));
+                finalMessageComponent.append(platform.createLiteralComponent(mentionMatcher.group(0)));
             }
             lastEnd = mentionMatcher.end();
         }
         if (wasMentionFound) {
             event.setCanceled(true);
-            finalMessageComponent.append(Component.literal(rawMessage.substring(lastEnd)));
-            Component finalMessage = Component.translatable("chat.type.text", sender.getDisplayName(), finalMessageComponent);
+            finalMessageComponent.append(platform.createLiteralComponent(rawMessage.substring(lastEnd)));
+            Component finalMessage = platform.createTranslatableComponent("chat.type.text", platform.getPlayerDisplayName(sender), finalMessageComponent);
             platform.broadcastChatMessage(finalMessage);
         }
     }
@@ -155,7 +155,7 @@ public class Mentions implements ParadigmModule {
                 }
             } else { lastEveryoneMentionTime = System.currentTimeMillis(); }
             notifyEveryone(platform.getOnlinePlayers(), sender, message, isConsole, everyoneMentionPlaceholder);
-            platform.sendSuccess(source, Component.literal("Mentioned everyone successfully."), !isConsole);
+            platform.sendSuccess(source, platform.createLiteralComponent("Mentioned everyone successfully."), !isConsole);
             return 1;
         }
         boolean mentionedSomeone = false;
@@ -172,11 +172,11 @@ public class Mentions implements ParadigmModule {
         }
         if (mentionedSomeone) {
             Component formattedChat = services.getMessageParser().parseMessage(message, sender);
-            Component finalMessage = Component.translatable("chat.type.text", source.getDisplayName(), formattedChat);
+            Component finalMessage = platform.createTranslatableComponent("chat.type.text", source.getDisplayName(), formattedChat);
             platform.broadcastChatMessage(finalMessage);
-            platform.sendSuccess(source, Component.literal("Mentioned player(s) successfully."), !isConsole);
+            platform.sendSuccess(source, platform.createLiteralComponent("Mentioned player(s) successfully."), !isConsole);
         } else {
-            platform.sendFailure(source, Component.literal("No valid mentions found in the message."));
+            platform.sendFailure(source, platform.createLiteralComponent("No valid mentions found in the message."));
         }
         return mentionedSomeone ? 1 : 0;
     }
@@ -209,13 +209,13 @@ public class Mentions implements ParadigmModule {
         MutableComponent finalChatMessage = services.getMessageParser().parseMessage(chatMessage, targetPlayer);
         if (contentMessage != null && !contentMessage.isEmpty()) {
             MutableComponent contentComponent = services.getMessageParser().parseMessage("- " + contentMessage, targetPlayer);
-            finalChatMessage.append(Component.literal("\n")).append(contentComponent);
+            finalChatMessage.append(platform.createLiteralComponent("\n")).append(contentComponent);
         }
         platform.sendSystemMessage(targetPlayer, finalChatMessage);
         Component parsedTitleMessage = services.getMessageParser().parseMessage(titleMessage, targetPlayer);
         Component parsedSubtitleMessage = (contentMessage != null && !contentMessage.isEmpty())
                 ? services.getMessageParser().parseMessage(contentMessage, targetPlayer)
-                : Component.empty();
+                : platform.createLiteralComponent("");
         platform.sendTitle(targetPlayer, parsedTitleMessage, parsedSubtitleMessage);
         platform.playSound(targetPlayer, "minecraft:entity.player.levelup", net.minecraft.sounds.SoundSource.PLAYERS, 1.0F, 1.0F);
     }

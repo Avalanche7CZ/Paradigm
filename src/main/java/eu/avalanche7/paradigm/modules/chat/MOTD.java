@@ -74,12 +74,15 @@ public class MOTD implements ParadigmModule {
     private Component createMOTDMessage(ServerPlayer player) {
         List<String> lines = services.getMotdConfig().motdLines;
         if (lines == null || lines.isEmpty()) {
-            return Component.empty();
+            return platform.createLiteralComponent("");
         }
-        MutableComponent motdMessage = Component.literal("");
+
+        MutableComponent motdMessage = platform.createLiteralComponent("");
         for (String line : lines) {
-            motdMessage.append(services.getMessageParser().parseMessage(line, player)).append(Component.literal("\n"));
+            motdMessage.append(services.getMessageParser().parseMessage(line, player))
+                      .append(platform.createLiteralComponent("\n"));
         }
+
         return motdMessage;
     }
 }

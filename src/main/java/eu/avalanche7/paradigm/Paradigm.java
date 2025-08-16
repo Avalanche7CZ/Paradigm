@@ -72,7 +72,7 @@ public class Paradigm {
         MessageParser messageParser = new MessageParser(placeholders, platformAdapter);
         platformAdapter.provideMessageParser(messageParser);
 
-        Lang lang = new Lang(LOGGER, MainConfigHandler.CONFIG, messageParser);
+        Lang lang = new Lang(LOGGER, MainConfigHandler.CONFIG, messageParser, platformAdapter);
         lang.initializeLanguage();
         GroupChatManager groupChatManager = new GroupChatManager(platformAdapter, lang, debugLogger, messageParser);
         CustomToastManager customToastManager = new CustomToastManager(platformAdapter, messageParser, taskScheduler, debugLogger);
