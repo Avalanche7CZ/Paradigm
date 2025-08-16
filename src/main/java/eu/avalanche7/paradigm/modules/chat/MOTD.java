@@ -3,6 +3,7 @@ package eu.avalanche7.paradigm.modules.chat;
 import com.mojang.brigadier.CommandDispatcher;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.platform.IPlatformAdapter;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.server.command.ServerCommandSource;
@@ -16,6 +17,7 @@ public class MOTD implements ParadigmModule {
 
     private static final String NAME = "MOTD";
     private Services services;
+    private IPlatformAdapter platform;
 
     @Override
     public String getName() {
@@ -30,6 +32,7 @@ public class MOTD implements ParadigmModule {
     @Override
     public void onLoad(Object event, Services services, Object modEventBus) {
         this.services = services;
+        this.platform = services.getPlatformAdapter();
         if (services != null && services.getDebugLogger() != null) {
             services.getDebugLogger().debugLog(NAME + " module loaded.");
         }
@@ -82,7 +85,7 @@ public class MOTD implements ParadigmModule {
             return;
         }
         Text motdMessage = createMOTDMessage(player, this.services);
-        player.sendMessage(motdMessage);
+        platform.sendSystemMessage(player, motdMessage);
         this.services.getDebugLogger().debugLog("Sent MOTD to " + player.getName().getString());
     }
 
@@ -97,7 +100,7 @@ public class MOTD implements ParadigmModule {
         if (lines == null || lines.isEmpty()) {
             return Text.empty();
         }
-        MutableText motdMessage = Text.literal("");
+        MutableText motdMessage = platform.createLiteralComponent("");
         for (int i = 0; i < lines.size(); i++) {
             String line = lines.get(i);
             if (services.getMessageParser() != null) {
@@ -106,10 +109,10 @@ public class MOTD implements ParadigmModule {
                 if(services.getDebugLogger() != null) {
                     services.getDebugLogger().debugLog("MOTDModule: MessageParser is null in createMOTDMessage loop.");
                 }
-                motdMessage.append(Text.literal(line));
+                motdMessage.append(platform.createLiteralComponent(line));
             }
             if (i < lines.size() - 1) {
-                motdMessage.append(Text.literal("\n"));
+                motdMessage.append(platform.createLiteralComponent("\n"));
             }
         }
         return motdMessage;

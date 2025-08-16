@@ -5,6 +5,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.PlayerGroupData;
+import eu.avalanche7.paradigm.platform.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.GroupChatManager;
 import net.fabricmc.fabric.api.message.v1.ServerMessageDecoratorEvent;
 import net.minecraft.command.CommandRegistryAccess;
@@ -24,6 +25,7 @@ public class GroupChat implements ParadigmModule {
     private static final String NAME = "GroupChat";
     private GroupChatManager groupChatManager;
     private Services services;
+    private IPlatformAdapter platform;
 
     public GroupChat(GroupChatManager groupChatManager) {
         this.groupChatManager = groupChatManager;
@@ -42,6 +44,7 @@ public class GroupChat implements ParadigmModule {
     @Override
     public void onLoad(Object event, Services services, Object modEventBus) {
         this.services = services;
+        this.platform = services.getPlatformAdapter();
         services.getDebugLogger().debugLog(NAME + " module loaded.");
     }
 
@@ -117,7 +120,7 @@ public class GroupChat implements ParadigmModule {
                             if (currentGroup != null) {
                                 groupChatManager.groupInfo(ctx.getSource().getPlayer(), currentGroup);
                             } else {
-                                ctx.getSource().getPlayer().sendMessage(services.getLang().translate("group.no_group_to_info"));
+                                platform.sendSystemMessage(ctx.getSource().getPlayer(), services.getLang().translate("group.no_group_to_info"));
                             }
                             return 1;
                         }))
@@ -163,13 +166,13 @@ public class GroupChat implements ParadigmModule {
                     return null;
                 } else {
                     groupChatManager.setGroupChatToggled(player, false);
-                    player.sendMessage(services.getLang().translate("group.chat_disabled"));
+                    platform.sendSystemMessage(player, services.getLang().translate("group.chat_disabled"));
                     return message;
                 }
             } else {
-                player.sendMessage(services.getLang().translate("group.no_group_to_send_message"));
+                platform.sendSystemMessage(player, services.getLang().translate("group.no_group_to_send_message"));
                 groupChatManager.setGroupChatToggled(player, false);
-                player.sendMessage(services.getLang().translate("group.chat_disabled"));
+                platform.sendSystemMessage(player, services.getLang().translate("group.chat_disabled"));
             }
         }
 
@@ -178,7 +181,7 @@ public class GroupChat implements ParadigmModule {
 
     private void displayHelp(ServerPlayerEntity player, Services services) {
         String label = "groupchat";
-        player.sendMessage(services.getLang().translate("group.help_title"));
+        platform.sendSystemMessage(player, services.getLang().translate("group.help_title"));
         sendHelpMessage(player, label, "create <name>", services.getLang().translate("group.help_create").getString(), services);
         sendHelpMessage(player, label, "delete", services.getLang().translate("group.help_delete").getString(), services);
         sendHelpMessage(player, label, "invite <player>", services.getLang().translate("group.help_invite").getString(), services);
@@ -195,10 +198,10 @@ public class GroupChat implements ParadigmModule {
         MutableText hoverText = parsedDescription.copy();
         hoverText.setStyle(hoverText.getStyle().withColor(Formatting.AQUA));
 
-        MutableText message = Text.literal(" §9> §e/" + label + " " + command)
+        MutableText message = platform.createLiteralComponent(" §9> §e/" + label + " " + command)
                 .formatted(Formatting.YELLOW)
                 .styled(style -> style.withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/" + label + " " + command)))
                 .styled(style -> style.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hoverText)));
-        player.sendMessage(message);
+        platform.sendSystemMessage(player, message);
     }
 }

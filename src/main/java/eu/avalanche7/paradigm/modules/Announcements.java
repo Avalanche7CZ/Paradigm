@@ -5,19 +5,12 @@ import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
-import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.platform.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 import net.minecraft.command.CommandRegistryAccess;
-import net.minecraft.entity.boss.BossBar;
-import net.minecraft.entity.boss.ServerBossBar;
-import net.minecraft.network.packet.s2c.play.ClearTitleS2CPacket;
-import net.minecraft.network.packet.s2c.play.OverlayMessageS2CPacket;
-import net.minecraft.network.packet.s2c.play.SubtitleS2CPacket;
-import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
@@ -40,6 +33,7 @@ public class Announcements implements ParadigmModule {
     private ScheduledFuture<?> actionbarTask = null;
     private ScheduledFuture<?> titleTask = null;
     private ScheduledFuture<?> bossbarTask = null;
+    private IPlatformAdapter platform;
 
     @Override
     public String getName() {
@@ -53,6 +47,7 @@ public class Announcements implements ParadigmModule {
 
     @Override
     public void onLoad(Object event, Services services, Object modEventBus) {
+        this.platform = services.getPlatformAdapter();
         services.getDebugLogger().debugLog(NAME + " module loaded.");
     }
 
@@ -106,8 +101,8 @@ public class Announcements implements ParadigmModule {
                                 .then(CommandManager.argument("interval", IntegerArgumentType.integer(1))
                                         .then(CommandManager.argument("color", StringArgumentType.word())
                                                 .suggests((ctx, builder) -> {
-                                                    for (BossBar.Color color : BossBar.Color.values()) {
-                                                        builder.suggest(color.getName());
+                                                    for (IPlatformAdapter.BossBarColor color : IPlatformAdapter.BossBarColor.values()) {
+                                                        builder.suggest(color.name().toLowerCase());
                                                     }
                                                     return builder.buildFuture();
                                                 })
@@ -129,9 +124,8 @@ public class Announcements implements ParadigmModule {
         cancelAllTasks(services);
 
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
-        MinecraftServer server = services.getMinecraftServer();
-        if (server == null) {
-            services.getDebugLogger().debugLog(NAME + ": Cannot schedule announcements, server instance is null.");
+        if (platform == null) {
+            services.getDebugLogger().debugLog(NAME + ": Cannot schedule announcements, platform adapter is null.");
             return;
         }
 
@@ -189,9 +183,8 @@ public class Announcements implements ParadigmModule {
     }
 
     private void broadcastGlobalMessages(Services services) {
-        MinecraftServer server = services.getMinecraftServer();
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
-        if (server == null || config.globalMessages.value.isEmpty()) return;
+        if (platform == null || config.globalMessages.value.isEmpty()) return;
 
         List<String> messages = config.globalMessages.value;
         String prefix = config.prefix.value != null ? config.prefix.value + "§r" : "";
@@ -209,26 +202,18 @@ public class Announcements implements ParadigmModule {
         Text message = services.getMessageParser().parseMessage(messageText, null);
 
         if (config.headerAndFooter.value) {
-            Text headerComp = services.getMessageParser().parseMessage(header, null);
-            Text footerComp = services.getMessageParser().parseMessage(footer, null);
-            server.getPlayerManager().getPlayerList().forEach(player -> {
-                player.sendMessage(headerComp);
-                player.sendMessage(message);
-                player.sendMessage(footerComp);
-            });
+            platform.broadcastSystemMessage(message, header, footer, null);
         } else {
-            server.getPlayerManager().broadcast(message, false);
+            platform.broadcastChatMessage(message);
         }
         services.getDebugLogger().debugLog(NAME + ": Broadcasted global message: {}", message.getString());
     }
 
     private void broadcastActionbarMessages(Services services) {
-        MinecraftServer server = services.getMinecraftServer();
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
-        if (server == null || config.actionbarMessages.value.isEmpty()) return;
+        if (platform == null || config.actionbarMessages.value.isEmpty()) return;
 
         List<String> messages = config.actionbarMessages.value;
-        if (messages == null || messages.isEmpty()) return;
         String prefix = config.prefix.value != null ? config.prefix.value + "§r" : "";
 
         String messageText;
@@ -240,19 +225,17 @@ public class Announcements implements ParadigmModule {
         }
         Text message = services.getMessageParser().parseMessage(messageText, null);
 
-        server.getPlayerManager().getPlayerList().forEach(player -> {
-            player.networkHandler.sendPacket(new OverlayMessageS2CPacket(message));
-        });
+        platform.getOnlinePlayers().forEach(player ->
+            platform.sendActionBar(player, message)
+        );
         services.getDebugLogger().debugLog(NAME + ": Broadcasted actionbar message: {}", message.getString());
     }
 
     private void broadcastTitleMessages(Services services) {
-        MinecraftServer server = services.getMinecraftServer();
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
-        if (server == null || config.titleMessages.value.isEmpty()) return;
+        if (platform == null || config.titleMessages.value.isEmpty()) return;
 
         List<String> messages = config.titleMessages.value;
-        if (messages == null || messages.isEmpty()) return;
         String prefix = config.prefix.value != null ? config.prefix.value + "§r" : "";
 
         String messageText;
@@ -264,34 +247,38 @@ public class Announcements implements ParadigmModule {
         }
 
         String[] parts = messageText.split(" \\|\\| ", 2);
-        Text titleComponent = services.getMessageParser().parseMessage(parts[0], null);
-        Text subtitleComponent = parts.length > 1 ? services.getMessageParser().parseMessage(parts[1], null) : Text.empty();
+        String titleStr = parts[0].trim();
+        String subtitleStr = parts.length > 1 ? parts[1].trim() : "";
+        Text titleComponent = !titleStr.isEmpty() ? services.getMessageParser().parseMessage(titleStr, null) : Text.empty();
+        Text subtitleComponent = !subtitleStr.isEmpty() ? services.getMessageParser().parseMessage(subtitleStr, null) : Text.empty();
 
-        server.getPlayerManager().getPlayerList().forEach(player -> {
-            player.networkHandler.sendPacket(new ClearTitleS2CPacket(false));
-            player.networkHandler.sendPacket(new TitleS2CPacket(titleComponent));
-            if (parts.length > 1 && !subtitleComponent.getString().isEmpty()) {
-                player.networkHandler.sendPacket(new SubtitleS2CPacket(subtitleComponent));
+        platform.getOnlinePlayers().forEach(player -> {
+            platform.clearTitles(player);
+            if (!titleComponent.getString().isEmpty() && !subtitleComponent.getString().isEmpty()) {
+                platform.sendTitle(player, titleComponent, subtitleComponent);
+            } else if (!titleComponent.getString().isEmpty()) {
+                platform.sendTitle(player, titleComponent, Text.empty());
+            } else if (!subtitleComponent.getString().isEmpty()) {
+                platform.sendSubtitle(player, subtitleComponent);
             }
         });
         services.getDebugLogger().debugLog(NAME + ": Broadcasted title message: {}", messageText);
     }
 
     private void broadcastBossbarMessages(Services services) {
-        MinecraftServer server = services.getMinecraftServer();
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
-        if (server == null || config.bossbarMessages.value.isEmpty()) return;
+        if (platform == null || config.bossbarMessages.value.isEmpty()) return;
 
         List<String> messages = config.bossbarMessages.value;
-        if (messages == null || messages.isEmpty()) return;
         String prefix = config.prefix.value != null ? config.prefix.value + "§r" : "";
         int bossbarTime = config.bossbarTime.value != null ? config.bossbarTime.value : 10;
-        BossBar.Color bossbarColor;
+        String colorStr = config.bossbarColor.value != null ? config.bossbarColor.value.toUpperCase() : "PURPLE";
+        IPlatformAdapter.BossBarColor bossbarColor;
         try {
-            bossbarColor = config.bossbarColor.value != null ? BossBar.Color.valueOf(config.bossbarColor.value.toUpperCase()) : BossBar.Color.PURPLE;
+            bossbarColor = IPlatformAdapter.BossBarColor.valueOf(colorStr);
         } catch (IllegalArgumentException e) {
             services.getDebugLogger().debugLog(NAME + ": Invalid bossbar color: {}. Defaulting to PURPLE.", config.bossbarColor.value);
-            bossbarColor = BossBar.Color.PURPLE;
+            bossbarColor = IPlatformAdapter.BossBarColor.PURPLE;
         }
 
         String messageText;
@@ -303,96 +290,86 @@ public class Announcements implements ParadigmModule {
         }
         Text message = services.getMessageParser().parseMessage(messageText, null);
 
-        ServerBossBar bossBar = new ServerBossBar(message, bossbarColor, BossBar.Style.PROGRESS);
-        bossBar.setPercent(1.0f);
-
-        server.getPlayerManager().getPlayerList().forEach(bossBar::addPlayer);
+        platform.sendBossBar(
+                platform.getOnlinePlayers(),
+                message,
+                bossbarTime,
+                bossbarColor,
+                1.0f
+        );
         services.getDebugLogger().debugLog(NAME + ": Broadcasted bossbar message: {}", message.getString());
-
-        services.getTaskScheduler().schedule(() -> {
-            bossBar.clearPlayers();
-            bossBar.setVisible(false);
-            services.getDebugLogger().debugLog(NAME + ": Removed bossbar message after {} seconds", bossbarTime);
-        }, bossbarTime, TimeUnit.SECONDS);
     }
 
-    public int broadcastTitleCmd(CommandContext<ServerCommandSource> context, String title, String subtitle, Services services) throws CommandSyntaxException {
+    public int broadcastTitleCmd(CommandContext<ServerCommandSource> context, String title, String subtitle, Services services) {
         ServerCommandSource source = context.getSource();
-        MinecraftServer server = services.getMinecraftServer();
-
-        if (server == null) {
-            source.sendError(Text.literal("Server not available."));
+        if (platform == null) {
+            source.sendError(platform.createLiteralComponent("Platform not available."));
             return 0;
         }
-
-        Text titleComponent = services.getMessageParser().parseMessage(title, null);
+        Text titleComponent = (title != null && !title.isEmpty()) ? services.getMessageParser().parseMessage(title, null) : Text.empty();
         Text subtitleComponent = (subtitle != null && !subtitle.isEmpty()) ? services.getMessageParser().parseMessage(subtitle, null) : Text.empty();
-
-        server.getPlayerManager().getPlayerList().forEach(player -> {
-            player.networkHandler.sendPacket(new ClearTitleS2CPacket(false));
-            player.networkHandler.sendPacket(new TitleS2CPacket(titleComponent));
-            if (subtitle != null && !subtitleComponent.getString().isEmpty()) {
-                player.networkHandler.sendPacket(new SubtitleS2CPacket(subtitleComponent));
+        platform.getOnlinePlayers().forEach(player -> {
+            platform.clearTitles(player);
+            if (!titleComponent.getString().isEmpty() && !subtitleComponent.getString().isEmpty()) {
+                platform.sendTitle(player, titleComponent, subtitleComponent);
+            } else if (!titleComponent.getString().isEmpty()) {
+                platform.sendTitle(player, titleComponent, Text.empty());
+            } else if (!subtitleComponent.getString().isEmpty()) {
+                platform.sendSubtitle(player, subtitleComponent);
             }
         });
-        source.sendFeedback(() -> Text.literal("Title broadcasted."), true);
+        source.sendFeedback(() -> platform.createLiteralComponent("Title broadcasted."), true);
         return 1;
     }
 
-    public int broadcastMessageCmd(CommandContext<ServerCommandSource> context, String type, Services services) throws CommandSyntaxException {
+    public int broadcastMessageCmd(CommandContext<ServerCommandSource> context, String type, Services services) {
         String messageStr = StringArgumentType.getString(context, "message");
         ServerCommandSource source = context.getSource();
-        MinecraftServer server = services.getMinecraftServer();
-
-        if (server == null) {
-            source.sendError(Text.literal("Server not available."));
+        if (platform == null) {
+            source.sendError(platform.createLiteralComponent("Platform not available."));
             return 0;
         }
-
         Text broadcastMessage = services.getMessageParser().parseMessage(messageStr, null);
-
         switch (type) {
-            case "broadcast":
+            case "broadcast": {
                 boolean headerFooter = BoolArgumentType.getBool(context, "header_footer");
                 if (headerFooter) {
                     String header = services.getAnnouncementsConfig().header.value;
                     String footer = services.getAnnouncementsConfig().footer.value;
-                    Text headerMessage = services.getMessageParser().parseMessage(header, null);
-                    Text footerMessage = services.getMessageParser().parseMessage(footer, null);
-                    server.getPlayerManager().getPlayerList().forEach(player -> {
-                        player.sendMessage(headerMessage);
-                        player.sendMessage(broadcastMessage);
-                        player.sendMessage(footerMessage);
-                    });
+                    platform.broadcastSystemMessage(broadcastMessage, header, footer, null);
                 } else {
-                    server.getPlayerManager().broadcast(broadcastMessage, false);
+                    platform.broadcastChatMessage(broadcastMessage);
                 }
                 break;
+            }
             case "actionbar":
-                server.getPlayerManager().getPlayerList().forEach(player -> {
-                    player.networkHandler.sendPacket(new OverlayMessageS2CPacket(broadcastMessage));
-                });
+                platform.getOnlinePlayers().forEach(player ->
+                    platform.sendActionBar(player, broadcastMessage)
+                );
                 break;
-            case "bossbar":
+            case "bossbar": {
                 String colorStr = StringArgumentType.getString(context, "color");
                 int interval = IntegerArgumentType.getInteger(context, "interval");
-                BossBar.Color bossBarColor;
+                IPlatformAdapter.BossBarColor bossBarColor;
                 try {
-                    bossBarColor = BossBar.Color.valueOf(colorStr.toUpperCase());
+                    bossBarColor = IPlatformAdapter.BossBarColor.valueOf(colorStr.toUpperCase());
                 } catch (IllegalArgumentException e) {
-                    source.sendError(Text.literal("Invalid bossbar color: " + colorStr));
+                    source.sendError(platform.createLiteralComponent("Invalid bossbar color: " + colorStr));
                     return 0;
                 }
-                ServerBossBar bossBar = new ServerBossBar(broadcastMessage, bossBarColor, BossBar.Style.PROGRESS);
-                bossBar.setPercent(1.0f);
-                server.getPlayerManager().getPlayerList().forEach(bossBar::addPlayer);
-                services.getTaskScheduler().schedule(bossBar::clearPlayers, interval, TimeUnit.SECONDS);
+                platform.sendBossBar(
+                    platform.getOnlinePlayers(),
+                    broadcastMessage,
+                    interval,
+                    bossBarColor,
+                    1.0f
+                );
                 break;
+            }
             default:
-                source.sendError(Text.literal("Invalid message type for command: " + type));
+                source.sendError(platform.createLiteralComponent("Invalid message type for command: " + type));
                 return 0;
         }
         return 1;
     }
 }
-

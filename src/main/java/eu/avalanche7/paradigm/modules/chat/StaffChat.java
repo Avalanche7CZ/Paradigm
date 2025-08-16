@@ -6,13 +6,11 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.platform.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents.AllowChatMessage;
 import net.minecraft.command.CommandRegistryAccess;
-import net.minecraft.entity.boss.BossBar;
-import net.minecraft.entity.boss.ServerBossBar;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -27,8 +25,8 @@ public class StaffChat implements ParadigmModule {
 
     private static final String NAME = "StaffChat";
     private final ConcurrentHashMap<UUID, Boolean> staffChatEnabledMap = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<UUID, ServerBossBar> bossBarsMap = new ConcurrentHashMap<>();
     private Services services;
+    private IPlatformAdapter platform;
 
     @Override
     public String getName() {
@@ -43,6 +41,7 @@ public class StaffChat implements ParadigmModule {
     @Override
     public void onLoad(Object event, Services services, Object modEventBus) {
         this.services = services;
+        this.platform = services.getPlatformAdapter();
     }
 
     @Override
@@ -55,17 +54,13 @@ public class StaffChat implements ParadigmModule {
 
     @Override
     public void onDisable(Services services) {
-        MinecraftServer server = services.getMinecraftServer();
-        if (server != null) {
-            staffChatEnabledMap.keySet().forEach(uuid -> {
-                ServerPlayerEntity player = server.getPlayerManager().getPlayer(uuid);
-                if (player != null) {
-                    removeBossBar(player);
-                }
-            });
-        }
+        staffChatEnabledMap.keySet().forEach(uuid -> {
+            ServerPlayerEntity player = platform.getPlayerByUuid(uuid);
+            if (player != null) {
+                platform.removePersistentBossBar(player);
+            }
+        });
         staffChatEnabledMap.clear();
-        bossBarsMap.clear();
     }
 
     @Override
@@ -91,43 +86,28 @@ public class StaffChat implements ParadigmModule {
         ServerMessageEvents.ALLOW_CHAT_MESSAGE.register(this::onAllowChatMessage);
     }
 
-    private int toggleStaffChatCmd(ServerCommandSource source) throws CommandSyntaxException {
-        ServerPlayerEntity player = source.getPlayerOrThrow();
-        toggleStaffChat(player);
-        return 1;
-    }
-
-    private int sendStaffChatMessageCmd(ServerCommandSource source, String message) throws CommandSyntaxException {
-        ServerPlayerEntity player = source.getPlayerOrThrow();
-        sendStaffChatMessage(player, message, source.getServer());
-        return 1;
-    }
-
     private void toggleStaffChat(ServerPlayerEntity player) {
         boolean isCurrentlyEnabled = staffChatEnabledMap.getOrDefault(player.getUuid(), false);
         boolean newState = !isCurrentlyEnabled;
         staffChatEnabledMap.put(player.getUuid(), newState);
-
-        Text feedbackMessage = Text.literal("Staff chat ").append(newState ? Text.literal("enabled").styled(s -> s.withColor(0x55FF55)) : Text.literal("disabled").styled(s -> s.withColor(0xFF5555)));
-        player.sendMessage(feedbackMessage, false);
+        Text feedbackMessage = platform.createLiteralComponent("Staff chat ").append(newState ? platform.createLiteralComponent("enabled").styled(s -> s.withColor(0x55FF55)) : platform.createLiteralComponent("disabled").styled(s -> s.withColor(0xFF5555)));
+        platform.sendSystemMessage(player, feedbackMessage);
 
         if (newState) {
             showBossBar(player);
         } else {
-            removeBossBar(player);
+            platform.removePersistentBossBar(player);
         }
     }
 
-    private void sendStaffChatMessage(ServerPlayerEntity sender, String message, MinecraftServer server) {
+    private void sendStaffChatMessage(ServerPlayerEntity sender, String message) {
         ChatConfigHandler.Config chatConfig = services.getChatConfig();
-
         String formattedMessage = String.format(chatConfig.staffChatFormat.value, sender.getName().getString(), message);
-
         Text chatComponent = services.getMessageParser().parseMessage(formattedMessage, sender);
 
-        server.getPlayerManager().getPlayerList().stream()
-                .filter(onlinePlayer -> services.getPermissionsHandler().hasPermission(onlinePlayer, PermissionsHandler.STAFF_CHAT_PERMISSION))
-                .forEach(staffMember -> staffMember.sendMessage(chatComponent));
+        platform.getOnlinePlayers().stream()
+                .filter(onlinePlayer -> platform.hasPermission(onlinePlayer, PermissionsHandler.STAFF_CHAT_PERMISSION))
+                .forEach(staffMember -> platform.sendSystemMessage(staffMember, chatComponent));
 
         services.getLogger().info("(StaffChat) {}: {}", sender.getName().getString(), message);
     }
@@ -138,7 +118,7 @@ public class StaffChat implements ParadigmModule {
         }
 
         if (staffChatEnabledMap.getOrDefault(player.getUuid(), false)) {
-            sendStaffChatMessage(player, message.getContent().getString(), player.getServer());
+            sendStaffChatMessage(player, message.getContent().getString());
             return false;
         }
 
@@ -147,18 +127,20 @@ public class StaffChat implements ParadigmModule {
 
     private void showBossBar(ServerPlayerEntity player) {
         if (services.getChatConfig().enableStaffBossBar.value) {
-            removeBossBar(player);
             Text title = services.getMessageParser().parseMessage("§cStaff Chat Mode §aEnabled", player);
-            ServerBossBar bossBar = new ServerBossBar(title, BossBar.Color.RED, BossBar.Style.PROGRESS);
-            bossBar.addPlayer(player);
-            bossBarsMap.put(player.getUuid(), bossBar);
+            platform.showPersistentBossBar(player, title, IPlatformAdapter.BossBarColor.RED, IPlatformAdapter.BossBarOverlay.PROGRESS);
         }
     }
 
-    private void removeBossBar(ServerPlayerEntity player) {
-        ServerBossBar bossBar = bossBarsMap.remove(player.getUuid());
-        if (bossBar != null) {
-            bossBar.clearPlayers();
-        }
+    private int toggleStaffChatCmd(ServerCommandSource source) throws CommandSyntaxException {
+        ServerPlayerEntity player = source.getPlayerOrThrow();
+        toggleStaffChat(player);
+        return 1;
+    }
+
+    private int sendStaffChatMessageCmd(ServerCommandSource source, String message) throws CommandSyntaxException {
+        ServerPlayerEntity player = source.getPlayerOrThrow();
+        sendStaffChatMessage(player, message);
+        return 1;
     }
 }

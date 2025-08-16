@@ -7,7 +7,6 @@ import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 import net.minecraft.command.CommandRegistryAccess;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -29,6 +28,7 @@ public class Restart implements ParadigmModule {
     private static final String NAME = "Restart";
     private static final DecimalFormat TIME_FORMATTER = new DecimalFormat("00");
     private Services services;
+    private IPlatformAdapter platform;
     private final AtomicBoolean restartInProgress = new AtomicBoolean(false);
     private ScheduledFuture<?> mainTaskFuture = null;
 
@@ -45,6 +45,7 @@ public class Restart implements ParadigmModule {
     @Override
     public void onLoad(Object event, Services services, Object modEventBus) {
         this.services = services;
+        this.platform = services.getPlatformAdapter();
         services.getDebugLogger().debugLog(NAME + " module loaded.");
     }
 
@@ -83,8 +84,8 @@ public class Restart implements ParadigmModule {
         }
         mainTaskFuture = null;
         restartInProgress.set(false);
-        if (services != null) {
-            services.getPlatformAdapter().removeRestartBossBar();
+        if (services != null && platform != null) {
+            platform.removeRestartBossBar();
         }
     }
 
@@ -96,7 +97,7 @@ public class Restart implements ParadigmModule {
                         .executes(context -> {
                             services.getDebugLogger().debugLog(NAME + ": /restart now command executed by " + context.getSource().getDisplayName().getString());
                             initiateRestartSequence(60, services, services.getRestartConfig());
-                            context.getSource().sendFeedback(() -> Text.literal("Initiating immediate 60-second restart sequence."), true);
+                            context.getSource().sendFeedback(() -> platform.createLiteralComponent("Initiating immediate 60-second restart sequence."), true);
                             return 1;
                         }))
                 .then(CommandManager.literal("cancel")
@@ -105,9 +106,9 @@ public class Restart implements ParadigmModule {
                             if (restartInProgress.get()) {
                                 cancelAndCleanup();
                                 scheduleNextRestart(services);
-                                context.getSource().sendFeedback(() -> Text.literal("The active server restart has been cancelled."), true);
+                                context.getSource().sendFeedback(() -> platform.createLiteralComponent("The active server restart has been cancelled."), true);
                             } else {
-                                context.getSource().sendError(Text.literal("No restart is currently scheduled to be cancelled."));
+                                context.getSource().sendError(platform.createLiteralComponent("No restart is currently scheduled to be cancelled."));
                             }
                             return 1;
                         }))
@@ -222,10 +223,9 @@ public class Restart implements ParadigmModule {
         }
         services.getDebugLogger().debugLog(NAME + ": Sending restart warning. Time left: " + timeLeftSeconds + "s.");
 
-        List<ServerPlayerEntity> players = services.getMinecraftServer().getPlayerManager().getPlayerList();
+        List<ServerPlayerEntity> players = platform.getOnlinePlayers();
 
         for (ServerPlayerEntity player : players) {
-            IPlatformAdapter platform = services.getPlatformAdapter();
             final int hours = (int) (timeLeftSeconds / 3600);
             final int minutes = (int) ((timeLeftSeconds % 3600) / 60);
             final int seconds = (int) (timeLeftSeconds % 60);
@@ -234,7 +234,7 @@ public class Restart implements ParadigmModule {
             final String titleMessage = config.titleMessage.value != null ? config.titleMessage.value.replace("{time}", formattedTime).replace("{minutes}", TIME_FORMATTER.format(minutes)).replace("{seconds}", TIME_FORMATTER.format(seconds)) : "";
 
             if (config.timerUseChat.value) {
-                player.sendMessage(services.getMessageParser().parseMessage(chatMessage, player), false);
+                platform.sendSystemMessage(player, services.getMessageParser().parseMessage(chatMessage, player));
             }
             if (config.titleEnabled.value) {
                 platform.sendTitle(player, services.getMessageParser().parseMessage(titleMessage, player), Text.empty());
@@ -252,16 +252,13 @@ public class Restart implements ParadigmModule {
             String formattedTime = String.format("%dh %sm %ss", hours, TIME_FORMATTER.format(minutes), TIME_FORMATTER.format(seconds));
             float progress = Math.max(0.0f, (float) timeLeftSeconds / (float) Math.max(1.0, originalTotalIntervalSeconds));
             String bossBarMessage = config.bossBarMessage.value != null ? config.bossBarMessage.value.replace("{time}", formattedTime).replace("{minutes}", TIME_FORMATTER.format(minutes)).replace("{seconds}", TIME_FORMATTER.format(seconds)) : "";
-            services.getPlatformAdapter().createOrUpdateRestartBossBar(services.getMessageParser().parseMessage(bossBarMessage, null), IPlatformAdapter.BossBarColor.RED, progress);
+            platform.createOrUpdateRestartBossBar(services.getMessageParser().parseMessage(bossBarMessage, null), IPlatformAdapter.BossBarColor.RED, progress);
         }
     }
-
-    
 
     private void performShutdown(Services services, RestartConfigHandler.Config config) {
         if (!restartInProgress.get()) return;
         services.getDebugLogger().debugLog(NAME + ": Initiating final shutdown procedure.");
-        IPlatformAdapter platform = services.getPlatformAdapter();
         Text kickMessage = services.getMessageParser().parseMessage(config.defaultRestartReason.value, null);
         platform.shutdownServer(kickMessage);
     }

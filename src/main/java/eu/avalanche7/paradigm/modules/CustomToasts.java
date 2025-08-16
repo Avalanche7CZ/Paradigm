@@ -6,6 +6,7 @@ import com.mojang.brigadier.suggestion.SuggestionProvider;
 import eu.avalanche7.paradigm.configs.ToastConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.platform.IPlatformAdapter;
 import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.command.argument.EntityArgumentType;
 import net.minecraft.server.command.CommandManager;
@@ -14,6 +15,8 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 
 public class CustomToasts implements ParadigmModule {
+
+    private IPlatformAdapter platform;
 
     @Override
     public String getName() {
@@ -26,7 +29,9 @@ public class CustomToasts implements ParadigmModule {
     }
 
     @Override
-    public void onLoad(Object event, Services services, Object modEventBus) {}
+    public void onLoad(Object event, Services services, Object modEventBus) {
+        this.platform = services.getPlatformAdapter();
+    }
 
     @Override
     public void onServerStarting(Object event, Services services) {}
@@ -62,9 +67,9 @@ public class CustomToasts implements ParadigmModule {
 
                                                     boolean success = services.getCustomToastManager().showToast(player, toastId, services);
                                                     if (success) {
-                                                        context.getSource().sendFeedback(() -> Text.literal("Toast '" + toastId + "' sent to " + player.getName().getString()), true);
+                                                        context.getSource().sendFeedback(() -> platform.createLiteralComponent("Toast '" + toastId + "' sent to " + player.getName().getString()), true);
                                                     } else {
-                                                        context.getSource().sendError(Text.literal("Toast with ID '" + toastId + "' not found in toasts.json."));
+                                                        context.getSource().sendError(platform.createLiteralComponent("Toast with ID '" + toastId + "' not found in toasts.json."));
                                                     }
                                                     return success ? 1 : 0;
                                                 })
