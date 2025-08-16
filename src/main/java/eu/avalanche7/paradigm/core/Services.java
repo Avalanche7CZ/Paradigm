@@ -11,7 +11,7 @@ public class Services {
     private final MainConfigHandler.Config mainConfig;
     private final AnnouncementsConfigHandler.Config announcementsConfig;
     private final MOTDConfigHandler.Config motdConfig;
-    private final MentionConfigHandler mentionConfig;
+    private final MentionConfigHandler.Config mentionConfig;
     private final RestartConfigHandler.Config restartConfig;
     private final ChatConfigHandler.Config chatConfig;
     private final CMConfig cmConfigInstance;
@@ -23,13 +23,14 @@ public class Services {
     private final TaskScheduler taskSchedulerInstance;
     private final GroupChatManager groupChatManagerInstance;
     private final IPlatformAdapter platformAdapter;
+    private final CooldownConfigHandler cooldownConfigHandler;
 
     public Services(
             Logger logger,
             MainConfigHandler.Config mainConfig,
             AnnouncementsConfigHandler.Config announcementsConfig,
             MOTDConfigHandler.Config motdConfig,
-            MentionConfigHandler mentionConfig,
+            MentionConfigHandler.Config mentionConfig,
             RestartConfigHandler.Config restartConfig,
             ChatConfigHandler.Config chatConfig,
             CMConfig cmConfig,
@@ -40,7 +41,8 @@ public class Services {
             PermissionsHandler permissionsHandler,
             Placeholders placeholders,
             TaskScheduler taskScheduler,
-            IPlatformAdapter platformAdapter
+            IPlatformAdapter platformAdapter,
+            CooldownConfigHandler cooldownConfigHandler
     ) {
         this.logger = logger;
         this.mainConfig = mainConfig;
@@ -58,6 +60,7 @@ public class Services {
         this.placeholdersInstance = placeholders;
         this.taskSchedulerInstance = taskScheduler;
         this.platformAdapter = platformAdapter;
+        this.cooldownConfigHandler = cooldownConfigHandler;
     }
 
     public Logger getLogger() {
@@ -100,7 +103,7 @@ public class Services {
         return motdConfig;
     }
 
-    public MentionConfigHandler getMentionConfig() {
+    public MentionConfigHandler.Config getMentionConfig() {
         return mentionConfig;
     }
 
@@ -122,5 +125,9 @@ public class Services {
 
     public IPlatformAdapter getPlatformAdapter() {
         return platformAdapter;
+    }
+
+    public CooldownConfigHandler getCooldownConfigHandler() {
+        return cooldownConfigHandler;
     }
 }

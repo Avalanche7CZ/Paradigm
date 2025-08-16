@@ -1,5 +1,6 @@
 package eu.avalanche7.paradigm.data;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class CustomCommand {
@@ -11,13 +12,30 @@ public class CustomCommand {
     private String permissionErrorMessage;
     private List<Action> actions;
 
-    public CustomCommand(String name, String description, String permission, boolean requirePermission, List<Action> actions) {
+    private Integer cooldown_seconds;
+    private String cooldown_message;
+    private AreaRestriction area_restriction;
+
+    private CustomCommand() {}
+
+    public CustomCommand(String name, String description, String permission, boolean requirePermission, String permissionErrorMessage, List<Action> actions) {
+        this(name, description, permission, requirePermission, permissionErrorMessage, actions, null, null, null);
+    }
+
+    public CustomCommand(String name, String description, String permission, boolean requirePermission, String permissionErrorMessage, List<Action> actions, Integer cooldown_seconds, String cooldown_message) {
+        this(name, description, permission, requirePermission, permissionErrorMessage, actions, cooldown_seconds, cooldown_message, null);
+    }
+
+    public CustomCommand(String name, String description, String permission, boolean requirePermission, String permissionErrorMessage, List<Action> actions, Integer cooldown_seconds, String cooldown_message, AreaRestriction area_restriction) {
         this.name = name;
         this.description = description;
         this.permission = permission;
         this.requirePermission = requirePermission;
         this.permissionErrorMessage = permissionErrorMessage;
         this.actions = actions;
+        this.cooldown_seconds = cooldown_seconds;
+        this.cooldown_message = cooldown_message;
+        this.area_restriction = area_restriction;
     }
 
     public String getName() {
@@ -44,24 +62,108 @@ public class CustomCommand {
         return permissionErrorMessage != null ? permissionErrorMessage : "&cYou do not have permission to execute this command.";
     }
 
-    public static class Action {
+    public Integer getCooldownSeconds() {
+        return cooldown_seconds;
+    }
 
+    public String getCooldownMessage() {
+        return cooldown_message;
+    }
+
+    public AreaRestriction getAreaRestriction() {
+        return area_restriction;
+    }
+
+    public static class AreaRestriction {
+        private String world;
+        private List<Integer> corner1;
+        private List<Integer> corner2;
+        private String restriction_message;
+
+        private AreaRestriction() {}
+
+        public AreaRestriction(String world, List<Integer> corner1, List<Integer> corner2, String restriction_message) {
+            this.world = world;
+            this.corner1 = corner1;
+            this.corner2 = corner2;
+            this.restriction_message = restriction_message;
+        }
+
+        public String getWorld() {
+            return world;
+        }
+
+        public List<Integer> getCorner1() {
+            return corner1;
+        }
+
+        public List<Integer> getCorner2() {
+            return corner2;
+        }
+
+        public String getRestrictionMessage() {
+            return restriction_message != null ? restriction_message : "&cYou are not in the correct area to use this command.";
+        }
+    }
+
+    public static class Condition {
+        private String type;
+        private String value;
+        private Integer item_amount;
+        private boolean negate;
+
+        private Condition() {}
+
+        public Condition(String type, String value, Integer item_amount, boolean negate) {
+            this.type = type;
+            this.value = value;
+            this.item_amount = item_amount;
+            this.negate = negate;
+        }
+
+        public String getType() {
+            return type != null ? type.toLowerCase() : "";
+        }
+
+        public String getValue() {
+            return value;
+        }
+
+        public int getItemAmount() {
+            return item_amount != null ? item_amount : 1;
+        }
+
+        public boolean isNegate() {
+            return negate;
+        }
+    }
+
+    public static class Action {
         private String type;
         private List<String> text;
         private Integer x, y, z;
         private List<String> commands;
 
-        public Action(String type, List<String> text, Integer x, Integer y, Integer z, List<String> commands) {
+        private List<Condition> conditions;
+        private List<Action> on_success;
+        private List<Action> on_failure;
+
+        private Action() {}
+
+        public Action(String type, List<String> text, Integer x, Integer y, Integer z, List<String> commands, List<Condition> conditions, List<Action> on_success, List<Action> on_failure) {
             this.type = type;
             this.text = text;
             this.x = x;
             this.y = y;
             this.z = z;
             this.commands = commands;
+            this.conditions = conditions;
+            this.on_success = on_success;
+            this.on_failure = on_failure;
         }
 
         public String getType() {
-            return type;
+            return type != null ? type.toLowerCase() : "";
         }
 
         public List<String> getText() {
@@ -82,6 +184,18 @@ public class CustomCommand {
 
         public List<String> getCommands() {
             return commands;
+        }
+
+        public List<Condition> getConditions() {
+            return conditions != null ? conditions : new ArrayList<>();
+        }
+
+        public List<Action> getOnSuccess() {
+            return on_success != null ? on_success : new ArrayList<>();
+        }
+
+        public List<Action> getOnFailure() {
+            return on_failure != null ? on_failure : new ArrayList<>();
         }
     }
 }

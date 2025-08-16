@@ -49,7 +49,13 @@ public class MentionConfigHandler {
             try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
                 Config loadedConfig = GSON.fromJson(reader, Config.class);
                 if(loadedConfig != null) {
-                    CONFIG = loadedConfig;
+                    CONFIG.MENTION_SYMBOL = loadedConfig.MENTION_SYMBOL != null ? loadedConfig.MENTION_SYMBOL : CONFIG.MENTION_SYMBOL;
+                    CONFIG.INDIVIDUAL_MENTION_MESSAGE = loadedConfig.INDIVIDUAL_MENTION_MESSAGE != null ? loadedConfig.INDIVIDUAL_MENTION_MESSAGE : CONFIG.INDIVIDUAL_MENTION_MESSAGE;
+                    CONFIG.EVERYONE_MENTION_MESSAGE = loadedConfig.EVERYONE_MENTION_MESSAGE != null ? loadedConfig.EVERYONE_MENTION_MESSAGE : CONFIG.EVERYONE_MENTION_MESSAGE;
+                    CONFIG.INDIVIDUAL_TITLE_MESSAGE = loadedConfig.INDIVIDUAL_TITLE_MESSAGE != null ? loadedConfig.INDIVIDUAL_TITLE_MESSAGE : CONFIG.INDIVIDUAL_TITLE_MESSAGE;
+                    CONFIG.EVERYONE_TITLE_MESSAGE = loadedConfig.EVERYONE_TITLE_MESSAGE != null ? loadedConfig.EVERYONE_TITLE_MESSAGE : CONFIG.EVERYONE_TITLE_MESSAGE;
+                    CONFIG.INDIVIDUAL_MENTION_RATE_LIMIT = loadedConfig.INDIVIDUAL_MENTION_RATE_LIMIT != null ? loadedConfig.INDIVIDUAL_MENTION_RATE_LIMIT : CONFIG.INDIVIDUAL_MENTION_RATE_LIMIT;
+                    CONFIG.EVERYONE_MENTION_RATE_LIMIT = loadedConfig.EVERYONE_MENTION_RATE_LIMIT != null ? loadedConfig.EVERYONE_MENTION_RATE_LIMIT : CONFIG.EVERYONE_MENTION_RATE_LIMIT;
                 }
             } catch (Exception e) {
                 LOGGER.warn("[Paradigm] Could not parse mentions.json, it may be corrupt. A new one will be generated.", e);

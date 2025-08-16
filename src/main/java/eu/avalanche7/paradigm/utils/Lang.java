@@ -103,10 +103,6 @@ public class Lang {
         return this.messageParser.parseMessage(translatedText, null);
     }
 
-    public String getRawTranslation(String key) {
-        return translations.getOrDefault(key, key);
-    }
-
     private void ensureDefaultLangFiles() throws IOException {
         if (!Files.exists(langFolder)) {
             Files.createDirectories(langFolder);

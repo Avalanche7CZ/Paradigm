@@ -37,7 +37,7 @@ public class MainConfigHandler {
                 false, "Enables verbose debug logging in the console for development."
         );
         public ConfigEntry<String> defaultLanguage = new ConfigEntry<>(
-                "en", "Default language file to use (e.g., 'en', 'de'). Must match a file in the lang folder."
+                "en", "Default language file to use (e.g., 'en', 'cs'). Must match a file in the lang folder."
         );
         public ConfigEntry<Boolean> commandManagerEnable = new ConfigEntry<>(
                 true, "Enables the custom commands module."
@@ -49,7 +49,13 @@ public class MainConfigHandler {
             try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
                 Config loadedConfig = GSON.fromJson(reader, Config.class);
                 if (loadedConfig != null) {
-                    CONFIG = loadedConfig;
+                    CONFIG.announcementsEnable = loadedConfig.announcementsEnable != null ? loadedConfig.announcementsEnable : CONFIG.announcementsEnable;
+                    CONFIG.motdEnable = loadedConfig.motdEnable != null ? loadedConfig.motdEnable : CONFIG.motdEnable;
+                    CONFIG.mentionsEnable = loadedConfig.mentionsEnable != null ? loadedConfig.mentionsEnable : CONFIG.mentionsEnable;
+                    CONFIG.restartEnable = loadedConfig.restartEnable != null ? loadedConfig.restartEnable : CONFIG.restartEnable;
+                    CONFIG.debugEnable = loadedConfig.debugEnable != null ? loadedConfig.debugEnable : CONFIG.debugEnable;
+                    CONFIG.defaultLanguage = loadedConfig.defaultLanguage != null ? loadedConfig.defaultLanguage : CONFIG.defaultLanguage;
+                    CONFIG.commandManagerEnable = loadedConfig.commandManagerEnable != null ? loadedConfig.commandManagerEnable : CONFIG.commandManagerEnable;
                 }
             } catch (Exception e) {
                 LOGGER.warn("[Paradigm] Could not parse main.json, it may be corrupt. A new one will be generated.", e);

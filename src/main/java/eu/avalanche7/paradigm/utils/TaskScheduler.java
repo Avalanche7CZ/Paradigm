@@ -4,6 +4,7 @@ import net.minecraft.server.MinecraftServer;
 
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -38,12 +39,12 @@ public class TaskScheduler {
         executorService.scheduleAtFixedRate(() -> syncExecute(task), initialDelay, period, unit);
     }
 
-    public void schedule(Runnable task, long delay, TimeUnit unit) {
+    public ScheduledFuture<?> schedule(Runnable task, long delay, TimeUnit unit) {
         if (executorService == null || executorService.isShutdown()) {
             debugLogger.debugLog("TaskScheduler: Cannot schedule task, executor service is not running.");
-            return;
+            return null;
         }
-        executorService.schedule(() -> syncExecute(task), delay, unit);
+        return executorService.schedule(() -> syncExecute(task), delay, unit);
     }
 
     private void syncExecute(Runnable task) {

@@ -11,7 +11,6 @@ import eu.avalanche7.paradigm.platform.IPlatformAdapter;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -48,11 +47,13 @@ public class Announcements implements ParadigmModule {
     public void onLoad(FMLCommonSetupEvent event, Services services, IEventBus modEventBus) {
         this.services = services;
         this.platform = services.getPlatformAdapter();
+        services.getDebugLogger().debugLog("{} module loaded.", NAME);
     }
 
     @Override
     public void onServerStarting(ServerStartingEvent event, Services services) {
         if (isEnabled(services)) {
+            services.getDebugLogger().debugLog("{}: Server is starting, scheduling announcements.", NAME);
             scheduleConfiguredAnnouncements();
         }
     }
@@ -60,18 +61,23 @@ public class Announcements implements ParadigmModule {
     @Override
     public void onEnable(Services services) {
         if (platform.getMinecraftServer() != null && isEnabled(services)) {
+            services.getDebugLogger().debugLog("{}: Module enabled, scheduling announcements.", NAME);
             scheduleConfiguredAnnouncements();
         }
     }
 
     @Override
-    public void onDisable(Services services) {}
+    public void onDisable(Services services) {
+        services.getDebugLogger().debugLog("{}: Module disabled. Scheduled announcement tasks will be terminated.", NAME);
+    }
 
     @Override
-    public void onServerStopping(ServerStoppingEvent event, Services services) {}
+    public void onServerStopping(ServerStoppingEvent event, Services services) {
+    }
 
     @Override
     public void registerCommands(CommandDispatcher<CommandSourceStack> dispatcher, Services services) {
+        services.getDebugLogger().debugLog("{}: Registering commands.", NAME);
         dispatcher.register(
                 Commands.literal("paradigm")
                         .requires(source -> source.hasPermission(2))
@@ -103,29 +109,41 @@ public class Announcements implements ParadigmModule {
 
     private void scheduleConfiguredAnnouncements() {
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
-        if (platform.getMinecraftServer() == null) return;
+        if (platform.getMinecraftServer() == null) {
+            services.getDebugLogger().debugLog("{}: Server not available, skipping announcement scheduling.", NAME);
+            return;
+        }
+        services.getDebugLogger().debugLog("{}: Scheduling announcements based on config.", NAME);
 
         if (config.globalEnable.get()) {
             long interval = config.globalInterval.get();
+            services.getDebugLogger().debugLog("{}: Scheduling global announcements every {} seconds.", NAME, interval);
             services.getTaskScheduler().scheduleAtFixedRate(this::broadcastGlobalMessages, interval, interval, TimeUnit.SECONDS);
         }
         if (config.actionbarEnable.get()) {
             long interval = config.actionbarInterval.get();
+            services.getDebugLogger().debugLog("{}: Scheduling actionbar announcements every {} seconds.", NAME, interval);
             services.getTaskScheduler().scheduleAtFixedRate(this::broadcastActionbarMessages, interval, interval, TimeUnit.SECONDS);
         }
         if (config.titleEnable.get()) {
             long interval = config.titleInterval.get();
+            services.getDebugLogger().debugLog("{}: Scheduling title announcements every {} seconds.", NAME, interval);
             services.getTaskScheduler().scheduleAtFixedRate(this::broadcastTitleMessages, interval, interval, TimeUnit.SECONDS);
         }
         if (config.bossbarEnable.get()) {
             long interval = config.bossbarInterval.get();
+            services.getDebugLogger().debugLog("{}: Scheduling bossbar announcements every {} seconds.", NAME, interval);
             services.getTaskScheduler().scheduleAtFixedRate(this::broadcastBossbarMessages, interval, interval, TimeUnit.SECONDS);
         }
     }
 
     private void broadcastGlobalMessages() {
+        services.getDebugLogger().debugLog("{}: Firing global announcement task.", NAME);
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
-        if (config.globalMessages.get().isEmpty()) return;
+        if (config.globalMessages.get().isEmpty()) {
+            services.getDebugLogger().debugLog("{}: No global messages configured, skipping.", NAME);
+            return;
+        }
 
         String messageText = getNextMessage(config.globalMessages.get(), config.orderMode.get(), "global");
 
@@ -140,8 +158,12 @@ public class Announcements implements ParadigmModule {
     }
 
     private void broadcastActionbarMessages() {
+        services.getDebugLogger().debugLog("{}: Firing actionbar announcement task.", NAME);
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
-        if (config.actionbarMessages.get().isEmpty()) return;
+        if (config.actionbarMessages.get().isEmpty()) {
+            services.getDebugLogger().debugLog("{}: No actionbar messages configured, skipping.", NAME);
+            return;
+        }
 
         String messageText = getNextMessage(config.actionbarMessages.get(), config.orderMode.get(), "actionbar");
 
@@ -152,8 +174,12 @@ public class Announcements implements ParadigmModule {
     }
 
     private void broadcastTitleMessages() {
+        services.getDebugLogger().debugLog("{}: Firing title announcement task.", NAME);
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
-        if (config.titleMessages.get().isEmpty()) return;
+        if (config.titleMessages.get().isEmpty()) {
+            services.getDebugLogger().debugLog("{}: No title messages configured, skipping.", NAME);
+            return;
+        }
 
         String messageText = getNextMessage(config.titleMessages.get(), config.orderMode.get(), "title");
 
@@ -167,8 +193,12 @@ public class Announcements implements ParadigmModule {
     }
 
     private void broadcastBossbarMessages() {
+        services.getDebugLogger().debugLog("{}: Firing bossbar announcement task.", NAME);
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
-        if (config.bossbarMessages.get().isEmpty()) return;
+        if (config.bossbarMessages.get().isEmpty()) {
+            services.getDebugLogger().debugLog("{}: No bossbar messages configured, skipping.", NAME);
+            return;
+        }
 
         String messageText = getNextMessage(config.bossbarMessages.get(), config.orderMode.get(), "bossbar");
         int duration = config.bossbarTime.get();
@@ -185,22 +215,40 @@ public class Announcements implements ParadigmModule {
         String messageText;
         if ("SEQUENTIAL".equalsIgnoreCase(orderMode)) {
             int index;
-            switch(type) {
-                case "global": index = globalMessageIndex++; if(globalMessageIndex >= messages.size()) globalMessageIndex = 0; break;
-                case "actionbar": index = actionbarMessageIndex++; if(actionbarMessageIndex >= messages.size()) actionbarMessageIndex = 0; break;
-                case "title": index = titleMessageIndex++; if(titleMessageIndex >= messages.size()) titleMessageIndex = 0; break;
-                case "bossbar": index = bossbarMessageIndex++; if(bossbarMessageIndex >= messages.size()) bossbarMessageIndex = 0; break;
-                default: index = random.nextInt(messages.size());
+            switch (type) {
+                case "global" -> {
+                    index = globalMessageIndex++;
+                    if (globalMessageIndex >= messages.size()) globalMessageIndex = 0;
+                }
+                case "actionbar" -> {
+                    index = actionbarMessageIndex++;
+                    if (actionbarMessageIndex >= messages.size()) actionbarMessageIndex = 0;
+                }
+                case "title" -> {
+                    index = titleMessageIndex++;
+                    if (titleMessageIndex >= messages.size()) titleMessageIndex = 0;
+                }
+                case "bossbar" -> {
+                    index = bossbarMessageIndex++;
+                    if (bossbarMessageIndex >= messages.size()) bossbarMessageIndex = 0;
+                }
+                default -> index = random.nextInt(messages.size());
             }
             messageText = messages.get(index);
+            services.getDebugLogger().debugLog("{}: Picked sequential message for type '{}' at index {}: \"{}\"", NAME, type, index, messageText);
         } else {
-            messageText = messages.get(random.nextInt(messages.size()));
+            int index = random.nextInt(messages.size());
+            messageText = messages.get(index);
+            services.getDebugLogger().debugLog("{}: Picked random message for type '{}' at index {}: \"{}\"", NAME, type, index, messageText);
         }
         return messageText.replace("{Prefix}", prefix);
     }
 
     private int broadcastTitleCmd(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         String titleAndSubtitle = StringArgumentType.getString(context, "titleAndSubtitle");
+        services.getDebugLogger().debugLog("{}: /paradigm title command executed by {} with message: \"{}\"",
+                NAME, context.getSource().getDisplayName().getString(), titleAndSubtitle);
+
         String[] parts = titleAndSubtitle.split(" \\|\\| ", 2);
 
         platform.getOnlinePlayers().forEach(target -> {
@@ -218,28 +266,28 @@ public class Announcements implements ParadigmModule {
         String messageStr = StringArgumentType.getString(context, "message");
         String commandName = context.getNodes().get(1).getNode().getName();
 
+        services.getDebugLogger().debugLog("{}: /paradigm {} command executed by {} with message: \"{}\"",
+                NAME, commandName, context.getSource().getDisplayName().getString(), messageStr);
+
         switch (commandName) {
-            case "broadcast":
-                platform.getOnlinePlayers().forEach(player -> {
-                    Component message = services.getMessageParser().parseMessage(messageStr, player);
-                    platform.sendSystemMessage(player, message);
-                });
-                break;
-            case "actionbar":
-                platform.getOnlinePlayers().forEach(player -> {
-                    Component message = services.getMessageParser().parseMessage(messageStr, player);
-                    platform.sendActionBar(player, message);
-                });
-                break;
-            case "bossbar":
+            case "broadcast" -> platform.getOnlinePlayers().forEach(player -> {
+                Component message = services.getMessageParser().parseMessage(messageStr, player);
+                platform.sendSystemMessage(player, message);
+            });
+            case "actionbar" -> platform.getOnlinePlayers().forEach(player -> {
+                Component message = services.getMessageParser().parseMessage(messageStr, player);
+                platform.sendActionBar(player, message);
+            });
+            case "bossbar" -> {
                 String colorStr = StringArgumentType.getString(context, "color");
                 int interval = IntegerArgumentType.getInteger(context, "interval");
                 IPlatformAdapter.BossBarColor color = IPlatformAdapter.BossBarColor.valueOf(colorStr.toUpperCase());
+                services.getDebugLogger().debugLog("{}: Bossbar broadcast details: color={}, interval={}", NAME, colorStr, interval);
                 platform.getOnlinePlayers().forEach(player -> {
                     Component message = services.getMessageParser().parseMessage(messageStr, player);
                     platform.sendBossBar(Collections.singletonList(player), message, interval, color, 1.0f);
                 });
-                break;
+            }
         }
         platform.sendSuccess(context.getSource(), platform.createLiteralComponent(commandName + " broadcasted."), true);
         return 1;

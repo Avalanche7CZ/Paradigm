@@ -1,4 +1,4 @@
-package eu.avalanche7.paradigm.modules;
+package eu.avalanche7.paradigm.modules.chat;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -44,6 +44,7 @@ public class StaffChat implements ParadigmModule {
     public void onLoad(FMLCommonSetupEvent event, Services services, IEventBus modEventBus) {
         this.services = services;
         this.platform = services.getPlatformAdapter();
+        services.getDebugLogger().debugLog(NAME + " module loaded.");
     }
 
     @Override
@@ -121,6 +122,7 @@ public class StaffChat implements ParadigmModule {
         } else {
             platform.removePersistentBossBar(player);
         }
+        services.getDebugLogger().debugLog("Player " + platform.getPlayerName(player) + " toggled staff chat to " + !isCurrentlyEnabled);
     }
 
     private void sendStaffChatMessage(ServerPlayer sender, String message) {

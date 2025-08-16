@@ -1,4 +1,4 @@
-package eu.avalanche7.paradigm.modules;
+package eu.avalanche7.paradigm.modules.chat;
 
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
@@ -24,7 +24,9 @@ public class MOTD implements ParadigmModule {
     private IPlatformAdapter platform;
 
     @Override
-    public String getName() { return NAME; }
+    public String getName() {
+        return NAME;
+    }
 
     @Override
     public boolean isEnabled(Services services) {
@@ -35,6 +37,7 @@ public class MOTD implements ParadigmModule {
     public void onLoad(FMLCommonSetupEvent event, Services services, IEventBus modEventBus) {
         this.services = services;
         this.platform = services.getPlatformAdapter();
+        services.getDebugLogger().debugLog(NAME + " module loaded.");
     }
 
     @Override
@@ -65,6 +68,7 @@ public class MOTD implements ParadigmModule {
         ServerPlayer player = (ServerPlayer) event.getEntity();
         Component motdMessage = createMOTDMessage(player);
         platform.sendSystemMessage(player, motdMessage);
+        this.services.getDebugLogger().debugLog("Sent MOTD to " + platform.getPlayerName(player));
     }
 
     private Component createMOTDMessage(ServerPlayer player) {

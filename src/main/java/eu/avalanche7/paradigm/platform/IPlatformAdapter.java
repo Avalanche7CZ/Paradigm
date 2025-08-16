@@ -42,7 +42,7 @@ public interface IPlatformAdapter {
     void createOrUpdateRestartBossBar(Component message, BossBarColor color, float progress);
     void removeRestartBossBar();
     void clearTitles(ServerPlayer player);
-    void playSound(ServerPlayer player, String soundId, float volume, float pitch);
+    void playSound(ServerPlayer player, String soundId, net.minecraft.sounds.SoundSource category, float volume, float pitch);
     void executeCommandAs(CommandSourceStack source, String command);
     void executeCommandAsConsole(String command);
     String replacePlaceholders(String text, @Nullable ServerPlayer player);
@@ -51,4 +51,6 @@ public interface IPlatformAdapter {
     void sendSuccess(CommandSourceStack source, Component message, boolean toOps);
     void sendFailure(CommandSourceStack source, Component message);
     void teleportPlayer(ServerPlayer player, double x, double y, double z);
+    boolean playerHasItem(ServerPlayer player, String itemId, int amount);
+    boolean isPlayerInArea(ServerPlayer player, String worldId, List<Integer> corner1, List<Integer> corner2);
 }

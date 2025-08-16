@@ -1,4 +1,4 @@
-package eu.avalanche7.paradigm.modules;
+package eu.avalanche7.paradigm.modules.chat;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -47,6 +47,7 @@ public class GroupChat implements ParadigmModule {
     public void onLoad(FMLCommonSetupEvent event, Services services, IEventBus modEventBus) {
         this.services = services;
         this.platform = services.getPlatformAdapter();
+        services.getDebugLogger().debugLog(NAME + " module loaded.");
     }
 
     @Override
@@ -154,19 +155,20 @@ public class GroupChat implements ParadigmModule {
     private void displayHelp(ServerPlayer player) {
         String label = "groupchat";
         platform.sendSystemMessage(player, services.getLang().translate("group.help_title"));
-        sendHelpMessage(player, label, "create <name>", services.getLang().translate("group.help_create"));
-        sendHelpMessage(player, label, "delete", services.getLang().translate("group.help_delete"));
-        sendHelpMessage(player, label, "invite <player>", services.getLang().translate("group.help_invite"));
-        sendHelpMessage(player, label, "join <group_name>", services.getLang().translate("group.help_join"));
-        sendHelpMessage(player, label, "leave", services.getLang().translate("group.help_leave"));
-        sendHelpMessage(player, label, "list", services.getLang().translate("group.help_list"));
-        sendHelpMessage(player, label, "info [group_name]", services.getLang().translate("group.help_info"));
-        sendHelpMessage(player, label, "say <message>", services.getLang().translate("group.help_say"));
-        sendHelpMessage(player, label, "toggle", services.getLang().translate("group.help_toggle"));
+        sendHelpMessage(player, label, "create <name>", "group.help_create");
+        sendHelpMessage(player, label, "delete", "group.help_delete");
+        sendHelpMessage(player, label, "invite <player>", "group.help_invite");
+        sendHelpMessage(player, label, "join <group_name>", "group.help_join");
+        sendHelpMessage(player, label, "leave", "group.help_leave");
+        sendHelpMessage(player, label, "list", "group.help_list");
+        sendHelpMessage(player, label, "info [group_name]", "group.help_info");
+        sendHelpMessage(player, label, "say <message>", "group.help_say");
+        sendHelpMessage(player, label, "toggle", "group.help_toggle");
     }
 
-    private void sendHelpMessage(ServerPlayer player, String label, String command, Component description) {
-        MutableComponent hoverText = description.copy().withStyle(ChatFormatting.AQUA);
+    private void sendHelpMessage(ServerPlayer player, String label, String command, String descriptionKey) {
+        MutableComponent hoverText = services.getLang().translate(descriptionKey).copy();
+        hoverText.withStyle(ChatFormatting.AQUA);
 
         MutableComponent message = platform.createLiteralComponent(" §9> §e/" + label + " " + command)
                 .withStyle(ChatFormatting.YELLOW)

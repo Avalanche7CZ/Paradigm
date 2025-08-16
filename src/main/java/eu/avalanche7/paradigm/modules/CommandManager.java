@@ -14,6 +14,8 @@ import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 
+import java.util.List;
+
 public class CommandManager implements ParadigmModule {
 
     private static final String NAME = "CustomCommands";
@@ -64,7 +66,7 @@ public class CommandManager implements ParadigmModule {
         });
 
         dispatcher.register(
-                Commands.literal("fareloadcommands")
+                Commands.literal("customcommandsreload")
                         .requires(source -> source.hasPermission(2))
                         .executes(ctx -> {
                             services.getCmConfig().reloadCommands();
@@ -81,8 +83,46 @@ public class CommandManager implements ParadigmModule {
     private void executeCustomCommand(CommandSourceStack source, CustomCommand command) {
         ServerPlayer player = source.getEntity() instanceof ServerPlayer sp ? sp : null;
 
-        for (CustomCommand.Action action : command.getActions()) {
-            switch (action.getType().toLowerCase()) {
+        CustomCommand.AreaRestriction area = command.getAreaRestriction();
+        if (area != null) {
+            if (player == null) {
+                platform.sendFailure(source, services.getMessageParser().parseMessage("&cThis command can only be run by a player in a specific area.", null));
+                return;
+            }
+            if (!platform.isPlayerInArea(player, area.getWorld(), area.getCorner1(), area.getCorner2())) {
+                platform.sendFailure(source, services.getMessageParser().parseMessage(area.getRestrictionMessage(), player));
+                return;
+            }
+        }
+
+        if (command.getCooldownSeconds() != null && command.getCooldownSeconds() > 0 && player != null) {
+            long lastUsage = services.getCooldownConfigHandler().getLastUsage(player.getUUID(), command.getName());
+            long cooldownMillis = command.getCooldownSeconds() * 1000L;
+            long currentTime = System.currentTimeMillis();
+
+            if (currentTime < lastUsage + cooldownMillis) {
+                long remainingMillis = (lastUsage + cooldownMillis) - currentTime;
+                long remainingSeconds = (remainingMillis / 1000) + (remainingMillis % 1000 > 0 ? 1 : 0);
+
+                String cooldownMessage = command.getCooldownMessage();
+                if (cooldownMessage == null || cooldownMessage.isEmpty()) {
+                    cooldownMessage = "&cThis command is on cooldown! Please wait &e{remaining_time} &cseconds.";
+                }
+                String formattedMessage = cooldownMessage.replace("{remaining_time}", String.valueOf(remainingSeconds));
+                platform.sendFailure(source, services.getMessageParser().parseMessage(formattedMessage, player));
+                return;
+            }
+            services.getCooldownConfigHandler().setLastUsage(player.getUUID(), command.getName(), currentTime);
+        }
+
+        executeActions(source, command.getActions());
+    }
+
+    private void executeActions(CommandSourceStack source, List<CustomCommand.Action> actions) {
+        ServerPlayer player = source.getEntity() instanceof ServerPlayer sp ? sp : null;
+
+        for (CustomCommand.Action action : actions) {
+            switch (action.getType()) {
                 case "message":
                     if (action.getText() != null) {
                         for (String line : action.getText()) {
@@ -117,9 +157,69 @@ public class CommandManager implements ParadigmModule {
                         }
                     }
                     break;
+                case "conditional":
+                    if (checkAllConditions(source, action.getConditions())) {
+                        executeActions(source, action.getOnSuccess());
+                    } else {
+                        executeActions(source, action.getOnFailure());
+                    }
+                    break;
                 default:
-                    platform.sendFailure(source, services.getMessageParser().parseMessage("&cUnknown action type.", player));
+                    platform.sendFailure(source, services.getMessageParser().parseMessage("&cUnknown action type: " + action.getType(), player));
             }
         }
+    }
+
+    private boolean checkAllConditions(CommandSourceStack source, List<CustomCommand.Condition> conditions) {
+        if (conditions.isEmpty()) {
+            return true;
+        }
+        for (CustomCommand.Condition condition : conditions) {
+            if (!checkCondition(source, condition)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean checkCondition(CommandSourceStack source, CustomCommand.Condition condition) {
+        ServerPlayer player = source.getEntity() instanceof ServerPlayer sp ? sp : null;
+        boolean result = false;
+
+        if (player == null) {
+            switch (condition.getType()) {
+                case "has_permission", "has_item", "is_op":
+                    services.getDebugLogger().debugLog("Conditional check '" + condition.getType() + "' requires a player, but was run from console. Failing condition.");
+                    return false;
+            }
+        }
+
+        switch (condition.getType()) {
+            case "has_permission":
+                if (player != null && condition.getValue() != null) {
+                    result = platform.hasPermission(player, condition.getValue());
+                }
+                break;
+            case "has_item":
+                if (player != null && condition.getValue() != null) {
+                    result = platform.playerHasItem(player, condition.getValue(), condition.getItemAmount());
+                }
+                break;
+            case "is_op":
+                if (player != null) {
+                    int level = 2;
+                    try {
+                        if (condition.getValue() != null) {
+                            level = Integer.parseInt(condition.getValue());
+                        }
+                    } catch (NumberFormatException ignored) {}
+                    result = player.hasPermissions(level);
+                }
+                break;
+            default:
+                platform.sendFailure(source, services.getMessageParser().parseMessage("&cUnknown condition type: " + condition.getType(), player));
+                return false;
+        }
+        return condition.isNegate() != result;
     }
 }

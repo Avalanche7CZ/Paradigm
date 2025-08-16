@@ -4,6 +4,9 @@ import com.mojang.brigadier.CommandDispatcher;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.*;
+import eu.avalanche7.paradigm.modules.chat.GroupChat;
+import eu.avalanche7.paradigm.modules.chat.MOTD;
+import eu.avalanche7.paradigm.modules.chat.StaffChat;
 import eu.avalanche7.paradigm.configs.*;
 import eu.avalanche7.paradigm.platform.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.PlatformAdapterImpl;
@@ -66,7 +69,7 @@ public class Paradigm {
         TaskScheduler taskScheduler = new TaskScheduler(debugLogger);
         PermissionsHandler permissionsHandler = new PermissionsHandler(LOGGER, cmConfig, debugLogger);
 
-        IPlatformAdapter platformAdapter = new PlatformAdapterImpl(permissionsHandler, placeholders, taskScheduler);
+        IPlatformAdapter platformAdapter = new PlatformAdapterImpl(permissionsHandler, placeholders, taskScheduler, debugLogger);
 
         MessageParser messageParser = new MessageParser(placeholders, platformAdapter);
 
@@ -77,12 +80,15 @@ public class Paradigm {
 
         GroupChatManager groupChatManager = new GroupChatManager(platformAdapter, lang, debugLogger, messageParser);
 
+        CooldownConfigHandler cooldownConfigHandler = new CooldownConfigHandler(debugLogger);
+        cooldownConfigHandler.loadCooldowns();
+
         return new Services(
                 LOGGER,
                 MainConfigHandler.CONFIG,
                 AnnouncementsConfigHandler.CONFIG,
                 MOTDConfigHandler.getConfig(),
-                new MentionConfigHandler(),
+                MentionConfigHandler.CONFIG,
                 RestartConfigHandler.CONFIG,
                 ChatConfigHandler.CONFIG,
                 cmConfig,
@@ -93,7 +99,8 @@ public class Paradigm {
                 permissionsHandler,
                 placeholders,
                 taskScheduler,
-                platformAdapter
+                platformAdapter,
+                cooldownConfigHandler
         );
     }
 
@@ -105,6 +112,7 @@ public class Paradigm {
         modules.add(new StaffChat());
         modules.add(new GroupChat(services.getGroupChatManager()));
         modules.add(new CommandManager());
+        modules.add(new eu.avalanche7.paradigm.modules.chat.JoinLeaveMessages());
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
