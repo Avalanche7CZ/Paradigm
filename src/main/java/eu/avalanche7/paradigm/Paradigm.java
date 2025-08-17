@@ -78,25 +78,48 @@ public class Paradigm implements DedicatedServerModInitializer {
 
     private void loadConfigurations() {
         try {
-            MainConfigHandler.load();
-            AnnouncementsConfigHandler.load();
-            MentionConfigHandler.load();
-            RestartConfigHandler.load();
-            ChatConfigHandler.load();
-            ToastConfigHandler.load();
-            MOTDConfigHandler.loadConfig();
+            LOGGER.info("[Paradigm] Loading configurations...");
+
+            DebugLogger bootstrapDebugLogger = new DebugLogger(null);
+            MainConfigHandler.setJsonValidator(bootstrapDebugLogger);
+            AnnouncementsConfigHandler.setJsonValidator(bootstrapDebugLogger);
+            ChatConfigHandler.setJsonValidator(bootstrapDebugLogger);
+            MentionConfigHandler.setJsonValidator(bootstrapDebugLogger);
+            RestartConfigHandler.setJsonValidator(bootstrapDebugLogger);
+            ToastConfigHandler.setJsonValidator(bootstrapDebugLogger);
+            MOTDConfigHandler.setJsonValidator(bootstrapDebugLogger);
+
+            MainConfigHandler.getConfig();
+            AnnouncementsConfigHandler.getConfig();
+            MentionConfigHandler.getConfig();
+            RestartConfigHandler.getConfig();
+            ChatConfigHandler.getConfig();
+            ToastConfigHandler.getToasts();
+            MOTDConfigHandler.getConfig();
             CooldownConfigHandler.load();
+
+            debugLoggerInstance = new DebugLogger(MainConfigHandler.getConfig());
+            MainConfigHandler.setJsonValidator(debugLoggerInstance);
+            AnnouncementsConfigHandler.setJsonValidator(debugLoggerInstance);
+            ChatConfigHandler.setJsonValidator(debugLoggerInstance);
+            MentionConfigHandler.setJsonValidator(debugLoggerInstance);
+            RestartConfigHandler.setJsonValidator(debugLoggerInstance);
+            ToastConfigHandler.setJsonValidator(debugLoggerInstance);
+            MOTDConfigHandler.setJsonValidator(debugLoggerInstance);
+
             if (this.cmConfigInstance == null) {
-                this.cmConfigInstance = new CMConfig(new DebugLogger(MainConfigHandler.CONFIG));
+                this.cmConfigInstance = new CMConfig(debugLoggerInstance);
             }
             this.cmConfigInstance.loadCommands();
+
             if(this.langInstance == null) {
                 if (this.placeholdersInstance == null) this.placeholdersInstance = new Placeholders();
                 if (this.messageParserInstance == null) this.messageParserInstance = new MessageParser(this.placeholdersInstance);
-                if (this.debugLoggerInstance == null) this.debugLoggerInstance = new DebugLogger(MainConfigHandler.CONFIG);
-                this.langInstance = new Lang(LOGGER, MainConfigHandler.CONFIG, this.messageParserInstance);
+                this.langInstance = new Lang(LOGGER, MainConfigHandler.getConfig(), this.messageParserInstance);
             }
             this.langInstance.initializeLanguage();
+
+            LOGGER.info("[Paradigm] All configurations loaded successfully.");
         } catch (Exception e) {
             LOGGER.error("Failed to load configuration for {}", MOD_ID, e);
             throw new RuntimeException("Configuration loading failed for " + MOD_ID, e);
@@ -108,7 +131,7 @@ public class Paradigm implements DedicatedServerModInitializer {
         this.placeholdersInstance = new Placeholders();
         this.messageParserInstance = new MessageParser(this.placeholdersInstance);
         this.customToastManagerInstance = new CustomToastManager(this.messageParserInstance);
-        this.debugLoggerInstance = new DebugLogger(MainConfigHandler.CONFIG);
+        this.debugLoggerInstance = new DebugLogger(MainConfigHandler.getConfig());
         this.taskSchedulerInstance = new TaskScheduler(this.debugLoggerInstance);
         this.permissionsHandlerInstance = new PermissionsHandler(LOGGER, this.cmConfigInstance, this.debugLoggerInstance);
         this.groupChatManagerInstance = new GroupChatManager();
@@ -122,15 +145,20 @@ public class Paradigm implements DedicatedServerModInitializer {
     }
 
     private void initializeServices() {
+        LOGGER.info("[Paradigm] Initializing Services with configs:");
+        LOGGER.info("[Paradigm] MainConfig: " + (MainConfigHandler.getConfig() != null ? "NOT NULL" : "NULL"));
+        LOGGER.info("[Paradigm] AnnouncementsConfig: " + (AnnouncementsConfigHandler.getConfig() != null ? "NOT NULL" : "NULL"));
+        LOGGER.info("[Paradigm] MentionConfig: " + (MentionConfigHandler.getConfig() != null ? "NOT NULL" : "NULL"));
+
         this.services = new Services(
                 LOGGER,
-                MainConfigHandler.CONFIG,
-                AnnouncementsConfigHandler.CONFIG,
+                MainConfigHandler.getConfig(),
+                AnnouncementsConfigHandler.getConfig(),
                 MOTDConfigHandler.getConfig(),
-                new MentionConfigHandler(),
-                RestartConfigHandler.CONFIG,
-                ChatConfigHandler.CONFIG,
-                new ToastConfigHandler(),
+                MentionConfigHandler.getConfig(),
+                RestartConfigHandler.getConfig(),
+                ChatConfigHandler.getConfig(),
+                ToastConfigHandler.getToasts(),
                 this.cmConfigInstance,
                 this.groupChatManagerInstance,
                 this.debugLoggerInstance,
@@ -144,6 +172,7 @@ public class Paradigm implements DedicatedServerModInitializer {
                 this.cooldownConfigHandlerInstance
         );
         this.groupChatManagerInstance.setServices(this.services);
+        LOGGER.info("[Paradigm] Services initialized successfully");
     }
 
     private void registerModules() {

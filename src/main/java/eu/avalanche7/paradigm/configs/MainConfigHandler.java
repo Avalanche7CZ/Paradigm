@@ -3,6 +3,8 @@ package eu.avalanche7.paradigm.configs;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import eu.avalanche7.paradigm.Paradigm;
+import eu.avalanche7.paradigm.utils.DebugLogger;
+import eu.avalanche7.paradigm.utils.JsonValidator;
 import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -18,7 +21,24 @@ public class MainConfigHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(Paradigm.MOD_ID);
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("paradigm/main.json");
-    public static Config CONFIG = new Config();
+    public static volatile Config CONFIG = null;
+    private static JsonValidator jsonValidator;
+    private static volatile boolean isLoaded = false;
+
+    public static void setJsonValidator(DebugLogger debugLogger) {
+        jsonValidator = new JsonValidator(debugLogger);
+    }
+
+    public static Config getConfig() {
+        if (!isLoaded || CONFIG == null) {
+            synchronized (MainConfigHandler.class) {
+                if (!isLoaded || CONFIG == null) {
+                    load();
+                }
+            }
+        }
+        return CONFIG;
+    }
 
     public static class Config {
         public ConfigEntry<Boolean> announcementsEnable = new ConfigEntry<>(
@@ -52,23 +72,90 @@ public class MainConfigHandler {
     }
 
     public static void load() {
+        LOGGER.info("[Paradigm] MainConfigHandler.load() started");
+        Config defaultConfig = new Config();
+
         if (Files.exists(CONFIG_PATH)) {
+            LOGGER.info("[Paradigm] Config file exists, loading from: " + CONFIG_PATH);
             try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
-                Config loadedConfig = GSON.fromJson(reader, Config.class);
-                if (loadedConfig != null) {
-                    if (loadedConfig.announcementsEnable != null && loadedConfig.announcementsEnable.value != null) CONFIG.announcementsEnable = loadedConfig.announcementsEnable;
-                    if (loadedConfig.motdEnable != null && loadedConfig.motdEnable.value != null) CONFIG.motdEnable = loadedConfig.motdEnable;
-                    if (loadedConfig.mentionsEnable != null && loadedConfig.mentionsEnable.value != null) CONFIG.mentionsEnable = loadedConfig.mentionsEnable;
-                    if (loadedConfig.restartEnable != null && loadedConfig.restartEnable.value != null) CONFIG.restartEnable = loadedConfig.restartEnable;
-                    if (loadedConfig.debugEnable != null && loadedConfig.debugEnable.value != null) CONFIG.debugEnable = loadedConfig.debugEnable;
-                    if (loadedConfig.defaultLanguage != null && loadedConfig.defaultLanguage.value != null) CONFIG.defaultLanguage = loadedConfig.defaultLanguage;
-                    if (loadedConfig.commandManagerEnable != null && loadedConfig.commandManagerEnable.value != null) CONFIG.commandManagerEnable = loadedConfig.commandManagerEnable;
+                StringBuilder content = new StringBuilder();
+                int c;
+                while ((c = reader.read()) != -1) {
+                    content.append((char) c);
+                }
+
+                if (jsonValidator != null) {
+                    JsonValidator.ValidationResult result = jsonValidator.validateAndFix(content.toString());
+                    if (result.isValid()) {
+                        if (result.hasIssues()) {
+                            LOGGER.info("[Paradigm] Fixed JSON syntax issues in main.json: " + result.getIssuesSummary());
+                            LOGGER.info("[Paradigm] Saving corrected version to preserve user values");
+                            try (FileWriter writer = new FileWriter(CONFIG_PATH.toFile())) {
+                                writer.write(result.getFixedJson());
+                                LOGGER.info("[Paradigm] Saved corrected main.json with preserved user values");
+                            } catch (IOException saveError) {
+                                LOGGER.warn("[Paradigm] Failed to save corrected file: " + saveError.getMessage());
+                            }
+                        }
+
+                        Config loadedConfig = GSON.fromJson(result.getFixedJson(), Config.class);
+                        if (loadedConfig != null) {
+                            mergeConfigs(defaultConfig, loadedConfig);
+                            LOGGER.info("[Paradigm] Successfully loaded main.json configuration");
+                        }
+                    } else {
+                        LOGGER.warn("[Paradigm] Critical JSON syntax errors in main.json: " + result.getMessage());
+                        LOGGER.warn("[Paradigm] Please fix the JSON syntax manually. Using default values for this session.");
+                        LOGGER.warn("[Paradigm] Your file has NOT been modified - fix the syntax and restart the server.");
+                    }
+                } else {
+                    LOGGER.debug("[Paradigm] JsonValidator not available yet, using direct JSON parsing");
+                    Config loadedConfig = GSON.fromJson(content.toString(), Config.class);
+                    if (loadedConfig != null) {
+                        mergeConfigs(defaultConfig, loadedConfig);
+                        LOGGER.info("[Paradigm] Successfully loaded main.json configuration (without validation)");
+                    }
                 }
             } catch (Exception e) {
-                LOGGER.warn("[Paradigm] Could not parse main.json, it may be corrupt. A new one will be generated.", e);
+                LOGGER.warn("[Paradigm] Could not parse main.json, using defaults for this session.", e);
+                LOGGER.warn("[Paradigm] Your file has NOT been modified. Please check the file manually.");
             }
+        } else {
+            LOGGER.info("[Paradigm] main.json not found, generating with default values.");
         }
-        save();
+
+        CONFIG = defaultConfig;
+        isLoaded = true;
+
+        if (!Files.exists(CONFIG_PATH)) {
+            save();
+            LOGGER.info("[Paradigm] Generated new main.json with default values.");
+        }
+
+        LOGGER.info("[Paradigm] MainConfigHandler.load() completed, CONFIG is: " + (CONFIG != null ? "NOT NULL" : "NULL"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void mergeConfigs(Config defaults, Config loaded) {
+        try {
+            Field[] fields = Config.class.getDeclaredFields();
+            for (Field field : fields) {
+                if (field.getType() == ConfigEntry.class) {
+                    field.setAccessible(true);
+                    ConfigEntry<?> loadedEntry = (ConfigEntry<?>) field.get(loaded);
+                    ConfigEntry<Object> defaultEntry = (ConfigEntry<Object>) field.get(defaults);
+
+                    if (loadedEntry != null && loadedEntry.value != null) {
+                        defaultEntry.value = loadedEntry.value;
+                        LOGGER.debug("[Paradigm] Preserved user setting for: " + field.getName());
+                    } else {
+                        LOGGER.debug("[Paradigm] Using default value for new/missing config: " + field.getName());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error("[Paradigm] Error merging main configs", e);
+        }
     }
 
     public static void save() {

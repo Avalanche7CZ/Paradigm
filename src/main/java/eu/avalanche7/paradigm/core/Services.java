@@ -6,6 +6,8 @@ import eu.avalanche7.paradigm.utils.*;
 import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
 
+import java.util.Map;
+
 public class Services {
 
     private MinecraftServer server;
@@ -14,11 +16,11 @@ public class Services {
     private final MainConfigHandler.Config mainConfig;
     private final AnnouncementsConfigHandler.Config announcementsConfig;
     private final MOTDConfigHandler.Config motdConfig;
-    private final MentionConfigHandler mentionConfig;
+    private final MentionConfigHandler.Config mentionConfig;
     private final RestartConfigHandler.Config restartConfig;
     private final ChatConfigHandler.Config chatConfig;
     private final CMConfig cmConfigInstance;
-    private final ToastConfigHandler toastConfig;
+    private final Map<String, ToastConfigHandler.ToastDefinition> toastConfig;
     private final CooldownConfigHandler cooldownConfigHandler;
 
     private final DebugLogger debugLoggerInstance;
@@ -37,10 +39,10 @@ public class Services {
             MainConfigHandler.Config mainConfig,
             AnnouncementsConfigHandler.Config announcementsConfig,
             MOTDConfigHandler.Config motdConfig,
-            MentionConfigHandler mentionConfig,
+            MentionConfigHandler.Config mentionConfig,
             RestartConfigHandler.Config restartConfig,
             ChatConfigHandler.Config chatConfig,
-            ToastConfigHandler toastConfig,
+            Map<String, ToastConfigHandler.ToastDefinition> toastConfig,
             CMConfig cmConfig,
             GroupChatManager groupChatManager,
             DebugLogger debugLogger,
@@ -147,8 +149,12 @@ public class Services {
         return motdConfig;
     }
 
-    public MentionConfigHandler getMentionConfig() {
+    public MentionConfigHandler.Config getMentionConfig() {
         return mentionConfig;
+    }
+
+    public Map<String, ToastConfigHandler.ToastDefinition> getToastConfig() {
+        return toastConfig;
     }
 
     public RestartConfigHandler.Config getRestartConfig() {
