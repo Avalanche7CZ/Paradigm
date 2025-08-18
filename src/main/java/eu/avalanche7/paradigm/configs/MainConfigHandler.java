@@ -69,6 +69,18 @@ public class MainConfigHandler {
                 true,
                 "Enable or disable the custom Command Manager for custom commands."
         );
+        public ConfigEntry<Boolean> telemetryEnable = new ConfigEntry<>(
+                true,
+                "Enables anonymous telemetry (server count, online players). Sends only anonymized metrics."
+        );
+        public ConfigEntry<Integer> telemetryIntervalSeconds = new ConfigEntry<>(
+                900,
+                "Telemetry ping interval in seconds."
+        );
+        public ConfigEntry<String> telemetryServerId = new ConfigEntry<>(
+                "",
+                "Anonymous server ID (auto-generated when empty)."
+        );
     }
 
     public static void load() {

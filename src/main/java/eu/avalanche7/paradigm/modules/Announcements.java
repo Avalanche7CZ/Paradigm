@@ -15,6 +15,8 @@ import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ScheduledFuture;
@@ -23,11 +25,17 @@ import java.util.concurrent.TimeUnit;
 public class Announcements implements ParadigmModule {
 
     private static final String NAME = "Announcements";
-    private final Random random = new Random();
+    private final Random random = new Random(System.currentTimeMillis());
     private int globalMessageIndex = 0;
     private int actionbarMessageIndex = 0;
     private int titleMessageIndex = 0;
     private int bossbarMessageIndex = 0;
+
+    private List<Integer> globalRandomPool = new ArrayList<>();
+    private List<Integer> actionbarRandomPool = new ArrayList<>();
+    private List<Integer> titleRandomPool = new ArrayList<>();
+    private List<Integer> bossbarRandomPool = new ArrayList<>();
+
     private boolean tasksScheduled = false;
     private ScheduledFuture<?> globalTask = null;
     private ScheduledFuture<?> actionbarTask = null;
@@ -129,6 +137,8 @@ public class Announcements implements ParadigmModule {
             return;
         }
 
+        initializeRandomPools(config);
+
         if (config.globalEnable.value) {
             long globalInterval = config.globalInterval.value;
             globalTask = services.getTaskScheduler().scheduleAtFixedRate(() -> broadcastGlobalMessages(services), globalInterval, globalInterval, TimeUnit.SECONDS);
@@ -153,6 +163,32 @@ public class Announcements implements ParadigmModule {
             services.getDebugLogger().debugLog(NAME + ": Scheduled bossbar messages with interval: {} seconds", bossbarInterval);
         }
         tasksScheduled = true;
+    }
+
+    private void initializeRandomPools(AnnouncementsConfigHandler.Config config) {
+        globalRandomPool.clear();
+        for (int i = 0; i < config.globalMessages.value.size(); i++) {
+            globalRandomPool.add(i);
+        }
+        Collections.shuffle(globalRandomPool, random);
+
+        actionbarRandomPool.clear();
+        for (int i = 0; i < config.actionbarMessages.value.size(); i++) {
+            actionbarRandomPool.add(i);
+        }
+        Collections.shuffle(actionbarRandomPool, random);
+
+        titleRandomPool.clear();
+        for (int i = 0; i < config.titleMessages.value.size(); i++) {
+            titleRandomPool.add(i);
+        }
+        Collections.shuffle(titleRandomPool, random);
+
+        bossbarRandomPool.clear();
+        for (int i = 0; i < config.bossbarMessages.value.size(); i++) {
+            bossbarRandomPool.add(i);
+        }
+        Collections.shuffle(bossbarRandomPool, random);
     }
 
     private void cancelAllTasks(Services services) {
@@ -182,6 +218,16 @@ public class Announcements implements ParadigmModule {
         }
     }
 
+    private int getNextRandomIndex(List<Integer> pool, int messageCount) {
+        if (pool.isEmpty()) {
+            for (int i = 0; i < messageCount; i++) {
+                pool.add(i);
+            }
+            Collections.shuffle(pool, random);
+        }
+        return pool.remove(0);
+    }
+
     private void broadcastGlobalMessages(Services services) {
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
         if (platform == null || config.globalMessages.value.isEmpty()) return;
@@ -196,7 +242,8 @@ public class Announcements implements ParadigmModule {
             messageText = messages.get(globalMessageIndex).replace("{Prefix}", prefix);
             globalMessageIndex = (globalMessageIndex + 1) % messages.size();
         } else {
-            messageText = messages.get(random.nextInt(messages.size())).replace("{Prefix}", prefix);
+            int randomIndex = getNextRandomIndex(globalRandomPool, messages.size());
+            messageText = messages.get(randomIndex).replace("{Prefix}", prefix);
         }
 
         Text message = services.getMessageParser().parseMessage(messageText, null);
@@ -221,7 +268,8 @@ public class Announcements implements ParadigmModule {
             messageText = messages.get(actionbarMessageIndex).replace("{Prefix}", prefix);
             actionbarMessageIndex = (actionbarMessageIndex + 1) % messages.size();
         } else {
-            messageText = messages.get(random.nextInt(messages.size())).replace("{Prefix}", prefix);
+            int randomIndex = getNextRandomIndex(actionbarRandomPool, messages.size());
+            messageText = messages.get(randomIndex).replace("{Prefix}", prefix);
         }
         Text message = services.getMessageParser().parseMessage(messageText, null);
 
@@ -243,7 +291,8 @@ public class Announcements implements ParadigmModule {
             messageText = messages.get(titleMessageIndex).replace("{Prefix}", prefix);
             titleMessageIndex = (titleMessageIndex + 1) % messages.size();
         } else {
-            messageText = messages.get(random.nextInt(messages.size())).replace("{Prefix}", prefix);
+            int randomIndex = getNextRandomIndex(titleRandomPool, messages.size());
+            messageText = messages.get(randomIndex).replace("{Prefix}", prefix);
         }
 
         String[] parts = messageText.split(" \\|\\| ", 2);
@@ -286,7 +335,8 @@ public class Announcements implements ParadigmModule {
             messageText = messages.get(bossbarMessageIndex).replace("{Prefix}", prefix);
             bossbarMessageIndex = (bossbarMessageIndex + 1) % messages.size();
         } else {
-            messageText = messages.get(random.nextInt(messages.size())).replace("{Prefix}", prefix);
+            int randomIndex = getNextRandomIndex(bossbarRandomPool, messages.size());
+            messageText = messages.get(randomIndex).replace("{Prefix}", prefix);
         }
         Text message = services.getMessageParser().parseMessage(messageText, null);
 
@@ -303,7 +353,7 @@ public class Announcements implements ParadigmModule {
     public int broadcastTitleCmd(CommandContext<ServerCommandSource> context, String title, String subtitle, Services services) {
         ServerCommandSource source = context.getSource();
         if (platform == null) {
-            source.sendError(platform.createLiteralComponent("Platform not available."));
+            source.sendError(Text.literal("Platform not available."));
             return 0;
         }
         Text titleComponent = (title != null && !title.isEmpty()) ? services.getMessageParser().parseMessage(title, null) : Text.empty();
@@ -326,7 +376,7 @@ public class Announcements implements ParadigmModule {
         String messageStr = StringArgumentType.getString(context, "message");
         ServerCommandSource source = context.getSource();
         if (platform == null) {
-            source.sendError(platform.createLiteralComponent("Platform not available."));
+            source.sendError(Text.literal("Platform not available."));
             return 0;
         }
         Text broadcastMessage = services.getMessageParser().parseMessage(messageStr, null);
@@ -354,7 +404,7 @@ public class Announcements implements ParadigmModule {
                 try {
                     bossBarColor = IPlatformAdapter.BossBarColor.valueOf(colorStr.toUpperCase());
                 } catch (IllegalArgumentException e) {
-                    source.sendError(platform.createLiteralComponent("Invalid bossbar color: " + colorStr));
+                    source.sendError(Text.literal("Invalid bossbar color: " + colorStr));
                     return 0;
                 }
                 platform.sendBossBar(
@@ -367,7 +417,7 @@ public class Announcements implements ParadigmModule {
                 break;
             }
             default:
-                source.sendError(platform.createLiteralComponent("Invalid message type for command: " + type));
+                source.sendError(Text.literal("Invalid message type for command: " + type));
                 return 0;
         }
         return 1;

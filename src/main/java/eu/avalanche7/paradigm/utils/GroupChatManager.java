@@ -10,11 +10,15 @@ import net.minecraft.text.Text;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.HashSet;
+import java.util.Collections;
 
 public class GroupChatManager {
     private final Map<String, Group> groups = new HashMap<>();
     private final Map<UUID, PlayerGroupData> playerData = new HashMap<>();
+    private final Map<String, Set<UUID>> pendingJoinRequests = new HashMap<>();
     private Services services;
 
     public void setServices(Services services) {
@@ -64,7 +68,7 @@ public class GroupChatManager {
     }
 
     public boolean createGroup(ServerPlayerEntity player, String groupName) {
-        if (groupName == null || groupName.trim().isEmpty() || groupName.length() > 16) { // Max 16 characters for group name
+        if (groupName == null || groupName.trim().isEmpty() || groupName.length() > 16) {
             player.sendMessage(translate("group.invalid_name"));
             return false;
         }
@@ -322,6 +326,193 @@ public class GroupChatManager {
     public void clearAllGroupsAndPlayerData() {
         groups.clear();
         playerData.clear();
+        pendingJoinRequests.clear();
         debugLog("All group chat data cleared.");
+    }
+
+    public void requestJoinGroup(ServerPlayerEntity player, String groupName) {
+        if (!groups.containsKey(groupName)) {
+            player.sendMessage(translate("group.group_not_found"));
+            return;
+        }
+        Group group = groups.get(groupName);
+        UUID playerUUID = player.getUuid();
+        if (group.getMembers().contains(playerUUID)) {
+            player.sendMessage(parseMessage("&7You are already in group &f" + groupName, player));
+            return;
+        }
+        if (getPlayerData(player).getInvitations().contains(groupName)) {
+            player.sendMessage(parseMessage("&7You already have an invite to &e" + groupName + "&7. Use &a/groupchat accept " + groupName, player));
+            return;
+        }
+        pendingJoinRequests.computeIfAbsent(groupName, k -> new HashSet<>()).add(playerUUID);
+        player.sendMessage(translate("group.join_request_sent"));
+
+        MinecraftServer server = getServer();
+        if (server != null) {
+            ServerPlayerEntity owner = server.getPlayerManager().getPlayer(group.getOwner());
+            if (owner != null) {
+                String notifyRaw = translate("group.join_request_received").getString()
+                        .replace("{player_name}", player.getName().getString())
+                        .replace("{group_name}", groupName);
+                owner.sendMessage(parseMessage(notifyRaw, owner));
+            }
+        }
+    }
+
+    public boolean acceptInvite(ServerPlayerEntity player, String groupName) {
+        PlayerGroupData data = getPlayerData(player);
+        if (!data.getInvitations().contains(groupName)) {
+            player.sendMessage(translate("group.not_invited"));
+            return false;
+        }
+        data.removeInvitation(groupName);
+        return internalJoinGroup(player, groupName);
+    }
+
+    public boolean denyInvite(ServerPlayerEntity player, String groupName) {
+        PlayerGroupData data = getPlayerData(player);
+        if (!data.getInvitations().contains(groupName)) {
+            player.sendMessage(translate("group.not_invited"));
+            return false;
+        }
+        data.removeInvitation(groupName);
+        player.sendMessage(translate("group.invite_denied"));
+        return true;
+    }
+
+    public boolean acceptJoinRequest(ServerPlayerEntity owner, String playerName) {
+        String groupName = getPlayerData(owner).getCurrentGroup();
+        if (groupName == null) {
+            owner.sendMessage(translate("group.no_group_to_manage_requests"));
+            return false;
+        }
+        Group group = groups.get(groupName);
+        if (!group.getOwner().equals(owner.getUuid())) {
+            owner.sendMessage(translate("group.not_owner"));
+            return false;
+        }
+
+        MinecraftServer server = getServer();
+        if (server == null) {
+            owner.sendMessage(translate("group.request_player_offline"));
+            return false;
+        }
+
+        ServerPlayerEntity target = server.getPlayerManager().getPlayer(playerName);
+        if (target == null) {
+            owner.sendMessage(translate("group.request_player_offline"));
+            return false;
+        }
+
+        Set<UUID> reqs = pendingJoinRequests.getOrDefault(groupName, Collections.emptySet());
+        if (!reqs.contains(target.getUuid())) {
+            owner.sendMessage(translate("group.no_pending_request"));
+            return false;
+        }
+
+        reqs.remove(target.getUuid());
+        boolean ok = internalJoinGroup(target, groupName);
+        if (ok) {
+            owner.sendMessage(translate("group.request_accepted_owner"));
+            target.sendMessage(translate("group.request_accepted_player"));
+        }
+        return ok;
+    }
+
+    public boolean denyJoinRequest(ServerPlayerEntity owner, String playerName) {
+        String groupName = getPlayerData(owner).getCurrentGroup();
+        if (groupName == null) {
+            owner.sendMessage(translate("group.no_group_to_manage_requests"));
+            return false;
+        }
+        Group group = groups.get(groupName);
+        if (!group.getOwner().equals(owner.getUuid())) {
+            owner.sendMessage(translate("group.not_owner"));
+            return false;
+        }
+
+        MinecraftServer server = getServer();
+        if (server == null) {
+            owner.sendMessage(translate("group.request_player_offline"));
+            return false;
+        }
+
+        ServerPlayerEntity target = server.getPlayerManager().getPlayer(playerName);
+        if (target == null) {
+            owner.sendMessage(translate("group.request_player_offline"));
+            return false;
+        }
+
+        Set<UUID> reqs = pendingJoinRequests.getOrDefault(groupName, Collections.emptySet());
+        if (!reqs.remove(target.getUuid())) {
+            owner.sendMessage(translate("group.no_pending_request"));
+            return false;
+        }
+
+        owner.sendMessage(translate("group.request_denied_owner"));
+        target.sendMessage(translate("group.request_denied_player"));
+        return true;
+    }
+
+    public void listJoinRequests(ServerPlayerEntity owner) {
+        String groupName = getPlayerData(owner).getCurrentGroup();
+        if (groupName == null) {
+            owner.sendMessage(translate("group.no_group_to_manage_requests"));
+            return;
+        }
+        Group group = groups.get(groupName);
+        if (!group.getOwner().equals(owner.getUuid())) {
+            owner.sendMessage(translate("group.not_owner"));
+            return;
+        }
+
+        Set<UUID> reqs = pendingJoinRequests.getOrDefault(groupName, Collections.emptySet());
+        if (reqs.isEmpty()) {
+            owner.sendMessage(translate("group.no_pending_request"));
+            return;
+        }
+
+        owner.sendMessage(parseMessage("&6Pending join requests:", owner));
+        MinecraftServer server = getServer();
+        for (UUID uuid : reqs) {
+            String name = uuid.toString();
+            if (server != null) {
+                ServerPlayerEntity p = server.getPlayerManager().getPlayer(uuid);
+                if (p != null) name = p.getName().getString();
+            }
+            owner.sendMessage(parseMessage("&7- &f" + name + " &8[&a/groupchat acceptreq " + name + "&8 | &c/groupchat denyreq " + name + "&8]", owner));
+        }
+    }
+
+    private boolean internalJoinGroup(ServerPlayerEntity player, String groupName) {
+        PlayerGroupData playerData = getPlayerData(player);
+        Group group = groups.get(groupName);
+        if (group == null) {
+            player.sendMessage(translate("group.group_not_found"));
+            return false;
+        }
+
+        if (playerData.getCurrentGroup() != null && !playerData.getCurrentGroup().equals(groupName)) {
+            leaveGroup(player, true);
+        }
+
+        group.addMember(player.getUuid());
+        playerData.setCurrentGroup(groupName);
+        playerData.removeInvitation(groupName);
+
+        if (services.getChatConfig().enableGroupChatToasts.value) {
+            String toastTitleRaw = translate("group.toast_joined_title").getString().replace("{group_name}", groupName);
+            Text toastTitle = parseMessage(toastTitleRaw, player);
+            services.getCustomToastManager().showToast(player, "minecraft:emerald", toastTitle, AdvancementFrame.GOAL, services);
+        }
+
+        String joinedRaw = translate("group.joined").getString().replace("{group_name}", groupName);
+        player.sendMessage(parseMessage(joinedRaw, player));
+
+        String joinedNotificationRaw = translate("group.player_joined_notification").getString().replace("{player_name}", player.getName().getString());
+        broadcastToGroup(group, parseMessage(joinedNotificationRaw, null), player.getUuid());
+        debugLog("Player " + player.getName().getString() + " joined group: " + groupName);
+        return true;
     }
 }

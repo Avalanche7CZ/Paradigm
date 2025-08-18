@@ -19,10 +19,16 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.ServerCommandSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.net.URL;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -46,6 +52,7 @@ public class Paradigm implements DedicatedServerModInitializer {
     private CustomToastManager customToastManagerInstance;
     private IPlatformAdapter platformAdapterInstance;
     private CooldownConfigHandler cooldownConfigHandlerInstance;
+    private TelemetryReporter telemetryReporter;
 
     @Override
     public void onInitializeServer() {
@@ -195,6 +202,12 @@ public class Paradigm implements DedicatedServerModInitializer {
 
     private void onServerStarting(MinecraftServer server) {
         services.setServer(server);
+
+        if (telemetryReporter == null) {
+            telemetryReporter = new TelemetryReporter(services);
+        }
+        telemetryReporter.start();
+
         modules.forEach(module -> {
             if (module.isEnabled(services)) {
                 module.onEnable(services);
@@ -222,6 +235,11 @@ public class Paradigm implements DedicatedServerModInitializer {
                 module.onDisable(services);
             }
         });
+
+        if (telemetryReporter != null) {
+            telemetryReporter.stop();
+        }
+
         if (this.taskSchedulerInstance != null) {
             this.taskSchedulerInstance.onServerStopping();
         }
@@ -230,23 +248,107 @@ public class Paradigm implements DedicatedServerModInitializer {
 
     public static class UpdateChecker {
         private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/Fabric/1.21.1/version.txt?v=1";
+        private static final String MODRINTH_PROJECT_ID = "s4i32SJd";
+        private static final String CURSEFORGE_SLUG = "paradigm";
+        private static final String MODRINTH_PROJECT_PAGE = "https://modrinth.com/mod/" + MODRINTH_PROJECT_ID;
+        private static final String CURSEFORGE_PROJECT_PAGE = "https://www.curseforge.com/minecraft/mc-mods/" + CURSEFORGE_SLUG;
 
         public static void checkForUpdates(String currentVersion, Logger logger) {
-            try {
-                URL url = new URL(LATEST_VERSION_URL);
-                try (BufferedReader reader = new BufferedReader(new InputStreamReader(url.openStream()))) {
+            boolean foundOnModrinth = checkModrinth(currentVersion, logger);
+            if (!foundOnModrinth) {
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(URI.create(LATEST_VERSION_URL).toURL().openStream(), StandardCharsets.UTF_8))) {
                     String latestVersion = reader.readLine();
                     if (latestVersion != null && !currentVersion.equals(latestVersion.trim())) {
                         logger.info("Paradigm: A new version is available: {} (Current: {})", latestVersion.trim(), currentVersion);
-                        logger.info("Paradigm: Please update at: https://www.curseforge.com/minecraft/mc-mods/paradigm or https://modrinth.com/mod/paradigm");
-                    } else if (latestVersion != null) {
-                        logger.info("Paradigm: You are running the latest version: {}", currentVersion);
-                    } else {
-                        logger.info("Paradigm: Could not determine the latest version.");
+                        logger.info("Modrinth: {}", MODRINTH_PROJECT_PAGE);
+                        logger.info("CurseForge: {}", CURSEFORGE_PROJECT_PAGE);
+                    }
+                } catch (Exception e) {
+                    logger.warn("Paradigm: Failed to check for updates (GitHub).");
+                }
+            }
+        }
+
+        private static boolean checkModrinth(String currentVersion, Logger logger) {
+            HttpURLConnection conn = null;
+            try {
+                String apiUrl = "https://api.modrinth.com/v2/project/" + MODRINTH_PROJECT_ID + "/version";
+                conn = (HttpURLConnection) URI.create(apiUrl).toURL().openConnection();
+                conn.setRequestProperty("User-Agent", "Paradigm-UpdateChecker/1.0 (+https://modrinth.com/mod/" + MODRINTH_PROJECT_ID + ")");
+                conn.setConnectTimeout(4000);
+                conn.setReadTimeout(6000);
+
+                try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                    JsonArray arr = JsonParser.parseReader(br).getAsJsonArray();
+                    if (arr.isEmpty()) return false;
+
+                    String mcVersion = getMinecraftVersionSafe();
+                    String loader = "fabric";
+
+                    String newestCompatible = null;
+                    String publishedAtNewest = null;
+
+                    for (JsonElement el : arr) {
+                        JsonObject obj = el.getAsJsonObject();
+                        boolean loaderOk = false;
+                        JsonArray loaders = obj.getAsJsonArray("loaders");
+                        if (loaders != null) {
+                            for (JsonElement l : loaders) {
+                                if (loader.equalsIgnoreCase(l.getAsString())) { loaderOk = true; break; }
+                            }
+                        }
+                        if (!loaderOk) continue;
+
+                        boolean versionOk = true;
+                        if (mcVersion != null) {
+                            versionOk = false;
+                            JsonArray gameVersions = obj.getAsJsonArray("game_versions");
+                            if (gameVersions != null) {
+                                for (JsonElement v : gameVersions) {
+                                    if (mcVersion.equals(v.getAsString())) { versionOk = true; break; }
+                                }
+                            }
+                        }
+                        if (!versionOk) continue;
+
+                        String ver = obj.get("version_number").getAsString();
+                        String published = obj.has("date_published") ? obj.get("date_published").getAsString() : null;
+
+                        if (newestCompatible == null) {
+                            newestCompatible = ver;
+                            publishedAtNewest = published;
+                        } else if (isAfter(published, publishedAtNewest)) {
+                            newestCompatible = ver;
+                            publishedAtNewest = published;
+                        }
+                    }
+
+                    if (newestCompatible != null && !newestCompatible.equals(currentVersion)) {
+                        logger.info("Paradigm: A new version is available on Modrinth: {} (Current: {})", newestCompatible, currentVersion);
+                        logger.info("Modrinth: {}", MODRINTH_PROJECT_PAGE);
+                        logger.info("CurseForge: {}", CURSEFORGE_PROJECT_PAGE);
+                        return true;
                     }
                 }
-            } catch (Exception e) {
-                logger.warn("Paradigm: Failed to check for updates: {}", e.getMessage());
+            } catch (Exception ex) {
+                logger.debug("Paradigm: Modrinth check failed: {}", ex.toString());
+            } finally {
+                if (conn != null) conn.disconnect();
+            }
+            return false;
+        }
+
+        private static boolean isAfter(String a, String b) {
+            if (a == null) return false;
+            if (b == null) return true;
+            return a.compareTo(b) > 0;
+        }
+
+        private static String getMinecraftVersionSafe() {
+            try {
+                return net.minecraft.SharedConstants.getGameVersion().getName();
+            } catch (Throwable t) {
+                return null;
             }
         }
     }

@@ -100,8 +100,42 @@ public class GroupChat implements ParadigmModule {
                                     String groupName = StringArgumentType.getString(ctx, "name");
                                     return groupChatManager.joinGroup(ctx.getSource().getPlayer(), groupName) ? 1 : 0;
                                 })))
-                .then(CommandManager.literal("leave")
-                        .executes(ctx -> groupChatManager.leaveGroup(ctx.getSource().getPlayer()) ? 1 : 0))
+                .then(CommandManager.literal("accept")
+                        .then(CommandManager.argument("groupname", StringArgumentType.string())
+                                .executes(ctx -> {
+                                    String groupName = StringArgumentType.getString(ctx, "groupname");
+                                    return groupChatManager.acceptInvite(ctx.getSource().getPlayer(), groupName) ? 1 : 0;
+                                })))
+                .then(CommandManager.literal("deny")
+                        .then(CommandManager.argument("groupname", StringArgumentType.string())
+                                .executes(ctx -> {
+                                    String groupName = StringArgumentType.getString(ctx, "groupname");
+                                    return groupChatManager.denyInvite(ctx.getSource().getPlayer(), groupName) ? 1 : 0;
+                                })))
+                .then(CommandManager.literal("request")
+                        .then(CommandManager.argument("groupname", StringArgumentType.string())
+                                .executes(ctx -> {
+                                    String groupName = StringArgumentType.getString(ctx, "groupname");
+                                    groupChatManager.requestJoinGroup(ctx.getSource().getPlayer(), groupName);
+                                    return 1;
+                                })))
+                .then(CommandManager.literal("acceptreq")
+                        .then(CommandManager.argument("playername", StringArgumentType.string())
+                                .executes(ctx -> {
+                                    String playerName = StringArgumentType.getString(ctx, "playername");
+                                    return groupChatManager.acceptJoinRequest(ctx.getSource().getPlayer(), playerName) ? 1 : 0;
+                                })))
+                .then(CommandManager.literal("denyreq")
+                        .then(CommandManager.argument("playername", StringArgumentType.string())
+                                .executes(ctx -> {
+                                    String playerName = StringArgumentType.getString(ctx, "playername");
+                                    return groupChatManager.denyJoinRequest(ctx.getSource().getPlayer(), playerName) ? 1 : 0;
+                                })))
+                .then(CommandManager.literal("requests")
+                        .executes(ctx -> {
+                            groupChatManager.listJoinRequests(ctx.getSource().getPlayer());
+                            return 1;
+                        }))
                 .then(CommandManager.literal("list")
                         .executes(ctx -> {
                             groupChatManager.listGroups(ctx.getSource().getPlayer());
@@ -191,6 +225,12 @@ public class GroupChat implements ParadigmModule {
         sendHelpMessage(player, label, "info [group_name]", services.getLang().translate("group.help_info").getString(), services);
         sendHelpMessage(player, label, "say <message>", services.getLang().translate("group.help_say").getString(), services);
         sendHelpMessage(player, label, "toggle", services.getLang().translate("group.help_toggle").getString(), services);
+        sendHelpMessage(player, label, "accept <group_name>", services.getLang().translate("group.help_accept").getString(), services);
+        sendHelpMessage(player, label, "deny <group_name>", services.getLang().translate("group.help_deny").getString(), services);
+        sendHelpMessage(player, label, "request <group_name>", services.getLang().translate("group.help_request").getString(), services);
+        sendHelpMessage(player, label, "acceptreq <player_name>", services.getLang().translate("group.help_acceptreq").getString(), services);
+        sendHelpMessage(player, label, "denyreq <player_name>", services.getLang().translate("group.help_denyreq").getString(), services);
+        sendHelpMessage(player, label, "requests", services.getLang().translate("group.help_requests").getString(), services);
     }
 
     private void sendHelpMessage(ServerPlayerEntity player, String label, String command, String description, Services services) {

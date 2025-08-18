@@ -15,6 +15,7 @@ public class CustomCommand {
     private Integer cooldown_seconds;
     private String cooldown_message;
     private AreaRestriction area_restriction;
+    private List<ArgumentDefinition> arguments;
 
     private CustomCommand() {}
 
@@ -27,6 +28,10 @@ public class CustomCommand {
     }
 
     public CustomCommand(String name, String description, String permission, boolean requirePermission, String permissionErrorMessage, List<Action> actions, Integer cooldown_seconds, String cooldown_message, AreaRestriction area_restriction) {
+        this(name, description, permission, requirePermission, permissionErrorMessage, actions, cooldown_seconds, cooldown_message, area_restriction, null);
+    }
+
+    public CustomCommand(String name, String description, String permission, boolean requirePermission, String permissionErrorMessage, List<Action> actions, Integer cooldown_seconds, String cooldown_message, AreaRestriction area_restriction, List<ArgumentDefinition> arguments) {
         this.name = name;
         this.description = description;
         this.permission = permission;
@@ -36,6 +41,7 @@ public class CustomCommand {
         this.cooldown_seconds = cooldown_seconds;
         this.cooldown_message = cooldown_message;
         this.area_restriction = area_restriction;
+        this.arguments = arguments;
     }
 
     public String getName() {
@@ -72,6 +78,10 @@ public class CustomCommand {
 
     public AreaRestriction getAreaRestriction() {
         return area_restriction;
+    }
+
+    public List<ArgumentDefinition> getArguments() {
+        return arguments != null ? arguments : new ArrayList<>();
     }
 
     public static class AreaRestriction {
@@ -196,6 +206,55 @@ public class CustomCommand {
 
         public List<Action> getOnFailure() {
             return on_failure != null ? on_failure : new ArrayList<>();
+        }
+    }
+    public static class ArgumentDefinition {
+        private String name;
+        private String type; // "string", "integer", "boolean", "player", "world", "gamemode", "custom"
+        private boolean required;
+        private String errorMessage;
+        private List<String> customCompletions;
+        private Integer minValue;
+        private Integer maxValue;
+
+        private ArgumentDefinition() {}
+
+        public ArgumentDefinition(String name, String type, boolean required, String errorMessage, List<String> customCompletions, Integer minValue, Integer maxValue) {
+            this.name = name;
+            this.type = type != null ? type.toLowerCase() : "string";
+            this.required = required;
+            this.errorMessage = errorMessage;
+            this.customCompletions = customCompletions;
+            this.minValue = minValue;
+            this.maxValue = maxValue;
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public String getType() {
+            return type != null ? type.toLowerCase() : "string";
+        }
+
+        public boolean isRequired() {
+            return required;
+        }
+
+        public String getErrorMessage() {
+            return errorMessage != null ? errorMessage : "&cInvalid argument: " + name;
+        }
+
+        public List<String> getCustomCompletions() {
+            return customCompletions != null ? customCompletions : new ArrayList<>();
+        }
+
+        public Integer getMinValue() {
+            return minValue;
+        }
+
+        public Integer getMaxValue() {
+            return maxValue;
         }
     }
 }

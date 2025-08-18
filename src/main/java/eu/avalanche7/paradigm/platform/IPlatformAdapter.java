@@ -55,4 +55,6 @@ public interface IPlatformAdapter {
     void teleportPlayer(ServerPlayerEntity player, double x, double y, double z);
     boolean playerHasItem(ServerPlayerEntity player, String itemId, int amount);
     boolean isPlayerInArea(ServerPlayerEntity player, String worldId, List<Integer> corner1, List<Integer> corner2);
+    List<String> getOnlinePlayerNames();
+    List<String> getWorldNames();
 }

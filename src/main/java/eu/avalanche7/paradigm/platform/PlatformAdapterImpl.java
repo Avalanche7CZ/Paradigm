@@ -25,6 +25,7 @@ import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -357,5 +358,22 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         double z2 = Math.max(corner1.get(2), corner2.get(2));
 
         return pX >= x1 && pX <= x2 && pY >= y1 && pY <= y2 && pZ >= z1 && pZ <= z2;
+    }
+
+    @Override
+    public List<String> getOnlinePlayerNames() {
+        return getOnlinePlayers().stream()
+                .map(player -> player.getName().getString())
+                .toList();
+    }
+
+    @Override
+    public List<String> getWorldNames() {
+        if (server == null) return List.of();
+        List<String> worldNames = new ArrayList<>();
+        for (net.minecraft.server.world.ServerWorld world : server.getWorlds()) {
+            worldNames.add(world.getRegistryKey().getValue().toString());
+        }
+        return worldNames;
     }
 }

@@ -45,9 +45,14 @@ public class Lang {
         }
     }
 
+    public Lang(Logger logger) {
+        this(logger, null, null);
+    }
+
     public void initializeLanguage() {
         if (mainConfig == null || mainConfig.defaultLanguage == null) {
-            if (logger != null) logger.error("Lang: MainConfig or defaultLanguage setting is null. Cannot initialize language.");
+            if (logger != null) logger.warn("Lang: MainConfig or defaultLanguage setting is null. Using default language 'en'.");
+            loadLanguage("en");
             return;
         }
         String language = mainConfig.defaultLanguage.value;
@@ -97,6 +102,7 @@ public class Lang {
             }
         }
     }
+
     public Text translate(String key) {
         String translatedText = translations.getOrDefault(key, key);
         translatedText = translatedText.replace("&", "§");
@@ -105,6 +111,31 @@ public class Lang {
             return Text.literal(translatedText);
         }
         return this.messageParser.parseMessage(translatedText, null);
+    }
+
+    public String getTranslation(String key) {
+        String translatedText = translations.getOrDefault(key, key);
+        return translatedText.replace("&", "§");
+    }
+
+    public void setLanguage(String language) {
+        loadLanguage(language);
+    }
+
+    public String getCurrentLanguage() {
+        return currentLanguage != null ? currentLanguage : "en";
+    }
+
+    public boolean isLanguageAvailable(String language) {
+        Path langFile = langFolder.resolve(language + ".json");
+        return Files.exists(langFile);
+    }
+
+    public String[] getAvailableLanguages() {
+        List<String> availableLanguages = List.of("en", "cs", "ru");
+        return availableLanguages.stream()
+                .filter(this::isLanguageAvailable)
+                .toArray(String[]::new);
     }
 
     private void ensureDefaultLangFiles() throws IOException {
