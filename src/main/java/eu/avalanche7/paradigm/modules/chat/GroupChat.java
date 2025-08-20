@@ -240,8 +240,8 @@ public class GroupChat implements ParadigmModule {
 
         MutableText message = platform.createLiteralComponent(" §9> §e/" + label + " " + command)
                 .formatted(Formatting.YELLOW)
-                .styled(style -> style.withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/" + label + " " + command)))
-                .styled(style -> style.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hoverText)));
+                .styled(style -> style.withClickEvent(new ClickEvent.SuggestCommand("/" + label + " " + command)))
+                .styled(style -> style.withHoverEvent(new HoverEvent.ShowText(hoverText)));
         platform.sendSystemMessage(player, message);
     }
 }

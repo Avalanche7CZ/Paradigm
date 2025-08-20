@@ -346,7 +346,7 @@ public class Paradigm implements DedicatedServerModInitializer {
 
         private static String getMinecraftVersionSafe() {
             try {
-                return net.minecraft.SharedConstants.getGameVersion().getName();
+                return net.minecraft.SharedConstants.getGameVersion().id();
             } catch (Throwable t) {
                 return null;
             }

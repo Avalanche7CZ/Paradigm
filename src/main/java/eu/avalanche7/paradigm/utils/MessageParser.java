@@ -7,6 +7,7 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.*;
 import net.minecraft.util.Formatting;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -33,15 +34,19 @@ public class MessageParser {
     private void initializeTagHandlers() {
         tagHandlers.put(Pattern.compile("\\[link=(.*?)\\]"), (matcher, context) -> {
             String url = matcher.group(1);
-            context.getText().append(Text.literal(url)
-                            .setStyle(context.getCurrentStyle().withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, formatUrl(url)))))
-                    .append(Text.literal(" ").setStyle(context.getCurrentStyle()));
+            try {
+                context.getText().append(Text.literal(url)
+                                .setStyle(context.getCurrentStyle().withClickEvent(new ClickEvent.OpenUrl(URI.create(formatUrl(url))))))
+                        .append(Text.literal(" ").setStyle(context.getCurrentStyle()));
+            } catch (IllegalArgumentException e) {
+                context.getText().append(Text.literal(url + " ").setStyle(context.getCurrentStyle()));
+            }
         });
         tagHandlers.put(Pattern.compile("\\[command=(.*?)\\]"), (matcher, context) -> {
             String command = matcher.group(1);
             String fullCommand = command.startsWith("/") ? command : "/" + command;
             context.getText().append(Text.literal(fullCommand)
-                            .setStyle(context.getCurrentStyle().withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, fullCommand))))
+                            .setStyle(context.getCurrentStyle().withClickEvent(new ClickEvent.RunCommand(fullCommand))))
                     .append(Text.literal(" ").setStyle(context.getCurrentStyle()));
         });
         tagHandlers.put(Pattern.compile("\\[hover=(.*?)\\](.*?)\\[/hover\\]", Pattern.DOTALL), (matcher, context) -> {
@@ -50,7 +55,7 @@ public class MessageParser {
             MutableText hoverComponent = parseMessageInternal(hoverTextContent, context.getPlayer(), Style.EMPTY);
             MutableText textWithHover = Text.literal("");
             parseTextRecursive(mainTextContent, textWithHover, context.getCurrentStyle(), context.getPlayer());
-            applyHoverToComponent(textWithHover, new HoverEvent(HoverEvent.Action.SHOW_TEXT, hoverComponent));
+            applyHoverToComponent(textWithHover, new HoverEvent.ShowText(hoverComponent));
             context.getText().append(textWithHover);
         });
         tagHandlers.put(Pattern.compile("\\[divider\\]"), (matcher, context) -> {
@@ -208,8 +213,12 @@ public class MessageParser {
                 }
             } else if (nextUrlFound && nextUrlStart == currentIndex) {
                 String url = urlMatcher.group(0);
-                Style urlStyle = currentStyle.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, formatUrl(url)));
-                parentComponent.append(Text.literal(url).setStyle(urlStyle));
+                try {
+                    Style urlStyle = currentStyle.withClickEvent(new ClickEvent.OpenUrl(URI.create(formatUrl(url))));
+                    parentComponent.append(Text.literal(url).setStyle(urlStyle));
+                } catch (IllegalArgumentException e) {
+                    parentComponent.append(Text.literal(url).setStyle(currentStyle));
+                }
                 currentIndex = urlMatcher.end();
             } else {
                 if (currentIndex < length) {

@@ -64,7 +64,7 @@ public class TelemetryReporter {
         if (srvObj instanceof MinecraftServer ms) {
             maxPlayers = ms.getPlayerManager().getMaxPlayerCount();
         }
-        String mcVersion = SharedConstants.getGameVersion().getName();
+        String mcVersion = SharedConstants.getGameVersion().id();
         String modVersion = FabricLoader.getInstance().getModContainer("paradigm")
                 .map(c -> c.getMetadata().getVersion().getFriendlyString())
                 .orElse("unknown");

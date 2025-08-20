@@ -11,6 +11,7 @@ import net.minecraft.registry.Registries;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
+import net.minecraft.resource.metadata.ResourceMetadata;
 
 import java.util.Collections;
 import java.util.Map;
@@ -53,7 +54,7 @@ public class CustomToastManager {
 
         AdvancementDisplay display = new AdvancementDisplay(
                 icon, title, description,
-                Optional.of(Identifier.of("textures/gui/advancements/backgrounds/stone.png")),
+                Optional.empty(),
                 frame, true, true, false
         );
 
@@ -77,7 +78,8 @@ public class CustomToastManager {
                 false,
                 Collections.singletonList(advancementEntry),
                 Collections.emptySet(),
-                Map.of(advancementId, progress)
+                Map.of(advancementId, progress),
+                true
         );
 
         player.networkHandler.send(addAndGrantPacket, null);
@@ -87,7 +89,8 @@ public class CustomToastManager {
                     false,
                     Collections.emptyList(),
                     Collections.singleton(advancementId),
-                    Collections.emptyMap()
+                    Collections.emptyMap(),
+                    true
             );
             if (!player.isDisconnected()) {
                 player.networkHandler.send(removePacket, null);
