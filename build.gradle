@@ -1,5 +1,5 @@
 plugins {
-    id 'fabric-loom' version '1.6-SNAPSHOT'
+    id 'fabric-loom' version '1.7-SNAPSHOT'
     id 'maven-publish'
 }
 
@@ -27,6 +27,8 @@ base {
 repositories {
     maven { url "https://maven.shedaniel.me/" }
     maven { url "https://maven.terraformersmc.com/releases/" }
+    // Add Maven Central for better dependency resolution
+    mavenCentral()
 }
 
 dependencies {
@@ -36,6 +38,15 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
     compileOnly('net.luckperms:api:5.4')
+}
+
+loom {
+    // Configure Loom for better compatibility
+    runs {
+        server {
+            runDir = "run"
+        }
+    }
 }
 
 processResources {
@@ -54,6 +65,8 @@ processResources {
 def targetJavaVersion = 21
 tasks.withType(JavaCompile).configureEach {
     it.options.encoding = "UTF-8"
+    // Ensure compatibility across versions
+    it.options.compilerArgs.addAll(['-Xlint:deprecation', '-Xlint:unchecked'])
     if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
         it.options.release.set(targetJavaVersion)
     }
@@ -70,6 +83,19 @@ java {
 jar {
     from("LICENSE") {
         rename { "${it}_${project.archivesBaseName}"}
+    }
+
+    // Add manifest attributes for better mod identification
+    manifest {
+        attributes([
+            "Specification-Title": "Paradigm",
+            "Specification-Vendor": "Avalanche7CZ",
+            "Specification-Version": project.version,
+            "Implementation-Title": project.name,
+            "Implementation-Version": project.version,
+            "Implementation-Vendor": "Avalanche7CZ",
+            "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+        ])
     }
 }
 

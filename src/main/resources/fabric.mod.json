@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "paradigm",
-  "version": "f21.0.beta6",
+  "version": "${version}",
   "name": "Paradigm",
   "description": "Sever side Mod - Announcements, Restarting, and more!",
   "authors": [
@@ -25,6 +25,6 @@
   "depends": {
     "fabricloader": ">=0.16.14",
     "fabric-api": "*",
-    "minecraft": "~1.21.1"
+    "minecraft": ">=1.21 <1.21.2"
   }
 }
