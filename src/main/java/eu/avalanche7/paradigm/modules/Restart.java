@@ -125,7 +125,7 @@ public class Restart implements ParadigmModule {
         }
     }
 
-    private void scheduleNextRestart() {
+    public void scheduleNextRestart() {
         cancelAndCleanup();
         restartInProgress.set(true);
         RestartConfigHandler.Config config = services.getRestartConfig();

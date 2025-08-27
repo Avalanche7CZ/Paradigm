@@ -90,6 +90,10 @@ public class reload implements ParadigmModule {
                 break;
             case "restart":
                 RestartConfigHandler.load();
+                Paradigm.getModules().stream()
+                    .filter(m -> m instanceof eu.avalanche7.paradigm.modules.Restart)
+                    .findFirst()
+                    .ifPresent(m -> ((eu.avalanche7.paradigm.modules.Restart)m).scheduleNextRestart());
                 result.append("✔ &aRestart config reloaded!");
                 break;
             case "customcommands":
@@ -103,6 +107,10 @@ public class reload implements ParadigmModule {
                 MOTDConfigHandler.load();
                 MentionConfigHandler.load();
                 RestartConfigHandler.load();
+                Paradigm.getModules().stream()
+                    .filter(m -> m instanceof eu.avalanche7.paradigm.modules.Restart)
+                    .findFirst()
+                    .ifPresent(m -> ((eu.avalanche7.paradigm.modules.Restart)m).scheduleNextRestart());
                 services.getCmConfig().reloadCommands();
                 Paradigm.getModules().stream()
                     .filter(m -> m instanceof eu.avalanche7.paradigm.modules.Announcements)
