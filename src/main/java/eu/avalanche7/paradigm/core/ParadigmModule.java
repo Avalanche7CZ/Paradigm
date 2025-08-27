@@ -1,7 +1,6 @@
 package eu.avalanche7.paradigm.core;
 
 import com.mojang.brigadier.CommandDispatcher;
-import net.minecraft.commands.CommandSourceStack;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -14,7 +13,7 @@ public interface ParadigmModule {
     void onEnable(Services services);
     void onDisable(Services services);
     void onServerStopping(ServerStoppingEvent event, Services services);
-    void registerCommands(CommandDispatcher<CommandSourceStack> dispatcher, Services services);
+    void registerCommands(CommandDispatcher<?> dispatcher, Services services);
     void registerEventListeners(IEventBus forgeEventBus, Services services);
     boolean isEnabled(Services services);
 }

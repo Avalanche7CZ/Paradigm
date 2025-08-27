@@ -1,7 +1,7 @@
 package eu.avalanche7.paradigm.core;
 
 import eu.avalanche7.paradigm.configs.*;
-import eu.avalanche7.paradigm.platform.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.*;
 import org.slf4j.Logger;
 
@@ -11,7 +11,7 @@ public class Services {
     private final MainConfigHandler.Config mainConfig;
     private final AnnouncementsConfigHandler.Config announcementsConfig;
     private final MOTDConfigHandler.Config motdConfig;
-    private final MentionConfigHandler mentionConfig;
+    private final MentionConfigHandler.Config mentionConfig;
     private final RestartConfigHandler.Config restartConfig;
     private final ChatConfigHandler.Config chatConfig;
     private final CMConfig cmConfigInstance;
@@ -22,7 +22,6 @@ public class Services {
     private final Placeholders placeholdersInstance;
     private final TaskScheduler taskSchedulerInstance;
     private final GroupChatManager groupChatManagerInstance;
-    private final CustomToastManager customToastManagerInstance;
     private final IPlatformAdapter platformAdapter;
     private final CooldownConfigHandler cooldownConfigHandler;
 
@@ -31,12 +30,11 @@ public class Services {
             MainConfigHandler.Config mainConfig,
             AnnouncementsConfigHandler.Config announcementsConfig,
             MOTDConfigHandler.Config motdConfig,
-            MentionConfigHandler mentionConfig,
+            MentionConfigHandler.Config mentionConfig,
             RestartConfigHandler.Config restartConfig,
             ChatConfigHandler.Config chatConfig,
             CMConfig cmConfig,
             GroupChatManager groupChatManager,
-            CustomToastManager customToastManager,
             DebugLogger debugLogger,
             Lang lang,
             MessageParser messageParser,
@@ -55,7 +53,6 @@ public class Services {
         this.chatConfig = chatConfig;
         this.cmConfigInstance = cmConfig;
         this.groupChatManagerInstance = groupChatManager;
-        this.customToastManagerInstance = customToastManager;
         this.debugLoggerInstance = debugLogger;
         this.langInstance = lang;
         this.messageParserInstance = messageParser;
@@ -64,10 +61,17 @@ public class Services {
         this.taskSchedulerInstance = taskScheduler;
         this.platformAdapter = platformAdapter;
         this.cooldownConfigHandler = cooldownConfigHandler;
+
+        initializeJsonValidators();
     }
 
-    public CustomToastManager getCustomToastManager() {
-        return customToastManagerInstance;
+    private void initializeJsonValidators() {
+        ChatConfigHandler.setJsonValidator(debugLoggerInstance);
+        AnnouncementsConfigHandler.setJsonValidator(debugLoggerInstance);
+        MentionConfigHandler.setJsonValidator(debugLoggerInstance);
+        RestartConfigHandler.setJsonValidator(debugLoggerInstance);
+        MainConfigHandler.setJsonValidator(debugLoggerInstance);
+        MOTDConfigHandler.setJsonValidator(debugLoggerInstance);
     }
 
     public Logger getLogger() {
@@ -99,27 +103,27 @@ public class Services {
     }
 
     public MainConfigHandler.Config getMainConfig() {
-        return mainConfig;
+        return MainConfigHandler.CONFIG;
     }
 
     public AnnouncementsConfigHandler.Config getAnnouncementsConfig() {
-        return announcementsConfig;
+        return AnnouncementsConfigHandler.CONFIG;
     }
 
     public MOTDConfigHandler.Config getMotdConfig() {
-        return motdConfig;
+        return MOTDConfigHandler.CONFIG;
     }
 
-    public MentionConfigHandler getMentionConfig() {
-        return mentionConfig;
+    public MentionConfigHandler.Config getMentionConfig() {
+        return MentionConfigHandler.CONFIG;
     }
 
     public RestartConfigHandler.Config getRestartConfig() {
-        return restartConfig;
+        return RestartConfigHandler.CONFIG;
     }
 
     public ChatConfigHandler.Config getChatConfig() {
-        return chatConfig;
+        return ChatConfigHandler.CONFIG;
     }
 
     public CMConfig getCmConfig() {

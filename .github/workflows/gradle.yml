@@ -1,10 +1,10 @@
-name: JCIG-1.19.2
+name: JCIG-1.21.1
 
 on:
   push:
-    branches: [ "1.19.2" ]
+    branches: [ "1.21.1" ]
   pull_request:
-    branches: [ "1.19.2" ]
+    branches: [ "1.21.1" ]
 
 jobs:
   build:
@@ -15,10 +15,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Set up JDK 17
+    - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
-        java-version: '17'
+        java-version: '21'
         distribution: 'temurin'
 
     - name: Setup Gradle
@@ -38,10 +38,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Set up JDK 17
+    - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
-        java-version: '17'
+        java-version: '21'
         distribution: 'temurin'
 
     - name: Generate and submit dependency graph

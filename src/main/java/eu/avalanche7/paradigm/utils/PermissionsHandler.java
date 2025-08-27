@@ -18,6 +18,7 @@ public class PermissionsHandler {
     public static final String ACTIONBAR_PERMISSION = "paradigm.actionbar";
     public static final String TITLE_PERMISSION = "paradigm.title";
     public static final String BOSSBAR_PERMISSION = "paradigm.bossbar";
+    public static final String RELOAD_PERMISSION = "paradigm.reload";
 
     public static final int MENTION_EVERYONE_PERMISSION_LEVEL = 2;
     public static final int MENTION_PLAYER_PERMISSION_LEVEL = 2;
@@ -27,6 +28,7 @@ public class PermissionsHandler {
     public static final int ACTIONBAR_PERMISSION_LEVEL = 2;
     public static final int TITLE_PERMISSION_LEVEL = 2;
     public static final int BOSSBAR_PERMISSION_LEVEL = 2;
+    public static final int RELOAD_PERMISSION_LEVEL = 2;
 
     private PermissionChecker checker;
 
@@ -59,6 +61,13 @@ public class PermissionsHandler {
             initialize();
         }
         return checker.hasPermission(player, permission);
+    }
+
+    /**
+     * Checks if the player has permission to use the reload command.
+     */
+    public boolean hasReloadPermission(ServerPlayer player) {
+        return hasPermission(player, RELOAD_PERMISSION);
     }
 
     public interface PermissionChecker {
@@ -106,6 +115,7 @@ public class PermissionsHandler {
                 case TITLE_PERMISSION -> TITLE_PERMISSION_LEVEL;
                 case BOSSBAR_PERMISSION -> BOSSBAR_PERMISSION_LEVEL;
                 case RESTART_MANAGE_PERMISSION -> RESTART_MANAGE_PERMISSION_LEVEL;
+                case RELOAD_PERMISSION -> RELOAD_PERMISSION_LEVEL;
                 default -> 0;
             };
         }

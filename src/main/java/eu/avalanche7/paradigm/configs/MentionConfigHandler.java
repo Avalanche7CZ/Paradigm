@@ -3,6 +3,8 @@ package eu.avalanche7.paradigm.configs;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import eu.avalanche7.paradigm.Paradigm;
+import eu.avalanche7.paradigm.utils.DebugLogger;
+import eu.avalanche7.paradigm.utils.JsonValidator;
 import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -19,6 +22,11 @@ public class MentionConfigHandler {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     private static final Path CONFIG_PATH = FMLPaths.CONFIGDIR.get().resolve("paradigm/mentions.json");
     public static Config CONFIG = new Config();
+    private static JsonValidator jsonValidator;
+
+    public static void setJsonValidator(DebugLogger debugLogger) {
+        jsonValidator = new JsonValidator(debugLogger);
+    }
 
     public static class Config {
         public ConfigEntry<String> MENTION_SYMBOL = new ConfigEntry<>(
@@ -45,23 +53,83 @@ public class MentionConfigHandler {
     }
 
     public static void load() {
+        Config defaultConfig = new Config();
+
         if (Files.exists(CONFIG_PATH)) {
             try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
-                Config loadedConfig = GSON.fromJson(reader, Config.class);
-                if(loadedConfig != null) {
-                    CONFIG.MENTION_SYMBOL = loadedConfig.MENTION_SYMBOL != null ? loadedConfig.MENTION_SYMBOL : CONFIG.MENTION_SYMBOL;
-                    CONFIG.INDIVIDUAL_MENTION_MESSAGE = loadedConfig.INDIVIDUAL_MENTION_MESSAGE != null ? loadedConfig.INDIVIDUAL_MENTION_MESSAGE : CONFIG.INDIVIDUAL_MENTION_MESSAGE;
-                    CONFIG.EVERYONE_MENTION_MESSAGE = loadedConfig.EVERYONE_MENTION_MESSAGE != null ? loadedConfig.EVERYONE_MENTION_MESSAGE : CONFIG.EVERYONE_MENTION_MESSAGE;
-                    CONFIG.INDIVIDUAL_TITLE_MESSAGE = loadedConfig.INDIVIDUAL_TITLE_MESSAGE != null ? loadedConfig.INDIVIDUAL_TITLE_MESSAGE : CONFIG.INDIVIDUAL_TITLE_MESSAGE;
-                    CONFIG.EVERYONE_TITLE_MESSAGE = loadedConfig.EVERYONE_TITLE_MESSAGE != null ? loadedConfig.EVERYONE_TITLE_MESSAGE : CONFIG.EVERYONE_TITLE_MESSAGE;
-                    CONFIG.INDIVIDUAL_MENTION_RATE_LIMIT = loadedConfig.INDIVIDUAL_MENTION_RATE_LIMIT != null ? loadedConfig.INDIVIDUAL_MENTION_RATE_LIMIT : CONFIG.INDIVIDUAL_MENTION_RATE_LIMIT;
-                    CONFIG.EVERYONE_MENTION_RATE_LIMIT = loadedConfig.EVERYONE_MENTION_RATE_LIMIT != null ? loadedConfig.EVERYONE_MENTION_RATE_LIMIT : CONFIG.EVERYONE_MENTION_RATE_LIMIT;
+                StringBuilder content = new StringBuilder();
+                int c;
+                while ((c = reader.read()) != -1) {
+                    content.append((char) c);
+                }
+
+                if (jsonValidator != null) {
+                    JsonValidator.ValidationResult result = jsonValidator.validateAndFix(content.toString());
+                    if (result.isValid()) {
+                        if (result.hasIssues()) {
+                            LOGGER.info("[Paradigm] Fixed JSON syntax issues in mentions.json: " + result.getIssuesSummary());
+                            LOGGER.info("[Paradigm] Saving corrected version to preserve user values");
+
+                            try (FileWriter writer = new FileWriter(CONFIG_PATH.toFile())) {
+                                writer.write(result.getFixedJson());
+                                LOGGER.info("[Paradigm] Saved corrected mentions.json with preserved user values");
+                            } catch (IOException saveError) {
+                                LOGGER.warn("[Paradigm] Failed to save corrected file: " + saveError.getMessage());
+                            }
+                        }
+
+                        Config loadedConfig = GSON.fromJson(result.getFixedJson(), Config.class);
+                        if (loadedConfig != null) {
+                            mergeConfigs(defaultConfig, loadedConfig);
+                            LOGGER.info("[Paradigm] Successfully loaded mentions.json configuration");
+                        }
+                    } else {
+                        LOGGER.warn("[Paradigm] Critical JSON syntax errors in mentions.json: " + result.getMessage());
+                        LOGGER.warn("[Paradigm] Please fix the JSON syntax manually. Using default values for this session.");
+                        LOGGER.warn("[Paradigm] Your file has NOT been modified - fix the syntax and restart the server.");
+                    }
+                } else {
+                    Config loadedConfig = GSON.fromJson(content.toString(), Config.class);
+                    if (loadedConfig != null) {
+                        mergeConfigs(defaultConfig, loadedConfig);
+                    }
                 }
             } catch (Exception e) {
-                LOGGER.warn("[Paradigm] Could not parse mentions.json, it may be corrupt. A new one will be generated.", e);
+                LOGGER.warn("[Paradigm] Could not parse mentions.json, using defaults and regenerating file.", e);
             }
+        } else {
+            LOGGER.info("[Paradigm] mentions.json not found, generating with default values.");
         }
-        save();
+
+        CONFIG = defaultConfig;
+
+        if (!Files.exists(CONFIG_PATH)) {
+            save();
+            LOGGER.info("[Paradigm] Generated new mentions.json with default values.");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void mergeConfigs(Config defaults, Config loaded) {
+        try {
+            Field[] fields = Config.class.getDeclaredFields();
+            for (Field field : fields) {
+                if (field.getType() == ConfigEntry.class) {
+                    field.setAccessible(true);
+                    ConfigEntry<?> loadedEntry = (ConfigEntry<?>) field.get(loaded);
+                    ConfigEntry<Object> defaultEntry = (ConfigEntry<Object>) field.get(defaults);
+
+                    if (loadedEntry != null && loadedEntry.value != null) {
+                        defaultEntry.value = loadedEntry.value;
+                        LOGGER.debug("[Paradigm] Preserved user setting for: " + field.getName());
+                    } else {
+                        LOGGER.debug("[Paradigm] Using default value for new/missing config: " + field.getName());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error("[Paradigm] Error merging mention configs", e);
+        }
     }
 
     public static void save() {

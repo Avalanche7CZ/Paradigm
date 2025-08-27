@@ -31,12 +31,12 @@ public class TaskScheduler {
         }
     }
 
-    public void scheduleAtFixedRate(Runnable task, long initialDelay, long period, TimeUnit unit) {
+    public ScheduledFuture<?> scheduleAtFixedRate(Runnable task, long initialDelay, long period, TimeUnit unit) {
         if (executorService == null || executorService.isShutdown()) {
             debugLogger.debugLog("TaskScheduler: Cannot schedule task, executor service is not running.");
-            return;
+            return null;
         }
-        executorService.scheduleAtFixedRate(() -> syncExecute(task), initialDelay, period, unit);
+        return executorService.scheduleAtFixedRate(() -> syncExecute(task), initialDelay, period, unit);
     }
 
     public ScheduledFuture<?> schedule(Runnable task, long delay, TimeUnit unit) {

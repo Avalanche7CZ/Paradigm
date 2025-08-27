@@ -15,16 +15,18 @@ public class DebugLogger {
 
     public DebugLogger(MainConfigHandler.Config mainConfig) {
         this.mainConfig = mainConfig;
+        boolean debugEnabledInConfig = mainConfig != null && mainConfig.debugEnable.get();
         if (!hasLoggedStatus.getAndSet(true)) {
-            boolean debugEnabledInConfig = mainConfig != null && mainConfig.debugEnable.get();
-
             if (debugEnabledInConfig) {
-                SLF4J_LOGGER.info("[Paradigm] Debug logging is ENABLED. Verbose logs will now be shown.");
+                SLF4J_LOGGER.info("[Paradigm] Debug logging is ENABLED. Verbose logs will now be shown. (Check both console and logs/latest.log)");
                 Configurator.setLevel("eu.avalanche7.paradigm", Level.DEBUG);
             } else {
                 SLF4J_LOGGER.info("[Paradigm] Debug logging is DISABLED. To see verbose logs, enable 'debugEnable' in the main config.");
                 Configurator.setLevel("eu.avalanche7.paradigm", Level.INFO);
+                SLF4J_LOGGER.warn("[Paradigm] DebugLogger constructed with debug disabled! No debug logs will be shown.");
             }
+        } else if (!debugEnabledInConfig) {
+            SLF4J_LOGGER.warn("[Paradigm] DebugLogger constructed with debug disabled! No debug logs will be shown.");
         }
     }
 

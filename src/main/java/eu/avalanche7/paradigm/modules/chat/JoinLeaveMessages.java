@@ -4,9 +4,10 @@ import com.mojang.brigadier.CommandDispatcher;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.platform.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import net.minecraft.commands.CommandSourceStack;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.stats.Stats;
 import net.minecraftforge.event.entity.player.PlayerEvent;
@@ -60,7 +61,7 @@ public class JoinLeaveMessages implements ParadigmModule {
     }
 
     @Override
-    public void registerCommands(CommandDispatcher<CommandSourceStack> dispatcher, Services services) {
+    public void registerCommands(CommandDispatcher<?> dispatcher, Services services) {
     }
 
     @Override
@@ -90,9 +91,10 @@ public class JoinLeaveMessages implements ParadigmModule {
         }
 
         if (messageFormat != null) {
-            Component formattedMessage = services.getMessageParser().parseMessage(messageFormat, player);
+            IPlayer iPlayer = eu.avalanche7.paradigm.platform.MinecraftPlayer.of(player);
+            IComponent formattedMessage = services.getMessageParser().parseMessage(messageFormat, iPlayer);
             platform.broadcastSystemMessage(formattedMessage);
-            services.getDebugLogger().debugLog(logMessage + platform.getPlayerName(player));
+            services.getDebugLogger().debugLog(logMessage + platform.getPlayerName(iPlayer));
         }
     }
 
@@ -106,9 +108,10 @@ public class JoinLeaveMessages implements ParadigmModule {
 
         if (chatConfig.enableJoinLeaveMessages.get()) {
             String leaveMessageFormat = chatConfig.leaveMessageFormat.get();
-            Component formattedMessage = services.getMessageParser().parseMessage(leaveMessageFormat, player);
+            IPlayer iPlayer = eu.avalanche7.paradigm.platform.MinecraftPlayer.of(player);
+            IComponent formattedMessage = services.getMessageParser().parseMessage(leaveMessageFormat, iPlayer);
             platform.broadcastSystemMessage(formattedMessage);
-            services.getDebugLogger().debugLog("Sent leave message for " + platform.getPlayerName(player));
+            services.getDebugLogger().debugLog("Sent leave message for " + platform.getPlayerName(iPlayer));
         }
     }
 }

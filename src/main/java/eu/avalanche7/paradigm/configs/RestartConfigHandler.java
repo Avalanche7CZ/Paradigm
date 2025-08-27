@@ -3,6 +3,8 @@ package eu.avalanche7.paradigm.configs;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import eu.avalanche7.paradigm.Paradigm;
+import eu.avalanche7.paradigm.utils.DebugLogger;
+import eu.avalanche7.paradigm.utils.JsonValidator;
 import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -19,8 +22,13 @@ public class RestartConfigHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Paradigm.MOD_ID);
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
-    private static final Path CONFIG_PATH = FMLPaths.CONFIGDIR.get().resolve("paradigm/restarts.json");
+    private static final Path CONFIG_PATH = FMLPaths.CONFIGDIR.get().resolve("paradigm/restart.json");
     public static Config CONFIG = new Config();
+    private static JsonValidator jsonValidator;
+
+    public static void setJsonValidator(DebugLogger debugLogger) {
+        jsonValidator = new JsonValidator(debugLogger);
+    }
 
     public static class Config {
         public ConfigEntry<String> restartType = new ConfigEntry<>(
@@ -86,31 +94,82 @@ public class RestartConfigHandler {
     }
 
     public static void load() {
+        Config defaultConfig = new Config();
+
         if (Files.exists(CONFIG_PATH)) {
             try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
-                Config loadedConfig = GSON.fromJson(reader, Config.class);
-                if (loadedConfig != null) {
-                    CONFIG.restartType = loadedConfig.restartType != null ? loadedConfig.restartType : CONFIG.restartType;
-                    CONFIG.restartInterval = loadedConfig.restartInterval != null ? loadedConfig.restartInterval : CONFIG.restartInterval;
-                    CONFIG.realTimeInterval = loadedConfig.realTimeInterval != null ? loadedConfig.realTimeInterval : CONFIG.realTimeInterval;
-                    CONFIG.bossbarEnabled = loadedConfig.bossbarEnabled != null ? loadedConfig.bossbarEnabled : CONFIG.bossbarEnabled;
-                    CONFIG.bossBarMessage = loadedConfig.bossBarMessage != null ? loadedConfig.bossBarMessage : CONFIG.bossBarMessage;
-                    CONFIG.timerUseChat = loadedConfig.timerUseChat != null ? loadedConfig.timerUseChat : CONFIG.timerUseChat;
-                    CONFIG.BroadcastMessage = loadedConfig.BroadcastMessage != null ? loadedConfig.BroadcastMessage : CONFIG.BroadcastMessage;
-                    CONFIG.timerBroadcast = loadedConfig.timerBroadcast != null ? loadedConfig.timerBroadcast : CONFIG.timerBroadcast;
-                    CONFIG.defaultRestartReason = loadedConfig.defaultRestartReason != null ? loadedConfig.defaultRestartReason : CONFIG.defaultRestartReason;
-                    CONFIG.playSoundEnabled = loadedConfig.playSoundEnabled != null ? loadedConfig.playSoundEnabled : CONFIG.playSoundEnabled;
-                    CONFIG.playSoundString = loadedConfig.playSoundString != null ? loadedConfig.playSoundString : CONFIG.playSoundString;
-                    CONFIG.playSoundFirstTime = loadedConfig.playSoundFirstTime != null ? loadedConfig.playSoundFirstTime : CONFIG.playSoundFirstTime;
-                    CONFIG.titleEnabled = loadedConfig.titleEnabled != null ? loadedConfig.titleEnabled : CONFIG.titleEnabled;
-                    CONFIG.titleStayTime = loadedConfig.titleStayTime != null ? loadedConfig.titleStayTime : CONFIG.titleStayTime;
-                    CONFIG.titleMessage = loadedConfig.titleMessage != null ? loadedConfig.titleMessage : CONFIG.titleMessage;
+                StringBuilder content = new StringBuilder();
+                int c;
+                while ((c = reader.read()) != -1) {
+                    content.append((char) c);
+                }
+
+                if (jsonValidator != null) {
+                    JsonValidator.ValidationResult result = jsonValidator.validateAndFix(content.toString());
+                    if (result.isValid()) {
+                        if (result.hasIssues()) {
+                            LOGGER.info("[Paradigm] Fixed JSON syntax issues in restart.json: " + result.getIssuesSummary());
+                            LOGGER.info("[Paradigm] Saving corrected version to preserve user values");
+                            try (FileWriter writer = new FileWriter(CONFIG_PATH.toFile())) {
+                                writer.write(result.getFixedJson());
+                                LOGGER.info("[Paradigm] Saved corrected restart.json with preserved user values");
+                            } catch (IOException saveError) {
+                                LOGGER.warn("[Paradigm] Failed to save corrected file: " + saveError.getMessage());
+                            }
+                        }
+
+                        Config loadedConfig = GSON.fromJson(result.getFixedJson(), Config.class);
+                        if (loadedConfig != null) {
+                            mergeConfigs(defaultConfig, loadedConfig);
+                            LOGGER.info("[Paradigm] Successfully loaded restart.json configuration");
+                        }
+                    } else {
+                        LOGGER.warn("[Paradigm] Critical JSON syntax errors in restart.json: " + result.getMessage());
+                        LOGGER.warn("[Paradigm] Please fix the JSON syntax manually. Using default values for this session.");
+                        LOGGER.warn("[Paradigm] Your file has NOT been modified - fix the syntax and restart the server.");
+                    }
+                } else {
+                    Config loadedConfig = GSON.fromJson(content.toString(), Config.class);
+                    if (loadedConfig != null) {
+                        mergeConfigs(defaultConfig, loadedConfig);
+                    }
                 }
             } catch (Exception e) {
-                LOGGER.warn("[Paradigm] Could not parse restarts.json, it may be corrupt. A new one will be generated.", e);
+                LOGGER.warn("[Paradigm] Could not parse restart.json, using defaults and regenerating file.", e);
             }
+        } else {
+            LOGGER.info("[Paradigm] restart.json not found, generating with default values.");
         }
-        save();
+
+        CONFIG = defaultConfig;
+
+        if (!Files.exists(CONFIG_PATH)) {
+            save();
+            LOGGER.info("[Paradigm] Generated new restart.json with default values.");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void mergeConfigs(Config defaults, Config loaded) {
+        try {
+            Field[] fields = Config.class.getDeclaredFields();
+            for (Field field : fields) {
+                if (field.getType() == ConfigEntry.class) {
+                    field.setAccessible(true);
+                    ConfigEntry<?> loadedEntry = (ConfigEntry<?>) field.get(loaded);
+                    ConfigEntry<Object> defaultEntry = (ConfigEntry<Object>) field.get(defaults);
+
+                    if (loadedEntry != null && loadedEntry.value != null) {
+                        defaultEntry.value = loadedEntry.value;
+                        LOGGER.debug("[Paradigm] Preserved user setting for: " + field.getName());
+                    } else {
+                        LOGGER.debug("[Paradigm] Using default value for new/missing config: " + field.getName());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error("[Paradigm] Error merging restart configs", e);
+        }
     }
 
     public static void save() {

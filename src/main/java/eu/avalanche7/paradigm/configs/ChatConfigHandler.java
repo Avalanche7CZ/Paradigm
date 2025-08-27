@@ -3,6 +3,8 @@ package eu.avalanche7.paradigm.configs;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import eu.avalanche7.paradigm.Paradigm;
+import eu.avalanche7.paradigm.utils.DebugLogger;
+import eu.avalanche7.paradigm.utils.JsonValidator;
 import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -19,6 +22,11 @@ public class ChatConfigHandler {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     private static final Path CONFIG_PATH = FMLPaths.CONFIGDIR.get().resolve("paradigm/chat.json");
     public static Config CONFIG = new Config();
+    private static JsonValidator jsonValidator;
+
+    public static void setJsonValidator(DebugLogger debugLogger) {
+        jsonValidator = new JsonValidator(debugLogger);
+    }
 
     public static class Config {
         public ConfigEntry<Boolean> enableStaffChat = new ConfigEntry<>(
@@ -60,25 +68,83 @@ public class ChatConfigHandler {
     }
 
     public static void load() {
+        Config defaultConfig = new Config();
+
         if (Files.exists(CONFIG_PATH)) {
             try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
-                Config loadedConfig = GSON.fromJson(reader, Config.class);
-                if (loadedConfig != null) {
-                    CONFIG.enableStaffChat = loadedConfig.enableStaffChat != null ? loadedConfig.enableStaffChat : CONFIG.enableStaffChat;
-                    CONFIG.staffChatFormat = loadedConfig.staffChatFormat != null ? loadedConfig.staffChatFormat : CONFIG.staffChatFormat;
-                    CONFIG.enableStaffBossBar = loadedConfig.enableStaffBossBar != null ? loadedConfig.enableStaffBossBar : CONFIG.enableStaffBossBar;
-                    CONFIG.enableGroupChatToasts = loadedConfig.enableGroupChatToasts != null ? loadedConfig.enableGroupChatToasts : CONFIG.enableGroupChatToasts;
-                    CONFIG.enableJoinLeaveMessages = loadedConfig.enableJoinLeaveMessages != null ? loadedConfig.enableJoinLeaveMessages : CONFIG.enableJoinLeaveMessages;
-                    CONFIG.joinMessageFormat = loadedConfig.joinMessageFormat != null ? loadedConfig.joinMessageFormat : CONFIG.joinMessageFormat;
-                    CONFIG.leaveMessageFormat = loadedConfig.leaveMessageFormat != null ? loadedConfig.leaveMessageFormat : CONFIG.leaveMessageFormat;
-                    CONFIG.enableFirstJoinMessage = loadedConfig.enableFirstJoinMessage != null ? loadedConfig.enableFirstJoinMessage : CONFIG.enableFirstJoinMessage;
-                    CONFIG.firstJoinMessageFormat = loadedConfig.firstJoinMessageFormat != null ? loadedConfig.firstJoinMessageFormat : CONFIG.firstJoinMessageFormat;
+                StringBuilder content = new StringBuilder();
+                int c;
+                while ((c = reader.read()) != -1) {
+                    content.append((char) c);
+                }
+
+                if (jsonValidator != null) {
+                    JsonValidator.ValidationResult result = jsonValidator.validateAndFix(content.toString());
+                    if (result.isValid()) {
+                        if (result.hasIssues()) {
+                            LOGGER.info("[Paradigm] Fixed JSON syntax issues in chat.json: " + result.getIssuesSummary());
+                            LOGGER.info("[Paradigm] Saving corrected version to preserve user values");
+
+                            try (FileWriter writer = new FileWriter(CONFIG_PATH.toFile())) {
+                                writer.write(result.getFixedJson());
+                                LOGGER.info("[Paradigm] Saved corrected chat.json with preserved user values");
+                            } catch (IOException saveError) {
+                                LOGGER.warn("[Paradigm] Failed to save corrected file: " + saveError.getMessage());
+                            }
+                        }
+
+                        Config loadedConfig = GSON.fromJson(result.getFixedJson(), Config.class);
+                        if (loadedConfig != null) {
+                            mergeConfigs(defaultConfig, loadedConfig);
+                            LOGGER.info("[Paradigm] Successfully loaded chat.json configuration");
+                        }
+                    } else {
+                        LOGGER.warn("[Paradigm] Critical JSON syntax errors in chat.json: " + result.getMessage());
+                        LOGGER.warn("[Paradigm] Please fix the JSON syntax manually. Using default values for this session.");
+                        LOGGER.warn("[Paradigm] Your file has NOT been modified - fix the syntax and restart the server.");
+                    }
+                } else {
+                    Config loadedConfig = GSON.fromJson(content.toString(), Config.class);
+                    if (loadedConfig != null) {
+                        mergeConfigs(defaultConfig, loadedConfig);
+                    }
                 }
             } catch (Exception e) {
-                LOGGER.warn("[Paradigm] Could not parse chat.json, it may be corrupt or from an old version. A new one will be generated with defaults.", e);
+                LOGGER.warn("[Paradigm] Could not parse chat.json, using defaults and regenerating file.", e);
             }
+        } else {
+            LOGGER.info("[Paradigm] chat.json not found, generating with default values.");
         }
-        save();
+
+        CONFIG = defaultConfig;
+
+        if (!Files.exists(CONFIG_PATH)) {
+            save();
+            LOGGER.info("[Paradigm] Generated new chat.json with default values.");
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void mergeConfigs(Config defaults, Config loaded) {
+        try {
+            Field[] fields = Config.class.getDeclaredFields();
+            for (Field field : fields) {
+                if (field.getType() == ConfigEntry.class) {
+                    field.setAccessible(true);
+                    ConfigEntry<?> loadedEntry = (ConfigEntry<?>) field.get(loaded);
+                    ConfigEntry<Object> defaultEntry = (ConfigEntry<Object>) field.get(defaults);
+
+                    if (loadedEntry != null && loadedEntry.value != null) {
+                        defaultEntry.value = loadedEntry.value;
+                        LOGGER.debug("[Paradigm] Preserved user setting for: " + field.getName());
+                    } else {
+                        LOGGER.debug("[Paradigm] Using default value for new/missing config: " + field.getName());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error("[Paradigm] Error merging chat configs", e);
+        }
     }
 
     public static void save() {
