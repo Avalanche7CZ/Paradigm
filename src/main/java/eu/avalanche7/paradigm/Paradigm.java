@@ -180,11 +180,13 @@ INSTANCE = this;
             String version = modContainer.getModInfo().getVersion().toString();
             String displayName = modContainer.getModInfo().getDisplayName();
             LOGGER.info("==================================================");
-            LOGGER.info("{} - Version {}", displayName, version);
+            LOGGER.info("{} - Version {}", displayName, version + " - FORGE");
             LOGGER.info("Author: Avalanche7CZ");
             LOGGER.info("Discord: https://discord.com/invite/qZDcQdEFqQ");
             LOGGER.info("==================================================");
-            UpdateChecker.checkForUpdates(version, LOGGER);
+            String mcVersion = net.minecraft.SharedConstants.getCurrentVersion().getName();
+            String loader = "forge";
+            UpdateChecker.checkForUpdates(version, mcVersion, loader, LOGGER);
         });
     }
 
@@ -231,8 +233,8 @@ INSTANCE = this;
         private static final String MODRINTH_PROJECT_PAGE = "https://modrinth.com/mod/" + MODRINTH_PROJECT_ID;
         private static final String CURSEFORGE_PROJECT_PAGE = "https://www.curseforge.com/minecraft/mc-mods/" + CURSEFORGE_SLUG;
 
-        public static void checkForUpdates(String currentVersion, Logger logger) {
-            boolean foundOnModrinth = checkModrinth(currentVersion, logger);
+        public static void checkForUpdates(String currentVersion, String mcVersion, String loader, Logger logger) {
+            boolean foundOnModrinth = checkModrinth(currentVersion, mcVersion, loader, logger);
             if (!foundOnModrinth) {
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(URI.create(LATEST_VERSION_URL).toURL().openStream(), StandardCharsets.UTF_8))) {
                     String latestVersion = reader.readLine();
@@ -247,10 +249,10 @@ INSTANCE = this;
             }
         }
 
-        private static boolean checkModrinth(String currentVersion, Logger logger) {
+        private static boolean checkModrinth(String currentVersion, String mcVersion, String loader, Logger logger) {
             HttpURLConnection conn = null;
             try {
-                String apiUrl = "https://api.modrinth.com/v2/project/" + MODRINTH_PROJECT_ID + "/version";
+                String apiUrl = "https://api.modrinth.com/v2/project/" + MODRINTH_PROJECT_ID + "/version?game_versions=" + mcVersion + "&loaders=" + loader;
                 conn = (HttpURLConnection) URI.create(apiUrl).toURL().openConnection();
                 conn.setRequestProperty("User-Agent", "Paradigm-UpdateChecker/1.0 (+https://modrinth.com/mod/" + MODRINTH_PROJECT_ID + ")");
                 conn.setConnectTimeout(4000);
@@ -260,8 +262,6 @@ INSTANCE = this;
                     JsonArray arr = JsonParser.parseReader(br).getAsJsonArray();
                     if (arr.isEmpty()) return false;
 
-                    String mcVersion = getMinecraftVersionSafe();
-                    String loader = "forge";
 
                     String newestCompatible = null;
                     String publishedAtNewest = null;

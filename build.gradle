@@ -107,6 +107,7 @@ tasks.named('processResources', ProcessResources).configure {
 
 
 tasks.named('jar', Jar).configure {
+    archiveFileName.set("Paradigm-${minecraft_version}-${mod_version}.jar")
     manifest {
         attributes([
                 "Specification-Title": mod_id,
