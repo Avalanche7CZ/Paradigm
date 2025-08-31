@@ -1,4 +1,4 @@
-package eu.avalanche7.paradigm.platform;
+package eu.avalanche7.paradigm.platform.Interfaces;
 
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.utils.MessageParser;

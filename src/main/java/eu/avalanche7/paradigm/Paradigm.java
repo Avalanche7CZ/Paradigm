@@ -8,7 +8,7 @@ import eu.avalanche7.paradigm.modules.*;
 import eu.avalanche7.paradigm.modules.chat.GroupChat;
 import eu.avalanche7.paradigm.modules.chat.MOTD;
 import eu.avalanche7.paradigm.modules.chat.StaffChat;
-import eu.avalanche7.paradigm.platform.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.PlatformAdapterImpl;
 import eu.avalanche7.paradigm.utils.*;
 import net.fabricmc.api.DedicatedServerModInitializer;
