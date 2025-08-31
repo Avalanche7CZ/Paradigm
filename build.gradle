@@ -129,7 +129,7 @@ tasks.named('jar', Jar).configure {
                 "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
         ])
     }
-    archiveFileName = "Paradigm-18-dev-${getCommitId()}.jar"
+    archiveFileName = "Paradigm-${mod_version}-${getCommitId()}.jar"
 
     finalizedBy 'reobfJar'
 }

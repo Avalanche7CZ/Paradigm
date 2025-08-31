@@ -1,7 +1,7 @@
 package eu.avalanche7.paradigm.core;
 
 import eu.avalanche7.paradigm.configs.*;
-import eu.avalanche7.paradigm.platform.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.*;
 import org.slf4j.Logger;
 
@@ -61,6 +61,17 @@ public class Services {
         this.taskSchedulerInstance = taskScheduler;
         this.platformAdapter = platformAdapter;
         this.cooldownConfigHandler = cooldownConfigHandler;
+
+        initializeJsonValidators();
+    }
+
+    private void initializeJsonValidators() {
+        ChatConfigHandler.setJsonValidator(debugLoggerInstance);
+        AnnouncementsConfigHandler.setJsonValidator(debugLoggerInstance);
+        MentionConfigHandler.setJsonValidator(debugLoggerInstance);
+        RestartConfigHandler.setJsonValidator(debugLoggerInstance);
+        MainConfigHandler.setJsonValidator(debugLoggerInstance);
+        MOTDConfigHandler.setJsonValidator(debugLoggerInstance);
     }
 
     public Logger getLogger() {
@@ -92,27 +103,27 @@ public class Services {
     }
 
     public MainConfigHandler.Config getMainConfig() {
-        return mainConfig;
+        return MainConfigHandler.CONFIG;
     }
 
     public AnnouncementsConfigHandler.Config getAnnouncementsConfig() {
-        return announcementsConfig;
+        return AnnouncementsConfigHandler.CONFIG;
     }
 
     public MOTDConfigHandler.Config getMotdConfig() {
-        return motdConfig;
+        return MOTDConfigHandler.CONFIG;
     }
 
     public MentionConfigHandler.Config getMentionConfig() {
-        return mentionConfig;
+        return MentionConfigHandler.CONFIG;
     }
 
     public RestartConfigHandler.Config getRestartConfig() {
-        return restartConfig;
+        return RestartConfigHandler.CONFIG;
     }
 
     public ChatConfigHandler.Config getChatConfig() {
-        return chatConfig;
+        return ChatConfigHandler.CONFIG;
     }
 
     public CMConfig getCmConfig() {
