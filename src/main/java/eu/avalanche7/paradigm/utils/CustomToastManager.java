@@ -31,7 +31,7 @@ public class CustomToastManager {
             return false;
         }
 
-        Text title = messageParser.parseMessage(definition.title, player);
+        Text title = messageParser.parseMessage(definition.title, services.getPlatformAdapter().wrapPlayer(player)).getOriginalText();
         AdvancementFrame frame;
         try {
             frame = AdvancementFrame.valueOf(definition.frame.toUpperCase());

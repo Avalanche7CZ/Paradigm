@@ -3,7 +3,8 @@
   "package": "eu.avalanche7.paradigm.mixin",
   "compatibilityLevel": "JAVA_17",
   "mixins": [
-    "PlayerManagerMixin"
+    "PlayerManagerMixin",
+    "ServerPlayNetworkHandlerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -5,6 +5,7 @@ import eu.avalanche7.paradigm.configs.RestartConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.server.command.CommandManager;
@@ -225,7 +226,8 @@ public class Restart implements ParadigmModule {
 
         List<ServerPlayerEntity> players = platform.getOnlinePlayers();
 
-        for (ServerPlayerEntity player : players) {
+        for (ServerPlayerEntity playerEntity : players) {
+            IPlayer player = platform.wrapPlayer(playerEntity);
             final int hours = (int) (timeLeftSeconds / 3600);
             final int minutes = (int) ((timeLeftSeconds % 3600) / 60);
             final int seconds = (int) (timeLeftSeconds % 60);
@@ -234,14 +236,14 @@ public class Restart implements ParadigmModule {
             final String titleMessage = config.titleMessage.value != null ? config.titleMessage.value.replace("{time}", formattedTime).replace("{minutes}", TIME_FORMATTER.format(minutes)).replace("{seconds}", TIME_FORMATTER.format(seconds)) : "";
 
             if (config.timerUseChat.value) {
-                platform.sendSystemMessage(player, services.getMessageParser().parseMessage(chatMessage, player));
+                platform.sendSystemMessage(player.getOriginalPlayer(), services.getMessageParser().parseMessage(chatMessage, player).getOriginalText());
             }
             if (config.titleEnabled.value) {
-                platform.sendTitle(player, services.getMessageParser().parseMessage(titleMessage, player), Text.empty());
+                platform.sendTitle(player.getOriginalPlayer(), services.getMessageParser().parseMessage(titleMessage, player).getOriginalText(), Text.empty());
             }
 
             if (config.playSoundEnabled.value && timeLeftSeconds <= config.playSoundFirstTime.value) {
-                platform.playSound(player, "minecraft:block.note_block.pling", net.minecraft.sound.SoundCategory.MASTER, 1.0f, 1.0f);
+                platform.playSound(player.getOriginalPlayer(), "minecraft:block.note_block.pling", net.minecraft.sound.SoundCategory.MASTER, 1.0f, 1.0f);
             }
         }
 
@@ -252,14 +254,14 @@ public class Restart implements ParadigmModule {
             String formattedTime = String.format("%dh %sm %ss", hours, TIME_FORMATTER.format(minutes), TIME_FORMATTER.format(seconds));
             float progress = Math.max(0.0f, (float) timeLeftSeconds / (float) Math.max(1.0, originalTotalIntervalSeconds));
             String bossBarMessage = config.bossBarMessage.value != null ? config.bossBarMessage.value.replace("{time}", formattedTime).replace("{minutes}", TIME_FORMATTER.format(minutes)).replace("{seconds}", TIME_FORMATTER.format(seconds)) : "";
-            platform.createOrUpdateRestartBossBar(services.getMessageParser().parseMessage(bossBarMessage, null), IPlatformAdapter.BossBarColor.RED, progress);
+            platform.createOrUpdateRestartBossBar(services.getMessageParser().parseMessage(bossBarMessage, null).getOriginalText(), IPlatformAdapter.BossBarColor.RED, progress);
         }
     }
 
     private void performShutdown(Services services, RestartConfigHandler.Config config) {
         if (!restartInProgress.get()) return;
         services.getDebugLogger().debugLog(NAME + ": Initiating final shutdown procedure.");
-        Text kickMessage = services.getMessageParser().parseMessage(config.defaultRestartReason.value, null);
+        Text kickMessage = services.getMessageParser().parseMessage(config.defaultRestartReason.value, null).getOriginalText();
         platform.shutdownServer(kickMessage);
     }
 }

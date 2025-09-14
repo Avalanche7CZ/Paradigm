@@ -110,7 +110,7 @@ public class Lang {
             if (logger != null) logger.warn("Lang.translate: MessageParser is null for key '{}'. Returning literal text.", key);
             return Text.literal(translatedText);
         }
-        return this.messageParser.parseMessage(translatedText, null);
+        return this.messageParser.parseMessage(translatedText, null).getOriginalText();
     }
 
     public String getTranslation(String key) {

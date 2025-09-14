@@ -8,12 +8,14 @@ import com.mojang.brigadier.context.CommandContext;
 import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.text.Text;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -23,25 +25,23 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 public class Announcements implements ParadigmModule {
-
     private static final String NAME = "Announcements";
     private final Random random = new Random(System.currentTimeMillis());
     private int globalMessageIndex = 0;
     private int actionbarMessageIndex = 0;
     private int titleMessageIndex = 0;
     private int bossbarMessageIndex = 0;
-
-    private List<Integer> globalRandomPool = new ArrayList<>();
-    private List<Integer> actionbarRandomPool = new ArrayList<>();
-    private List<Integer> titleRandomPool = new ArrayList<>();
-    private List<Integer> bossbarRandomPool = new ArrayList<>();
-
-    private boolean tasksScheduled = false;
+    private int lastGlobalRandomIndex = -1;
+    private int lastActionbarRandomIndex = -1;
+    private int lastTitleRandomIndex = -1;
+    private int lastBossbarRandomIndex = -1;
+    private boolean announcementsScheduled = false;
     private ScheduledFuture<?> globalTask = null;
     private ScheduledFuture<?> actionbarTask = null;
     private ScheduledFuture<?> titleTask = null;
     private ScheduledFuture<?> bossbarTask = null;
     private IPlatformAdapter platform;
+    private Services services;
 
     @Override
     public String getName() {
@@ -55,33 +55,39 @@ public class Announcements implements ParadigmModule {
 
     @Override
     public void onLoad(Object event, Services services, Object modEventBus) {
+        this.services = services;
         this.platform = services.getPlatformAdapter();
         services.getDebugLogger().debugLog(NAME + " module loaded.");
     }
 
     @Override
     public void onServerStarting(Object event, Services services) {
-        if (isEnabled(services)) {
-            services.getDebugLogger().debugLog(NAME + " module: Server starting, scheduling announcements if enabled.");
-            scheduleConfiguredAnnouncements(services);
+        if (isEnabled(services) && !announcementsScheduled) {
+            services.getDebugLogger().debugLog(NAME + ": Server starting, scheduling announcements if enabled.");
+            scheduleConfiguredAnnouncements();
         }
     }
 
     @Override
     public void onEnable(Services services) {
-        services.getDebugLogger().debugLog(NAME + " module enabled.");
+        if (platform != null && isEnabled(services) && !announcementsScheduled) {
+            services.getDebugLogger().debugLog(NAME + ": Module enabled, scheduling announcements.");
+            scheduleConfiguredAnnouncements();
+        }
     }
 
     @Override
     public void onDisable(Services services) {
-        services.getDebugLogger().debugLog(NAME + " module disabled. Cancelling scheduled tasks.");
-        cancelAllTasks(services);
+        services.getDebugLogger().debugLog(NAME + ": Module disabled. Cancelling scheduled tasks.");
+        cancelAllTasks();
+        announcementsScheduled = false;
     }
 
     @Override
     public void onServerStopping(Object event, Services services) {
-        services.getDebugLogger().debugLog(NAME + " module: Server stopping.");
-        cancelAllTasks(services);
+        services.getDebugLogger().debugLog(NAME + ": Server stopping.");
+        cancelAllTasks();
+        announcementsScheduled = false;
     }
 
     @Override
@@ -92,19 +98,13 @@ public class Announcements implements ParadigmModule {
                         .then(CommandManager.literal("broadcast")
                                 .then(CommandManager.argument("header_footer", BoolArgumentType.bool())
                                         .then(CommandManager.argument("message", StringArgumentType.greedyString())
-                                                .executes(context -> broadcastMessageCmd(context, "broadcast", services)))))
+                                                .executes(context -> broadcastMessageCmd(context, "broadcast")))))
                         .then(CommandManager.literal("actionbar")
                                 .then(CommandManager.argument("message", StringArgumentType.greedyString())
-                                        .executes(context -> broadcastMessageCmd(context, "actionbar", services))))
+                                        .executes(context -> broadcastMessageCmd(context, "actionbar"))))
                         .then(CommandManager.literal("title")
                                 .then(CommandManager.argument("titleAndSubtitle", StringArgumentType.greedyString())
-                                        .executes(context -> {
-                                            String titleAndSubtitle = StringArgumentType.getString(context, "titleAndSubtitle");
-                                            String[] parts = titleAndSubtitle.split(" \\|\\| ", 2);
-                                            String title = parts[0];
-                                            String subtitle = parts.length > 1 ? parts[1] : null;
-                                            return broadcastTitleCmd(context, title, subtitle, services);
-                                        })))
+                                        .executes(context -> broadcastTitleCmd(context))))
                         .then(CommandManager.literal("bossbar")
                                 .then(CommandManager.argument("interval", IntegerArgumentType.integer(1))
                                         .then(CommandManager.argument("color", StringArgumentType.word())
@@ -115,83 +115,49 @@ public class Announcements implements ParadigmModule {
                                                     return builder.buildFuture();
                                                 })
                                                 .then(CommandManager.argument("message", StringArgumentType.greedyString())
-                                                        .executes(context -> broadcastMessageCmd(context, "bossbar", services))))))
+                                                        .executes(context -> broadcastMessageCmd(context, "bossbar"))))))
         );
     }
 
     @Override
-    public void registerEventListeners(Object eventBus, Services services) {
-    }
+    public void registerEventListeners(Object eventBus, Services services) {}
 
-    private void scheduleConfiguredAnnouncements(Services services) {
-        if (tasksScheduled) {
-            services.getDebugLogger().debugLog(NAME + ": Tasks already scheduled, skipping.");
+    private void scheduleConfiguredAnnouncements() {
+        services.getDebugLogger().debugLog(NAME + ": scheduleConfiguredAnnouncements() called.");
+        if (announcementsScheduled) {
+            services.getDebugLogger().debugLog(NAME + ": Announcements already scheduled, skipping.");
             return;
         }
-
-        cancelAllTasks(services);
-
+        cancelAllTasks();
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
         if (platform == null) {
             services.getDebugLogger().debugLog(NAME + ": Cannot schedule announcements, platform adapter is null.");
             return;
         }
-
-        initializeRandomPools(config);
-
         if (config.globalEnable.value) {
-            long globalInterval = config.globalInterval.value;
-            globalTask = services.getTaskScheduler().scheduleAtFixedRate(() -> broadcastGlobalMessages(services), globalInterval, globalInterval, TimeUnit.SECONDS);
-            services.getDebugLogger().debugLog(NAME + ": Scheduled global messages with interval: {} seconds", globalInterval);
+            long interval = config.globalInterval.value;
+            globalTask = services.getTaskScheduler().scheduleAtFixedRate(this::broadcastGlobalMessages, interval, interval, TimeUnit.SECONDS);
+            services.getDebugLogger().debugLog(NAME + ": Scheduled global messages with interval: " + interval + " seconds");
         }
-
         if (config.actionbarEnable.value) {
-            long actionbarInterval = config.actionbarInterval.value;
-            actionbarTask = services.getTaskScheduler().scheduleAtFixedRate(() -> broadcastActionbarMessages(services), actionbarInterval, actionbarInterval, TimeUnit.SECONDS);
-            services.getDebugLogger().debugLog(NAME + ": Scheduled actionbar messages with interval: {} seconds", actionbarInterval);
+            long interval = config.actionbarInterval.value;
+            actionbarTask = services.getTaskScheduler().scheduleAtFixedRate(this::broadcastActionbarMessages, interval, interval, TimeUnit.SECONDS);
+            services.getDebugLogger().debugLog(NAME + ": Scheduled actionbar messages with interval: " + interval + " seconds");
         }
-
         if (config.titleEnable.value) {
-            long titleInterval = config.titleInterval.value;
-            titleTask = services.getTaskScheduler().scheduleAtFixedRate(() -> broadcastTitleMessages(services), titleInterval, titleInterval, TimeUnit.SECONDS);
-            services.getDebugLogger().debugLog(NAME + ": Scheduled title messages with interval: {} seconds", titleInterval);
+            long interval = config.titleInterval.value;
+            titleTask = services.getTaskScheduler().scheduleAtFixedRate(this::broadcastTitleMessages, interval, interval, TimeUnit.SECONDS);
+            services.getDebugLogger().debugLog(NAME + ": Scheduled title messages with interval: " + interval + " seconds");
         }
-
         if (config.bossbarEnable.value) {
-            long bossbarInterval = config.bossbarInterval.value;
-            bossbarTask = services.getTaskScheduler().scheduleAtFixedRate(() -> broadcastBossbarMessages(services), bossbarInterval, bossbarInterval, TimeUnit.SECONDS);
-            services.getDebugLogger().debugLog(NAME + ": Scheduled bossbar messages with interval: {} seconds", bossbarInterval);
+            long interval = config.bossbarInterval.value;
+            bossbarTask = services.getTaskScheduler().scheduleAtFixedRate(this::broadcastBossbarMessages, interval, interval, TimeUnit.SECONDS);
+            services.getDebugLogger().debugLog(NAME + ": Scheduled bossbar messages with interval: " + interval + " seconds");
         }
-        tasksScheduled = true;
+        announcementsScheduled = true;
     }
 
-    private void initializeRandomPools(AnnouncementsConfigHandler.Config config) {
-        globalRandomPool.clear();
-        for (int i = 0; i < config.globalMessages.value.size(); i++) {
-            globalRandomPool.add(i);
-        }
-        Collections.shuffle(globalRandomPool, random);
-
-        actionbarRandomPool.clear();
-        for (int i = 0; i < config.actionbarMessages.value.size(); i++) {
-            actionbarRandomPool.add(i);
-        }
-        Collections.shuffle(actionbarRandomPool, random);
-
-        titleRandomPool.clear();
-        for (int i = 0; i < config.titleMessages.value.size(); i++) {
-            titleRandomPool.add(i);
-        }
-        Collections.shuffle(titleRandomPool, random);
-
-        bossbarRandomPool.clear();
-        for (int i = 0; i < config.bossbarMessages.value.size(); i++) {
-            bossbarRandomPool.add(i);
-        }
-        Collections.shuffle(bossbarRandomPool, random);
-    }
-
-    private void cancelAllTasks(Services services) {
+    private void cancelAllTasks() {
         if (globalTask != null && !globalTask.isCancelled()) {
             globalTask.cancel(false);
             globalTask = null;
@@ -212,214 +178,210 @@ public class Announcements implements ParadigmModule {
             bossbarTask = null;
             services.getDebugLogger().debugLog(NAME + ": Cancelled bossbar messages task.");
         }
-        tasksScheduled = false;
-        if (services != null) {
-            services.getDebugLogger().debugLog(NAME + ": All scheduled tasks have been cancelled.");
-        }
     }
 
-    private int getNextRandomIndex(List<Integer> pool, int messageCount) {
-        if (pool.isEmpty()) {
-            for (int i = 0; i < messageCount; i++) {
-                pool.add(i);
+    private String getNextMessage(List<String> messages, String orderMode, String type) {
+        String prefix = services.getAnnouncementsConfig().prefix.value != null ? services.getAnnouncementsConfig().prefix.value + "§r" : "";
+        String messageText;
+        if ("SEQUENTIAL".equalsIgnoreCase(orderMode)) {
+            int index;
+            switch (type) {
+                case "global" -> {
+                    index = globalMessageIndex++;
+                    if (globalMessageIndex >= messages.size()) globalMessageIndex = 0;
+                }
+                case "actionbar" -> {
+                    index = actionbarMessageIndex++;
+                    if (actionbarMessageIndex >= messages.size()) actionbarMessageIndex = 0;
+                }
+                case "title" -> {
+                    index = titleMessageIndex++;
+                    if (titleMessageIndex >= messages.size()) titleMessageIndex = 0;
+                }
+                case "bossbar" -> {
+                    index = bossbarMessageIndex++;
+                    if (bossbarMessageIndex >= messages.size()) bossbarMessageIndex = 0;
+                }
+                default -> index = random.nextInt(messages.size());
             }
-            Collections.shuffle(pool, random);
+            messageText = messages.get(index);
+        } else {
+            int index;
+            int lastIndex;
+            switch (type) {
+                case "global" -> lastIndex = lastGlobalRandomIndex;
+                case "actionbar" -> lastIndex = lastActionbarRandomIndex;
+                case "title" -> lastIndex = lastTitleRandomIndex;
+                case "bossbar" -> lastIndex = lastBossbarRandomIndex;
+                default -> lastIndex = -1;
+            }
+            if (messages.size() > 1) {
+                do {
+                    index = random.nextInt(messages.size());
+                } while (index == lastIndex);
+            } else {
+                index = 0;
+            }
+            switch (type) {
+                case "global" -> lastGlobalRandomIndex = index;
+                case "actionbar" -> lastActionbarRandomIndex = index;
+                case "title" -> lastTitleRandomIndex = index;
+                case "bossbar" -> lastBossbarRandomIndex = index;
+            }
+            messageText = messages.get(index);
         }
-        return pool.remove(0);
+        return messageText.replace("{Prefix}", prefix);
     }
 
-    private void broadcastGlobalMessages(Services services) {
+    private void broadcastGlobalMessages() {
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
-        if (platform == null || config.globalMessages.value.isEmpty()) return;
-
         List<String> messages = config.globalMessages.value;
-        String prefix = config.prefix.value != null ? config.prefix.value + "§r" : "";
+        if (platform == null || messages.isEmpty()) return;
+        String orderMode = config.orderMode.value;
+        String messageText = getNextMessage(messages, orderMode, "global");
+        boolean headerFooter = config.headerAndFooter.value;
         String header = config.header.value != null ? config.header.value : "";
         String footer = config.footer.value != null ? config.footer.value : "";
-
-        String messageText;
-        if ("SEQUENTIAL".equalsIgnoreCase(config.orderMode.value)) {
-            messageText = messages.get(globalMessageIndex).replace("{Prefix}", prefix);
-            globalMessageIndex = (globalMessageIndex + 1) % messages.size();
-        } else {
-            int randomIndex = getNextRandomIndex(globalRandomPool, messages.size());
-            messageText = messages.get(randomIndex).replace("{Prefix}", prefix);
-        }
-
-        Text message = services.getMessageParser().parseMessage(messageText, null);
-
-        if (config.headerAndFooter.value) {
-            platform.broadcastSystemMessage(message, header, footer, null);
-        } else {
-            platform.broadcastChatMessage(message);
-        }
-        services.getDebugLogger().debugLog(NAME + ": Broadcasted global message: {}", message.getString());
-    }
-
-    private void broadcastActionbarMessages(Services services) {
-        AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
-        if (platform == null || config.actionbarMessages.value.isEmpty()) return;
-
-        List<String> messages = config.actionbarMessages.value;
-        String prefix = config.prefix.value != null ? config.prefix.value + "§r" : "";
-
-        String messageText;
-        if ("SEQUENTIAL".equalsIgnoreCase(config.orderMode.value)) {
-            messageText = messages.get(actionbarMessageIndex).replace("{Prefix}", prefix);
-            actionbarMessageIndex = (actionbarMessageIndex + 1) % messages.size();
-        } else {
-            int randomIndex = getNextRandomIndex(actionbarRandomPool, messages.size());
-            messageText = messages.get(randomIndex).replace("{Prefix}", prefix);
-        }
-        Text message = services.getMessageParser().parseMessage(messageText, null);
-
-        platform.getOnlinePlayers().forEach(player ->
-            platform.sendActionBar(player, message)
-        );
-        services.getDebugLogger().debugLog(NAME + ": Broadcasted actionbar message: {}", message.getString());
-    }
-
-    private void broadcastTitleMessages(Services services) {
-        AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
-        if (platform == null || config.titleMessages.value.isEmpty()) return;
-
-        List<String> messages = config.titleMessages.value;
-        String prefix = config.prefix.value != null ? config.prefix.value + "§r" : "";
-
-        String messageText;
-        if ("SEQUENTIAL".equalsIgnoreCase(config.orderMode.value)) {
-            messageText = messages.get(titleMessageIndex).replace("{Prefix}", prefix);
-            titleMessageIndex = (titleMessageIndex + 1) % messages.size();
-        } else {
-            int randomIndex = getNextRandomIndex(titleRandomPool, messages.size());
-            messageText = messages.get(randomIndex).replace("{Prefix}", prefix);
-        }
-
-        String[] parts = messageText.split(" \\|\\| ", 2);
-        String titleStr = parts[0].trim();
-        String subtitleStr = parts.length > 1 ? parts[1].trim() : "";
-        Text titleComponent = !titleStr.isEmpty() ? services.getMessageParser().parseMessage(titleStr, null) : Text.empty();
-        Text subtitleComponent = !subtitleStr.isEmpty() ? services.getMessageParser().parseMessage(subtitleStr, null) : Text.empty();
-
         platform.getOnlinePlayers().forEach(player -> {
-            platform.clearTitles(player);
-            if (!titleComponent.getString().isEmpty() && !subtitleComponent.getString().isEmpty()) {
-                platform.sendTitle(player, titleComponent, subtitleComponent);
-            } else if (!titleComponent.getString().isEmpty()) {
-                platform.sendTitle(player, titleComponent, Text.empty());
-            } else if (!subtitleComponent.getString().isEmpty()) {
-                platform.sendSubtitle(player, subtitleComponent);
+            IPlayer iPlayer = platform.wrapPlayer(player);
+            if (headerFooter) {
+                IComponent headerComp = services.getMessageParser().parseMessage(header, iPlayer);
+                IComponent messageComp = services.getMessageParser().parseMessage(messageText, iPlayer);
+                IComponent footerComp = services.getMessageParser().parseMessage(footer, iPlayer);
+                platform.sendSystemMessage(player, headerComp.getOriginalText());
+                platform.sendSystemMessage(player, messageComp.getOriginalText());
+                platform.sendSystemMessage(player, footerComp.getOriginalText());
+            } else {
+                IComponent messageComp = services.getMessageParser().parseMessage(messageText, iPlayer);
+                platform.sendSystemMessage(player, messageComp.getOriginalText());
             }
         });
-        services.getDebugLogger().debugLog(NAME + ": Broadcasted title message: {}", messageText);
+        services.getDebugLogger().debugLog(NAME + ": Broadcasted global message: " + messageText);
     }
 
-    private void broadcastBossbarMessages(Services services) {
+    private void broadcastActionbarMessages() {
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
-        if (platform == null || config.bossbarMessages.value.isEmpty()) return;
+        List<String> messages = config.actionbarMessages.value;
+        if (platform == null || messages.isEmpty()) return;
+        String orderMode = config.orderMode.value;
+        String messageText = getNextMessage(messages, orderMode, "actionbar");
+        platform.getOnlinePlayers().forEach(player -> {
+            IPlayer iPlayer = platform.wrapPlayer(player);
+            IComponent messageComp = services.getMessageParser().parseMessage(messageText, iPlayer);
+            platform.sendActionBar(player, messageComp.getOriginalText());
+        });
+        services.getDebugLogger().debugLog(NAME + ": Broadcasted actionbar message: " + messageText);
+    }
 
+    private void broadcastTitleMessages() {
+        AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
+        List<String> messages = config.titleMessages.value;
+        if (platform == null || messages.isEmpty()) return;
+        String orderMode = config.orderMode.value;
+        String messageText = getNextMessage(messages, orderMode, "title");
+        platform.getOnlinePlayers().forEach(player -> {
+            IPlayer iPlayer = platform.wrapPlayer(player);
+            String[] parts = messageText.split(" \\|\\| ", 2);
+            IComponent titleComp = services.getMessageParser().parseMessage(parts[0], iPlayer);
+            IComponent subtitleComp = parts.length > 1 ? services.getMessageParser().parseMessage(parts[1], iPlayer) : services.getMessageParser().parseMessage("", iPlayer);
+            platform.clearTitles(player);
+            platform.sendTitle(player, titleComp.getOriginalText(), subtitleComp.getOriginalText());
+        });
+        services.getDebugLogger().debugLog(NAME + ": Broadcasted title message: " + messageText);
+    }
+
+    private void broadcastBossbarMessages() {
+        AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
         List<String> messages = config.bossbarMessages.value;
-        String prefix = config.prefix.value != null ? config.prefix.value + "§r" : "";
+        if (platform == null || messages.isEmpty()) return;
+        String orderMode = config.orderMode.value;
+        String messageText = getNextMessage(messages, orderMode, "bossbar");
         int bossbarTime = config.bossbarTime.value != null ? config.bossbarTime.value : 10;
         String colorStr = config.bossbarColor.value != null ? config.bossbarColor.value.toUpperCase() : "PURPLE";
-        IPlatformAdapter.BossBarColor bossbarColor;
+        IPlatformAdapter.BossBarColor tempBossbarColor;
         try {
-            bossbarColor = IPlatformAdapter.BossBarColor.valueOf(colorStr);
+            tempBossbarColor = IPlatformAdapter.BossBarColor.valueOf(colorStr);
         } catch (IllegalArgumentException e) {
-            services.getDebugLogger().debugLog(NAME + ": Invalid bossbar color: {}. Defaulting to PURPLE.", config.bossbarColor.value);
-            bossbarColor = IPlatformAdapter.BossBarColor.PURPLE;
+            services.getDebugLogger().debugLog(NAME + ": Invalid bossbar color: " + colorStr + ". Defaulting to PURPLE.");
+            tempBossbarColor = IPlatformAdapter.BossBarColor.PURPLE;
         }
-
-        String messageText;
-        if ("SEQUENTIAL".equalsIgnoreCase(config.orderMode.value)) {
-            messageText = messages.get(bossbarMessageIndex).replace("{Prefix}", prefix);
-            bossbarMessageIndex = (bossbarMessageIndex + 1) % messages.size();
-        } else {
-            int randomIndex = getNextRandomIndex(bossbarRandomPool, messages.size());
-            messageText = messages.get(randomIndex).replace("{Prefix}", prefix);
-        }
-        Text message = services.getMessageParser().parseMessage(messageText, null);
-
-        platform.sendBossBar(
-                platform.getOnlinePlayers(),
-                message,
-                bossbarTime,
-                bossbarColor,
-                1.0f
-        );
-        services.getDebugLogger().debugLog(NAME + ": Broadcasted bossbar message: {}", message.getString());
+        final IPlatformAdapter.BossBarColor bossbarColor = tempBossbarColor;
+        platform.getOnlinePlayers().forEach(player -> {
+            IPlayer iPlayer = platform.wrapPlayer(player);
+            IComponent messageComp = services.getMessageParser().parseMessage(messageText, iPlayer);
+            platform.sendBossBar(Collections.singletonList(player), messageComp.getOriginalText(), bossbarTime, bossbarColor, 1.0f);
+        });
+        services.getDebugLogger().debugLog(NAME + ": Broadcasted bossbar message: " + messageText);
     }
 
-    public int broadcastTitleCmd(CommandContext<ServerCommandSource> context, String title, String subtitle, Services services) {
-        ServerCommandSource source = context.getSource();
-        if (platform == null) {
-            source.sendError(Text.literal("Platform not available."));
-            return 0;
-        }
-        Text titleComponent = (title != null && !title.isEmpty()) ? services.getMessageParser().parseMessage(title, null) : Text.empty();
-        Text subtitleComponent = (subtitle != null && !subtitle.isEmpty()) ? services.getMessageParser().parseMessage(subtitle, null) : Text.empty();
-        platform.getOnlinePlayers().forEach(player -> {
-            platform.clearTitles(player);
-            if (!titleComponent.getString().isEmpty() && !subtitleComponent.getString().isEmpty()) {
-                platform.sendTitle(player, titleComponent, subtitleComponent);
-            } else if (!titleComponent.getString().isEmpty()) {
-                platform.sendTitle(player, titleComponent, Text.empty());
-            } else if (!subtitleComponent.getString().isEmpty()) {
-                platform.sendSubtitle(player, subtitleComponent);
-            }
+    public int broadcastTitleCmd(CommandContext<ServerCommandSource> context) {
+        String titleAndSubtitle = StringArgumentType.getString(context, "titleAndSubtitle");
+        // ICommandSource source = platform.wrapCommandSource(context.getSource()); // Fix this if needed
+        services.getDebugLogger().debugLog(NAME + ": /paradigm title command executed with message: " + titleAndSubtitle);
+        String[] parts = titleAndSubtitle.split(" \\|\\| ", 2);
+        platform.getOnlinePlayers().forEach(target -> {
+            IPlayer iPlayer = platform.wrapPlayer(target);
+            IComponent titleComp = services.getMessageParser().parseMessage(parts[0], iPlayer);
+            IComponent subtitleComp = parts.length > 1 ? services.getMessageParser().parseMessage(parts[1], iPlayer) : services.getMessageParser().parseMessage("", iPlayer);
+            platform.clearTitles(target);
+            platform.sendTitle(target, titleComp.getOriginalText(), subtitleComp.getOriginalText());
         });
-        source.sendFeedback(() -> platform.createLiteralComponent("Title broadcasted."), true);
+        platform.sendSuccess(context.getSource(), platform.createLiteralComponent("Title broadcasted."), true);
         return 1;
     }
 
-    public int broadcastMessageCmd(CommandContext<ServerCommandSource> context, String type, Services services) {
+    public int broadcastMessageCmd(CommandContext<ServerCommandSource> context, String type) {
         String messageStr = StringArgumentType.getString(context, "message");
-        ServerCommandSource source = context.getSource();
-        if (platform == null) {
-            source.sendError(Text.literal("Platform not available."));
-            return 0;
-        }
-        Text broadcastMessage = services.getMessageParser().parseMessage(messageStr, null);
+        // ICommandSource source = platform.wrapCommandSource(context.getSource()); // Fix this if needed
+        services.getDebugLogger().debugLog(NAME + ": /paradigm " + type + " command executed with message: " + messageStr);
         switch (type) {
-            case "broadcast": {
+            case "broadcast" -> {
                 boolean headerFooter = BoolArgumentType.getBool(context, "header_footer");
-                if (headerFooter) {
-                    String header = services.getAnnouncementsConfig().header.value;
-                    String footer = services.getAnnouncementsConfig().footer.value;
-                    platform.broadcastSystemMessage(broadcastMessage, header, footer, null);
-                } else {
-                    platform.broadcastChatMessage(broadcastMessage);
-                }
-                break;
+                String header = services.getAnnouncementsConfig().header.value;
+                String footer = services.getAnnouncementsConfig().footer.value;
+                platform.getOnlinePlayers().forEach(player -> {
+                    IPlayer iPlayer = platform.wrapPlayer(player);
+                    IComponent messageComp = services.getMessageParser().parseMessage(messageStr, iPlayer);
+                    if (headerFooter) {
+                        IComponent headerComp = services.getMessageParser().parseMessage(header, iPlayer);
+                        IComponent footerComp = services.getMessageParser().parseMessage(footer, iPlayer);
+                        platform.sendSystemMessage(player, headerComp.getOriginalText());
+                        platform.sendSystemMessage(player, messageComp.getOriginalText());
+                        platform.sendSystemMessage(player, footerComp.getOriginalText());
+                    } else {
+                        platform.sendSystemMessage(player, messageComp.getOriginalText());
+                    }
+                });
             }
-            case "actionbar":
-                platform.getOnlinePlayers().forEach(player ->
-                    platform.sendActionBar(player, broadcastMessage)
-                );
-                break;
-            case "bossbar": {
+            case "actionbar" -> {
+                platform.getOnlinePlayers().forEach(player -> {
+                    IPlayer iPlayer = platform.wrapPlayer(player);
+                    IComponent messageComp = services.getMessageParser().parseMessage(messageStr, iPlayer);
+                    platform.sendActionBar(player, messageComp.getOriginalText());
+                });
+            }
+            case "bossbar" -> {
                 String colorStr = StringArgumentType.getString(context, "color");
                 int interval = IntegerArgumentType.getInteger(context, "interval");
                 IPlatformAdapter.BossBarColor bossBarColor;
                 try {
                     bossBarColor = IPlatformAdapter.BossBarColor.valueOf(colorStr.toUpperCase());
                 } catch (IllegalArgumentException e) {
-                    source.sendError(Text.literal("Invalid bossbar color: " + colorStr));
+                    platform.sendFailure(context.getSource(), platform.createLiteralComponent("Invalid bossbar color: " + colorStr));
                     return 0;
                 }
-                platform.sendBossBar(
-                    platform.getOnlinePlayers(),
-                    broadcastMessage,
-                    interval,
-                    bossBarColor,
-                    1.0f
-                );
-                break;
+                platform.getOnlinePlayers().forEach(player -> {
+                    IPlayer iPlayer = platform.wrapPlayer(player);
+                    IComponent messageComp = services.getMessageParser().parseMessage(messageStr, iPlayer);
+                    platform.sendBossBar(Collections.singletonList(player), messageComp.getOriginalText(), interval, bossBarColor, 1.0f);
+                });
             }
-            default:
-                source.sendError(Text.literal("Invalid message type for command: " + type));
+            default -> {
+                platform.sendFailure(context.getSource(), platform.createLiteralComponent("Invalid message type for command: " + type));
                 return 0;
+            }
         }
+        platform.sendSuccess(context.getSource(), platform.createLiteralComponent(type + " broadcasted."), true);
         return 1;
     }
 }

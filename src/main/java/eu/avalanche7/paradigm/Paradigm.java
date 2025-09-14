@@ -59,7 +59,6 @@ public class Paradigm implements DedicatedServerModInitializer {
         LOGGER.info("Initializing Paradigm Mod for Fabric 1.21.1...");
         loadConfigurations();
 
-        createUtilityInstances();
         initializeServices();
         registerModules();
         servicesInstance = services;
@@ -119,9 +118,9 @@ public class Paradigm implements DedicatedServerModInitializer {
             }
             this.cmConfigInstance.loadCommands();
 
+            createUtilityInstances();
+
             if(this.langInstance == null) {
-                if (this.placeholdersInstance == null) this.placeholdersInstance = new Placeholders();
-                if (this.messageParserInstance == null) this.messageParserInstance = new MessageParser(this.placeholdersInstance);
                 this.langInstance = new Lang(LOGGER, MainConfigHandler.getConfig(), this.messageParserInstance);
             }
             this.langInstance.initializeLanguage();
@@ -133,11 +132,9 @@ public class Paradigm implements DedicatedServerModInitializer {
         }
     }
 
-
     private void createUtilityInstances() {
         this.placeholdersInstance = new Placeholders();
-        this.messageParserInstance = new MessageParser(this.placeholdersInstance);
-        this.customToastManagerInstance = new CustomToastManager(this.messageParserInstance);
+        this.customToastManagerInstance = new CustomToastManager(null);
         this.debugLoggerInstance = new DebugLogger(MainConfigHandler.getConfig());
         this.taskSchedulerInstance = new TaskScheduler(this.debugLoggerInstance);
         this.permissionsHandlerInstance = new PermissionsHandler(LOGGER, this.cmConfigInstance, this.debugLoggerInstance);
@@ -149,6 +146,9 @@ public class Paradigm implements DedicatedServerModInitializer {
                 this.taskSchedulerInstance,
                 this.debugLoggerInstance
         );
+        this.messageParserInstance = new MessageParser(this.placeholdersInstance, this.platformAdapterInstance);
+        this.customToastManagerInstance = new CustomToastManager(this.messageParserInstance);
+        this.platformAdapterInstance.provideMessageParser(this.messageParserInstance);
     }
 
     private void initializeServices() {

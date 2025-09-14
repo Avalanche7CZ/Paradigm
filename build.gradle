@@ -67,7 +67,7 @@ tasks.withType(JavaCompile).configureEach {
     it.options.encoding = "UTF-8"
     // Ensure compatibility across versions
     it.options.compilerArgs.addAll(['-Xlint:deprecation', '-Xlint:unchecked'])
-    if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
+    if (targetJavaVersion >= 17 || JavaVersion.current().isJava10Compatible()) {
         it.options.release.set(targetJavaVersion)
     }
 }

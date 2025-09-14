@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.UUID;
 
 public interface IPlatformAdapter {
-
     enum BossBarColor { PINK, BLUE, RED, GREEN, YELLOW, PURPLE, WHITE }
     enum BossBarOverlay { PROGRESS, NOTCHED_6, NOTCHED_10, NOTCHED_12, NOTCHED_20 }
 
@@ -57,4 +56,5 @@ public interface IPlatformAdapter {
     boolean isPlayerInArea(ServerPlayerEntity player, String worldId, List<Integer> corner1, List<Integer> corner2);
     List<String> getOnlinePlayerNames();
     List<String> getWorldNames();
+    IPlayer wrapPlayer(ServerPlayerEntity player);
 }

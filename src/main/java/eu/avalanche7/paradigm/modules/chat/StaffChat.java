@@ -7,6 +7,7 @@ import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.minecraft.command.CommandRegistryAccess;
@@ -102,7 +103,8 @@ public class StaffChat implements ParadigmModule {
     private void sendStaffChatMessage(ServerPlayerEntity sender, String message) {
         ChatConfigHandler.Config chatConfig = services.getChatConfig();
         String formattedMessage = String.format(chatConfig.staffChatFormat.value, sender.getName().getString(), message);
-        Text chatComponent = services.getMessageParser().parseMessage(formattedMessage, sender);
+        IPlayer iSender = services.getPlatformAdapter().wrapPlayer(sender);
+        Text chatComponent = services.getMessageParser().parseMessage(formattedMessage, iSender).getOriginalText();
 
         platform.getOnlinePlayers().stream()
                 .filter(onlinePlayer -> platform.hasPermission(onlinePlayer, PermissionsHandler.STAFF_CHAT_PERMISSION))
@@ -126,7 +128,8 @@ public class StaffChat implements ParadigmModule {
 
     private void showBossBar(ServerPlayerEntity player) {
         if (services.getChatConfig().enableStaffBossBar.value) {
-            Text title = services.getMessageParser().parseMessage("§cStaff Chat Mode §aEnabled", player);
+            IPlayer iPlayer = services.getPlatformAdapter().wrapPlayer(player);
+            Text title = services.getMessageParser().parseMessage("§cStaff Chat Mode §aEnabled", iPlayer).getOriginalText();
             platform.showPersistentBossBar(player, title, IPlatformAdapter.BossBarColor.RED, IPlatformAdapter.BossBarOverlay.PROGRESS);
         }
     }

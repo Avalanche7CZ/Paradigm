@@ -5,6 +5,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.PlayerGroupData;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.GroupChatManager;
 import net.fabricmc.fabric.api.message.v1.ServerMessageDecoratorEvent;
@@ -234,7 +235,8 @@ public class GroupChat implements ParadigmModule {
     }
 
     private void sendHelpMessage(ServerPlayerEntity player, String label, String command, String description, Services services) {
-        Text parsedDescription = services.getMessageParser().parseMessage(description, player);
+        IPlayer iPlayer = services.getPlatformAdapter().wrapPlayer(player);
+        Text parsedDescription = services.getMessageParser().parseMessage(description, iPlayer).getOriginalText();
         MutableText hoverText = parsedDescription.copy();
         hoverText.setStyle(hoverText.getStyle().withColor(Formatting.AQUA));
 

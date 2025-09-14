@@ -3,6 +3,7 @@ package eu.avalanche7.paradigm.utils;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.Group;
 import eu.avalanche7.paradigm.data.PlayerGroupData;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import net.minecraft.advancement.AdvancementFrame;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -36,7 +37,8 @@ public class GroupChatManager {
 
     private Text parseMessage(String message, ServerPlayerEntity player) {
         if (this.services != null && this.services.getMessageParser() != null) {
-            return this.services.getMessageParser().parseMessage(message, player);
+            IPlayer iPlayer = player != null ? this.services.getPlatformAdapter().wrapPlayer(player) : null;
+            return this.services.getMessageParser().parseMessage(message, iPlayer).getOriginalText();
         } else if (this.services != null && this.services.getDebugLogger() != null) {
             this.services.getDebugLogger().debugLog("GroupChatManager: Services or MessageParser is null for message '{}'. Returning literal text.", message);
         }

@@ -4,6 +4,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import eu.avalanche7.paradigm.configs.MentionConfigHandler;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
@@ -234,19 +235,20 @@ public class Mentions implements ParadigmModule {
     private void sendMentionNotification(ServerPlayerEntity targetPlayer, String chatMessage, String titleMessage, String contentMessage, Services services) {
         MentionConfigHandler.Config config = MentionConfigHandler.CONFIG;
 
+        IPlayer iTarget = services.getPlatformAdapter().wrapPlayer(targetPlayer);
         if (config.enableChatNotification.value) {
-            MutableText finalChatMessage = services.getMessageParser().parseMessage(chatMessage, targetPlayer);
+            MutableText finalChatMessage = services.getMessageParser().parseMessage(chatMessage, iTarget).getOriginalText().copy();
             if (contentMessage != null && !contentMessage.isEmpty()) {
-                MutableText contentComponent = services.getMessageParser().parseMessage("- " + contentMessage, targetPlayer);
+                MutableText contentComponent = services.getMessageParser().parseMessage("- " + contentMessage, iTarget).getOriginalText().copy();
                 finalChatMessage.append(platform.createLiteralComponent("\n")).append(contentComponent);
             }
             platform.sendSystemMessage(targetPlayer, finalChatMessage);
         }
 
         if (config.enableTitleNotification.value) {
-            Text parsedTitleMessage = services.getMessageParser().parseMessage(titleMessage, targetPlayer);
+            Text parsedTitleMessage = services.getMessageParser().parseMessage(titleMessage, iTarget).getOriginalText();
             Text parsedSubtitleMessage = (config.enableSubtitleNotification.value && contentMessage != null && !contentMessage.isEmpty())
-                ? services.getMessageParser().parseMessage(contentMessage, targetPlayer)
+                ? services.getMessageParser().parseMessage(contentMessage, iTarget).getOriginalText()
                 : Text.empty();
             platform.sendTitle(targetPlayer, parsedTitleMessage, parsedSubtitleMessage);
         }

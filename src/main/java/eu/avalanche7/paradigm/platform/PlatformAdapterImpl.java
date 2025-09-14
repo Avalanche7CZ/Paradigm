@@ -1,7 +1,9 @@
 package eu.avalanche7.paradigm.platform;
 
 import eu.avalanche7.paradigm.data.CustomCommand;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.*;
 import net.minecraft.entity.boss.BossBar;
 import net.minecraft.entity.boss.ServerBossBar;
@@ -146,12 +148,13 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public void broadcastSystemMessage(Text message, String header, String footer, @Nullable ServerPlayerEntity playerContext) {
         if (messageParser == null) return;
-        Text headerComp = messageParser.parseMessage(header, playerContext);
-        Text footerComp = messageParser.parseMessage(footer, playerContext);
+        IPlayer iPlayerContext = playerContext != null ? wrapPlayer(playerContext) : null;
+        IComponent headerComp = messageParser.parseMessage(header, iPlayerContext);
+        IComponent footerComp = messageParser.parseMessage(footer, iPlayerContext);
         getOnlinePlayers().forEach(p -> {
-            p.sendMessage(headerComp);
+            p.sendMessage(headerComp.getOriginalText());
             p.sendMessage(message);
-            p.sendMessage(footerComp);
+            p.sendMessage(footerComp.getOriginalText());
         });
     }
 
@@ -274,8 +277,8 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         }
         boolean hasPerm = permissionsHandler.hasPermission(player, command.getPermission());
         if (!hasPerm && messageParser != null) {
-            String errorMessage = command.getPermissionErrorMessage();
-            player.sendMessage(messageParser.parseMessage(errorMessage, player));
+            IComponent errorComponent = messageParser.parseMessage(command.getPermissionErrorMessage(), wrapPlayer(player));
+            player.sendMessage(errorComponent.getOriginalText());
         }
         return hasPerm;
     }
@@ -336,10 +339,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         }
 
         Identifier worldIdentifier = Identifier.of(worldId);
-        if (worldIdentifier == null) {
-            debugLogger.debugLog("PlatformAdapter: Invalid world ID: " + worldId);
-            return false;
-        }
         net.minecraft.registry.RegistryKey<World> targetWorldKey = net.minecraft.registry.RegistryKey.of(RegistryKeys.WORLD, worldIdentifier);
 
         if (!player.getWorld().getRegistryKey().equals(targetWorldKey)) {
@@ -376,5 +375,10 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             worldNames.add(world.getRegistryKey().getValue().toString());
         }
         return worldNames;
+    }
+
+    @Override
+    public IPlayer wrapPlayer(ServerPlayerEntity player) {
+        return MinecraftPlayer.of(player);
     }
 }

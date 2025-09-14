@@ -4,6 +4,7 @@ import eu.avalanche7.paradigm.Paradigm;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import net.minecraft.network.ClientConnection;
 import net.minecraft.server.PlayerManager;
 import net.minecraft.server.network.ConnectedClientData;
@@ -49,7 +50,8 @@ public class PlayerManagerMixin {
         }
 
         if (messageFormat != null && !messageFormat.isEmpty()) {
-            Text formattedMessage = services.getMessageParser().parseMessage(messageFormat, player);
+            IPlayer iPlayer = services.getPlatformAdapter().wrapPlayer(player);
+            Text formattedMessage = services.getMessageParser().parseMessage(messageFormat, iPlayer).getOriginalText();
             platform.broadcastSystemMessage(formattedMessage);
         }
     }
@@ -68,7 +70,8 @@ public class PlayerManagerMixin {
         String leaveMessageFormat = chatConfig.leaveMessageFormat.value;
 
         if (leaveMessageFormat != null && !leaveMessageFormat.isEmpty()) {
-            Text formattedMessage = services.getMessageParser().parseMessage(leaveMessageFormat, player);
+            IPlayer iPlayer = services.getPlatformAdapter().wrapPlayer(player);
+            Text formattedMessage = services.getMessageParser().parseMessage(leaveMessageFormat, iPlayer).getOriginalText();
             platform.broadcastSystemMessage(formattedMessage);
         }
     }
