@@ -50,14 +50,13 @@ public class Paradigm implements DedicatedServerModInitializer {
     private TaskScheduler taskSchedulerInstance;
     private GroupChatManager groupChatManagerInstance;
     private CMConfig cmConfigInstance;
-    private CustomToastManager customToastManagerInstance;
     private IPlatformAdapter platformAdapterInstance;
     private CooldownConfigHandler cooldownConfigHandlerInstance;
     private TelemetryReporter telemetryReporter;
 
     @Override
     public void onInitializeServer() {
-        LOGGER.info("Initializing Paradigm Mod for Fabric 1.21.1...");
+        LOGGER.info("Initializing Paradigm Mod for Fabric 1.20.1...");
         loadConfigurations();
 
         initializeServices();
@@ -74,7 +73,7 @@ public class Paradigm implements DedicatedServerModInitializer {
             modVersion = modContainer.getMetadata().getVersion().getFriendlyString();
             String displayName = modContainer.getMetadata().getName();
 
-            LOGGER.info("Paradigm Fabric mod (1.21.1) has been set up.");
+            LOGGER.info("Paradigm Fabric mod (1.20.1) has been set up.");
             LOGGER.info("==================================================");
             LOGGER.info("{} - Version {}", displayName, getModVersion());
             LOGGER.info("Author: Avalanche7CZ");
@@ -94,7 +93,6 @@ public class Paradigm implements DedicatedServerModInitializer {
             ChatConfigHandler.setJsonValidator(bootstrapDebugLogger);
             MentionConfigHandler.setJsonValidator(bootstrapDebugLogger);
             RestartConfigHandler.setJsonValidator(bootstrapDebugLogger);
-            ToastConfigHandler.setJsonValidator(bootstrapDebugLogger);
             MOTDConfigHandler.setJsonValidator(bootstrapDebugLogger);
 
             MainConfigHandler.getConfig();
@@ -102,7 +100,6 @@ public class Paradigm implements DedicatedServerModInitializer {
             MentionConfigHandler.getConfig();
             RestartConfigHandler.getConfig();
             ChatConfigHandler.getConfig();
-            ToastConfigHandler.getToasts();
             MOTDConfigHandler.getConfig();
             CooldownConfigHandler.load();
 
@@ -112,7 +109,6 @@ public class Paradigm implements DedicatedServerModInitializer {
             ChatConfigHandler.setJsonValidator(debugLoggerInstance);
             MentionConfigHandler.setJsonValidator(debugLoggerInstance);
             RestartConfigHandler.setJsonValidator(debugLoggerInstance);
-            ToastConfigHandler.setJsonValidator(debugLoggerInstance);
             MOTDConfigHandler.setJsonValidator(debugLoggerInstance);
 
             if (this.cmConfigInstance == null) {
@@ -149,7 +145,6 @@ public class Paradigm implements DedicatedServerModInitializer {
         );
 
         this.messageParserInstance = new MessageParser(this.placeholdersInstance, this.platformAdapterInstance);
-        this.customToastManagerInstance = new CustomToastManager(this.messageParserInstance);
         this.platformAdapterInstance.provideMessageParser(this.messageParserInstance);
     }
 
@@ -167,7 +162,6 @@ public class Paradigm implements DedicatedServerModInitializer {
                 MentionConfigHandler.getConfig(),
                 RestartConfigHandler.getConfig(),
                 ChatConfigHandler.getConfig(),
-                ToastConfigHandler.getToasts(),
                 this.cmConfigInstance,
                 this.groupChatManagerInstance,
                 this.debugLoggerInstance,
@@ -176,7 +170,6 @@ public class Paradigm implements DedicatedServerModInitializer {
                 this.permissionsHandlerInstance,
                 this.placeholdersInstance,
                 this.taskSchedulerInstance,
-                this.customToastManagerInstance,
                 this.platformAdapterInstance,
                 this.cooldownConfigHandlerInstance
         );
@@ -185,12 +178,7 @@ public class Paradigm implements DedicatedServerModInitializer {
     }
 
     private void registerModules() {
-        // Important: Brigadier merges literals with the same name. The first time we register the root literal
-        // "paradigm" determines whether an executes handler (base /paradigm output) can be attached.
-        // Later registrations with the same literal name CANNOT override/attach a new executes to the root node
-        // (their command function is ignored; only children are merged). Therefore the Help module MUST be
-        // registered before any other module that also calls dispatcher.register(literal("paradigm")).
-        modules.add(new eu.avalanche7.paradigm.modules.commands.Help()); // register first so its executes is kept
+        modules.add(new eu.avalanche7.paradigm.modules.commands.Help());
         modules.add(new Announcements());
         modules.add(new MOTD());
         modules.add(new Mentions());
@@ -198,7 +186,6 @@ public class Paradigm implements DedicatedServerModInitializer {
         modules.add(new StaffChat());
         modules.add(new GroupChat(this.groupChatManagerInstance));
         modules.add(new CommandManager());
-        modules.add(new CustomToasts());
         modules.add(new eu.avalanche7.paradigm.modules.commands.Reload());
         LOGGER.info("Paradigm: Registered {} modules.", modules.size());
     }
@@ -249,9 +236,8 @@ public class Paradigm implements DedicatedServerModInitializer {
 
     public static String getModVersion() {
         if (!"unknown".equals(modVersion)) return modVersion;
-        // Fallback attempt if not yet initialized
         try {
-            return FabricLoader.getInstance().getModContainer(MOD_ID)
+            return net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer(MOD_ID)
                     .map(c -> c.getMetadata().getVersion().getFriendlyString())
                     .orElse("unknown");
         } catch (Throwable t) {
@@ -274,11 +260,11 @@ public class Paradigm implements DedicatedServerModInitializer {
         if (this.taskSchedulerInstance != null) {
             this.taskSchedulerInstance.onServerStopping();
         }
-        LOGGER.info("Paradigm modules (1.21.1) have been processed for server stop.");
+        LOGGER.info("Paradigm modules (1.20.1) have been processed for server stop.");
     }
 
     public static class UpdateChecker {
-        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/Fabric/1.21.1/version.txt?v=1";
+        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/Fabric/1.20.1/version.txt?v=1";
         private static final String MODRINTH_PROJECT_ID = "s4i32SJd";
         private static final String CURSEFORGE_SLUG = "paradigm";
         private static final String MODRINTH_PROJECT_PAGE = "https://modrinth.com/mod/" + MODRINTH_PROJECT_ID;
@@ -295,7 +281,7 @@ public class Paradigm implements DedicatedServerModInitializer {
                         logger.info("CurseForge: {}", CURSEFORGE_PROJECT_PAGE);
                     }
                 } catch (Exception e) {
-                    logger.warn("Paradigm: Failed to check for updates (GitHub).");
+                    logger.warn("Paradigm: Failed to check for updates (GitHub)." );
                 }
             }
         }

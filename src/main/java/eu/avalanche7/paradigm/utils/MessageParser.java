@@ -134,7 +134,6 @@ public class MessageParser {
         }
 
         if (platformAdapter == null) {
-            // Fallback when platformAdapter is null - return simple text component
             return new MinecraftComponent(Text.literal(rawMessage));
         }
 
@@ -188,7 +187,10 @@ public class MessageParser {
                         if (currentIndex + 7 < length) {
                             String hex = textToParse.substring(currentIndex + 2, currentIndex + 8);
                             try {
-                                currentStyle = currentStyle.withColor(TextColor.parse("#" + hex).getOrThrow());
+                                TextColor parsed = TextColor.parse("#" + hex);
+                                if (parsed != null) {
+                                    currentStyle = currentStyle.withColor(parsed);
+                                }
                                 currentIndex += 8;
                             } catch (Exception e) {
                                 parentComponent.append(new MinecraftComponent(platformAdapter.createLiteralComponent(textToParse.substring(currentIndex, currentIndex + 2))).setStyle(currentStyle));

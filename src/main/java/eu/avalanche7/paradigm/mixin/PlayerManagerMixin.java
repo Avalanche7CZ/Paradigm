@@ -7,7 +7,6 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import net.minecraft.network.ClientConnection;
 import net.minecraft.server.PlayerManager;
-import net.minecraft.server.network.ConnectedClientData;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.stat.Stats;
 import net.minecraft.text.Text;
@@ -30,7 +29,7 @@ public class PlayerManagerMixin {
     }
 
     @Inject(method = "onPlayerConnect", at = @At("TAIL"))
-    private void sendCustomJoinMessage(ClientConnection connection, ServerPlayerEntity player, ConnectedClientData clientData, CallbackInfo ci) {
+    private void sendCustomJoinMessage(ClientConnection connection, ServerPlayerEntity player, CallbackInfo ci) {
         Services services = Paradigm.getServices();
         if (services == null) return;
 

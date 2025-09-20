@@ -52,7 +52,6 @@ public class Help implements ParadigmModule {
         moduleHelps.put("MOTD", "MOTD: Show a message of the day when players join.\nConfigurable in the config file.");
         moduleHelps.put("Restart", "Restart: Schedule or trigger restarts with warnings.\nCommands: /restart now|cancel");
         moduleHelps.put("CustomCommands", "CustomCommands: Define your own commands in config.\nCommand: /customcommandsreload");
-        moduleHelps.put("CustomToasts", "CustomToasts: Show custom toasts.\nCommand: /paradigm toast show <player> <toast_id>");
         moduleHelps.put("Help", "Help: Show this help.\nCommand: /paradigm help [module]");
         moduleHelps.put("Reload", "Reload: Reload configs.\nCommand: /paradigm reload <config>");
 

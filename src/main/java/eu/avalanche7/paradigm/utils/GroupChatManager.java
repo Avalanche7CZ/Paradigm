@@ -5,7 +5,6 @@ import eu.avalanche7.paradigm.data.Group;
 import eu.avalanche7.paradigm.data.PlayerGroupData;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import net.minecraft.advancement.AdvancementFrame;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.ClickEvent;
@@ -170,13 +169,6 @@ public class GroupChatManager {
         getPlayerData(target).addInvitation(groupName);
         String inviteSentRaw = translate("group.invite_sent").getString().replace("{player_name}", target.getName().getString());
         platform().sendSystemMessage(inviter, parseMessage(inviteSentRaw, inviter));
-        if (services.getChatConfig().enableGroupChatToasts.value) {
-            String toastTitleRaw = translate("group.toast_invite_title").getString()
-                    .replace("{group_name}", groupName)
-                    .replace("{inviter_name}", inviter.getName().getString());
-            Text toastTitle = parseMessage(toastTitleRaw, target);
-            services.getCustomToastManager().showToast(target, "minecraft:paper", toastTitle, AdvancementFrame.TASK, services);
-        }
         MutableText base = Text.literal("§eYou have been invited to join group §b" + groupName + "§e by §a" + inviter.getName().getString() + " §8[");
         MutableText accept = Text.literal("§aACCEPT").styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/groupchat accept " + groupName)).withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Click to accept"))));
         MutableText deny = Text.literal("§cDENY").styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/groupchat deny " + groupName)).withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Click to deny"))));
@@ -194,11 +186,6 @@ public class GroupChatManager {
         group.addMember(player.getUuid());
         playerData.setCurrentGroup(groupName);
         playerData.removeInvitation(groupName);
-        if (services.getChatConfig().enableGroupChatToasts.value) {
-            String toastTitleRaw = translate("group.toast_joined_title").getString().replace("{group_name}", groupName);
-            Text toastTitle = parseMessage(toastTitleRaw, player);
-            services.getCustomToastManager().showToast(player, "minecraft:emerald", toastTitle, AdvancementFrame.GOAL, services);
-        }
         String joinedRaw = translate("group.joined").getString().replace("{group_name}", groupName);
         platform().sendSystemMessage(player, parseMessage(joinedRaw, player));
         String joinedNotificationRaw = translate("group.player_joined_notification").getString().replace("{player_name}", player.getName().getString());
@@ -218,11 +205,6 @@ public class GroupChatManager {
         group.removeMember(player.getUuid());
         data.setCurrentGroup(null);
         if (!isJoiningAnother) {
-            if (services.getChatConfig().enableGroupChatToasts.value) {
-                String toastTitleRaw = translate("group.toast_left_title").getString().replace("{group_name}", groupName);
-                Text toastTitle = parseMessage(toastTitleRaw, player);
-                services.getCustomToastManager().showToast(player, "minecraft:iron_door", toastTitle, AdvancementFrame.TASK, services);
-            }
             String leftRaw = translate("group.left").getString().replace("{group_name}", groupName);
             platform().sendSystemMessage(player, parseMessage(leftRaw, player));
         }
@@ -236,11 +218,6 @@ public class GroupChatManager {
             group.setOwner(newOwnerUUID);
             ServerPlayerEntity newOwnerPlayer = (newOwnerUUID != null && getServer() != null) ? getServer().getPlayerManager().getPlayer(newOwnerUUID) : null;
             if (newOwnerPlayer != null) {
-                if (services.getChatConfig().enableGroupChatToasts.value) {
-                    String titleRaw = translate("group.toast_new_owner_title").getString().replace("{group_name}", groupName);
-                    Text toastTitle = parseMessage(titleRaw, newOwnerPlayer);
-                    services.getCustomToastManager().showToast(newOwnerPlayer, "minecraft:diamond", toastTitle, AdvancementFrame.CHALLENGE, services);
-                }
                 platform().sendSystemMessage(newOwnerPlayer, translate("group.new_owner_notification"));
                 debugLog("Ownership of group " + groupName + " transferred to " + newOwnerPlayer.getName().getString());
             }
@@ -391,11 +368,6 @@ public class GroupChatManager {
         group.addMember(player.getUuid());
         playerData.setCurrentGroup(groupName);
         playerData.removeInvitation(groupName);
-        if (services.getChatConfig().enableGroupChatToasts.value) {
-            String toastTitleRaw = translate("group.toast_joined_title").getString().replace("{group_name}", groupName);
-            Text toastTitle = parseMessage(toastTitleRaw, player);
-            services.getCustomToastManager().showToast(player, "minecraft:emerald", toastTitle, AdvancementFrame.GOAL, services);
-        }
         String joinedRaw = translate("group.joined").getString().replace("{group_name}", groupName);
         platform().sendSystemMessage(player, parseMessage(joinedRaw, player));
         String joinedNotificationRaw = translate("group.player_joined_notification").getString().replace("{player_name}", player.getName().getString());

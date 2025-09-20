@@ -30,7 +30,7 @@ public class Reload implements ParadigmModule {
     @Override
     public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {
         SuggestionProvider<ServerCommandSource> configSuggestions = (ctx, builder) -> {
-            List<String> options = List.of("main", "announcements", "chat", "motd", "mention", "restart", "customcommands", "toasts", "all");
+            List<String> options = List.of("main", "announcements", "chat", "motd", "mention", "restart", "customcommands", "all");
             options.forEach(builder::suggest);
             return builder.buildFuture();
         };
@@ -50,7 +50,6 @@ public class Reload implements ParadigmModule {
                                         case "mention" -> { MentionConfigHandler.load(); msg = "Mention config reloaded."; }
                                         case "restart" -> { RestartConfigHandler.load(); rescheduleRestart(services); msg = "Restart config reloaded and rescheduled."; }
                                         case "customcommands" -> { services.getCmConfig().reloadCommands(); msg = "Custom commands reloaded."; }
-                                        case "toasts" -> { ToastConfigHandler.load(); msg = "Toasts config reloaded."; }
                                         case "all" -> {
                                             MainConfigHandler.load();
                                             AnnouncementsConfigHandler.load();
@@ -58,7 +57,6 @@ public class Reload implements ParadigmModule {
                                             MOTDConfigHandler.loadConfig();
                                             MentionConfigHandler.load();
                                             RestartConfigHandler.load();
-                                            ToastConfigHandler.load();
                                             services.getCmConfig().reloadCommands();
                                             rescheduleAnnouncements();
                                             rescheduleRestart(services);

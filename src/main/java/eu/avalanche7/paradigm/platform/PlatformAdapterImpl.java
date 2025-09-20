@@ -115,7 +115,9 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public ItemStack createItemStack(String itemId) {
-        Item item = Registries.ITEM.get(Identifier.of(itemId));
+        Identifier id = Identifier.tryParse(itemId);
+        if (id == null) return new ItemStack(Items.STONE);
+        Item item = Registries.ITEM.get(id);
         return item != Items.AIR ? new ItemStack(item) : new ItemStack(Items.STONE);
     }
 
@@ -255,7 +257,9 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public void playSound(ServerPlayerEntity player, String soundId, net.minecraft.sound.SoundCategory category, float volume, float pitch) {
-        SoundEvent soundEvent = Registries.SOUND_EVENT.get(Identifier.of(soundId));
+        Identifier id = Identifier.tryParse(soundId);
+        if (id == null) return;
+        SoundEvent soundEvent = Registries.SOUND_EVENT.get(id);
         if (soundEvent != null) {
             player.networkHandler.sendPacket(new PlaySoundS2CPacket(
                     Registries.SOUND_EVENT.getEntry(soundEvent),
@@ -340,7 +344,9 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         if (player == null || itemId == null) {
             return false;
         }
-        Item item = Registries.ITEM.get(Identifier.of(itemId));
+        Identifier id = Identifier.tryParse(itemId);
+        if (id == null) return false;
+        Item item = Registries.ITEM.get(id);
         if (item == Items.AIR) {
             debugLogger.debugLog("PlatformAdapter: Could not find item with ID: " + itemId);
             return false;
@@ -354,7 +360,8 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             return false;
         }
 
-        Identifier worldIdentifier = Identifier.of(worldId);
+        Identifier worldIdentifier = Identifier.tryParse(worldId);
+        if (worldIdentifier == null) return false;
         net.minecraft.registry.RegistryKey<World> targetWorldKey = net.minecraft.registry.RegistryKey.of(RegistryKeys.WORLD, worldIdentifier);
 
         if (!player.getWorld().getRegistryKey().equals(targetWorldKey)) {
@@ -398,9 +405,3 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         return MinecraftPlayer.of(player);
     }
 }
-
-
-
-
-
-

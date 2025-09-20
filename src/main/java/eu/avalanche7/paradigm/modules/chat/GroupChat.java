@@ -21,6 +21,8 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.concurrent.CompletableFuture;
+
 public class GroupChat implements ParadigmModule {
 
     private static final String NAME = "GroupChat";
@@ -181,11 +183,21 @@ public class GroupChat implements ParadigmModule {
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
-        ServerMessageDecoratorEvent.EVENT.register(this::decorateGroupChatMessage);
+        ServerMessageDecoratorEvent.EVENT.register((player, original) -> {
+            if (player == null) {
+                return CompletableFuture.completedFuture(original);
+            }
+            Text decorated = decorateGroupChatMessage(player, original);
+            if (decorated == null) {
+                return CompletableFuture.completedFuture(Text.empty());
+            }
+            return CompletableFuture.completedFuture(decorated);
+        });
     }
 
     @Nullable
     private Text decorateGroupChatMessage(ServerPlayerEntity player, Text message) {
+        if (player == null) return message;
         if (this.services == null || !isEnabled(this.services) || this.groupChatManager == null) {
             return message;
         }

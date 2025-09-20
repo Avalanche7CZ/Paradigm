@@ -1,5 +1,5 @@
 plugins {
-    id 'fabric-loom' version '1.7-SNAPSHOT'
+    id 'fabric-loom' version '1.5.8' // Downgraded from 1.7-SNAPSHOT for MC 1.20.1 compatibility
     id 'maven-publish'
 }
 
@@ -62,7 +62,7 @@ processResources {
     }
 }
 
-def targetJavaVersion = 21
+def targetJavaVersion = 17
 tasks.withType(JavaCompile).configureEach {
     it.options.encoding = "UTF-8"
     // Ensure compatibility across versions
