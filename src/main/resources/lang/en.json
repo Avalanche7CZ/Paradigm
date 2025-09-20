@@ -65,7 +65,16 @@
     "hover_accept_invite": "Click to accept the invitation",
     "hover_deny_invite": "Click to deny the invitation",
     "hover_accept_request": "Click to accept the join request",
-    "hover_deny_request": "Click to deny the join request"
+    "hover_deny_request": "Click to deny the join request",
+    "kick_not_found": "Player not found.",
+    "kick_not_member": "That player is not a member of your group.",
+    "kick_cannot_self": "You cannot kick yourself.",
+    "kick_success_target": "You have been kicked from group {group_name}.",
+    "kick_success_owner": "Kicked {player_name} from the group.",
+    "kick_success_notify": "{player_name} was kicked from the group.",
+    "cancel_request_none": "You don't have a pending request to that group.",
+    "cancel_request_success": "Your join request to {group_name} has been cancelled.",
+    "invite_rate_limit": "Please wait {seconds}s before sending another invite."
   },
 
   "mention": {

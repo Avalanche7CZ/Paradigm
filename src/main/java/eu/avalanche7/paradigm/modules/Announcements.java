@@ -384,4 +384,12 @@ public class Announcements implements ParadigmModule {
         platform.sendSuccess(context.getSource(), platform.createLiteralComponent(type + " broadcasted."), true);
         return 1;
     }
+
+    public void rescheduleAnnouncements() {
+        if (services == null) return;
+        services.getDebugLogger().debugLog(NAME + ": Rescheduling announcements on config reload.");
+        cancelAllTasks();
+        announcementsScheduled = false;
+        scheduleConfiguredAnnouncements();
+    }
 }

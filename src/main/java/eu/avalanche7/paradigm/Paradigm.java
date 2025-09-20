@@ -15,6 +15,7 @@ import net.fabricmc.api.DedicatedServerModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.loader.api.FabricLoader;
+import net.fabricmc.loader.api.ModContainer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.ServerCommandSource;
 import org.slf4j.Logger;
@@ -37,12 +38,12 @@ public class Paradigm implements DedicatedServerModInitializer {
     public static final String MOD_ID = "paradigm";
     private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
     private final List<ParadigmModule> modules = new ArrayList<>();
+    private static List<ParadigmModule> modulesStatic;
     private Services services;
     private static Services servicesInstance;
-
-
     private DebugLogger debugLoggerInstance;
     private Lang langInstance;
+    private static String modVersion = "unknown";
     private MessageParser messageParserInstance;
     private PermissionsHandler permissionsHandlerInstance;
     private Placeholders placeholdersInstance;
@@ -62,6 +63,7 @@ public class Paradigm implements DedicatedServerModInitializer {
         initializeServices();
         registerModules();
         servicesInstance = services;
+        modulesStatic = modules;
 
         modules.forEach(module -> module.registerEventListeners(null, services));
         modules.forEach(module -> module.onLoad(null, services, null));
@@ -69,16 +71,16 @@ public class Paradigm implements DedicatedServerModInitializer {
         registerFabricEvents();
 
         FabricLoader.getInstance().getModContainer(MOD_ID).ifPresent(modContainer -> {
-            String version = modContainer.getMetadata().getVersion().getFriendlyString();
+            modVersion = modContainer.getMetadata().getVersion().getFriendlyString();
             String displayName = modContainer.getMetadata().getName();
 
             LOGGER.info("Paradigm Fabric mod (1.21.1) has been set up.");
             LOGGER.info("==================================================");
-            LOGGER.info("{} - Version {}", displayName, version);
+            LOGGER.info("{} - Version {}", displayName, getModVersion());
             LOGGER.info("Author: Avalanche7CZ");
             LOGGER.info("Discord: https://discord.com/invite/qZDcQdEFqQ");
             LOGGER.info("==================================================");
-            UpdateChecker.checkForUpdates(version, LOGGER);
+            UpdateChecker.checkForUpdates(getModVersion(), LOGGER);
         });
     }
 
@@ -134,7 +136,6 @@ public class Paradigm implements DedicatedServerModInitializer {
 
     private void createUtilityInstances() {
         this.placeholdersInstance = new Placeholders();
-        this.customToastManagerInstance = new CustomToastManager(null);
         this.debugLoggerInstance = new DebugLogger(MainConfigHandler.getConfig());
         this.taskSchedulerInstance = new TaskScheduler(this.debugLoggerInstance);
         this.permissionsHandlerInstance = new PermissionsHandler(LOGGER, this.cmConfigInstance, this.debugLoggerInstance);
@@ -146,6 +147,7 @@ public class Paradigm implements DedicatedServerModInitializer {
                 this.taskSchedulerInstance,
                 this.debugLoggerInstance
         );
+
         this.messageParserInstance = new MessageParser(this.placeholdersInstance, this.platformAdapterInstance);
         this.customToastManagerInstance = new CustomToastManager(this.messageParserInstance);
         this.platformAdapterInstance.provideMessageParser(this.messageParserInstance);
@@ -183,6 +185,12 @@ public class Paradigm implements DedicatedServerModInitializer {
     }
 
     private void registerModules() {
+        // Important: Brigadier merges literals with the same name. The first time we register the root literal
+        // "paradigm" determines whether an executes handler (base /paradigm output) can be attached.
+        // Later registrations with the same literal name CANNOT override/attach a new executes to the root node
+        // (their command function is ignored; only children are merged). Therefore the Help module MUST be
+        // registered before any other module that also calls dispatcher.register(literal("paradigm")).
+        modules.add(new eu.avalanche7.paradigm.modules.commands.Help()); // register first so its executes is kept
         modules.add(new Announcements());
         modules.add(new MOTD());
         modules.add(new Mentions());
@@ -191,6 +199,7 @@ public class Paradigm implements DedicatedServerModInitializer {
         modules.add(new GroupChat(this.groupChatManagerInstance));
         modules.add(new CommandManager());
         modules.add(new CustomToasts());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.Reload());
         LOGGER.info("Paradigm: Registered {} modules.", modules.size());
     }
 
@@ -222,10 +231,32 @@ public class Paradigm implements DedicatedServerModInitializer {
                 module.registerCommands(dispatcher, registryAccess, services);
             }
         });
+        var root = dispatcher.getRoot().getChild("paradigm");
+        if (root != null) {
+            LOGGER.info("[Paradigm] Root /paradigm command node present. Has executes? {}", root.getCommand() != null);
+        } else {
+            LOGGER.warn("[Paradigm] Root /paradigm command node NOT found after registration!");
+        }
     }
 
     public static Services getServices() {
         return servicesInstance;
+    }
+
+    public static List<ParadigmModule> getModules() {
+        return modulesStatic != null ? modulesStatic : List.of();
+    }
+
+    public static String getModVersion() {
+        if (!"unknown".equals(modVersion)) return modVersion;
+        // Fallback attempt if not yet initialized
+        try {
+            return FabricLoader.getInstance().getModContainer(MOD_ID)
+                    .map(c -> c.getMetadata().getVersion().getFriendlyString())
+                    .orElse("unknown");
+        } catch (Throwable t) {
+            return "unknown";
+        }
     }
 
     private void onServerStopping(MinecraftServer server) {

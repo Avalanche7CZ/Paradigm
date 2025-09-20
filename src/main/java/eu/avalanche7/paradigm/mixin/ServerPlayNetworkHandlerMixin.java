@@ -2,8 +2,6 @@ package eu.avalanche7.paradigm.mixin;
 
 import eu.avalanche7.paradigm.platform.MinecraftEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem.ChatEventListener;
-import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem.ChatEvent;
-import eu.avalanche7.paradigm.platform.MinecraftPlayer;
 import net.minecraft.server.network.ServerPlayNetworkHandler;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
@@ -21,8 +19,13 @@ public class ServerPlayNetworkHandlerMixin {
         String message = packet.chatMessage();
         MinecraftEventSystem.ChatEventImpl event = new MinecraftEventSystem.ChatEventImpl(player, message);
         for (ChatEventListener listener : MinecraftEventSystem.getChatListeners()) {
-            listener.onPlayerChat(event);
+            try {
+                listener.onPlayerChat(event);
+            } catch (Exception e) {
+                System.err.println("Error in chat event listener: " + e.getMessage());
+            }
         }
+
         if (event.isCancelled()) {
             ci.cancel();
         } else if (!event.getMessage().equals(message)) {
@@ -31,4 +34,3 @@ public class ServerPlayNetworkHandlerMixin {
         }
     }
 }
-

@@ -121,7 +121,7 @@ public class Mentions implements ParadigmModule {
             return false;
         }
 
-        this.services.getDebugLogger().debugLog("Mention everyone detected in chat by " + sender.getName().getString());
+        this.services.getDebugLogger().debugLog("Mention everyone detected in chat by " + platform.getPlayerName(sender));
         notifyEveryone(platform.getOnlinePlayers(), sender, rawMessage, false, mentionConfig, matchedEveryoneMention);
         return false;
     }
@@ -142,7 +142,7 @@ public class Mentions implements ParadigmModule {
 
             if (hasPermission(sender, PermissionsHandler.MENTION_PLAYER_PERMISSION, PermissionsHandler.MENTION_PLAYER_PERMISSION_LEVEL)
                     && canMentionPlayer(sender, targetPlayer, mentionConfig)) {
-                this.services.getDebugLogger().debugLog("Mention player detected in chat: " + targetPlayer.getName().getString() + " by " + sender.getName().getString());
+                this.services.getDebugLogger().debugLog("Mention player detected in chat: " + platform.getPlayerName(targetPlayer) + " by " + platform.getPlayerName(sender));
                 notifyPlayer(targetPlayer, sender, rawMessage, false, mentionConfig, mentionMatcher.group(0));
                 mentionedSomeone = true;
             }
@@ -182,7 +182,7 @@ public class Mentions implements ParadigmModule {
 
         int mentionedCount = 0;
         for (ServerPlayerEntity targetPlayer : players) {
-            String playerMentionPlaceholder = mentionConfig.MENTION_SYMBOL.value + targetPlayer.getName().getString();
+            String playerMentionPlaceholder = mentionConfig.MENTION_SYMBOL.value + platform.getPlayerName(targetPlayer);
             Pattern playerMentionPattern = Pattern.compile(Pattern.quote(playerMentionPlaceholder), Pattern.CASE_INSENSITIVE);
 
             if (playerMentionPattern.matcher(message).find()) {
@@ -207,7 +207,7 @@ public class Mentions implements ParadigmModule {
     }
 
     private void notifyEveryone(List<ServerPlayerEntity> players, ServerPlayerEntity sender, String originalMessage, boolean isConsole, MentionConfigHandler.Config config, String matchedEveryoneMention) {
-        String senderName = isConsole || sender == null ? "Console" : sender.getName().getString();
+        String senderName = isConsole || sender == null ? "Console" : platform.getPlayerName(sender);
         String chatFormat = config.EVERYONE_MENTION_MESSAGE.value;
         String titleFormat = config.EVERYONE_TITLE_MESSAGE.value;
         String content = originalMessage.substring(originalMessage.toLowerCase().indexOf(matchedEveryoneMention.toLowerCase()) + matchedEveryoneMention.length()).trim();
@@ -221,7 +221,7 @@ public class Mentions implements ParadigmModule {
     }
 
     private void notifyPlayer(ServerPlayerEntity targetPlayer, ServerPlayerEntity sender, String originalMessage, boolean isConsole, MentionConfigHandler.Config config, String matchedPlayerMention) {
-        String senderName = isConsole || sender == null ? "Console" : sender.getName().getString();
+        String senderName = isConsole || sender == null ? "Console" : platform.getPlayerName(sender);
         String chatFormat = config.INDIVIDUAL_MENTION_MESSAGE.value;
         String titleFormat = config.INDIVIDUAL_TITLE_MESSAGE.value;
         String content = originalMessage.substring(originalMessage.toLowerCase().indexOf(matchedPlayerMention.toLowerCase()) + matchedPlayerMention.length()).trim();
@@ -292,3 +292,4 @@ public class Mentions implements ParadigmModule {
         return true;
     }
 }
+

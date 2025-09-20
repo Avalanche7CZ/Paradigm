@@ -66,9 +66,9 @@ public class CustomToasts implements ParadigmModule {
 
                                                     boolean success = services.getCustomToastManager().showToast(player, toastId, services);
                                                     if (success) {
-                                                        context.getSource().sendFeedback(() -> platform.createLiteralComponent("Toast '" + toastId + "' sent to " + player.getName().getString()), true);
+                                                        platform.sendSuccess(context.getSource(), platform.createLiteralComponent("Toast '" + toastId + "' sent to " + platform.getPlayerName(player)), true);
                                                     } else {
-                                                        context.getSource().sendError(platform.createLiteralComponent("Toast with ID '" + toastId + "' not found in toasts.json."));
+                                                        platform.sendFailure(context.getSource(), platform.createLiteralComponent("Toast with ID '" + toastId + "' not found in toasts.json."));
                                                     }
                                                     return success ? 1 : 0;
                                                 })

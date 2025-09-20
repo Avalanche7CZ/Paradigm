@@ -65,6 +65,10 @@ public class CommandManager implements ParadigmModule {
     @Override
     public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {
         services.getCmConfig().getLoadedCommands().forEach(command -> {
+            if (dispatcher.getRoot().getChild(command.getName()) != null) {
+                services.getDebugLogger().debugLog(NAME + ": Skipping registration of custom command '" + command.getName() + "' because it conflicts with an existing command.");
+                return;
+            }
             LiteralArgumentBuilder<ServerCommandSource> commandBuilder = net.minecraft.server.command.CommandManager.literal(command.getName())
                     .requires(source -> platform.hasPermissionForCustomCommand(source, command));
 

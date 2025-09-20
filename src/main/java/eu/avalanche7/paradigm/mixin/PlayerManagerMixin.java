@@ -40,6 +40,8 @@ public class PlayerManagerMixin {
         }
 
         IPlatformAdapter platform = services.getPlatformAdapter();
+        if (platform == null) return;
+
         boolean isFirstJoin = player.getStatHandler().getStat(Stats.CUSTOM.getOrCreateStat(Stats.LEAVE_GAME)) == 0;
         String messageFormat = null;
 
@@ -50,7 +52,7 @@ public class PlayerManagerMixin {
         }
 
         if (messageFormat != null && !messageFormat.isEmpty()) {
-            IPlayer iPlayer = services.getPlatformAdapter().wrapPlayer(player);
+            IPlayer iPlayer = platform.wrapPlayer(player);
             Text formattedMessage = services.getMessageParser().parseMessage(messageFormat, iPlayer).getOriginalText();
             platform.broadcastSystemMessage(formattedMessage);
         }
@@ -67,10 +69,12 @@ public class PlayerManagerMixin {
         }
 
         IPlatformAdapter platform = services.getPlatformAdapter();
+        if (platform == null) return;
+
         String leaveMessageFormat = chatConfig.leaveMessageFormat.value;
 
         if (leaveMessageFormat != null && !leaveMessageFormat.isEmpty()) {
-            IPlayer iPlayer = services.getPlatformAdapter().wrapPlayer(player);
+            IPlayer iPlayer = platform.wrapPlayer(player);
             Text formattedMessage = services.getMessageParser().parseMessage(leaveMessageFormat, iPlayer).getOriginalText();
             platform.broadcastSystemMessage(formattedMessage);
         }

@@ -75,19 +75,22 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public List<ServerPlayerEntity> getOnlinePlayers() {
-        return getMinecraftServer().getPlayerManager().getPlayerList();
+        if (server == null) return new ArrayList<>();
+        return server.getPlayerManager().getPlayerList();
     }
 
     @Override
     @Nullable
     public ServerPlayerEntity getPlayerByName(String name) {
-        return getMinecraftServer().getPlayerManager().getPlayer(name);
+        if (server == null) return null;
+        return server.getPlayerManager().getPlayer(name);
     }
 
     @Override
     @Nullable
     public ServerPlayerEntity getPlayerByUuid(UUID uuid) {
-        return getMinecraftServer().getPlayerManager().getPlayer(uuid);
+        if (server == null) return null;
+        return server.getPlayerManager().getPlayer(uuid);
     }
 
     @Override
@@ -133,29 +136,41 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public void broadcastSystemMessage(Text message) {
-        if (getMinecraftServer() != null) {
-            getMinecraftServer().getPlayerManager().broadcast(message, false);
+        if (server != null && server.getPlayerManager() != null) {
+            server.getPlayerManager().broadcast(message, false);
         }
     }
 
     @Override
     public void broadcastChatMessage(Text message) {
-        if (getMinecraftServer() != null) {
-            getMinecraftServer().getPlayerManager().broadcast(message, false);
+        if (server != null && server.getPlayerManager() != null) {
+            server.getPlayerManager().broadcast(message, false);
         }
     }
 
     @Override
     public void broadcastSystemMessage(Text message, String header, String footer, @Nullable ServerPlayerEntity playerContext) {
-        if (messageParser == null) return;
-        IPlayer iPlayerContext = playerContext != null ? wrapPlayer(playerContext) : null;
-        IComponent headerComp = messageParser.parseMessage(header, iPlayerContext);
-        IComponent footerComp = messageParser.parseMessage(footer, iPlayerContext);
-        getOnlinePlayers().forEach(p -> {
-            p.sendMessage(headerComp.getOriginalText());
-            p.sendMessage(message);
-            p.sendMessage(footerComp.getOriginalText());
-        });
+        if (messageParser == null || server == null) return;
+
+        if (playerContext != null) {
+            IPlayer iPlayerContext = wrapPlayer(playerContext);
+            IComponent headerComp = messageParser.parseMessage(header, iPlayerContext);
+            IComponent footerComp = messageParser.parseMessage(footer, iPlayerContext);
+            getOnlinePlayers().forEach(p -> {
+                sendSystemMessage(p, headerComp.getOriginalText());
+                sendSystemMessage(p, message);
+                sendSystemMessage(p, footerComp.getOriginalText());
+            });
+        } else {
+            getOnlinePlayers().forEach(p -> {
+                IPlayer iPlayer = wrapPlayer(p);
+                IComponent headerComp = messageParser.parseMessage(header, iPlayer);
+                IComponent footerComp = messageParser.parseMessage(footer, iPlayer);
+                sendSystemMessage(p, headerComp.getOriginalText());
+                sendSystemMessage(p, message);
+                sendSystemMessage(p, footerComp.getOriginalText());
+            });
+        }
     }
 
     @Override
@@ -258,8 +273,9 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public void executeCommandAsConsole(String command) {
-        ServerCommandSource consoleSource = getMinecraftServer().getCommandSource().withLevel(4);
-        getMinecraftServer().getCommandManager().executeWithPrefix(consoleSource, command);
+        if (server == null) return;
+        ServerCommandSource consoleSource = server.getCommandSource().withLevel(4);
+        server.getCommandManager().executeWithPrefix(consoleSource, command);
     }
 
     @Override
@@ -363,7 +379,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public List<String> getOnlinePlayerNames() {
         return getOnlinePlayers().stream()
-                .map(player -> player.getName().getString())
+                .map(this::getPlayerName)
                 .toList();
     }
 
@@ -382,3 +398,9 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         return MinecraftPlayer.of(player);
     }
 }
+
+
+
+
+
+

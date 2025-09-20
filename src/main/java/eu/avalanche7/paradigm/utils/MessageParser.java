@@ -32,6 +32,7 @@ public class MessageParser {
 
     private void initializeTagHandlers() {
         tagHandlers.put(Pattern.compile("\\[link=(.*?)\\]"), (matcher, context) -> {
+            if (platformAdapter == null) return;
             String url = matcher.group(1);
             IComponent urlComponent = new MinecraftComponent(platformAdapter.createLiteralComponent(url));
             urlComponent.setStyle(context.getCurrentStyle().withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, formatUrl(url))));
@@ -41,6 +42,7 @@ public class MessageParser {
             context.getComponent().append(spaceComponent);
         });
         tagHandlers.put(Pattern.compile("\\[command=(.*?)\\]"), (matcher, context) -> {
+            if (platformAdapter == null) return;
             String command = matcher.group(1);
             String fullCommand = command.startsWith("/") ? command : "/" + command;
             IComponent cmdComponent = new MinecraftComponent(platformAdapter.createLiteralComponent(fullCommand));
@@ -51,42 +53,43 @@ public class MessageParser {
             context.getComponent().append(spaceComponent);
         });
         tagHandlers.put(Pattern.compile("\\[hover=(.*?)\\](.*?)\\[/hover\\]", Pattern.DOTALL), (matcher, context) -> {
+            if (platformAdapter == null) return;
             String hoverTextContent = matcher.group(1);
             String mainTextContent = matcher.group(2);
             IComponent hoverComponent = parseMessageInternal(hoverTextContent, context.getPlayer(), Style.EMPTY);
             IComponent textWithHover = new MinecraftComponent(platformAdapter.createLiteralComponent(""));
             parseTextRecursive(mainTextContent, textWithHover, context.getCurrentStyle(), context.getPlayer());
-            textWithHover.onHoverComponent(hoverComponent);
+            textWithHover = textWithHover.onHoverComponent(hoverComponent);
             context.getComponent().append(textWithHover);
         });
         tagHandlers.put(Pattern.compile("\\[divider\\]"), (matcher, context) -> {
+            if (platformAdapter == null) return;
             IComponent dividerComponent = new MinecraftComponent(platformAdapter.createLiteralComponent("--------------------"));
             dividerComponent.setStyle(context.getCurrentStyle().withColor(TextColor.fromFormatting(Formatting.GRAY)));
             context.getComponent().append(dividerComponent);
         });
         tagHandlers.put(Pattern.compile("\\[title=(.*?)\\]", Pattern.DOTALL), (matcher, context) -> {
-            if (context.getPlayer() != null) {
-                String titleText = matcher.group(1);
-                IComponent titleComponent = parseTitleOrSubtitle(titleText, context.getCurrentStyle(), context.getPlayer());
-                platformAdapter.clearTitles(context.getPlayer().getOriginalPlayer());
-                platformAdapter.sendTitle(
-                    context.getPlayer().getOriginalPlayer(),
-                    titleComponent instanceof MinecraftComponent mc ? mc.getHandle() : new MinecraftComponent(platformAdapter.createLiteralComponent(titleComponent.getRawText())).getHandle(),
-                    new MinecraftComponent(platformAdapter.createLiteralComponent("")).getHandle()
-                );
-            }
+            if (platformAdapter == null || context.getPlayer() == null) return;
+            String titleText = matcher.group(1);
+            IComponent titleComponent = parseTitleOrSubtitle(titleText, context.getCurrentStyle(), context.getPlayer());
+            platformAdapter.clearTitles(context.getPlayer().getOriginalPlayer());
+            platformAdapter.sendTitle(
+                context.getPlayer().getOriginalPlayer(),
+                titleComponent instanceof MinecraftComponent mc ? mc.getHandle() : new MinecraftComponent(platformAdapter.createLiteralComponent(titleComponent.getRawText())).getHandle(),
+                new MinecraftComponent(platformAdapter.createLiteralComponent("")).getHandle()
+            );
         });
         tagHandlers.put(Pattern.compile("\\[subtitle=(.*?)\\]", Pattern.DOTALL), (matcher, context) -> {
-            if (context.getPlayer() != null) {
-                String subtitleText = matcher.group(1);
-                IComponent subtitleComponent = parseTitleOrSubtitle(subtitleText, context.getCurrentStyle(), context.getPlayer());
-                platformAdapter.sendSubtitle(
-                    context.getPlayer().getOriginalPlayer(),
-                    subtitleComponent instanceof MinecraftComponent mc ? mc.getHandle() : new MinecraftComponent(platformAdapter.createLiteralComponent(subtitleComponent.getRawText())).getHandle()
-                );
-            }
+            if (platformAdapter == null || context.getPlayer() == null) return;
+            String subtitleText = matcher.group(1);
+            IComponent subtitleComponent = parseTitleOrSubtitle(subtitleText, context.getCurrentStyle(), context.getPlayer());
+            platformAdapter.sendSubtitle(
+                context.getPlayer().getOriginalPlayer(),
+                subtitleComponent instanceof MinecraftComponent mc ? mc.getHandle() : new MinecraftComponent(platformAdapter.createLiteralComponent(subtitleComponent.getRawText())).getHandle()
+            );
         });
         tagHandlers.put(Pattern.compile("\\[center\\](.*?)\\[/center\\]", Pattern.DOTALL), (matcher, context) -> {
+            if (platformAdapter == null) return;
             String textToCenter = matcher.group(1);
             IComponent innerComponent = parseMessageInternal(textToCenter, context.getPlayer(), context.getCurrentStyle());
             String plainInnerText = innerComponent.getRawText();
@@ -124,16 +127,14 @@ public class MessageParser {
 
     private IComponent parseMessageInternal(String rawMessage, IPlayer player, Style initialStyle) {
         if (rawMessage == null) {
-            if (platformAdapter != null) {
-                IComponent emptyComponent = new MinecraftComponent(platformAdapter.createLiteralComponent(""));
-                emptyComponent.setStyle(initialStyle);
-                return emptyComponent;
-            } else {
-                return new MinecraftComponent(Text.literal(""));
-            }
+            IComponent emptyComponent = new MinecraftComponent(platformAdapter != null ?
+                platformAdapter.createLiteralComponent("") : Text.literal(""));
+            emptyComponent.setStyle(initialStyle);
+            return emptyComponent;
         }
 
         if (platformAdapter == null) {
+            // Fallback when platformAdapter is null - return simple text component
             return new MinecraftComponent(Text.literal(rawMessage));
         }
 
@@ -159,6 +160,10 @@ public class MessageParser {
     }
 
     private void parseTextRecursive(String textToParse, IComponent parentComponent, Style currentStyle, IPlayer player) {
+        if (platformAdapter == null) {
+            parentComponent.append(new MinecraftComponent(Text.literal(textToParse)).setStyle(currentStyle));
+            return;
+        }
         int currentIndex = 0;
         int length = textToParse.length();
         Matcher urlMatcher = urlPattern.matcher(textToParse);

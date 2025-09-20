@@ -98,7 +98,7 @@ public class Restart implements ParadigmModule {
                         .executes(context -> {
                             services.getDebugLogger().debugLog(NAME + ": /restart now command executed by " + context.getSource().getDisplayName().getString());
                             initiateRestartSequence(60, services, services.getRestartConfig());
-                            context.getSource().sendFeedback(() -> platform.createLiteralComponent("Initiating immediate 60-second restart sequence."), true);
+                            platform.sendSuccess(context.getSource(), platform.createLiteralComponent("Initiating immediate 60-second restart sequence."), true);
                             return 1;
                         }))
                 .then(CommandManager.literal("cancel")
@@ -107,9 +107,9 @@ public class Restart implements ParadigmModule {
                             if (restartInProgress.get()) {
                                 cancelAndCleanup();
                                 scheduleNextRestart(services);
-                                context.getSource().sendFeedback(() -> platform.createLiteralComponent("The active server restart has been cancelled."), true);
+                                platform.sendSuccess(context.getSource(), platform.createLiteralComponent("The active server restart has been cancelled."), true);
                             } else {
-                                context.getSource().sendError(platform.createLiteralComponent("No restart is currently scheduled to be cancelled."));
+                                platform.sendFailure(context.getSource(), platform.createLiteralComponent("No restart is currently scheduled to be cancelled."));
                             }
                             return 1;
                         }))
@@ -263,5 +263,12 @@ public class Restart implements ParadigmModule {
         services.getDebugLogger().debugLog(NAME + ": Initiating final shutdown procedure.");
         Text kickMessage = services.getMessageParser().parseMessage(config.defaultRestartReason.value, null).getOriginalText();
         platform.shutdownServer(kickMessage);
+    }
+
+    public void rescheduleNextRestart(Services services) {
+        if (services == null) return;
+        this.services = services;
+        cancelAndCleanup();
+        scheduleNextRestart(services);
     }
 }
