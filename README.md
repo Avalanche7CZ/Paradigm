@@ -7,9 +7,10 @@
 ### Compatibility
 | Version    | Mod Loader | Required Version | LuckPerms | ForgeEssentials | Status |
 |:-----------|:-----------|:-----------------|:---------:|:---------------:|:-------|
-| **1.21.1** | NeoForge   | `21.0.8-beta+`   | ✅        | ❌              | **Experimental** |
+ **1.21.8** | Fabric     | `0.16.14+`       | ❌        | ❌              | WIP |
+| **1.21.1** | NeoForge - Sinytra   | `21.0.8-beta+`   | ✅        | ❌              | **Experimental** |
 | **1.21.1** | Fabric     | `0.16.14+`       | ✅        | ❌              | Active |
-| **1.20.1** | Fabric     | `0.14.21+`       | ✅        | ❌              | WIP |
+| **1.20.1** | Fabric     | `0.14.21+`       | ❌        | ❌              | WIP |
 | **1.21.1** | Forge      | `52.1.0+`        | ✅        | ❌              | Active |
 | **1.20.1** | Forge      | `47.4.2+`        | ✅        | ❌              | Active |
 | **1.19.2** | Forge      | `41.1.0+`        | ✅        | ❌              | Active |
