@@ -24,7 +24,7 @@ public class Paradigm {
 
     public static final String MOD_ID = "paradigm";
     public static final String NAME = "Paradigm";
-    public static final String VERSION = "12.0.5";
+    public static final String VERSION = "12.0.6";
 
     private static final Logger LOGGER = LogManager.getLogger(MOD_ID);
     private final List<ParadigmModule> modules = new ArrayList<>();
