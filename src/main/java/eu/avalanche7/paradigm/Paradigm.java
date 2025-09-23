@@ -50,7 +50,6 @@ public class Paradigm implements DedicatedServerModInitializer {
     private TaskScheduler taskSchedulerInstance;
     private GroupChatManager groupChatManagerInstance;
     private CMConfig cmConfigInstance;
-    private CustomToastManager customToastManagerInstance;
     private IPlatformAdapter platformAdapterInstance;
     private CooldownConfigHandler cooldownConfigHandlerInstance;
     private TelemetryReporter telemetryReporter;
@@ -94,7 +93,6 @@ public class Paradigm implements DedicatedServerModInitializer {
             ChatConfigHandler.setJsonValidator(bootstrapDebugLogger);
             MentionConfigHandler.setJsonValidator(bootstrapDebugLogger);
             RestartConfigHandler.setJsonValidator(bootstrapDebugLogger);
-            ToastConfigHandler.setJsonValidator(bootstrapDebugLogger);
             MOTDConfigHandler.setJsonValidator(bootstrapDebugLogger);
 
             MainConfigHandler.getConfig();
@@ -102,7 +100,6 @@ public class Paradigm implements DedicatedServerModInitializer {
             MentionConfigHandler.getConfig();
             RestartConfigHandler.getConfig();
             ChatConfigHandler.getConfig();
-            ToastConfigHandler.getToasts();
             MOTDConfigHandler.getConfig();
             CooldownConfigHandler.load();
 
@@ -112,7 +109,6 @@ public class Paradigm implements DedicatedServerModInitializer {
             ChatConfigHandler.setJsonValidator(debugLoggerInstance);
             MentionConfigHandler.setJsonValidator(debugLoggerInstance);
             RestartConfigHandler.setJsonValidator(debugLoggerInstance);
-            ToastConfigHandler.setJsonValidator(debugLoggerInstance);
             MOTDConfigHandler.setJsonValidator(debugLoggerInstance);
 
             if (this.cmConfigInstance == null) {
@@ -149,7 +145,6 @@ public class Paradigm implements DedicatedServerModInitializer {
         );
 
         this.messageParserInstance = new MessageParser(this.placeholdersInstance, this.platformAdapterInstance);
-        this.customToastManagerInstance = new CustomToastManager(this.messageParserInstance);
         this.platformAdapterInstance.provideMessageParser(this.messageParserInstance);
     }
 
@@ -167,7 +162,6 @@ public class Paradigm implements DedicatedServerModInitializer {
                 MentionConfigHandler.getConfig(),
                 RestartConfigHandler.getConfig(),
                 ChatConfigHandler.getConfig(),
-                ToastConfigHandler.getToasts(),
                 this.cmConfigInstance,
                 this.groupChatManagerInstance,
                 this.debugLoggerInstance,
@@ -176,7 +170,6 @@ public class Paradigm implements DedicatedServerModInitializer {
                 this.permissionsHandlerInstance,
                 this.placeholdersInstance,
                 this.taskSchedulerInstance,
-                this.customToastManagerInstance,
                 this.platformAdapterInstance,
                 this.cooldownConfigHandlerInstance
         );
@@ -198,7 +191,6 @@ public class Paradigm implements DedicatedServerModInitializer {
         modules.add(new StaffChat());
         modules.add(new GroupChat(this.groupChatManagerInstance));
         modules.add(new CommandManager());
-        modules.add(new CustomToasts());
         modules.add(new eu.avalanche7.paradigm.modules.commands.Reload());
         LOGGER.info("Paradigm: Registered {} modules.", modules.size());
     }
