@@ -3,10 +3,8 @@ package eu.avalanche7.paradigm.configs;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -64,7 +62,7 @@ public class AnnouncementsConfigHandler {
 
     public static void load() {
         if (Files.exists(configPath)) {
-            try (FileReader reader = new FileReader(configPath.toFile())) {
+            try (InputStreamReader reader = new InputStreamReader(new FileInputStream(configPath.toFile()), StandardCharsets.UTF_8)) {
                 Config loadedConfig = GSON.fromJson(reader, Config.class);
                 if (loadedConfig != null) {
                     CONFIG = loadedConfig;
@@ -79,7 +77,7 @@ public class AnnouncementsConfigHandler {
     public static void save() {
         try {
             Files.createDirectories(configPath.getParent());
-            try (FileWriter writer = new FileWriter(configPath.toFile())) {
+            try (OutputStreamWriter writer = new OutputStreamWriter(new FileOutputStream(configPath.toFile()), StandardCharsets.UTF_8)) {
                 GSON.toJson(CONFIG, writer);
             }
         } catch (IOException e) {

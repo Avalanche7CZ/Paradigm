@@ -8,12 +8,9 @@ import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import net.minecraft.util.text.ITextComponent;
 import org.apache.logging.log4j.Logger;
 
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.InputStream;
+import java.io.*;
 import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -67,7 +64,7 @@ public class Lang {
             return;
         }
 
-        try (FileReader reader = new FileReader(langFile.toFile())) {
+        try (InputStreamReader reader = new InputStreamReader(new FileInputStream(langFile.toFile()), StandardCharsets.UTF_8)) {
             Map<String, Object> rawMap = gson.fromJson(reader, type);
             translations.clear();
             flattenMap("", rawMap);
@@ -107,7 +104,7 @@ public class Lang {
             Files.createDirectories(langFolder);
         }
 
-        List<String> availableLanguages = Arrays.asList("en", "cs", "ru");
+        List<String> availableLanguages = Arrays.asList("en", "cs", "ru", "zh");
         for (String langCode : availableLanguages) {
             Path langFile = langFolder.resolve(langCode + ".json");
             if (!Files.exists(langFile)) {

@@ -5,10 +5,8 @@ import com.google.gson.GsonBuilder;
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -47,7 +45,7 @@ public class CMConfig {
 
         if (commandFiles != null) {
             for (File file : commandFiles) {
-                try (FileReader reader = new FileReader(file)) {
+                try (InputStreamReader reader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8)) {
                     CustomCommand command = gson.fromJson(reader, CustomCommand.class);
                     if (command != null && command.getName() != null && !command.getName().trim().isEmpty()) {
                         this.loadedCommands.add(command);
@@ -73,7 +71,7 @@ public class CMConfig {
             configFolder.mkdirs();
         }
         File file = new File(configFolder, fileName);
-        try (FileWriter writer = new FileWriter(file)) {
+        try (OutputStreamWriter writer = new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8)) {
             gson.toJson(command, writer);
         } catch (IOException e) {
             debugLogger.debugLog("CMConfig: Failed to save example command to " + fileName, e);
