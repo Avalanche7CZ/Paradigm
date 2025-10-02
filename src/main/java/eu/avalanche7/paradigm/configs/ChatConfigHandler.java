@@ -53,6 +53,10 @@ public class ChatConfigHandler {
                 true,
                 "Shows a boss bar at the top of the screen when a staff member has staff chat toggled on."
         );
+        public ConfigEntry<Boolean> enableGroupChat = new ConfigEntry<>(
+                true,
+                "Enables or disables the Group Chat feature and its commands."
+        );
         public ConfigEntry<Boolean> enableJoinLeaveMessages = new ConfigEntry<>(
                 true,
                 "Enables or disables custom join and leave messages."

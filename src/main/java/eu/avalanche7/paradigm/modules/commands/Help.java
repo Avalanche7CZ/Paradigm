@@ -7,6 +7,9 @@ import eu.avalanche7.paradigm.Paradigm;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.utils.MessageParser;
 import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
@@ -16,11 +19,9 @@ import net.minecraft.text.HoverEvent;
 import net.minecraft.text.Text;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class Help implements ParadigmModule {
     private static final String NAME = "Help";
-    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger("ParadigmHelp");
 
     @Override public String getName() { return NAME; }
     @Override public boolean isEnabled(Services services) { return true; }
@@ -90,45 +91,81 @@ public class Help implements ParadigmModule {
     private ServerPlayerEntity getPlayer(ServerCommandSource source) { return source.getEntity() instanceof ServerPlayerEntity sp ? sp : null; }
 
     private void sendMainHelp(ServerPlayerEntity p, IPlatformAdapter platform, Services services) {
+        IPlayer ip = platform.wrapPlayer(p);
+        MessageParser parser = services.getMessageParser();
         String version = Paradigm.getModVersion();
-        String sep = "§8§m----------------------------------------";
-        platform.sendSystemMessage(p, Text.literal(sep));
-        platform.sendSystemMessage(p, Text.literal("§d§lParadigm §7v" + version + "  §f(/paradigm help)"));
-        platform.sendSystemMessage(p, Text.literal("§7Author: §dAvalanche7CZ  §7Discord: §9discord.gg/qZDcQdEFqQ")
-            .styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, "https://discord.com/invite/qZDcQdEFqQ"))
-                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Open Discord")))));
+        IComponent sep = parser.parseMessage("&8&m----------------------------------------", ip);
+        platform.sendSystemMessage(p, sep.getOriginalText());
+        platform.sendSystemMessage(p, parser.parseMessage("&d&l[ Paradigm Mod v" + version + " ]", ip).getOriginalText());
+        platform.sendSystemMessage(p, parser.parseMessage("&6by Avalanche7CZ &d♥", ip).getOriginalText());
+        platform.sendSystemMessage(p, parser.parseMessage("&bDiscord: [hover=Click to join the Paradigm Discord!]https://discord.com/invite/qZDcQdEFqQ[/hover]", ip).getOriginalText());
+        platform.sendSystemMessage(p, sep.getOriginalText());
         sendModuleList(p, platform, services, true);
-        platform.sendSystemMessage(p, Text.literal(sep));
-        platform.sendSystemMessage(p, Text.literal("§eHover & click a module for detail.  §7Try: §d/paradigm help all §7| §d/paradigm help search restart"));
-        platform.sendSystemMessage(p, Text.literal(sep));
+        platform.sendSystemMessage(p, sep.getOriginalText());
+        IComponent hint = parser.parseMessage("&eType &d/paradigm help <module> &efor details, or click a module above.", ip)
+            .onClickSuggestCommand("/paradigm help ")
+            .onHoverText("Click to start typing a help command");
+        platform.sendSystemMessage(p, hint.getOriginalText());
+        platform.sendSystemMessage(p, parser.parseMessage("&d&lParadigm - Elevate your server! ✨", ip).getOriginalText());
+        platform.sendSystemMessage(p, sep.getOriginalText());
+    }
+
+    private void sendHelpOverview(ServerPlayerEntity p, IPlatformAdapter platform) {
+        MessageParser parser = eu.avalanche7.paradigm.Paradigm.getServices().getMessageParser();
+        IPlayer ip = platform.wrapPlayer(p);
+        platform.sendSystemMessage(p, parser.parseMessage("&b&l[ Paradigm Help ]", ip).getOriginalText());
+        platform.sendSystemMessage(p, parser.parseMessage("&7Available Modules:", ip).getOriginalText());
+        List<ParadigmModule> mods = new ArrayList<>(Paradigm.getModules());
+        mods.sort(Comparator.comparing(ParadigmModule::getName, String.CASE_INSENSITIVE_ORDER));
+        for (ParadigmModule mod : mods) {
+            String modName = mod.getName();
+            IComponent line = parser.parseMessage("&b- " + modName, ip)
+                .onClickSuggestCommand("/paradigm help " + modName)
+                .onHoverText("Click for help about " + modName);
+            platform.sendSystemMessage(p, line.getOriginalText());
+        }
+        platform.sendSystemMessage(p, parser.parseMessage("&7Click a module or type &d/paradigm help <module> &7for details.", ip).getOriginalText());
     }
 
     private void sendModuleList(ServerPlayerEntity p, IPlatformAdapter platform, Services services, boolean interactive) {
+        MessageParser parser = services.getMessageParser();
+        IPlayer ip = platform.wrapPlayer(p);
+        platform.sendSystemMessage(p, parser.parseMessage("&d&lModules:", ip).getOriginalText());
         List<ParadigmModule> mods = new ArrayList<>(Paradigm.getModules());
         mods.sort(Comparator.comparing(ParadigmModule::getName, String.CASE_INSENSITIVE_ORDER));
-        platform.sendSystemMessage(p, Text.literal("§d§lModules:"));
         for (ParadigmModule mod : mods) {
             boolean enabled = mod.isEnabled(services);
-            String color = enabled ? "§a" : "§7";
-            String status = enabled ? "§2ON" : "§8OFF";
-            Text line = Text.literal(color + mod.getName() + " §8[" + status + "§8]")
-                .styled(s -> interactive ? s.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/paradigm help " + mod.getName()))
-                    .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Click for " + mod.getName() + " details"))) : s);
-            platform.sendSystemMessage(p, line);
+            String symbol = enabled ? "✔" : "✖";
+            String symbolColor = enabled ? "&a" : "&7";
+            String nameColor = enabled ? "&f" : "&8";
+            String status = enabled ? "&7(enabled)" : "&8(disabled)";
+            String raw = symbolColor + symbol + " " + nameColor + mod.getName() + " " + status;
+            IComponent line = parser.parseMessage(raw, ip);
+            if (interactive) {
+                line = line.onClickSuggestCommand("/paradigm help " + mod.getName())
+                        .onHoverText("Click for help about " + mod.getName());
+            }
+            platform.sendSystemMessage(p, line.getOriginalText());
         }
     }
 
     private void showModuleDetail(ServerPlayerEntity p, IPlatformAdapter platform, Services services, String name, Map<String,String> moduleHelps) {
         String key = moduleHelps.keySet().stream().filter(k -> k.equalsIgnoreCase(name)).findFirst().orElse(null);
-        if (key == null) { platform.sendSystemMessage(p, Text.literal("§cUnknown module: §f" + name)); suggestClosest(p, platform, moduleHelps, name); return; }
-        boolean enabled = Paradigm.getModules().stream().filter(m -> m.getName().equalsIgnoreCase(key)).findFirst().map(m -> m.isEnabled(services)).orElse(true);
-        String header = (enabled ? "§a" : "§7") + key + " §8[" + (enabled ? "§2ENABLED" : "§8DISABLED") + "§8]";
-        platform.sendSystemMessage(p, Text.literal("§8§m---------------§r §d" + key + " Help §8§m---------------"));
-        platform.sendSystemMessage(p, Text.literal(header));
-        for (String line : wrap(moduleHelps.get(key), 70)) {
-            platform.sendSystemMessage(p, Text.literal("§7" + line));
+        if (key == null) { platform.sendSystemMessage(p, Text.literal("§cNo help available for " + name + ". Try checking the wiki or ask on Discord.")); suggestClosest(p, platform, moduleHelps, name); return; }
+        boolean enabled = Paradigm.getModules().stream()
+                .filter(m -> m.getName().equalsIgnoreCase(key))
+                .findFirst()
+                .map(m -> m.isEnabled(services))
+                .orElse(false); 
+        MessageParser parser = services.getMessageParser();
+        IPlayer ip = platform.wrapPlayer(p);
+        platform.sendSystemMessage(p, parser.parseMessage("&b&l[ Paradigm Module Help ]", ip).getOriginalText());
+        platform.sendSystemMessage(p, parser.parseMessage("&b" + key + " Help", ip).getOriginalText());
+        for (String line : wrap(moduleHelps.get(key))) {
+            platform.sendSystemMessage(p, parser.parseMessage("&7" + line, ip).getOriginalText());
         }
-        platform.sendSystemMessage(p, Text.literal("§8--------------------------------------------------"));
+        String status = enabled ? "&a✔ &7Module is enabled" : "&7✖ &8Module is disabled";
+        platform.sendSystemMessage(p, parser.parseMessage(status, ip).getOriginalText());
     }
 
     private void sendAllModuleDetails(ServerPlayerEntity p, IPlatformAdapter platform, Services services, Map<String,String> moduleHelps) {
@@ -140,13 +177,13 @@ public class Help implements ParadigmModule {
 
     private void sendSearchResults(ServerPlayerEntity p, IPlatformAdapter platform, Services services, String query, Map<String,String> moduleHelps) {
         if (query.isEmpty()) { platform.sendSystemMessage(p, Text.literal("§cSearch query cannot be empty.")); return; }
-        List<String> matches = moduleHelps.keySet().stream().filter(k -> k.toLowerCase(Locale.ROOT).contains(query.toLowerCase(Locale.ROOT))).sorted(String.CASE_INSENSITIVE_ORDER).collect(Collectors.toList());
+        List<String> matches = moduleHelps.keySet().stream().filter(k -> k.toLowerCase(Locale.ROOT).contains(query.toLowerCase(Locale.ROOT))).sorted(String.CASE_INSENSITIVE_ORDER).toList();
         if (matches.isEmpty()) { platform.sendSystemMessage(p, Text.literal("§cNo modules matched: §f" + query)); return; }
         platform.sendSystemMessage(p, Text.literal("§dMatches (§f" + matches.size() + "§d):"));
         for (String m : matches) {
             boolean enabled = Paradigm.getModules().stream().anyMatch(pm -> pm.getName().equalsIgnoreCase(m) && pm.isEnabled(services));
             Text line = Text.literal((enabled ? "§a" : "§7") + m)
-                .styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/paradigm help " + m))
+                .styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/paradigm help " + m))
                     .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Click for detail"))));
             platform.sendSystemMessage(p, line);
         }
@@ -162,21 +199,22 @@ public class Help implements ParadigmModule {
         final String suggestion = best;
         if (suggestion != null && bestDist <= 4) {
             platform.sendSystemMessage(p, Text.literal("§7Did you mean: §d" + suggestion)
-                .styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/paradigm help " + suggestion))
+                .styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/paradigm help " + suggestion))
                     .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Show " + suggestion + " help")))));
         }
     }
 
-    private List<String> wrap(String text, int width) {
+    private List<String> wrap(String text) {
+        final int width = 70;
         List<String> out = new ArrayList<>();
         String[] words = text.split(" ");
         StringBuilder line = new StringBuilder();
         for (String w : words) {
             if (line.length() + w.length() + 1 > width) { out.add(line.toString()); line.setLength(0); }
-            if (line.length() > 0) line.append(' ');
+            if (!line.isEmpty()) line.append(' ');
             line.append(w);
         }
-        if (line.length() > 0) out.add(line.toString());
+        if (!line.isEmpty()) out.add(line.toString());
         return out;
     }
 

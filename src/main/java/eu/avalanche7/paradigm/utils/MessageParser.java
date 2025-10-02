@@ -134,7 +134,6 @@ public class MessageParser {
         }
 
         if (platformAdapter == null) {
-            // Fallback when platformAdapter is null - return simple text component
             return new MinecraftComponent(Text.literal(rawMessage));
         }
 

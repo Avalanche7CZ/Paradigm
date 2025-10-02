@@ -50,7 +50,13 @@ public class Announcements implements ParadigmModule {
 
     @Override
     public boolean isEnabled(Services services) {
-        return services.getAnnouncementsConfig().globalEnable.value;
+        var cfg = services.getAnnouncementsConfig();
+        return (cfg != null) && (
+            (cfg.globalEnable != null && Boolean.TRUE.equals(cfg.globalEnable.value)) ||
+            (cfg.actionbarEnable != null && Boolean.TRUE.equals(cfg.actionbarEnable.value)) ||
+            (cfg.titleEnable != null && Boolean.TRUE.equals(cfg.titleEnable.value)) ||
+            (cfg.bossbarEnable != null && Boolean.TRUE.equals(cfg.bossbarEnable.value))
+        );
     }
 
     @Override

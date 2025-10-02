@@ -39,7 +39,10 @@ public class GroupChat implements ParadigmModule {
 
     @Override
     public boolean isEnabled(Services services) {
-        return true;
+        if (services == null || services.getChatConfig() == null) {
+            return true;
+        }
+        return Boolean.TRUE.equals(services.getChatConfig().enableGroupChat.value);
     }
 
     @Override
@@ -181,11 +184,18 @@ public class GroupChat implements ParadigmModule {
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
+        if (!isEnabled(services)) {
+            services.getDebugLogger().debugLog(NAME + " module is disabled by config; skipping event registration.");
+            return;
+        }
         ServerMessageDecoratorEvent.EVENT.register(this::decorateGroupChatMessage);
     }
 
     @Nullable
     private Text decorateGroupChatMessage(ServerPlayerEntity player, Text message) {
+        if (player == null) {
+            return message;
+        }
         if (this.services == null || !isEnabled(this.services) || this.groupChatManager == null) {
             return message;
         }

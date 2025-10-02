@@ -115,6 +115,9 @@ public class StaffChat implements ParadigmModule {
     }
 
     private boolean onAllowChatMessage(SignedMessage message, ServerPlayerEntity player, MessageType.Parameters params) {
+        if (player == null) {
+            return true;
+        }
         if (!isEnabled(this.services)) {
             return true;
         }
