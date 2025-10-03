@@ -37,6 +37,9 @@ public class PermissionsHandler {
 
     public void initialize() {
         initializeChecker();
+    }
+
+    public void registerLuckPermsPermissions() {
         registerPermissionsWithLuckPerms();
     }
 
@@ -57,6 +60,15 @@ public class PermissionsHandler {
             return;
         }
 
+        registerPermissionsWithLuckPermsRetry(0);
+    }
+
+    private void registerPermissionsWithLuckPermsRetry(int attemptCount) {
+        if (attemptCount >= 5) {
+            logger.warn("Paradigm: Failed to register permissions with LuckPerms after {} attempts.", attemptCount);
+            return;
+        }
+
         try {
             net.luckperms.api.LuckPerms api = net.luckperms.api.LuckPermsProvider.get();
             Map<String, String> allPermissions = knownPermissionNodes();
@@ -71,9 +83,27 @@ public class PermissionsHandler {
                 }
                 logger.info("Paradigm: Made " + allPermissions.size() + " permissions visible to LuckPerms.");
             }
+        } catch (IllegalStateException e) {
+            if (e.getMessage() != null && e.getMessage().contains("API isn't loaded")) {
+                debugLogger.debugLog("LuckPerms not ready yet, retrying in " + (attemptCount + 1) + " seconds... (attempt " + (attemptCount + 1) + "/5)");
+                scheduleRetry(attemptCount);
+            } else {
+                logger.warn("Paradigm: Failed to register permissions with LuckPerms: " + e.getMessage());
+            }
         } catch (Exception e) {
             logger.warn("Paradigm: Failed to register permissions with LuckPerms: " + e.getMessage());
         }
+    }
+
+    private void scheduleRetry(int attemptCount) {
+        new Thread(() -> {
+            try {
+                Thread.sleep((attemptCount + 1) * 1000L);
+                registerPermissionsWithLuckPermsRetry(attemptCount + 1);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }).start();
     }
 
     public void refreshCustomCommandPermissions() {

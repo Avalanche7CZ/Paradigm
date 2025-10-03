@@ -97,6 +97,37 @@ public class MinecraftComponent implements IComponent {
     }
 
     @Override
+    public IComponent withFormatting(Formatting formatting) {
+        if (formatting == null) return copy();
+        return new MinecraftComponent(component.copy().styled(s -> s.withFormatting(formatting)));
+    }
+
+    @Override
+    public IComponent withColor(String hexOrFormatCode) {
+        if (hexOrFormatCode == null || hexOrFormatCode.isEmpty()) return copy();
+
+        if (hexOrFormatCode.startsWith("#")) {
+            return withColorHex(hexOrFormatCode.substring(1));
+        }
+
+        try {
+            int rgb = Integer.parseInt(hexOrFormatCode, 16);
+            return withColor(rgb);
+        } catch (NumberFormatException e) {
+            Formatting format = Formatting.byName(hexOrFormatCode);
+            if (format != null && format.isColor()) {
+                return withFormatting(format);
+            }
+            return copy();
+        }
+    }
+
+    @Override
+    public IComponent resetStyle() {
+        return new MinecraftComponent(component.copy().styled(s -> Style.EMPTY));
+    }
+
+    @Override
     public IComponent onClickRunCommand(String command) {
         return new MinecraftComponent(component.copy().styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command))));
     }

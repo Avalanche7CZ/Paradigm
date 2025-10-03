@@ -393,4 +393,35 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     public IPlayer wrapPlayer(ServerPlayerEntity player) {
         return MinecraftPlayer.of(player);
     }
+
+    @Override
+    public IComponent createEmptyComponent() {
+        return new MinecraftComponent(Text.literal(""));
+    }
+
+    @Override
+    public IComponent parseFormattingCode(String code, IComponent currentComponent) {
+        if (code == null || code.isEmpty()) return currentComponent;
+
+        net.minecraft.util.Formatting format = net.minecraft.util.Formatting.byCode(code.charAt(0));
+        if (format != null) {
+            if (format == net.minecraft.util.Formatting.RESET) {
+                return currentComponent.resetStyle();
+            }
+            return currentComponent.withFormatting(format);
+        }
+        return currentComponent;
+    }
+
+    @Override
+    public IComponent parseHexColor(String hex, IComponent currentComponent) {
+        if (hex == null || hex.length() != 6) return currentComponent;
+
+        try {
+            return currentComponent.withColor(hex);
+        } catch (Exception e) {
+            debugLogger.debugLog("Failed to parse hex color: " + hex, e);
+            return currentComponent;
+        }
+    }
 }

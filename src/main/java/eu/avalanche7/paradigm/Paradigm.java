@@ -204,6 +204,10 @@ public class Paradigm implements DedicatedServerModInitializer {
         }
         telemetryReporter.start();
 
+        if (this.permissionsHandlerInstance != null) {
+            this.permissionsHandlerInstance.registerLuckPermsPermissions();
+        }
+
         modules.forEach(module -> {
             if (module.isEnabled(services)) {
                 module.onEnable(services);
@@ -236,7 +240,6 @@ public class Paradigm implements DedicatedServerModInitializer {
 
     public static String getModVersion() {
         if (!"unknown".equals(modVersion)) return modVersion;
-        // Fallback attempt if not yet initialized
         try {
             return FabricLoader.getInstance().getModContainer(MOD_ID)
                     .map(c -> c.getMetadata().getVersion().getFriendlyString())
