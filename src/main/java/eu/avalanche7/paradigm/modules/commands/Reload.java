@@ -49,7 +49,11 @@ public class Reload implements ParadigmModule {
                                         case "motd" -> { MOTDConfigHandler.loadConfig(); msg = "MOTD config reloaded."; }
                                         case "mention" -> { MentionConfigHandler.load(); msg = "Mention config reloaded."; }
                                         case "restart" -> { RestartConfigHandler.load(); rescheduleRestart(services); msg = "Restart config reloaded and rescheduled."; }
-                                        case "customcommands" -> { services.getCmConfig().reloadCommands(); msg = "Custom commands reloaded."; }
+                                        case "customcommands" -> {
+                                            services.getCmConfig().reloadCommands();
+                                            services.getPermissionsHandler().refreshCustomCommandPermissions();
+                                            msg = "Custom commands config reloaded. §e§lNote: Command changes require a server restart to take effect!";
+                                        }
                                         case "all" -> {
                                             MainConfigHandler.load();
                                             AnnouncementsConfigHandler.load();
@@ -58,9 +62,10 @@ public class Reload implements ParadigmModule {
                                             MentionConfigHandler.load();
                                             RestartConfigHandler.load();
                                             services.getCmConfig().reloadCommands();
+                                            services.getPermissionsHandler().refreshCustomCommandPermissions();
                                             rescheduleAnnouncements();
                                             rescheduleRestart(services);
-                                            msg = "All configs reloaded; schedules refreshed.";
+                                            msg = "All configs reloaded; schedules refreshed. §e§lNote: Custom command changes require server restart!";
                                         }
                                         default -> { ok = false; msg = "Unknown config: " + cfg; }
                                     }

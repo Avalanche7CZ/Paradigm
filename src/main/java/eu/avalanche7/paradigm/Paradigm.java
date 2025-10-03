@@ -178,12 +178,7 @@ public class Paradigm implements DedicatedServerModInitializer {
     }
 
     private void registerModules() {
-        // Important: Brigadier merges literals with the same name. The first time we register the root literal
-        // "paradigm" determines whether an executes handler (base /paradigm output) can be attached.
-        // Later registrations with the same literal name CANNOT override/attach a new executes to the root node
-        // (their command function is ignored; only children are merged). Therefore the Help module MUST be
-        // registered before any other module that also calls dispatcher.register(literal("paradigm")).
-        modules.add(new eu.avalanche7.paradigm.modules.commands.Help()); // register first so its executes is kept
+        modules.add(new eu.avalanche7.paradigm.modules.commands.Help());
         modules.add(new Announcements());
         modules.add(new MOTD());
         modules.add(new Mentions());
