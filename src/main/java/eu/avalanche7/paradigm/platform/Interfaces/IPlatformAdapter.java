@@ -57,4 +57,8 @@ public interface IPlatformAdapter {
     List<String> getOnlinePlayerNames();
     List<String> getWorldNames();
     IPlayer wrapPlayer(ServerPlayerEntity player);
+
+    IComponent createEmptyComponent();
+    IComponent parseFormattingCode(String code, IComponent currentComponent);
+    IComponent parseHexColor(String hex, IComponent currentComponent);
 }

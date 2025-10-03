@@ -115,9 +115,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public ItemStack createItemStack(String itemId) {
-        Identifier id = Identifier.tryParse(itemId);
-        if (id == null) return new ItemStack(Items.STONE);
-        Item item = Registries.ITEM.get(id);
+        Item item = Registries.ITEM.get(new Identifier(itemId));
         return item != Items.AIR ? new ItemStack(item) : new ItemStack(Items.STONE);
     }
 
@@ -257,9 +255,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public void playSound(ServerPlayerEntity player, String soundId, net.minecraft.sound.SoundCategory category, float volume, float pitch) {
-        Identifier id = Identifier.tryParse(soundId);
-        if (id == null) return;
-        SoundEvent soundEvent = Registries.SOUND_EVENT.get(id);
+        SoundEvent soundEvent = Registries.SOUND_EVENT.get(new Identifier(soundId));
         if (soundEvent != null) {
             player.networkHandler.sendPacket(new PlaySoundS2CPacket(
                     Registries.SOUND_EVENT.getEntry(soundEvent),
@@ -296,10 +292,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             return true;
         }
         boolean hasPerm = permissionsHandler.hasPermission(player, command.getPermission());
-        if (!hasPerm && messageParser != null) {
-            IComponent errorComponent = messageParser.parseMessage(command.getPermissionErrorMessage(), wrapPlayer(player));
-            player.sendMessage(errorComponent.getOriginalText());
-        }
         return hasPerm;
     }
 
@@ -344,9 +336,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         if (player == null || itemId == null) {
             return false;
         }
-        Identifier id = Identifier.tryParse(itemId);
-        if (id == null) return false;
-        Item item = Registries.ITEM.get(id);
+        Item item = Registries.ITEM.get(new Identifier(itemId));
         if (item == Items.AIR) {
             debugLogger.debugLog("PlatformAdapter: Could not find item with ID: " + itemId);
             return false;
@@ -360,8 +350,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             return false;
         }
 
-        Identifier worldIdentifier = Identifier.tryParse(worldId);
-        if (worldIdentifier == null) return false;
+        Identifier worldIdentifier = new Identifier(worldId);
         net.minecraft.registry.RegistryKey<World> targetWorldKey = net.minecraft.registry.RegistryKey.of(RegistryKeys.WORLD, worldIdentifier);
 
         if (!player.getWorld().getRegistryKey().equals(targetWorldKey)) {
@@ -403,5 +392,36 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public IPlayer wrapPlayer(ServerPlayerEntity player) {
         return MinecraftPlayer.of(player);
+    }
+
+    @Override
+    public IComponent createEmptyComponent() {
+        return new MinecraftComponent(Text.literal(""));
+    }
+
+    @Override
+    public IComponent parseFormattingCode(String code, IComponent currentComponent) {
+        if (code == null || code.isEmpty()) return currentComponent;
+
+        net.minecraft.util.Formatting format = net.minecraft.util.Formatting.byCode(code.charAt(0));
+        if (format != null) {
+            if (format == net.minecraft.util.Formatting.RESET) {
+                return currentComponent.resetStyle();
+            }
+            return currentComponent.withFormatting(format);
+        }
+        return currentComponent;
+    }
+
+    @Override
+    public IComponent parseHexColor(String hex, IComponent currentComponent) {
+        if (hex == null || hex.length() != 6) return currentComponent;
+
+        try {
+            return currentComponent.withColor(hex);
+        } catch (Exception e) {
+            debugLogger.debugLog("Failed to parse hex color: " + hex, e);
+            return currentComponent;
+        }
     }
 }

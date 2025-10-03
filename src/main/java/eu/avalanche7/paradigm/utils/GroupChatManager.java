@@ -226,35 +226,65 @@ public class GroupChatManager {
         return true;
     }
 
-    public void toggleGroupChat(ServerPlayerEntity player) {
-        PlayerGroupData data = getPlayerData(player);
-        if (!data.isGroupChatToggled() && data.getCurrentGroup() == null) { platform().sendSystemMessage(player, translate("group.must_be_in_group_to_toggle")); return; }
-        data.setGroupChatToggled(!data.isGroupChatToggled());
-        platform().sendSystemMessage(player, data.isGroupChatToggled() ? translate("group.chat_enabled") : translate("group.chat_disabled"));
-    }
-
-    public boolean isGroupChatToggled(ServerPlayerEntity player) { return getPlayerData(player).isGroupChatToggled(); }
-
-    public void setGroupChatToggled(ServerPlayerEntity player, boolean toggled) { getPlayerData(player).setGroupChatToggled(toggled); }
-
-    public boolean sendMessageToGroup(ServerPlayerEntity sender, String groupName, String messageContent) {
+    private boolean internalJoinGroup(ServerPlayerEntity player, String groupName) {
+        PlayerGroupData playerData = getPlayerData(player);
         Group group = groups.get(groupName);
-        if (group == null || !group.getMembers().contains(sender.getUuid())) { platform().sendSystemMessage(sender, translate("group.not_in_group_or_not_exists")); return false; }
-        String preFormatted = String.format("&9[Group: %s] &r%s &7> &f%s", groupName, sender.getName().getString(), messageContent);
-        Text finalMessage = parseMessage(preFormatted, sender);
-        broadcastToGroup(group, finalMessage, null);
+        if (group == null) { platform().sendSystemMessage(player, translate("group.group_not_found")); return false; }
+        if (playerData.getCurrentGroup() != null && !playerData.getCurrentGroup().equals(groupName)) { leaveGroup(player, true); }
+        group.addMember(player.getUuid());
+        playerData.setCurrentGroup(groupName);
+        playerData.removeInvitation(groupName);
+        String joinedRaw = translate("group.joined").getString().replace("{group_name}", groupName);
+        platform().sendSystemMessage(player, parseMessage(joinedRaw, player));
+        String joinedNotificationRaw = translate("group.player_joined_notification").getString().replace("{player_name}", player.getName().getString());
+        broadcastToGroup(group, parseMessage(joinedNotificationRaw, null), player.getUuid());
+        debugLog("Player " + player.getName().getString() + " joined group: " + groupName);
         return true;
     }
 
-    public void sendMessageFromCommand(ServerPlayerEntity sender, String messageContent) {
-        String groupName = getPlayerData(sender).getCurrentGroup();
-        if (groupName == null) { platform().sendSystemMessage(sender, translate("group.no_group_to_send_message")); return; }
-        sendMessageToGroup(sender, groupName, messageContent);
+    public boolean kickMember(ServerPlayerEntity owner, String targetName) {
+        PlayerGroupData data = getPlayerData(owner);
+        String groupName = data.getCurrentGroup();
+        if (groupName == null) { platform().sendSystemMessage(owner, translate("group.no_group_to_manage_requests")); return false; }
+        Group group = groups.get(groupName);
+        if (!group.getOwner().equals(owner.getUuid())) { platform().sendSystemMessage(owner, translate("group.not_owner")); return false; }
+        MinecraftServer server = getServer();
+        if (server == null) { platform().sendSystemMessage(owner, Text.literal("Server not available.")); return false; }
+        ServerPlayerEntity target = server.getPlayerManager().getPlayer(targetName);
+        if (target == null) { platform().sendSystemMessage(owner, translate("group.kick_not_found")); return false; }
+        if (!group.getMembers().contains(target.getUuid())) { platform().sendSystemMessage(owner, translate("group.kick_not_member")); return false; }
+        if (target.getUuid().equals(owner.getUuid())) { platform().sendSystemMessage(owner, translate("group.kick_cannot_self")); return false; }
+        group.removeMember(target.getUuid());
+        getPlayerData(target).setCurrentGroup(null);
+        String tMsg = translate("group.kick_success_target").getString().replace("{group_name}", groupName);
+        platform().sendSystemMessage(target, Text.literal(tMsg));
+        String oMsg = translate("group.kick_success_owner").getString().replace("{player_name}", target.getName().getString());
+        platform().sendSystemMessage(owner, Text.literal(oMsg));
+        String nMsg = translate("group.kick_success_notify").getString().replace("{player_name}", target.getName().getString());
+        broadcastToGroup(group, Text.literal(nMsg), owner.getUuid());
+        if (group.getMembers().isEmpty()) { groups.remove(groupName); debugLog("Group " + groupName + " disbanded as last member was kicked."); }
+        debugLog("Player " + target.getName().getString() + " was kicked from group: " + groupName + " by owner " + owner.getName().getString());
+        return true;
     }
 
     public PlayerGroupData getPlayerData(ServerPlayerEntity player) { return playerData.computeIfAbsent(player.getUuid(), k -> new PlayerGroupData()); }
 
-    public void clearAllGroupsAndPlayerData() { groups.clear(); playerData.clear(); pendingJoinRequests.clear(); debugLog("All group chat data cleared."); }
+    public void clearAllGroupsAndPlayerData() { groups.clear(); playerData.clear(); pendingJoinRequests.clear(); inviteCooldowns.clear(); debugLog("All group chat data cleared."); }
+
+    public boolean acceptInvite(ServerPlayerEntity player, String groupName) {
+        PlayerGroupData data = getPlayerData(player);
+        if (!data.getInvitations().contains(groupName)) { platform().sendSystemMessage(player, translate("group.not_invited")); return false; }
+        data.removeInvitation(groupName);
+        return internalJoinGroup(player, groupName);
+    }
+
+    public boolean denyInvite(ServerPlayerEntity player, String groupName) {
+        PlayerGroupData data = getPlayerData(player);
+        if (!data.getInvitations().contains(groupName)) { platform().sendSystemMessage(player, translate("group.not_invited")); return false; }
+        data.removeInvitation(groupName);
+        platform().sendSystemMessage(player, translate("group.invite_denied"));
+        return true;
+    }
 
     public void requestJoinGroup(ServerPlayerEntity player, String groupName) {
         if (!groups.containsKey(groupName)) { platform().sendSystemMessage(player, translate("group.group_not_found")); return; }
@@ -277,28 +307,6 @@ public class GroupChatManager {
                 platform().sendSystemMessage(owner, ownerMsg.append(acc).append(Text.literal("§8 | ")).append(dny).append(Text.literal("§8]")));
             }
         }
-    }
-
-    public boolean cancelJoinRequest(ServerPlayerEntity player, String groupName) {
-        Set<UUID> reqs = pendingJoinRequests.get(groupName);
-        if (reqs == null || !reqs.remove(player.getUuid())) { platform().sendSystemMessage(player, Text.literal("§cYou don't have a pending request to that group.")); return false; }
-        platform().sendSystemMessage(player, Text.literal("§eYour join request to §b" + groupName + " §ehas been cancelled."));
-        return true;
-    }
-
-    public boolean acceptInvite(ServerPlayerEntity player, String groupName) {
-        PlayerGroupData data = getPlayerData(player);
-        if (!data.getInvitations().contains(groupName)) { platform().sendSystemMessage(player, translate("group.not_invited")); return false; }
-        data.removeInvitation(groupName);
-        return internalJoinGroup(player, groupName);
-    }
-
-    public boolean denyInvite(ServerPlayerEntity player, String groupName) {
-        PlayerGroupData data = getPlayerData(player);
-        if (!data.getInvitations().contains(groupName)) { platform().sendSystemMessage(player, translate("group.not_invited")); return false; }
-        data.removeInvitation(groupName);
-        platform().sendSystemMessage(player, translate("group.invite_denied"));
-        return true;
     }
 
     public boolean acceptJoinRequest(ServerPlayerEntity owner, String playerName) {
@@ -360,44 +368,30 @@ public class GroupChatManager {
         }
     }
 
-    private boolean internalJoinGroup(ServerPlayerEntity player, String groupName) {
-        PlayerGroupData playerData = getPlayerData(player);
+    public void toggleGroupChat(ServerPlayerEntity player) {
+        PlayerGroupData data = getPlayerData(player);
+        if (!data.isGroupChatToggled() && data.getCurrentGroup() == null) { platform().sendSystemMessage(player, translate("group.must_be_in_group_to_toggle")); return; }
+        data.setGroupChatToggled(!data.isGroupChatToggled());
+        platform().sendSystemMessage(player, data.isGroupChatToggled() ? translate("group.chat_enabled") : translate("group.chat_disabled"));
+    }
+
+    public boolean isGroupChatToggled(ServerPlayerEntity player) { return getPlayerData(player).isGroupChatToggled(); }
+
+    public void setGroupChatToggled(ServerPlayerEntity player, boolean toggled) { getPlayerData(player).setGroupChatToggled(toggled); }
+
+    public boolean sendMessageToGroup(ServerPlayerEntity sender, String groupName, String messageContent) {
         Group group = groups.get(groupName);
-        if (group == null) { platform().sendSystemMessage(player, translate("group.group_not_found")); return false; }
-        if (playerData.getCurrentGroup() != null && !playerData.getCurrentGroup().equals(groupName)) { leaveGroup(player, true); }
-        group.addMember(player.getUuid());
-        playerData.setCurrentGroup(groupName);
-        playerData.removeInvitation(groupName);
-        String joinedRaw = translate("group.joined").getString().replace("{group_name}", groupName);
-        platform().sendSystemMessage(player, parseMessage(joinedRaw, player));
-        String joinedNotificationRaw = translate("group.player_joined_notification").getString().replace("{player_name}", player.getName().getString());
-        broadcastToGroup(group, parseMessage(joinedNotificationRaw, null), player.getUuid());
-        debugLog("Player " + player.getName().getString() + " joined group: " + groupName);
+        if (group == null || !group.getMembers().contains(sender.getUuid())) { platform().sendSystemMessage(sender, translate("group.not_in_group_or_not_exists")); return false; }
+        String preFormatted = String.format("&9[Group: %s] &r%s &7> &f%s", groupName, sender.getName().getString(), messageContent);
+        Text finalMessage = parseMessage(preFormatted, sender);
+        broadcastToGroup(group, finalMessage, null);
         return true;
     }
 
-    public boolean kickMember(ServerPlayerEntity owner, String targetName) {
-        PlayerGroupData data = getPlayerData(owner);
-        String groupName = data.getCurrentGroup();
-        if (groupName == null) { platform().sendSystemMessage(owner, translate("group.no_group_to_manage_requests")); return false; }
-        Group group = groups.get(groupName);
-        if (!group.getOwner().equals(owner.getUuid())) { platform().sendSystemMessage(owner, translate("group.not_owner")); return false; }
-        MinecraftServer server = getServer();
-        if (server == null) { platform().sendSystemMessage(owner, Text.literal("Server not available.")); return false; }
-        ServerPlayerEntity target = server.getPlayerManager().getPlayer(targetName);
-        if (target == null) { platform().sendSystemMessage(owner, translate("group.kick_not_found")); return false; }
-        if (!group.getMembers().contains(target.getUuid())) { platform().sendSystemMessage(owner, translate("group.kick_not_member")); return false; }
-        if (target.getUuid().equals(owner.getUuid())) { platform().sendSystemMessage(owner, translate("group.kick_cannot_self")); return false; }
-        group.removeMember(target.getUuid());
-        getPlayerData(target).setCurrentGroup(null);
-        String tMsg = translate("group.kick_success_target").getString().replace("{group_name}", groupName);
-        platform().sendSystemMessage(target, Text.literal(tMsg));
-        String oMsg = translate("group.kick_success_owner").getString().replace("{player_name}", target.getName().getString());
-        platform().sendSystemMessage(owner, Text.literal(oMsg));
-        String nMsg = translate("group.kick_success_notify").getString().replace("{player_name}", target.getName().getString());
-        broadcastToGroup(group, Text.literal(nMsg), owner.getUuid());
-        if (group.getMembers().isEmpty()) { groups.remove(groupName); debugLog("Group " + groupName + " disbanded as last member was kicked."); }
-        debugLog("Player " + target.getName().getString() + " was kicked from group: " + groupName + " by owner " + owner.getName().getString());
-        return true;
+    public void sendMessageFromCommand(ServerPlayerEntity sender, String messageContent) {
+        String groupName = getPlayerData(sender).getCurrentGroup();
+        if (groupName == null) { platform().sendSystemMessage(sender, translate("group.no_group_to_send_message")); return; }
+        sendMessageToGroup(sender, groupName, messageContent);
     }
 }
+

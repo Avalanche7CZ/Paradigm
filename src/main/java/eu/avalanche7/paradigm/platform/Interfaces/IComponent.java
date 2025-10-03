@@ -18,9 +18,13 @@ public interface IComponent {
     IComponent withStyle(UnaryOperator<Style> styleUpdater);
     IComponent withColor(int rgb);
     IComponent withColorHex(String hex);
+    IComponent withFormatting(Formatting formatting);
+    IComponent withColor(String hexOrFormatCode);
+    IComponent resetStyle();
     IComponent onClickRunCommand(String command);
     IComponent onClickSuggestCommand(String command);
     IComponent onClickOpenUrl(String url);
+    IComponent onClickCopyToClipboard(String text);
     IComponent onHoverText(String text);
     IComponent onHoverComponent(IComponent component);
     Text getOriginalText();

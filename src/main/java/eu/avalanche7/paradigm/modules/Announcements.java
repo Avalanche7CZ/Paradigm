@@ -50,7 +50,13 @@ public class Announcements implements ParadigmModule {
 
     @Override
     public boolean isEnabled(Services services) {
-        return services.getAnnouncementsConfig().globalEnable.value;
+        var cfg = services.getAnnouncementsConfig();
+        return (cfg != null) && (
+            (cfg.globalEnable != null && Boolean.TRUE.equals(cfg.globalEnable.value)) ||
+            (cfg.actionbarEnable != null && Boolean.TRUE.equals(cfg.actionbarEnable.value)) ||
+            (cfg.titleEnable != null && Boolean.TRUE.equals(cfg.titleEnable.value)) ||
+            (cfg.bossbarEnable != null && Boolean.TRUE.equals(cfg.bossbarEnable.value))
+        );
     }
 
     @Override
@@ -94,7 +100,8 @@ public class Announcements implements ParadigmModule {
     public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {
         dispatcher.register(
                 CommandManager.literal("paradigm")
-                        .requires(source -> source.hasPermissionLevel(PermissionsHandler.BROADCAST_PERMISSION_LEVEL))
+                        .requires(source -> source.hasPermissionLevel(PermissionsHandler.BROADCAST_PERMISSION_LEVEL)
+                                || (source.isExecutedByPlayer() && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.BROADCAST_PERMISSION)))
                         .then(CommandManager.literal("broadcast")
                                 .then(CommandManager.argument("header_footer", BoolArgumentType.bool())
                                         .then(CommandManager.argument("message", StringArgumentType.greedyString())

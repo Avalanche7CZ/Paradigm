@@ -204,6 +204,10 @@ public class Paradigm implements DedicatedServerModInitializer {
         }
         telemetryReporter.start();
 
+        if (this.permissionsHandlerInstance != null) {
+            this.permissionsHandlerInstance.registerLuckPermsPermissions();
+        }
+
         modules.forEach(module -> {
             if (module.isEnabled(services)) {
                 module.onEnable(services);
@@ -237,7 +241,7 @@ public class Paradigm implements DedicatedServerModInitializer {
     public static String getModVersion() {
         if (!"unknown".equals(modVersion)) return modVersion;
         try {
-            return net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer(MOD_ID)
+            return FabricLoader.getInstance().getModContainer(MOD_ID)
                     .map(c -> c.getMetadata().getVersion().getFriendlyString())
                     .orElse("unknown");
         } catch (Throwable t) {
@@ -260,7 +264,7 @@ public class Paradigm implements DedicatedServerModInitializer {
         if (this.taskSchedulerInstance != null) {
             this.taskSchedulerInstance.onServerStopping();
         }
-        LOGGER.info("Paradigm modules (1.20.1) have been processed for server stop.");
+        LOGGER.info("Paradigm modules (1.21.1) have been processed for server stop.");
     }
 
     public static class UpdateChecker {
@@ -281,7 +285,7 @@ public class Paradigm implements DedicatedServerModInitializer {
                         logger.info("CurseForge: {}", CURSEFORGE_PROJECT_PAGE);
                     }
                 } catch (Exception e) {
-                    logger.warn("Paradigm: Failed to check for updates (GitHub)." );
+                    logger.warn("Paradigm: Failed to check for updates (GitHub).");
                 }
             }
         }
