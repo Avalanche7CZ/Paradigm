@@ -292,10 +292,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             return true;
         }
         boolean hasPerm = permissionsHandler.hasPermission(player, command.getPermission());
-        if (!hasPerm && messageParser != null) {
-            IComponent errorComponent = messageParser.parseMessage(command.getPermissionErrorMessage(), wrapPlayer(player));
-            player.sendMessage(errorComponent.getOriginalText());
-        }
         return hasPerm;
     }
 
@@ -398,9 +394,3 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         return MinecraftPlayer.of(player);
     }
 }
-
-
-
-
-
-

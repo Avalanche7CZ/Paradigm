@@ -21,6 +21,7 @@ public interface IComponent {
     IComponent onClickRunCommand(String command);
     IComponent onClickSuggestCommand(String command);
     IComponent onClickOpenUrl(String url);
+    IComponent onClickCopyToClipboard(String text);
     IComponent onHoverText(String text);
     IComponent onHoverComponent(IComponent component);
     Text getOriginalText();

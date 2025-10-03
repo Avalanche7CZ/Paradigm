@@ -110,6 +110,7 @@ public class Help implements ParadigmModule {
         platform.sendSystemMessage(p, sep.getOriginalText());
     }
 
+
     private void sendHelpOverview(ServerPlayerEntity p, IPlatformAdapter platform) {
         MessageParser parser = eu.avalanche7.paradigm.Paradigm.getServices().getMessageParser();
         IPlayer ip = platform.wrapPlayer(p);

@@ -113,6 +113,12 @@ public class MinecraftComponent implements IComponent {
     }
 
     @Override
+    public IComponent onClickCopyToClipboard(String text) {
+        String value = text != null ? text : "";
+        return new MinecraftComponent(component.copy().styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, value))));
+    }
+
+    @Override
     public IComponent onHoverText(String text) {
         Text hover = Text.literal(text != null ? text : "");
         return new MinecraftComponent(component.copy().styled(s -> s.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hover))));

@@ -8,6 +8,7 @@ import eu.avalanche7.paradigm.data.PlayerGroupData;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.GroupChatManager;
+import eu.avalanche7.paradigm.utils.PermissionsHandler;
 import net.fabricmc.fabric.api.message.v1.ServerMessageDecoratorEvent;
 import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.command.argument.EntityArgumentType;
@@ -79,7 +80,8 @@ public class GroupChat implements ParadigmModule {
     @Override
     public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {
         dispatcher.register(CommandManager.literal("groupchat")
-                .requires(source -> source.isExecutedByPlayer())
+                .requires(source -> source.isExecutedByPlayer() &&
+                        services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.GROUPCHAT_PERMISSION))
                 .executes(ctx -> {
                     displayHelp(ctx.getSource().getPlayer(), services);
                     return 1;

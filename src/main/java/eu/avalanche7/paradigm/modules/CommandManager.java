@@ -44,6 +44,7 @@ public class CommandManager implements ParadigmModule {
         this.platform = services.getPlatformAdapter();
         services.getDebugLogger().debugLog(NAME + " module loaded.");
         services.getCmConfig().loadCommands();
+        services.getPermissionsHandler().refreshCustomCommandPermissions();
     }
 
     @Override
@@ -97,6 +98,7 @@ public class CommandManager implements ParadigmModule {
                         .requires(source -> source.hasPermissionLevel(2))
                         .executes(ctx -> {
                             services.getCmConfig().reloadCommands();
+                            services.getPermissionsHandler().refreshCustomCommandPermissions();
                             Text message = services.getMessageParser().parseMessage("&aReloaded custom commands from config.", null).getOriginalText();
                             platform.sendSuccess(ctx.getSource(), message, false);
                             return 1;
@@ -249,6 +251,14 @@ public class CommandManager implements ParadigmModule {
     private void executeCustomCommand(ServerCommandSource source, CustomCommand command, String[] argsTokens) {
         ServerPlayerEntity player = source.getEntity() instanceof ServerPlayerEntity sp ? sp : null;
 
+        if (command.isRequirePermission()) {
+            if (player != null && !services.getPermissionsHandler().hasPermission(player, command.getPermission())) {
+                IPlayer iPlayer = platform.wrapPlayer(player);
+                platform.sendFailure(source, services.getMessageParser().parseMessage(command.getPermissionErrorMessage(), iPlayer).getOriginalText());
+                return;
+            }
+        }
+
         CustomCommand.AreaRestriction area = command.getAreaRestriction();
         if (area != null) {
             if (player == null) {
@@ -256,7 +266,7 @@ public class CommandManager implements ParadigmModule {
                 return;
             }
             if (!platform.isPlayerInArea(player, area.getWorld(), area.getCorner1(), area.getCorner2())) {
-                IPlayer iPlayer = player != null ? platform.wrapPlayer(player) : null;
+                IPlayer iPlayer = platform.wrapPlayer(player);
                 platform.sendFailure(source, services.getMessageParser().parseMessage(area.getRestrictionMessage(), iPlayer).getOriginalText());
                 return;
             }
