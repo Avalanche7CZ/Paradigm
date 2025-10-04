@@ -7,6 +7,7 @@ import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.PlayerGroupData;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.utils.GroupChatManager;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
@@ -15,8 +16,6 @@ import net.minecraft.command.argument.EntityArgumentType;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.ClickEvent;
-import net.minecraft.text.HoverEvent;
 import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
@@ -247,10 +246,10 @@ public class GroupChat implements ParadigmModule {
         MutableText hoverText = parsedDescription.copy();
         hoverText.setStyle(hoverText.getStyle().withColor(Formatting.AQUA));
 
-        MutableText message = platform.createLiteralComponent(" §9> §e/" + label + " " + command)
-                .formatted(Formatting.YELLOW)
-                .styled(style -> style.withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/" + label + " " + command)))
-                .styled(style -> style.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hoverText)));
-        platform.sendSystemMessage(player, message);
+        MutableText base = platform.createLiteralComponent(" §9> §e/" + label + " " + command).formatted(Formatting.YELLOW);
+        IComponent message = platform.wrap(base)
+                .onClickSuggestCommand("/" + label + " " + command)
+                .onHoverComponent(platform.wrap(hoverText));
+        platform.sendSystemMessage(player, message.getOriginalText());
     }
 }

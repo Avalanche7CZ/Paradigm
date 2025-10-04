@@ -115,7 +115,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public ItemStack createItemStack(String itemId) {
-        Item item = Registries.ITEM.get(new Identifier(itemId));
+        Item item = Registries.ITEM.get(new Identifier("minecraft", itemId));
         return item != Items.AIR ? new ItemStack(item) : new ItemStack(Items.STONE);
     }
 
@@ -255,7 +255,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public void playSound(ServerPlayerEntity player, String soundId, net.minecraft.sound.SoundCategory category, float volume, float pitch) {
-        SoundEvent soundEvent = Registries.SOUND_EVENT.get(new Identifier(soundId));
+        SoundEvent soundEvent = Registries.SOUND_EVENT.get(new Identifier("minecraft", soundId));
         if (soundEvent != null) {
             player.networkHandler.sendPacket(new PlaySoundS2CPacket(
                     Registries.SOUND_EVENT.getEntry(soundEvent),
@@ -336,7 +336,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         if (player == null || itemId == null) {
             return false;
         }
-        Item item = Registries.ITEM.get(new Identifier(itemId));
+        Item item = Registries.ITEM.get(new Identifier("minecraft", itemId));
         if (item == Items.AIR) {
             debugLogger.debugLog("PlatformAdapter: Could not find item with ID: " + itemId);
             return false;
@@ -350,7 +350,10 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             return false;
         }
 
-        Identifier worldIdentifier = new Identifier(worldId);
+        String[] parts = worldId.split(":", 2);
+        String namespace = parts.length > 1 ? parts[0] : "minecraft";
+        String path = parts.length > 1 ? parts[1] : worldId;
+        Identifier worldIdentifier = new Identifier(namespace, path);
         net.minecraft.registry.RegistryKey<World> targetWorldKey = net.minecraft.registry.RegistryKey.of(RegistryKeys.WORLD, worldIdentifier);
 
         if (!player.getWorld().getRegistryKey().equals(targetWorldKey)) {
@@ -423,5 +426,26 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             debugLogger.debugLog("Failed to parse hex color: " + hex, e);
             return currentComponent;
         }
+    }
+
+    @Override
+    public IComponent wrap(Text text) {
+        if (text == null) {
+            return createEmptyComponent();
+        }
+        if (text instanceof MutableText mt) {
+            return new MinecraftComponent(mt);
+        }
+        return new MinecraftComponent(text);
+    }
+
+    @Override
+    public IComponent createComponentFromLiteral(String text) {
+        return new MinecraftComponent(Text.literal(text != null ? text : ""));
+    }
+
+    @Override
+    public String getMinecraftVersion() {
+        return net.minecraft.SharedConstants.getGameVersion().getName();
     }
 }

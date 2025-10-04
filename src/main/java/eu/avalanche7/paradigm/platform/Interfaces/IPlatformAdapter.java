@@ -61,4 +61,8 @@ public interface IPlatformAdapter {
     IComponent createEmptyComponent();
     IComponent parseFormattingCode(String code, IComponent currentComponent);
     IComponent parseHexColor(String hex, IComponent currentComponent);
+
+    IComponent wrap(Text text);
+    IComponent createComponentFromLiteral(String text);
+    String getMinecraftVersion();
 }
