@@ -17,7 +17,7 @@ def getGitCommitHash = { ->
 }
 
 
-version = "${project.mod_version}-${getGitCommitHash()}"
+version = project.mod_version
 group = project.maven_group
 
 base {
@@ -92,7 +92,7 @@ jar {
             "Specification-Vendor": "Avalanche7CZ",
             "Specification-Version": project.version,
             "Implementation-Title": project.name,
-            "Implementation-Version": project.version,
+            "Implementation-Version": "${project.mod_version}-${getGitCommitHash()}",
             "Implementation-Vendor": "Avalanche7CZ",
             "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
         ])
