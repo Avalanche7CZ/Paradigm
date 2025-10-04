@@ -5,10 +5,9 @@ import eu.avalanche7.paradigm.data.Group;
 import eu.avalanche7.paradigm.data.PlayerGroupData;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.ClickEvent;
-import net.minecraft.text.HoverEvent;
 import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 
@@ -118,10 +117,11 @@ public class GroupChatManager {
                 if (owner != null) ownerName = owner.getName().getString();
             }
             int memberCount = group.getMembers().size();
-            MutableText joinBtn = Text.literal("[Join]")
-                    .styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/groupchat join " + groupName))
-                            .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Click to request join"))));
-            MutableText line = Text.literal("§e" + groupName + " §7(" + memberCount + " members, owner: " + ownerName + ") ").append(joinBtn);
+            IComponent joinBtn = platform().createComponentFromLiteral("[Join]")
+                    .onClickSuggestCommand("/groupchat join " + groupName)
+                    .onHoverText("Click to request join");
+            MutableText line = Text.literal("§e" + groupName + " §7(" + memberCount + " members, owner: " + ownerName + ") ")
+                    .append(joinBtn.getOriginalText());
             platform().sendSystemMessage(player, line);
         }
     }
@@ -170,9 +170,13 @@ public class GroupChatManager {
         String inviteSentRaw = translate("group.invite_sent").getString().replace("{player_name}", target.getName().getString());
         platform().sendSystemMessage(inviter, parseMessage(inviteSentRaw, inviter));
         MutableText base = Text.literal("§eYou have been invited to join group §b" + groupName + "§e by §a" + inviter.getName().getString() + " §8[");
-        MutableText accept = Text.literal("§aACCEPT").styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/groupchat accept " + groupName)).withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Click to accept"))));
-        MutableText deny = Text.literal("§cDENY").styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/groupchat deny " + groupName)).withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Click to deny"))));
-        platform().sendSystemMessage(target, base.append(accept).append(Text.literal("§8 | ")).append(deny).append(Text.literal("§8]")));
+        IComponent accept = platform().createComponentFromLiteral("§aACCEPT")
+                .onClickRunCommand("/groupchat accept " + groupName)
+                .onHoverText("Click to accept");
+        IComponent deny = platform().createComponentFromLiteral("§cDENY")
+                .onClickRunCommand("/groupchat deny " + groupName)
+                .onHoverText("Click to deny");
+        platform().sendSystemMessage(target, base.append(accept.getOriginalText()).append(Text.literal("§8 | ")).append(deny.getOriginalText()).append(Text.literal("§8]")));
         debugLog("Player " + inviter.getName().getString() + " invited " + target.getName().getString() + " to group: " + groupName);
         return true;
     }
@@ -295,16 +299,22 @@ public class GroupChatManager {
         pendingJoinRequests.computeIfAbsent(groupName, k -> new HashSet<>()).add(playerUUID);
         platform().sendSystemMessage(player, translate("group.join_request_sent"));
         MutableText reqMsg = Text.literal("§eYou have a pending join request to §b" + groupName + " §8[");
-        MutableText cancel = Text.literal("§6CANCEL").styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/groupchat cancelreq " + groupName)).withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Click to cancel request"))));
-        platform().sendSystemMessage(player, reqMsg.append(cancel).append(Text.literal("§8]")));
+        IComponent cancel = platform().createComponentFromLiteral("§6CANCEL")
+                .onClickRunCommand("/groupchat cancelreq " + groupName)
+                .onHoverText("Click to cancel request");
+        platform().sendSystemMessage(player, reqMsg.append(cancel.getOriginalText()).append(Text.literal("§8]")));
         MinecraftServer server = getServer();
         if (server != null) {
             ServerPlayerEntity owner = server.getPlayerManager().getPlayer(group.getOwner());
             if (owner != null) {
                 MutableText ownerMsg = Text.literal("§e" + player.getName().getString() + " wants to join §b" + groupName + " §8[");
-                MutableText acc = Text.literal("§aACCEPT").styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/groupchat acceptreq " + player.getName().getString())).withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Click to accept"))));
-                MutableText dny = Text.literal("§cDENY").styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/groupchat denyreq " + player.getName().getString())).withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Click to deny"))));
-                platform().sendSystemMessage(owner, ownerMsg.append(acc).append(Text.literal("§8 | ")).append(dny).append(Text.literal("§8]")));
+                IComponent acc = platform().createComponentFromLiteral("§aACCEPT")
+                        .onClickRunCommand("/groupchat acceptreq " + player.getName().getString())
+                        .onHoverText("Click to accept");
+                IComponent dny = platform().createComponentFromLiteral("§cDENY")
+                        .onClickRunCommand("/groupchat denyreq " + player.getName().getString())
+                        .onHoverText("Click to deny");
+                platform().sendSystemMessage(owner, ownerMsg.append(acc.getOriginalText()).append(Text.literal("§8 | ")).append(dny.getOriginalText()).append(Text.literal("§8]")));
             }
         }
     }
@@ -362,9 +372,13 @@ public class GroupChatManager {
             }
             final String pName = name;
             MutableText line = Text.literal("§7- §f" + pName + " §8[");
-            MutableText acc = Text.literal("§aACCEPT").styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/groupchat acceptreq " + pName)).withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Click to accept"))));
-            MutableText dny = Text.literal("§cDENY").styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/groupchat denyreq " + pName)).withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Click to deny"))));
-            platform().sendSystemMessage(owner, line.append(acc).append(Text.literal("§8 | ")).append(dny).append(Text.literal("§8]")));
+            IComponent acc = platform().createComponentFromLiteral("§aACCEPT")
+                    .onClickRunCommand("/groupchat acceptreq " + pName)
+                    .onHoverText("Click to accept");
+            IComponent dny = platform().createComponentFromLiteral("§cDENY")
+                    .onClickRunCommand("/groupchat denyreq " + pName)
+                    .onHoverText("Click to deny");
+            platform().sendSystemMessage(owner, line.append(acc.getOriginalText()).append(Text.literal("§8 | ")).append(dny.getOriginalText()).append(Text.literal("§8]")));
         }
     }
 
@@ -394,4 +408,3 @@ public class GroupChatManager {
         sendMessageToGroup(sender, groupName, messageContent);
     }
 }
-

@@ -424,4 +424,25 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             return currentComponent;
         }
     }
+
+    @Override
+    public IComponent wrap(Text text) {
+        if (text == null) {
+            return createEmptyComponent();
+        }
+        if (text instanceof MutableText mt) {
+            return new MinecraftComponent(mt);
+        }
+        return new MinecraftComponent(text);
+    }
+
+    @Override
+    public IComponent createComponentFromLiteral(String text) {
+        return new MinecraftComponent(Text.literal(text != null ? text : ""));
+    }
+
+    @Override
+    public String getMinecraftVersion() {
+        return net.minecraft.SharedConstants.getGameVersion().getName();
+    }
 }

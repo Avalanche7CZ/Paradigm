@@ -14,8 +14,6 @@ import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.ClickEvent;
-import net.minecraft.text.HoverEvent;
 import net.minecraft.text.Text;
 
 import java.util.*;
@@ -183,10 +181,11 @@ public class Help implements ParadigmModule {
         platform.sendSystemMessage(p, Text.literal("§dMatches (§f" + matches.size() + "§d):"));
         for (String m : matches) {
             boolean enabled = Paradigm.getModules().stream().anyMatch(pm -> pm.getName().equalsIgnoreCase(m) && pm.isEnabled(services));
-            Text line = Text.literal((enabled ? "§a" : "§7") + m)
-                .styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/paradigm help " + m))
-                    .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Click for detail"))));
-            platform.sendSystemMessage(p, line);
+            String text = (enabled ? "§a" : "§7") + m;
+            IComponent line = platform.createComponentFromLiteral(text)
+                .onClickSuggestCommand("/paradigm help " + m)
+                .onHoverText("Click for detail");
+            platform.sendSystemMessage(p, line.getOriginalText());
         }
     }
 
@@ -199,9 +198,10 @@ public class Help implements ParadigmModule {
         }
         final String suggestion = best;
         if (suggestion != null && bestDist <= 4) {
-            platform.sendSystemMessage(p, Text.literal("§7Did you mean: §d" + suggestion)
-                .styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, "/paradigm help " + suggestion))
-                    .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Text.literal("Show " + suggestion + " help")))));
+            IComponent line = platform.createComponentFromLiteral("§7Did you mean: §d" + suggestion)
+                .onClickSuggestCommand("/paradigm help " + suggestion)
+                .onHoverText("Show " + suggestion + " help");
+            platform.sendSystemMessage(p, line.getOriginalText());
         }
     }
 

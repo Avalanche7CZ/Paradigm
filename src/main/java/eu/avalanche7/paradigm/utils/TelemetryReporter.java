@@ -6,7 +6,6 @@ import com.google.gson.JsonObject;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import net.minecraft.SharedConstants;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.fabricmc.loader.api.FabricLoader;
@@ -64,7 +63,7 @@ public class TelemetryReporter {
         if (srvObj instanceof MinecraftServer ms) {
             maxPlayers = ms.getPlayerManager().getMaxPlayerCount();
         }
-        String mcVersion = SharedConstants.getGameVersion().getName();
+        String mcVersion = platform.getMinecraftVersion();
         String modVersion = FabricLoader.getInstance().getModContainer("paradigm")
                 .map(c -> c.getMetadata().getVersion().getFriendlyString())
                 .orElse("unknown");
