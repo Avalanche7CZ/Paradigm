@@ -112,10 +112,34 @@ public class RestartConfigHandler {
                 "&cRestarting in {minutes}:{seconds}",
                 "The message to display as a title. Placeholders: {hours}, {minutes}, {seconds}, {time}."
         );
+
+        public ConfigEntry<List<PreRestartCommand>> preRestartCommands = new ConfigEntry<>(
+                Arrays.asList(
+                        new PreRestartCommand(30, "broadcast &e[Paradigm] Restarting in 30 seconds..."),
+                        new PreRestartCommand(10, "[asPlayer] tell {player_name} &cServer restarting in {seconds}s")
+                ),
+                "Commands to run seconds before the restart. Each item has 'secondsBefore' and 'command'. Use [asPlayer], asplayer:, or each: at the start to run the command once per online player as that player (with per-player placeholders). Without a marker, the command runs as console."
+        );
+    }
+
+    public static class PreRestartCommand {
+        public int secondsBefore;
+        public String command;
+
+        public PreRestartCommand() {
+            this.secondsBefore = 5;
+            this.command = "broadcast &e[Paradigm] Restarting soon...";
+        }
+
+        public PreRestartCommand(int secondsBefore, String command) {
+            this.secondsBefore = secondsBefore;
+            this.command = command;
+        }
     }
 
     public static void load() {
         Config defaultConfig = new Config();
+        boolean shouldSaveMerged = false;
 
         if (Files.exists(CONFIG_PATH)) {
             try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
@@ -143,6 +167,7 @@ public class RestartConfigHandler {
                         if (loadedConfig != null) {
                             mergeConfigs(defaultConfig, loadedConfig);
                             LOGGER.info("[Paradigm] Successfully loaded restarts.json configuration");
+                            shouldSaveMerged = true;
                         }
                     } else {
                         LOGGER.warn("[Paradigm] Critical JSON syntax errors in restarts.json: " + result.getMessage());
@@ -153,6 +178,7 @@ public class RestartConfigHandler {
                     Config loadedConfig = GSON.fromJson(content.toString(), Config.class);
                     if (loadedConfig != null) {
                         mergeConfigs(defaultConfig, loadedConfig);
+                        shouldSaveMerged = true;
                     }
                 }
             } catch (Exception e) {
@@ -167,6 +193,14 @@ public class RestartConfigHandler {
         }
 
         CONFIG = defaultConfig;
+        if (shouldSaveMerged) {
+            try {
+                save();
+                LOGGER.info("[Paradigm] Synchronized restarts.json with new defaults while preserving user values.");
+            } catch (Exception e) {
+                LOGGER.warn("[Paradigm] Failed to write merged restarts.json: " + e.getMessage());
+            }
+        }
         isLoaded = true;
     }
 
