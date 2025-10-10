@@ -23,7 +23,7 @@ public class PermissionsHandler {
     public static final String RELOAD_PERMISSION = "paradigm.reload";
 
     public static final int MENTION_EVERYONE_PERMISSION_LEVEL = 2;
-    public static final int MENTION_PLAYER_PERMISSION_LEVEL = 2;
+    public static final int MENTION_PLAYER_PERMISSION_LEVEL = 0;
     public static final int BROADCAST_PERMISSION_LEVEL = 2;
     public static final int RESTART_MANAGE_PERMISSION_LEVEL = 2;
 
@@ -150,9 +150,9 @@ public class PermissionsHandler {
             if (permission == null) return 4;
 
             return switch (permission) {
-                case STAFF_CHAT_PERMISSION, MENTION_EVERYONE_PERMISSION, MENTION_PLAYER_PERMISSION,
+                case STAFF_CHAT_PERMISSION, MENTION_EVERYONE_PERMISSION,
                         RESTART_MANAGE_PERMISSION, BROADCAST_PERMISSION, RELOAD_PERMISSION -> 2;
-                case GROUPCHAT_PERMISSION -> 0;
+                case MENTION_PLAYER_PERMISSION, GROUPCHAT_PERMISSION -> 0;
                 default -> permission.startsWith("paradigm.") ? 0 : 4;
             };
         }
