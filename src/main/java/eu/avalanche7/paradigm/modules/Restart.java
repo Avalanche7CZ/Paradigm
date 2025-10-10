@@ -18,7 +18,6 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
@@ -35,6 +34,7 @@ public class Restart implements ParadigmModule {
     private ScheduledFuture<?> mainTaskFuture = null;
     private final java.util.List<ScheduledFuture<?>> warningFutures = new ArrayList<>();
     private ScheduledFuture<?> shutdownFuture = null;
+    private final java.util.List<ScheduledFuture<?>> preCommandFutures = new ArrayList<>();
     private final java.util.Set<Integer> sentWarningMoments = java.util.Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     @Override
@@ -94,6 +94,13 @@ public class Restart implements ParadigmModule {
             }
         }
         warningFutures.clear();
+        // cancel pre-restart command tasks
+        for (ScheduledFuture<?> f : preCommandFutures) {
+            if (f != null && !f.isDone()) {
+                f.cancel(false);
+            }
+        }
+        preCommandFutures.clear();
         // cancel shutdown future
         if (shutdownFuture != null && !shutdownFuture.isDone()) {
             shutdownFuture.cancel(false);
@@ -209,6 +216,26 @@ public class Restart implements ParadigmModule {
         return -1;
     }
 
+    private boolean isAsEachPlayerDirective(String commandText) {
+        if (commandText == null) return false;
+        String trimmed = commandText.trim();
+        return trimmed.startsWith("asplayer:") || trimmed.startsWith("each:") || trimmed.startsWith("[asPlayer]");
+    }
+
+    private String stripAsEachPlayerDirective(String commandText) {
+        String trimmed = commandText.trim();
+        if (trimmed.startsWith("[asPlayer]")) {
+            return trimmed.substring("[asPlayer]".length()).trim();
+        }
+        if (trimmed.startsWith("asplayer:")) {
+            return trimmed.substring("asplayer:".length()).trim();
+        }
+        if (trimmed.startsWith("each:")) {
+            return trimmed.substring("each:".length()).trim();
+        }
+        return commandText;
+    }
+
     private void initiateRestartSequence(double totalIntervalSeconds, Services services, RestartConfigHandler.Config config) {
         if (!restartInProgress.compareAndSet(false, true)) {
             services.getDebugLogger().debugLog(NAME + ": Restart sequence already in progress. Ignoring new trigger.");
@@ -234,6 +261,41 @@ public class Restart implements ParadigmModule {
                     sendRestartWarning(broadcastTimeSec, services, config, totalIntervalSeconds);
                 }, delayUntilWarning, TimeUnit.MILLISECONDS);
                 if (future != null) warningFutures.add(future);
+            }
+        }
+
+        List<RestartConfigHandler.PreRestartCommand> preCommands = config.preRestartCommands.value;
+        if (preCommands != null && !preCommands.isEmpty()) {
+            for (RestartConfigHandler.PreRestartCommand pre : preCommands) {
+                int secondsBefore = Math.max(0, pre.secondsBefore);
+                long delayUntilRun = totalIntervalMillis - (secondsBefore * 1000L);
+                if (delayUntilRun < 0) {
+                    services.getDebugLogger().debugLog(NAME + ": Pre-restart command scheduled too early (" + pre.secondsBefore + "s before) and will be skipped: " + pre.command);
+                    continue;
+                }
+                String commandText = pre.command == null ? "" : pre.command;
+                ScheduledFuture<?> f = services.getTaskScheduler().schedule(() -> {
+                    if (!restartInProgress.get()) return;
+                    if (isAsEachPlayerDirective(commandText)) {
+                        String raw = stripAsEachPlayerDirective(commandText);
+                        List<ServerPlayerEntity> players = platform.getOnlinePlayers();
+                        services.getDebugLogger().debugLog(NAME + ": Executing pre-restart player-commands (" + secondsBefore + "s before) for " + players.size() + " players: " + raw);
+                        for (ServerPlayerEntity sp : players) {
+                            String perPlayer = platform.replacePlaceholders(raw, sp);
+                            try {
+                                ServerCommandSource src = sp.getCommandSource();
+                                platform.executeCommandAs(src, perPlayer);
+                            } catch (Exception ex) {
+                                services.getDebugLogger().debugLog(NAME + ": Failed executing as player " + platform.getPlayerName(sp) + ": " + perPlayer, ex);
+                            }
+                        }
+                    } else {
+                        String replaced = platform.replacePlaceholders(commandText, null);
+                        services.getDebugLogger().debugLog(NAME + ": Executing pre-restart console command (" + secondsBefore + "s before): " + replaced);
+                        platform.executeCommandAsConsole(replaced);
+                    }
+                }, delayUntilRun, TimeUnit.MILLISECONDS);
+                if (f != null) preCommandFutures.add(f);
             }
         }
 

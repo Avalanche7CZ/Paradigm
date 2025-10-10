@@ -126,6 +126,7 @@ public class AnnouncementsConfigHandler {
 
     public static void load() {
         Config defaultConfig = new Config();
+        boolean shouldSaveMerged = false;
 
         if (Files.exists(CONFIG_PATH)) {
             try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
@@ -153,6 +154,7 @@ public class AnnouncementsConfigHandler {
                         if (loadedConfig != null) {
                             mergeConfigs(defaultConfig, loadedConfig);
                             LOGGER.info("[Paradigm] Successfully loaded announcements.json configuration");
+                            shouldSaveMerged = true;
                         }
                     } else {
                         LOGGER.warn("[Paradigm] Critical JSON syntax errors in announcements.json: " + result.getMessage());
@@ -163,6 +165,7 @@ public class AnnouncementsConfigHandler {
                     Config loadedConfig = GSON.fromJson(content.toString(), Config.class);
                     if (loadedConfig != null) {
                         mergeConfigs(defaultConfig, loadedConfig);
+                        shouldSaveMerged = true;
                     }
                 }
             } catch (Exception e) {
@@ -177,6 +180,14 @@ public class AnnouncementsConfigHandler {
         }
 
         CONFIG = defaultConfig;
+        if (shouldSaveMerged) {
+            try {
+                save();
+                LOGGER.info("[Paradigm] Synchronized announcements.json with new defaults while preserving user values.");
+            } catch (Exception e) {
+                LOGGER.warn("[Paradigm] Failed to write merged announcements.json: " + e.getMessage());
+            }
+        }
         isLoaded = true;
     }
 

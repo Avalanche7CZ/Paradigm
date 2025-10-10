@@ -81,6 +81,7 @@ public class ChatConfigHandler {
 
     public static void load() {
         Config defaultConfig = new Config();
+        boolean shouldSaveMerged = false;
 
         if (Files.exists(CONFIG_PATH)) {
             try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
@@ -108,6 +109,7 @@ public class ChatConfigHandler {
                         if (loadedConfig != null) {
                             mergeConfigs(defaultConfig, loadedConfig);
                             LOGGER.info("[Paradigm] Successfully loaded chat.json configuration");
+                            shouldSaveMerged = true;
                         }
                     } else {
                         LOGGER.warn("[Paradigm] Critical JSON syntax errors in chat.json: " + result.getMessage());
@@ -118,6 +120,7 @@ public class ChatConfigHandler {
                     Config loadedConfig = GSON.fromJson(content.toString(), Config.class);
                     if (loadedConfig != null) {
                         mergeConfigs(defaultConfig, loadedConfig);
+                        shouldSaveMerged = true;
                     }
                 }
             } catch (Exception e) {
@@ -132,6 +135,14 @@ public class ChatConfigHandler {
         }
 
         CONFIG = defaultConfig;
+        if (shouldSaveMerged) {
+            try {
+                save();
+                LOGGER.info("[Paradigm] Synchronized chat.json with new defaults while preserving user values.");
+            } catch (Exception e) {
+                LOGGER.warn("[Paradigm] Failed to write merged chat.json: " + e.getMessage());
+            }
+        }
         isLoaded = true;
     }
 

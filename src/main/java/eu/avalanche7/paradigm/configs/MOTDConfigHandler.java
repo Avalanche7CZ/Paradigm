@@ -30,6 +30,7 @@ public class MOTDConfigHandler {
 
     public static void loadConfig() {
         Config defaultConfig = new Config();
+        boolean shouldSaveMerged = false;
 
         if (Files.exists(CONFIG_FILE_PATH)) {
             try (FileReader reader = new FileReader(CONFIG_FILE_PATH.toFile())) {
@@ -54,8 +55,12 @@ public class MOTDConfigHandler {
                         }
 
                         Config loadedConfig = GSON.fromJson(result.getFixedJson(), Config.class);
-                        if (loadedConfig != null && loadedConfig.motdLines != null) {
-                            config = loadedConfig;
+                        if (loadedConfig != null) {
+                            if (loadedConfig.motdLines != null) {
+                                defaultConfig.motdLines = loadedConfig.motdLines;
+                            }
+                            config = defaultConfig;
+                            shouldSaveMerged = true;
                             LOGGER.info("[Paradigm] Successfully loaded motd.json configuration");
                         } else {
                             LOGGER.warn("[Paradigm] MOTD configuration is null or invalid. Using defaults for this session.");
@@ -70,8 +75,12 @@ public class MOTDConfigHandler {
                     }
                 } else {
                     Config loadedConfig = GSON.fromJson(content.toString(), Config.class);
-                    if (loadedConfig != null && loadedConfig.motdLines != null) {
-                        config = loadedConfig;
+                    if (loadedConfig != null) {
+                        if (loadedConfig.motdLines != null) {
+                            defaultConfig.motdLines = loadedConfig.motdLines;
+                        }
+                        config = defaultConfig;
+                        shouldSaveMerged = true;
                     } else {
                         config = defaultConfig;
                     }
@@ -85,6 +94,11 @@ public class MOTDConfigHandler {
             LOGGER.info("[Paradigm] motd.json not found, generating with default values.");
             config = defaultConfig;
             saveConfig();
+        }
+
+        if (shouldSaveMerged) {
+            saveConfig();
+            LOGGER.info("[Paradigm] Synchronized motd.json with new defaults while preserving user values.");
         }
         isLoaded = true;
     }
