@@ -291,9 +291,7 @@ public class Mentions implements ParadigmModule {
 
     private void sendMentionNotification(ServerPlayerEntity targetPlayer, String chatMessage, String titleMessage, String contentMessage, Services services) {
         MentionConfigHandler.Config config = MentionConfigHandler.CONFIG;
-
         IPlayer iTarget = services.getPlatformAdapter().wrapPlayer(targetPlayer);
-
         long timestamp = System.currentTimeMillis();
         this.services.getDebugLogger().debugLog("NOTIFY DEBUG [" + timestamp + "] - Target: " + platform.getPlayerName(targetPlayer));
         this.services.getDebugLogger().debugLog("NOTIFY DEBUG [" + timestamp + "] - Chat message format: '" + chatMessage + "'");
@@ -302,8 +300,9 @@ public class Mentions implements ParadigmModule {
         if (config.enableChatNotification.value) {
             IComponent finalChatMessage = services.getMessageParser().parseMessage(chatMessage, iTarget);
             if (contentMessage != null && !contentMessage.isEmpty()) {
-                IComponent newlineComponent = services.getMessageParser().parseMessage("\n- " + contentMessage, iTarget);
-                finalChatMessage = finalChatMessage.append(newlineComponent);
+                IComponent dash = services.getPlatformAdapter().createComponentFromLiteral("\n-\u00A0");
+                IComponent contentComp = services.getMessageParser().parseMessage(contentMessage, iTarget);
+                finalChatMessage = finalChatMessage.append(dash).append(contentComp);
             }
             this.services.getDebugLogger().debugLog("NOTIFY DEBUG [" + timestamp + "] - Sending chat notification to: " + platform.getPlayerName(targetPlayer));
             platform.sendSystemMessage(targetPlayer, finalChatMessage.getOriginalText());
@@ -312,7 +311,11 @@ public class Mentions implements ParadigmModule {
         if (config.enableTitleNotification.value) {
             IComponent parsedTitleMessage = services.getMessageParser().parseMessage(titleMessage, iTarget);
             IComponent parsedSubtitleMessage = platform.createEmptyComponent();
-            this.services.getDebugLogger().debugLog("NOTIFY DEBUG [" + timestamp + "] - Sending title notification (no subtitle content) to: " + platform.getPlayerName(targetPlayer));
+            boolean willShowSubtitle = config.enableSubtitleNotification.value && contentMessage != null && !contentMessage.isEmpty();
+            if (willShowSubtitle) {
+                parsedSubtitleMessage = services.getMessageParser().parseMessage(contentMessage, iTarget);
+            }
+            this.services.getDebugLogger().debugLog("NOTIFY DEBUG [" + timestamp + "] - Sending title notification" + (willShowSubtitle ? " with subtitle" : " (no subtitle content)") + " to: " + platform.getPlayerName(targetPlayer));
             platform.sendTitle(targetPlayer, parsedTitleMessage.getOriginalText(), parsedSubtitleMessage.getOriginalText());
         }
 
