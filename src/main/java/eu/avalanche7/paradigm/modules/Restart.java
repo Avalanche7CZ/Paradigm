@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -32,6 +33,9 @@ public class Restart implements ParadigmModule {
     private IPlatformAdapter platform;
     private final AtomicBoolean restartInProgress = new AtomicBoolean(false);
     private ScheduledFuture<?> mainTaskFuture = null;
+    private final java.util.List<ScheduledFuture<?>> warningFutures = new ArrayList<>();
+    private ScheduledFuture<?> shutdownFuture = null;
+    private final java.util.Set<Integer> sentWarningMoments = java.util.Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     @Override
     public String getName() {
@@ -61,8 +65,7 @@ public class Restart implements ParadigmModule {
     @Override
     public void onEnable(Services services) {
         if (services.getMinecraftServer() != null) {
-            services.getDebugLogger().debugLog(NAME + ": Module enabled, scheduling restarts.");
-            scheduleNextRestart(services);
+            services.getDebugLogger().debugLog(NAME + ": Module enabled (deferring restart scheduling to onServerStarting).");
         }
     }
 
@@ -84,6 +87,19 @@ public class Restart implements ParadigmModule {
             services.getDebugLogger().debugLog(NAME + ": Main restart task future cancelled.");
         }
         mainTaskFuture = null;
+        // cancel queued warning tasks
+        for (ScheduledFuture<?> f : warningFutures) {
+            if (f != null && !f.isDone()) {
+                f.cancel(false);
+            }
+        }
+        warningFutures.clear();
+        // cancel shutdown future
+        if (shutdownFuture != null && !shutdownFuture.isDone()) {
+            shutdownFuture.cancel(false);
+        }
+        shutdownFuture = null;
+        sentWarningMoments.clear();
         restartInProgress.set(false);
         if (services != null && platform != null) {
             platform.removeRestartBossBar();
@@ -97,6 +113,10 @@ public class Restart implements ParadigmModule {
                 .then(CommandManager.literal("now")
                         .executes(context -> {
                             services.getDebugLogger().debugLog(NAME + ": /restart now command executed by " + context.getSource().getDisplayName().getString());
+                            if (restartInProgress.get()) {
+                                services.getDebugLogger().debugLog(NAME + ": /restart now overriding active restart sequence.");
+                                cancelAndCleanup();
+                            }
                             initiateRestartSequence(60, services, services.getRestartConfig());
                             platform.sendSuccess(context.getSource(), platform.createLiteralComponent("Initiating immediate 60-second restart sequence."), true);
                             return 1;
@@ -139,11 +159,11 @@ public class Restart implements ParadigmModule {
         }
 
         if (delayMillis > 0) {
-            final double totalSeconds = delayMillis / 1000.0;
-            mainTaskFuture = services.getTaskScheduler().schedule(() -> {
-                services.getDebugLogger().debugLog(NAME + ": Scheduled restart time reached. Initiating shutdown sequence.");
-                initiateRestartSequence(totalSeconds, services, config);
-            }, delayMillis, TimeUnit.MILLISECONDS);
+            double totalSeconds = delayMillis / 1000.0;
+            services.getDebugLogger().debugLog(NAME + ": Starting restart countdown now for " + totalSeconds + " seconds.");
+            initiateRestartSequence(totalSeconds, services, config);
+        } else {
+            services.getDebugLogger().debugLog(NAME + ": No valid restart delay computed. Skipping schedule.");
         }
     }
 
@@ -195,23 +215,29 @@ public class Restart implements ParadigmModule {
             return;
         }
 
+        sentWarningMoments.clear();
         services.getDebugLogger().debugLog(NAME + ": Initiating restart sequence. Total duration: " + totalIntervalSeconds + " seconds.");
         long totalIntervalMillis = (long) (totalIntervalSeconds * 1000);
-        List<Integer> broadcastTimes = new ArrayList<>(config.timerBroadcast.value);
-        Collections.sort(broadcastTimes, Collections.reverseOrder());
+        java.util.List<Integer> broadcastTimes = new java.util.ArrayList<>(config.timerBroadcast.value);
+        broadcastTimes.sort(java.util.Collections.reverseOrder());
 
         services.getDebugLogger().debugLog(NAME + ": Scheduling " + broadcastTimes.size() + " warning messages.");
         for (final int broadcastTimeSec : broadcastTimes) {
             long delayUntilWarning = totalIntervalMillis - (broadcastTimeSec * 1000L);
             if (delayUntilWarning >= 0) {
-                services.getTaskScheduler().schedule(() -> {
+                ScheduledFuture<?> future = services.getTaskScheduler().schedule(() -> {
                     if (!restartInProgress.get()) return;
+                    if (!sentWarningMoments.add(broadcastTimeSec)) {
+                        services.getDebugLogger().debugLog(NAME + ": Duplicate warning suppressed. Time left: " + broadcastTimeSec + "s.");
+                        return;
+                    }
                     sendRestartWarning(broadcastTimeSec, services, config, totalIntervalSeconds);
                 }, delayUntilWarning, TimeUnit.MILLISECONDS);
+                if (future != null) warningFutures.add(future);
             }
         }
 
-        services.getTaskScheduler().schedule(() -> {
+        shutdownFuture = services.getTaskScheduler().schedule(() -> {
             if (!restartInProgress.get()) return;
             performShutdown(services, config);
         }, totalIntervalMillis, TimeUnit.MILLISECONDS);

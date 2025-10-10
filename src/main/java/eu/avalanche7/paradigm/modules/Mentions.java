@@ -24,6 +24,9 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 public class Mentions implements ParadigmModule {
 
@@ -124,6 +127,18 @@ public class Mentions implements ParadigmModule {
         this.services.getDebugLogger().debugLog("Mention everyone detected in chat by " + platform.getPlayerName(sender));
         notifyEveryone(platform.getOnlinePlayers(), sender, rawMessage, false, mentionConfig, matchedEveryoneMention);
         markMentionEveryoneUsed(sender);
+        if (sender != null) {
+            IPlayer iSender = platform.wrapPlayer(sender);
+            IComponent feedback = services.getMessageParser().parseMessage(mentionConfig.SENDER_FEEDBACK_EVERYONE_MESSAGE.value, iSender);
+            String appended = extractContentAfterToken(rawMessage, matchedEveryoneMention);
+            if (!appended.isEmpty()) {
+                String prefix = mentionConfig.CHAT_APPEND_PREFIX.value;
+                IComponent nl = services.getPlatformAdapter().createComponentFromLiteral("\n" + prefix);
+                IComponent appendedComp = services.getMessageParser().parseMessage(appended, iSender);
+                feedback = feedback.append(nl).append(appendedComp);
+            }
+            platform.sendSystemMessage(sender, feedback.getOriginalText());
+        }
         return false;
     }
 
@@ -149,6 +164,7 @@ public class Mentions implements ParadigmModule {
         }
 
         boolean mentionedSomeone = false;
+        Set<String> mentionedNames = new LinkedHashSet<>();
         while (mentionMatcher.find()) {
             String playerName = mentionMatcher.group(1);
             ServerPlayerEntity targetPlayer = platform.getPlayerByName(playerName);
@@ -157,10 +173,25 @@ public class Mentions implements ParadigmModule {
             this.services.getDebugLogger().debugLog("Mention player detected in chat: " + platform.getPlayerName(targetPlayer) + " by " + platform.getPlayerName(sender));
             notifyPlayer(targetPlayer, sender, rawMessage, false, mentionConfig, mentionMatcher.group(0));
             mentionedSomeone = true;
+            mentionedNames.add(platform.getPlayerName(targetPlayer));
         }
 
         if (mentionedSomeone) {
             markMentionIndividualUsed(sender);
+            if (sender != null && !mentionedNames.isEmpty()) {
+                IPlayer iSender = platform.wrapPlayer(sender);
+                String list = String.join(", ", new ArrayList<>(mentionedNames));
+                String formatted = String.format(mentionConfig.SENDER_FEEDBACK_PLAYER_MESSAGE.value, list);
+                IComponent feedback = services.getMessageParser().parseMessage(formatted, iSender);
+                String appended = extractContentAfterFirstMatch(rawMessage, allPlayersPattern);
+                if (!appended.isEmpty()) {
+                    String prefix = mentionConfig.CHAT_APPEND_PREFIX.value;
+                    IComponent nl = services.getPlatformAdapter().createComponentFromLiteral("\n" + prefix);
+                    IComponent appendedComp = services.getMessageParser().parseMessage(appended, iSender);
+                    feedback = feedback.append(nl).append(appendedComp);
+                }
+                platform.sendSystemMessage(sender, feedback.getOriginalText());
+            }
         }
         return !mentionedSomeone;
     }
@@ -191,6 +222,16 @@ public class Mentions implements ParadigmModule {
             notifyEveryone(players, sender, message, isConsole, mentionConfig, everyoneMatcher.group(0));
             if (sender != null) {
                 markMentionEveryoneUsed(sender);
+                IPlayer iSender = platform.wrapPlayer(sender);
+                IComponent feedback = services.getMessageParser().parseMessage(mentionConfig.SENDER_FEEDBACK_EVERYONE_MESSAGE.value, iSender);
+                String appended = extractContentAfterToken(message, everyoneMatcher.group(0));
+                if (!appended.isEmpty()) {
+                    String prefix = mentionConfig.CHAT_APPEND_PREFIX.value;
+                    IComponent nl = services.getPlatformAdapter().createComponentFromLiteral("\n" + prefix);
+                    IComponent appendedComp = services.getMessageParser().parseMessage(appended, iSender);
+                    feedback = feedback.append(nl).append(appendedComp);
+                }
+                platform.sendSystemMessage(sender, feedback.getOriginalText());
             }
             platform.sendSuccess(source, platform.createLiteralComponent("Mentioned everyone successfully."), !isConsole);
             return 1;
@@ -214,6 +255,7 @@ public class Mentions implements ParadigmModule {
             }
         }
 
+        List<String> mentionedNames = new ArrayList<>();
         for (ServerPlayerEntity targetPlayer : players) {
             String playerMentionPlaceholder = mentionConfig.MENTION_SYMBOL.value + platform.getPlayerName(targetPlayer);
             Pattern playerMentionPattern = Pattern.compile(Pattern.quote(playerMentionPlaceholder), Pattern.CASE_INSENSITIVE);
@@ -225,12 +267,26 @@ public class Mentions implements ParadigmModule {
 
                 notifyPlayer(targetPlayer, sender, message, isConsole, mentionConfig, playerMentionPlaceholder);
                 mentionedCount++;
+                mentionedNames.add(platform.getPlayerName(targetPlayer));
             }
         }
 
         if (mentionedCount > 0) {
             if (sender != null) {
                 markMentionIndividualUsed(sender);
+                IPlayer iSender = platform.wrapPlayer(sender);
+                String list = String.join(", ", mentionedNames);
+                String formatted = String.format(mentionConfig.SENDER_FEEDBACK_PLAYER_MESSAGE.value, list);
+                IComponent feedback = services.getMessageParser().parseMessage(formatted, iSender);
+                Pattern allPlayersPattern = buildAllPlayersMentionPattern(players, mentionConfig.MENTION_SYMBOL.value);
+                String appended = extractContentAfterFirstMatch(message, allPlayersPattern);
+                if (!appended.isEmpty()) {
+                    String prefix = mentionConfig.CHAT_APPEND_PREFIX.value;
+                    IComponent nl = services.getPlatformAdapter().createComponentFromLiteral("\n" + prefix);
+                    IComponent appendedComp = services.getMessageParser().parseMessage(appended, iSender);
+                    feedback = feedback.append(nl).append(appendedComp);
+                }
+                platform.sendSystemMessage(sender, feedback.getOriginalText());
             }
             platform.sendSuccess(source, platform.createLiteralComponent("Mentioned " + mentionedCount + " player(s) successfully."), !isConsole);
         } else {
@@ -300,7 +356,8 @@ public class Mentions implements ParadigmModule {
         if (config.enableChatNotification.value) {
             IComponent finalChatMessage = services.getMessageParser().parseMessage(chatMessage, iTarget);
             if (contentMessage != null && !contentMessage.isEmpty()) {
-                IComponent dash = services.getPlatformAdapter().createComponentFromLiteral("\n-\u00A0");
+                String prefix = config.CHAT_APPEND_PREFIX.value;
+                IComponent dash = services.getPlatformAdapter().createComponentFromLiteral("\n" + prefix);
                 IComponent contentComp = services.getMessageParser().parseMessage(contentMessage, iTarget);
                 finalChatMessage = finalChatMessage.append(dash).append(contentComp);
             }
@@ -369,5 +426,22 @@ public class Mentions implements ParadigmModule {
         if (sender == null) return;
         lastIndividualMentionBySender.put(sender.getUuid(), System.currentTimeMillis());
     }
-}
 
+    private String extractContentAfterToken(String originalMessage, String matchedToken) {
+        if (originalMessage == null || matchedToken == null) return "";
+        int idx = originalMessage.indexOf(matchedToken);
+        if (idx < 0) return "";
+        int end = idx + matchedToken.length();
+        if (end >= originalMessage.length()) return "";
+        return originalMessage.substring(end).trim();
+    }
+
+    private String extractContentAfterFirstMatch(String message, Pattern pattern) {
+        if (message == null || pattern == null) return "";
+        Matcher m = pattern.matcher(message);
+        if (!m.find()) return "";
+        int end = m.end();
+        if (end >= message.length()) return "";
+        return message.substring(end).trim();
+    }
+}

@@ -81,6 +81,18 @@ public class MentionConfigHandler {
                 true,
                 "Enable or disable subtitle notifications for mentions."
         );
+        public ConfigEntry<String> SENDER_FEEDBACK_PLAYER_MESSAGE = new ConfigEntry<>(
+                "You mentioned %s in chat.",
+                "Feedback message shown to the sender after mentioning players. %s is the list of mentioned player names."
+        );
+        public ConfigEntry<String> SENDER_FEEDBACK_EVERYONE_MESSAGE = new ConfigEntry<>(
+                "You mentioned everyone in chat.",
+                "Feedback message shown to the sender after using @everyone."
+        );
+        public ConfigEntry<String> CHAT_APPEND_PREFIX = new ConfigEntry<>(
+                "- ",
+                "Prefix used when appending the leftover message content in chat notifications (after a newline)."
+        );
     }
 
     public static void load() {
