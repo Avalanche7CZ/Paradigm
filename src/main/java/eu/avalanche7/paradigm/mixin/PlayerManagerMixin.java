@@ -3,7 +3,8 @@ package eu.avalanche7.paradigm.mixin;
 import eu.avalanche7.paradigm.Paradigm;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.platform.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import net.minecraft.network.ClientConnection;
 import net.minecraft.server.PlayerManager;
 import net.minecraft.server.network.ConnectedClientData;
@@ -12,20 +13,59 @@ import net.minecraft.stat.Stats;
 import net.minecraft.text.Text;
 import net.minecraft.text.TranslatableTextContent;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(PlayerManager.class)
 public class PlayerManagerMixin {
 
-    @Redirect(method = "onPlayerConnect", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/PlayerManager;broadcast(Lnet/minecraft/text/Text;Z)V"))
-    private void suppressDefaultJoinMessage(PlayerManager instance, Text message, boolean overlay) {
-        if (message.getContent() instanceof TranslatableTextContent && ((TranslatableTextContent) message.getContent()).getKey().equals("multiplayer.player.joined")) {
+    @Unique
+    private static final ThreadLocal<Boolean> SUPPRESS_JOIN_BROADCAST = new ThreadLocal<>();
+
+    @Inject(method = "onPlayerConnect", at = @At("HEAD"))
+    private void paradigm$decideJoinSuppression(ClientConnection connection, ServerPlayerEntity player, ConnectedClientData clientData, CallbackInfo ci) {
+        Services services = Paradigm.getServices();
+        if (services == null) {
+            SUPPRESS_JOIN_BROADCAST.set(Boolean.FALSE);
             return;
         }
-        instance.broadcast(message, overlay);
+        ChatConfigHandler.Config chatConfig = services.getChatConfig();
+        boolean enableRegular = chatConfig.enableJoinLeaveMessages.value;
+        boolean enableFirst = chatConfig.enableFirstJoinMessage.value;
+        boolean isFirstJoin = player.getStatHandler().getStat(Stats.CUSTOM.getOrCreateStat(Stats.LEAVE_GAME)) == 0;
+        boolean shouldSuppress = enableRegular || (enableFirst && isFirstJoin);
+        SUPPRESS_JOIN_BROADCAST.set(shouldSuppress);
+    }
+
+    @Inject(method = "onPlayerConnect", at = @At("RETURN"))
+    private void paradigm$clearJoinSuppression(ClientConnection connection, ServerPlayerEntity player, ConnectedClientData clientData, CallbackInfo ci) {
+        SUPPRESS_JOIN_BROADCAST.remove();
+    }
+
+    @Inject(method = "broadcast(Lnet/minecraft/text/Text;Z)V", at = @At("HEAD"), cancellable = true)
+    private void paradigm$maybeSuppressBroadcast(Text message, boolean overlay, CallbackInfo ci) {
+        if (message == null || !(message.getContent() instanceof TranslatableTextContent)) {
+            return;
+        }
+        TranslatableTextContent content = (TranslatableTextContent) message.getContent();
+        String key = content.getKey();
+        if ("multiplayer.player.joined".equals(key)) {
+            Boolean suppress = SUPPRESS_JOIN_BROADCAST.get();
+            if (Boolean.TRUE.equals(suppress)) {
+                ci.cancel();
+            }
+            return;
+        }
+        if ("multiplayer.player.left".equals(key)) {
+            Services services = Paradigm.getServices();
+            if (services == null) return;
+            ChatConfigHandler.Config chatConfig = services.getChatConfig();
+            if (chatConfig != null && chatConfig.enableJoinLeaveMessages.value) {
+                ci.cancel();
+            }
+        }
     }
 
     @Inject(method = "onPlayerConnect", at = @At("TAIL"))
@@ -39,6 +79,8 @@ public class PlayerManagerMixin {
         }
 
         IPlatformAdapter platform = services.getPlatformAdapter();
+        if (platform == null) return;
+
         boolean isFirstJoin = player.getStatHandler().getStat(Stats.CUSTOM.getOrCreateStat(Stats.LEAVE_GAME)) == 0;
         String messageFormat = null;
 
@@ -49,7 +91,8 @@ public class PlayerManagerMixin {
         }
 
         if (messageFormat != null && !messageFormat.isEmpty()) {
-            Text formattedMessage = services.getMessageParser().parseMessage(messageFormat, player);
+            IPlayer iPlayer = platform.wrapPlayer(player);
+            Text formattedMessage = services.getMessageParser().parseMessage(messageFormat, iPlayer).getOriginalText();
             platform.broadcastSystemMessage(formattedMessage);
         }
     }
@@ -65,10 +108,13 @@ public class PlayerManagerMixin {
         }
 
         IPlatformAdapter platform = services.getPlatformAdapter();
+        if (platform == null) return;
+
         String leaveMessageFormat = chatConfig.leaveMessageFormat.value;
 
         if (leaveMessageFormat != null && !leaveMessageFormat.isEmpty()) {
-            Text formattedMessage = services.getMessageParser().parseMessage(leaveMessageFormat, player);
+            IPlayer iPlayer = platform.wrapPlayer(player);
+            Text formattedMessage = services.getMessageParser().parseMessage(leaveMessageFormat, iPlayer).getOriginalText();
             platform.broadcastSystemMessage(formattedMessage);
         }
     }

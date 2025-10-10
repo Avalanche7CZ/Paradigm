@@ -1,6 +1,9 @@
 package eu.avalanche7.paradigm.platform;
 
 import eu.avalanche7.paradigm.data.CustomCommand;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.*;
 import net.minecraft.entity.boss.BossBar;
 import net.minecraft.entity.boss.ServerBossBar;
@@ -72,19 +75,22 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public List<ServerPlayerEntity> getOnlinePlayers() {
-        return getMinecraftServer().getPlayerManager().getPlayerList();
+        if (server == null) return new ArrayList<>();
+        return server.getPlayerManager().getPlayerList();
     }
 
     @Override
     @Nullable
     public ServerPlayerEntity getPlayerByName(String name) {
-        return getMinecraftServer().getPlayerManager().getPlayer(name);
+        if (server == null) return null;
+        return server.getPlayerManager().getPlayer(name);
     }
 
     @Override
     @Nullable
     public ServerPlayerEntity getPlayerByUuid(UUID uuid) {
-        return getMinecraftServer().getPlayerManager().getPlayer(uuid);
+        if (server == null) return null;
+        return server.getPlayerManager().getPlayer(uuid);
     }
 
     @Override
@@ -130,28 +136,41 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public void broadcastSystemMessage(Text message) {
-        if (getMinecraftServer() != null) {
-            getMinecraftServer().getPlayerManager().broadcast(message, false);
+        if (server != null && server.getPlayerManager() != null) {
+            server.getPlayerManager().broadcast(message, false);
         }
     }
 
     @Override
     public void broadcastChatMessage(Text message) {
-        if (getMinecraftServer() != null) {
-            getMinecraftServer().getPlayerManager().broadcast(message, false);
+        if (server != null && server.getPlayerManager() != null) {
+            server.getPlayerManager().broadcast(message, false);
         }
     }
 
     @Override
     public void broadcastSystemMessage(Text message, String header, String footer, @Nullable ServerPlayerEntity playerContext) {
-        if (messageParser == null) return;
-        Text headerComp = messageParser.parseMessage(header, playerContext);
-        Text footerComp = messageParser.parseMessage(footer, playerContext);
-        getOnlinePlayers().forEach(p -> {
-            p.sendMessage(headerComp);
-            p.sendMessage(message);
-            p.sendMessage(footerComp);
-        });
+        if (messageParser == null || server == null) return;
+
+        if (playerContext != null) {
+            IPlayer iPlayerContext = wrapPlayer(playerContext);
+            IComponent headerComp = messageParser.parseMessage(header, iPlayerContext);
+            IComponent footerComp = messageParser.parseMessage(footer, iPlayerContext);
+            getOnlinePlayers().forEach(p -> {
+                sendSystemMessage(p, headerComp.getOriginalText());
+                sendSystemMessage(p, message);
+                sendSystemMessage(p, footerComp.getOriginalText());
+            });
+        } else {
+            getOnlinePlayers().forEach(p -> {
+                IPlayer iPlayer = wrapPlayer(p);
+                IComponent headerComp = messageParser.parseMessage(header, iPlayer);
+                IComponent footerComp = messageParser.parseMessage(footer, iPlayer);
+                sendSystemMessage(p, headerComp.getOriginalText());
+                sendSystemMessage(p, message);
+                sendSystemMessage(p, footerComp.getOriginalText());
+            });
+        }
     }
 
     @Override
@@ -254,8 +273,9 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public void executeCommandAsConsole(String command) {
-        ServerCommandSource consoleSource = getMinecraftServer().getCommandSource().withLevel(4);
-        getMinecraftServer().getCommandManager().executeWithPrefix(consoleSource, command);
+        if (server == null) return;
+        ServerCommandSource consoleSource = server.getCommandSource().withLevel(4);
+        server.getCommandManager().executeWithPrefix(consoleSource, command);
     }
 
     @Override
@@ -272,10 +292,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             return true;
         }
         boolean hasPerm = permissionsHandler.hasPermission(player, command.getPermission());
-        if (!hasPerm && messageParser != null) {
-            String errorMessage = command.getPermissionErrorMessage();
-            player.sendMessage(messageParser.parseMessage(errorMessage, player));
-        }
         return hasPerm;
     }
 
@@ -335,10 +351,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         }
 
         Identifier worldIdentifier = Identifier.of(worldId);
-        if (worldIdentifier == null) {
-            debugLogger.debugLog("PlatformAdapter: Invalid world ID: " + worldId);
-            return false;
-        }
         net.minecraft.registry.RegistryKey<World> targetWorldKey = net.minecraft.registry.RegistryKey.of(RegistryKeys.WORLD, worldIdentifier);
 
         if (!player.getWorld().getRegistryKey().equals(targetWorldKey)) {
@@ -363,7 +375,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public List<String> getOnlinePlayerNames() {
         return getOnlinePlayers().stream()
-                .map(player -> player.getName().getString())
+                .map(this::getPlayerName)
                 .toList();
     }
 
@@ -375,5 +387,62 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             worldNames.add(world.getRegistryKey().getValue().toString());
         }
         return worldNames;
+    }
+
+    @Override
+    public IPlayer wrapPlayer(ServerPlayerEntity player) {
+        return MinecraftPlayer.of(player);
+    }
+
+    @Override
+    public IComponent createEmptyComponent() {
+        return new MinecraftComponent(Text.literal(""));
+    }
+
+    @Override
+    public IComponent parseFormattingCode(String code, IComponent currentComponent) {
+        if (code == null || code.isEmpty()) return currentComponent;
+
+        net.minecraft.util.Formatting format = net.minecraft.util.Formatting.byCode(code.charAt(0));
+        if (format != null) {
+            if (format == net.minecraft.util.Formatting.RESET) {
+                return currentComponent.resetStyle();
+            }
+            return currentComponent.withFormatting(format);
+        }
+        return currentComponent;
+    }
+
+    @Override
+    public IComponent parseHexColor(String hex, IComponent currentComponent) {
+        if (hex == null || hex.length() != 6) return currentComponent;
+
+        try {
+            return currentComponent.withColor(hex);
+        } catch (Exception e) {
+            debugLogger.debugLog("Failed to parse hex color: " + hex, e);
+            return currentComponent;
+        }
+    }
+
+    @Override
+    public IComponent wrap(Text text) {
+        if (text == null) {
+            return createEmptyComponent();
+        }
+        if (text instanceof MutableText mt) {
+            return new MinecraftComponent(mt);
+        }
+        return new MinecraftComponent(text);
+    }
+
+    @Override
+    public IComponent createComponentFromLiteral(String text) {
+        return new MinecraftComponent(Text.literal(text != null ? text : ""));
+    }
+
+    @Override
+    public String getMinecraftVersion() {
+        return net.minecraft.SharedConstants.getGameVersion().name();
     }
 }

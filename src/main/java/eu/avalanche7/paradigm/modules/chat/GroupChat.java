@@ -5,16 +5,17 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.PlayerGroupData;
-import eu.avalanche7.paradigm.platform.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.utils.GroupChatManager;
-import net.fabricmc.fabric.api.message.v1.ServerMessageDecoratorEvent;
+import eu.avalanche7.paradigm.utils.PermissionsHandler;
+import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
 import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.command.argument.EntityArgumentType;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.ClickEvent;
-import net.minecraft.text.HoverEvent;
 import net.minecraft.text.MutableText;
 import net.minecraft.text.Text;
 import net.minecraft.util.Formatting;
@@ -38,7 +39,10 @@ public class GroupChat implements ParadigmModule {
 
     @Override
     public boolean isEnabled(Services services) {
-        return true;
+        if (services == null || services.getChatConfig() == null) {
+            return true;
+        }
+        return Boolean.TRUE.equals(services.getChatConfig().enableGroupChat.value);
     }
 
     @Override
@@ -75,7 +79,8 @@ public class GroupChat implements ParadigmModule {
     @Override
     public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {
         dispatcher.register(CommandManager.literal("groupchat")
-                .requires(source -> source.isExecutedByPlayer())
+                .requires(source -> source.isExecutedByPlayer() &&
+                        services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.GROUPCHAT_PERMISSION))
                 .executes(ctx -> {
                     displayHelp(ctx.getSource().getPlayer(), services);
                     return 1;
@@ -180,13 +185,19 @@ public class GroupChat implements ParadigmModule {
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
-        ServerMessageDecoratorEvent.EVENT.register(this::decorateGroupChatMessage);
+        if (!isEnabled(services)) {
+            services.getDebugLogger().debugLog(NAME + " module is disabled by config; skipping event registration.");
+            return;
+        }
+        ServerMessageEvents.ALLOW_CHAT_MESSAGE.register(this::handleGroupChatMessage);
     }
 
-    @Nullable
-    private Text decorateGroupChatMessage(ServerPlayerEntity player, Text message) {
+    private boolean handleGroupChatMessage(net.minecraft.network.message.SignedMessage message, ServerPlayerEntity player, net.minecraft.network.message.MessageType.Parameters params) {
+        if (player == null || message == null) {
+            return true;
+        }
         if (this.services == null || !isEnabled(this.services) || this.groupChatManager == null) {
-            return message;
+            return true;
         }
 
         if (groupChatManager.isGroupChatToggled(player)) {
@@ -194,23 +205,19 @@ public class GroupChat implements ParadigmModule {
             String groupName = data.getCurrentGroup();
 
             if (groupName != null) {
-                boolean sentToGroup = groupChatManager.sendMessageToGroup(player, groupName, message.getString());
+                boolean sentToGroup = groupChatManager.sendMessageToGroup(player, groupName, message.getContent().getString());
                 if (sentToGroup) {
-                    services.getLogger().info("[GroupChat] [{}] {}: {}", groupName, player.getName().getString(), message.getString());
-                    return null;
-                } else {
-                    groupChatManager.setGroupChatToggled(player, false);
-                    platform.sendSystemMessage(player, services.getLang().translate("group.chat_disabled"));
-                    return message;
+                    services.getLogger().info("[GroupChat] [{}] {}: {}", groupName, player.getName().getString(), message.getContent().getString());
                 }
             } else {
                 platform.sendSystemMessage(player, services.getLang().translate("group.no_group_to_send_message"));
                 groupChatManager.setGroupChatToggled(player, false);
                 platform.sendSystemMessage(player, services.getLang().translate("group.chat_disabled"));
             }
+            return false;
         }
 
-        return message;
+        return true;
     }
 
     private void displayHelp(ServerPlayerEntity player, Services services) {
@@ -234,14 +241,15 @@ public class GroupChat implements ParadigmModule {
     }
 
     private void sendHelpMessage(ServerPlayerEntity player, String label, String command, String description, Services services) {
-        Text parsedDescription = services.getMessageParser().parseMessage(description, player);
+        IPlayer iPlayer = services.getPlatformAdapter().wrapPlayer(player);
+        Text parsedDescription = services.getMessageParser().parseMessage(description, iPlayer).getOriginalText();
         MutableText hoverText = parsedDescription.copy();
         hoverText.setStyle(hoverText.getStyle().withColor(Formatting.AQUA));
 
-        MutableText message = platform.createLiteralComponent(" §9> §e/" + label + " " + command)
-                .formatted(Formatting.YELLOW)
-                .styled(style -> style.withClickEvent(new ClickEvent.SuggestCommand("/" + label + " " + command)))
-                .styled(style -> style.withHoverEvent(new HoverEvent.ShowText(hoverText)));
-        platform.sendSystemMessage(player, message);
+        MutableText base = platform.createLiteralComponent(" §9> §e/" + label + " " + command).formatted(Formatting.YELLOW);
+        IComponent message = platform.wrap(base)
+                .onClickSuggestCommand("/" + label + " " + command)
+                .onHoverComponent(platform.wrap(hoverText));
+        platform.sendSystemMessage(player, message.getOriginalText());
     }
 }

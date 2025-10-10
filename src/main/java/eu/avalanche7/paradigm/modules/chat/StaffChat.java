@@ -6,10 +6,10 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.platform.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
-import net.fabricmc.fabric.api.message.v1.ServerMessageEvents.AllowChatMessage;
 import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
@@ -90,7 +90,8 @@ public class StaffChat implements ParadigmModule {
         boolean isCurrentlyEnabled = staffChatEnabledMap.getOrDefault(player.getUuid(), false);
         boolean newState = !isCurrentlyEnabled;
         staffChatEnabledMap.put(player.getUuid(), newState);
-        Text feedbackMessage = platform.createLiteralComponent("Staff chat ").append(newState ? platform.createLiteralComponent("enabled").styled(s -> s.withColor(0x55FF55)) : platform.createLiteralComponent("disabled").styled(s -> s.withColor(0xFF5555)));
+        Text feedbackMessage = platform.createLiteralComponent("Staff chat ")
+                .append(newState ? platform.createLiteralComponent("enabled").styled(s -> s.withColor(0x55FF55)) : platform.createLiteralComponent("disabled").styled(s -> s.withColor(0xFF5555)));
         platform.sendSystemMessage(player, feedbackMessage);
 
         if (newState) {
@@ -102,17 +103,21 @@ public class StaffChat implements ParadigmModule {
 
     private void sendStaffChatMessage(ServerPlayerEntity sender, String message) {
         ChatConfigHandler.Config chatConfig = services.getChatConfig();
-        String formattedMessage = String.format(chatConfig.staffChatFormat.value, sender.getName().getString(), message);
-        Text chatComponent = services.getMessageParser().parseMessage(formattedMessage, sender);
+        String formattedMessage = String.format(chatConfig.staffChatFormat.value, platform.getPlayerName(sender), message);
+        IPlayer iSender = services.getPlatformAdapter().wrapPlayer(sender);
+        Text chatComponent = services.getMessageParser().parseMessage(formattedMessage, iSender).getOriginalText();
 
         platform.getOnlinePlayers().stream()
                 .filter(onlinePlayer -> platform.hasPermission(onlinePlayer, PermissionsHandler.STAFF_CHAT_PERMISSION))
                 .forEach(staffMember -> platform.sendSystemMessage(staffMember, chatComponent));
 
-        services.getLogger().info("(StaffChat) {}: {}", sender.getName().getString(), message);
+        services.getLogger().info("(StaffChat) {}: {}", platform.getPlayerName(sender), message);
     }
 
     private boolean onAllowChatMessage(SignedMessage message, ServerPlayerEntity player, MessageType.Parameters params) {
+        if (player == null) {
+            return true;
+        }
         if (!isEnabled(this.services)) {
             return true;
         }
@@ -127,7 +132,8 @@ public class StaffChat implements ParadigmModule {
 
     private void showBossBar(ServerPlayerEntity player) {
         if (services.getChatConfig().enableStaffBossBar.value) {
-            Text title = services.getMessageParser().parseMessage("§cStaff Chat Mode §aEnabled", player);
+            IPlayer iPlayer = services.getPlatformAdapter().wrapPlayer(player);
+            Text title = services.getMessageParser().parseMessage("§cStaff Chat Mode §aEnabled", iPlayer).getOriginalText();
             platform.showPersistentBossBar(player, title, IPlatformAdapter.BossBarColor.RED, IPlatformAdapter.BossBarOverlay.PROGRESS);
         }
     }

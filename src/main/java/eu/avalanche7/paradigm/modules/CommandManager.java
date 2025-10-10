@@ -12,7 +12,8 @@ import com.mojang.brigadier.suggestion.Suggestions;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.CustomCommand;
-import eu.avalanche7.paradigm.platform.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.command.CommandSource;
 import net.minecraft.server.command.ServerCommandSource;
@@ -43,6 +44,7 @@ public class CommandManager implements ParadigmModule {
         this.platform = services.getPlatformAdapter();
         services.getDebugLogger().debugLog(NAME + " module loaded.");
         services.getCmConfig().loadCommands();
+        services.getPermissionsHandler().refreshCustomCommandPermissions();
     }
 
     @Override
@@ -64,6 +66,10 @@ public class CommandManager implements ParadigmModule {
     @Override
     public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {
         services.getCmConfig().getLoadedCommands().forEach(command -> {
+            if (dispatcher.getRoot().getChild(command.getName()) != null) {
+                services.getDebugLogger().debugLog(NAME + ": Skipping registration of custom command '" + command.getName() + "' because it conflicts with an existing command.");
+                return;
+            }
             LiteralArgumentBuilder<ServerCommandSource> commandBuilder = net.minecraft.server.command.CommandManager.literal(command.getName())
                     .requires(source -> platform.hasPermissionForCustomCommand(source, command));
 
@@ -92,7 +98,8 @@ public class CommandManager implements ParadigmModule {
                         .requires(source -> source.hasPermissionLevel(2))
                         .executes(ctx -> {
                             services.getCmConfig().reloadCommands();
-                            Text message = services.getMessageParser().parseMessage("&aReloaded custom commands from config.", null);
+                            services.getPermissionsHandler().refreshCustomCommandPermissions();
+                            Text message = services.getMessageParser().parseMessage("&aReloaded custom commands from config.", null).getOriginalText();
                             platform.sendSuccess(ctx.getSource(), message, false);
                             return 1;
                         })
@@ -204,13 +211,15 @@ public class CommandManager implements ParadigmModule {
                 Object value = getArgumentValue(ctx, argDef);
                 if (value == null && argDef.isRequired()) {
                     ServerPlayerEntity player = source.getEntity() instanceof ServerPlayerEntity sp ? sp : null;
-                    platform.sendFailure(source, services.getMessageParser().parseMessage(argDef.getErrorMessage(), player));
+                    IPlayer iPlayer = player != null ? platform.wrapPlayer(player) : null;
+                    platform.sendFailure(source, services.getMessageParser().parseMessage(argDef.getErrorMessage(), iPlayer).getOriginalText());
                     return 0;
                 }
                 validatedArgs[i] = value != null ? value.toString() : "";
             } catch (Exception e) {
                 ServerPlayerEntity player = source.getEntity() instanceof ServerPlayerEntity sp ? sp : null;
-                platform.sendFailure(source, services.getMessageParser().parseMessage(argDef.getErrorMessage(), player));
+                IPlayer iPlayer = player != null ? platform.wrapPlayer(player) : null;
+                platform.sendFailure(source, services.getMessageParser().parseMessage(argDef.getErrorMessage(), iPlayer).getOriginalText());
                 return 0;
             }
         }
@@ -242,14 +251,23 @@ public class CommandManager implements ParadigmModule {
     private void executeCustomCommand(ServerCommandSource source, CustomCommand command, String[] argsTokens) {
         ServerPlayerEntity player = source.getEntity() instanceof ServerPlayerEntity sp ? sp : null;
 
+        if (command.isRequirePermission()) {
+            if (player != null && !services.getPermissionsHandler().hasPermission(player, command.getPermission())) {
+                IPlayer iPlayer = platform.wrapPlayer(player);
+                platform.sendFailure(source, services.getMessageParser().parseMessage(command.getPermissionErrorMessage(), iPlayer).getOriginalText());
+                return;
+            }
+        }
+
         CustomCommand.AreaRestriction area = command.getAreaRestriction();
         if (area != null) {
             if (player == null) {
-                platform.sendFailure(source, services.getMessageParser().parseMessage("&cThis command can only be run by a player in a specific area.", null));
+                platform.sendFailure(source, services.getMessageParser().parseMessage("&cThis command can only be run by a player in a specific area.", null).getOriginalText());
                 return;
             }
             if (!platform.isPlayerInArea(player, area.getWorld(), area.getCorner1(), area.getCorner2())) {
-                platform.sendFailure(source, services.getMessageParser().parseMessage(area.getRestrictionMessage(), player));
+                IPlayer iPlayer = platform.wrapPlayer(player);
+                platform.sendFailure(source, services.getMessageParser().parseMessage(area.getRestrictionMessage(), iPlayer).getOriginalText());
                 return;
             }
         }
@@ -268,7 +286,8 @@ public class CommandManager implements ParadigmModule {
                     cooldownMessage = "&cThis command is on cooldown! Please wait &e{remaining_time} &cseconds.";
                 }
                 String formattedMessage = cooldownMessage.replace("{remaining_time}", String.valueOf(remainingSeconds));
-                platform.sendFailure(source, services.getMessageParser().parseMessage(formattedMessage, player));
+                IPlayer iPlayer = player != null ? platform.wrapPlayer(player) : null;
+                platform.sendFailure(source, services.getMessageParser().parseMessage(formattedMessage, iPlayer).getOriginalText());
                 return;
             }
             services.getCooldownConfigHandler().setLastUsage(player.getUuid(), command.getName(), currentTime);
@@ -292,7 +311,8 @@ public class CommandManager implements ParadigmModule {
                     if (action.getText() != null) {
                         for (String line : action.getText()) {
                             String expandedLine = expandCommand(line, player, argsTokens, rawArgs);
-                            Text formattedMessage = services.getMessageParser().parseMessage(expandedLine, player);
+                            IPlayer iPlayer = player != null ? platform.wrapPlayer(player) : null;
+                            Text formattedMessage = services.getMessageParser().parseMessage(expandedLine, iPlayer).getOriginalText();
                             platform.sendSuccess(source, formattedMessage, false);
                         }
                     }
@@ -301,9 +321,10 @@ public class CommandManager implements ParadigmModule {
                     if (player != null && action.getX() != null && action.getY() != null && action.getZ() != null) {
                         platform.teleportPlayer(player, action.getX(), action.getY(), action.getZ());
                     } else if (player == null) {
-                        platform.sendFailure(source, services.getMessageParser().parseMessage("&cTeleport action can only be performed by a player.", null));
+                        platform.sendFailure(source, services.getMessageParser().parseMessage("&cTeleport action can only be performed by a player.", null).getOriginalText());
                     } else {
-                        platform.sendFailure(source, services.getMessageParser().parseMessage("&cInvalid teleport coordinates.", player));
+                        IPlayer iPlayer = player != null ? platform.wrapPlayer(player) : null;
+                        platform.sendFailure(source, services.getMessageParser().parseMessage("&cInvalid teleport coordinates.", iPlayer).getOriginalText());
                     }
                     break;
                 case "run_command":
@@ -331,7 +352,8 @@ public class CommandManager implements ParadigmModule {
                     }
                     break;
                 default:
-                    platform.sendFailure(source, services.getMessageParser().parseMessage("&cUnknown action type: " + action.getType(), player));
+                    IPlayer iPlayer = player != null ? platform.wrapPlayer(player) : null;
+                    platform.sendFailure(source, services.getMessageParser().parseMessage("&cUnknown action type: " + action.getType(), iPlayer).getOriginalText());
             }
         }
     }
@@ -406,10 +428,10 @@ public class CommandManager implements ParadigmModule {
                 }
                 break;
             default:
-                platform.sendFailure(source, services.getMessageParser().parseMessage("&cUnknown condition type: " + condition.getType(), player));
+                IPlayer iPlayer = player != null ? platform.wrapPlayer(player) : null;
+                platform.sendFailure(source, services.getMessageParser().parseMessage("&cUnknown condition type: " + condition.getType(), iPlayer).getOriginalText());
                 return false;
         }
         return condition.isNegate() != result;
     }
 }
-

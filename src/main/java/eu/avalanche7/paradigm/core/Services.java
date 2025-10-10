@@ -1,12 +1,10 @@
 package eu.avalanche7.paradigm.core;
 
 import eu.avalanche7.paradigm.configs.*;
-import eu.avalanche7.paradigm.platform.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.*;
 import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
-
-import java.util.Map;
 
 public class Services {
 
@@ -20,7 +18,6 @@ public class Services {
     private final RestartConfigHandler.Config restartConfig;
     private final ChatConfigHandler.Config chatConfig;
     private final CMConfig cmConfigInstance;
-    private final Map<String, ToastConfigHandler.ToastDefinition> toastConfig;
     private final CooldownConfigHandler cooldownConfigHandler;
 
     private final DebugLogger debugLoggerInstance;
@@ -30,7 +27,6 @@ public class Services {
     private final Placeholders placeholdersInstance;
     private final TaskScheduler taskSchedulerInstance;
     private final GroupChatManager groupChatManagerInstance;
-    private final CustomToastManager customToastManagerInstance;
     private final IPlatformAdapter platformAdapter;
 
 
@@ -42,7 +38,6 @@ public class Services {
             MentionConfigHandler.Config mentionConfig,
             RestartConfigHandler.Config restartConfig,
             ChatConfigHandler.Config chatConfig,
-            Map<String, ToastConfigHandler.ToastDefinition> toastConfig,
             CMConfig cmConfig,
             GroupChatManager groupChatManager,
             DebugLogger debugLogger,
@@ -51,7 +46,6 @@ public class Services {
             PermissionsHandler permissionsHandler,
             Placeholders placeholders,
             TaskScheduler taskScheduler,
-            CustomToastManager customToastManager,
             IPlatformAdapter platformAdapter,
             CooldownConfigHandler cooldownConfigHandler
     ) {
@@ -62,7 +56,6 @@ public class Services {
         this.mentionConfig = mentionConfig;
         this.restartConfig = restartConfig;
         this.chatConfig = chatConfig;
-        this.toastConfig = toastConfig;
         this.cmConfigInstance = cmConfig;
         this.groupChatManagerInstance = groupChatManager;
         this.debugLoggerInstance = debugLogger;
@@ -71,7 +64,6 @@ public class Services {
         this.permissionsHandlerInstance = permissionsHandler;
         this.placeholdersInstance = placeholders;
         this.taskSchedulerInstance = taskScheduler;
-        this.customToastManagerInstance = customToastManager;
         this.platformAdapter = platformAdapter;
         this.cooldownConfigHandler = cooldownConfigHandler;
     }
@@ -99,10 +91,6 @@ public class Services {
 
     public CooldownConfigHandler getCooldownConfigHandler() {
         return cooldownConfigHandler;
-    }
-
-    public CustomToastManager getCustomToastManager() {
-        return customToastManagerInstance;
     }
 
     public IPlatformAdapter getPlatformAdapter() {
@@ -153,9 +141,6 @@ public class Services {
         return mentionConfig;
     }
 
-    public Map<String, ToastConfigHandler.ToastDefinition> getToastConfig() {
-        return toastConfig;
-    }
 
     public RestartConfigHandler.Config getRestartConfig() {
         return restartConfig;

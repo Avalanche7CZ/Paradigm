@@ -3,7 +3,8 @@ package eu.avalanche7.paradigm.modules.chat;
 import com.mojang.brigadier.CommandDispatcher;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.platform.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.server.command.ServerCommandSource;
@@ -80,13 +81,13 @@ public class MOTD implements ParadigmModule {
     public void onPlayerJoin(ServerPlayerEntity player, Services services) {
         if (this.services == null || !isEnabled(this.services) || this.services.getMotdConfig() == null) {
             if (this.services != null && this.services.getDebugLogger() != null) {
-                this.services.getDebugLogger().debugLog("MOTDModule: Services, MOTD module not enabled, or MOTDConfig is null. Skipping MOTD for " + player.getName().getString());
+                this.services.getDebugLogger().debugLog("MOTDModule: Services, MOTD module not enabled, or MOTDConfig is null. Skipping MOTD for " + platform.getPlayerName(player));
             }
             return;
         }
         Text motdMessage = createMOTDMessage(player, this.services);
         platform.sendSystemMessage(player, motdMessage);
-        this.services.getDebugLogger().debugLog("Sent MOTD to " + player.getName().getString());
+        this.services.getDebugLogger().debugLog("Sent MOTD to " + platform.getPlayerName(player));
     }
 
     private Text createMOTDMessage(ServerPlayerEntity player, Services services) {
@@ -101,10 +102,11 @@ public class MOTD implements ParadigmModule {
             return Text.empty();
         }
         MutableText motdMessage = platform.createLiteralComponent("");
+        IPlayer iPlayer = services.getPlatformAdapter().wrapPlayer(player);
         for (int i = 0; i < lines.size(); i++) {
             String line = lines.get(i);
             if (services.getMessageParser() != null) {
-                motdMessage.append(services.getMessageParser().parseMessage(line, player));
+                motdMessage.append(services.getMessageParser().parseMessage(line, iPlayer).getOriginalText());
             } else {
                 if(services.getDebugLogger() != null) {
                     services.getDebugLogger().debugLog("MOTDModule: MessageParser is null in createMOTDMessage loop.");

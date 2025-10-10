@@ -8,13 +8,14 @@ import eu.avalanche7.paradigm.modules.*;
 import eu.avalanche7.paradigm.modules.chat.GroupChat;
 import eu.avalanche7.paradigm.modules.chat.MOTD;
 import eu.avalanche7.paradigm.modules.chat.StaffChat;
-import eu.avalanche7.paradigm.platform.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.PlatformAdapterImpl;
 import eu.avalanche7.paradigm.utils.*;
 import net.fabricmc.api.DedicatedServerModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.loader.api.FabricLoader;
+import net.fabricmc.loader.api.ModContainer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.ServerCommandSource;
 import org.slf4j.Logger;
@@ -37,19 +38,18 @@ public class Paradigm implements DedicatedServerModInitializer {
     public static final String MOD_ID = "paradigm";
     private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
     private final List<ParadigmModule> modules = new ArrayList<>();
+    private static List<ParadigmModule> modulesStatic;
     private Services services;
     private static Services servicesInstance;
-
-
     private DebugLogger debugLoggerInstance;
     private Lang langInstance;
+    private static String modVersion = "unknown";
     private MessageParser messageParserInstance;
     private PermissionsHandler permissionsHandlerInstance;
     private Placeholders placeholdersInstance;
     private TaskScheduler taskSchedulerInstance;
     private GroupChatManager groupChatManagerInstance;
     private CMConfig cmConfigInstance;
-    private CustomToastManager customToastManagerInstance;
     private IPlatformAdapter platformAdapterInstance;
     private CooldownConfigHandler cooldownConfigHandlerInstance;
     private TelemetryReporter telemetryReporter;
@@ -59,10 +59,10 @@ public class Paradigm implements DedicatedServerModInitializer {
         LOGGER.info("Initializing Paradigm Mod for Fabric 1.21.1...");
         loadConfigurations();
 
-        createUtilityInstances();
         initializeServices();
         registerModules();
         servicesInstance = services;
+        modulesStatic = modules;
 
         modules.forEach(module -> module.registerEventListeners(null, services));
         modules.forEach(module -> module.onLoad(null, services, null));
@@ -70,16 +70,16 @@ public class Paradigm implements DedicatedServerModInitializer {
         registerFabricEvents();
 
         FabricLoader.getInstance().getModContainer(MOD_ID).ifPresent(modContainer -> {
-            String version = modContainer.getMetadata().getVersion().getFriendlyString();
+            modVersion = modContainer.getMetadata().getVersion().getFriendlyString();
             String displayName = modContainer.getMetadata().getName();
 
             LOGGER.info("Paradigm Fabric mod (1.21.1) has been set up.");
             LOGGER.info("==================================================");
-            LOGGER.info("{} - Version {}", displayName, version);
+            LOGGER.info("{} - Version {}", displayName, getModVersion());
             LOGGER.info("Author: Avalanche7CZ");
             LOGGER.info("Discord: https://discord.com/invite/qZDcQdEFqQ");
             LOGGER.info("==================================================");
-            UpdateChecker.checkForUpdates(version, LOGGER);
+            UpdateChecker.checkForUpdates(getModVersion(), LOGGER);
         });
     }
 
@@ -93,7 +93,6 @@ public class Paradigm implements DedicatedServerModInitializer {
             ChatConfigHandler.setJsonValidator(bootstrapDebugLogger);
             MentionConfigHandler.setJsonValidator(bootstrapDebugLogger);
             RestartConfigHandler.setJsonValidator(bootstrapDebugLogger);
-            ToastConfigHandler.setJsonValidator(bootstrapDebugLogger);
             MOTDConfigHandler.setJsonValidator(bootstrapDebugLogger);
 
             MainConfigHandler.getConfig();
@@ -101,7 +100,6 @@ public class Paradigm implements DedicatedServerModInitializer {
             MentionConfigHandler.getConfig();
             RestartConfigHandler.getConfig();
             ChatConfigHandler.getConfig();
-            ToastConfigHandler.getToasts();
             MOTDConfigHandler.getConfig();
             CooldownConfigHandler.load();
 
@@ -111,7 +109,6 @@ public class Paradigm implements DedicatedServerModInitializer {
             ChatConfigHandler.setJsonValidator(debugLoggerInstance);
             MentionConfigHandler.setJsonValidator(debugLoggerInstance);
             RestartConfigHandler.setJsonValidator(debugLoggerInstance);
-            ToastConfigHandler.setJsonValidator(debugLoggerInstance);
             MOTDConfigHandler.setJsonValidator(debugLoggerInstance);
 
             if (this.cmConfigInstance == null) {
@@ -119,9 +116,9 @@ public class Paradigm implements DedicatedServerModInitializer {
             }
             this.cmConfigInstance.loadCommands();
 
+            createUtilityInstances();
+
             if(this.langInstance == null) {
-                if (this.placeholdersInstance == null) this.placeholdersInstance = new Placeholders();
-                if (this.messageParserInstance == null) this.messageParserInstance = new MessageParser(this.placeholdersInstance);
                 this.langInstance = new Lang(LOGGER, MainConfigHandler.getConfig(), this.messageParserInstance);
             }
             this.langInstance.initializeLanguage();
@@ -133,11 +130,8 @@ public class Paradigm implements DedicatedServerModInitializer {
         }
     }
 
-
     private void createUtilityInstances() {
         this.placeholdersInstance = new Placeholders();
-        this.messageParserInstance = new MessageParser(this.placeholdersInstance);
-        this.customToastManagerInstance = new CustomToastManager(this.messageParserInstance);
         this.debugLoggerInstance = new DebugLogger(MainConfigHandler.getConfig());
         this.taskSchedulerInstance = new TaskScheduler(this.debugLoggerInstance);
         this.permissionsHandlerInstance = new PermissionsHandler(LOGGER, this.cmConfigInstance, this.debugLoggerInstance);
@@ -149,6 +143,9 @@ public class Paradigm implements DedicatedServerModInitializer {
                 this.taskSchedulerInstance,
                 this.debugLoggerInstance
         );
+
+        this.messageParserInstance = new MessageParser(this.placeholdersInstance, this.platformAdapterInstance);
+        this.platformAdapterInstance.provideMessageParser(this.messageParserInstance);
     }
 
     private void initializeServices() {
@@ -165,7 +162,6 @@ public class Paradigm implements DedicatedServerModInitializer {
                 MentionConfigHandler.getConfig(),
                 RestartConfigHandler.getConfig(),
                 ChatConfigHandler.getConfig(),
-                ToastConfigHandler.getToasts(),
                 this.cmConfigInstance,
                 this.groupChatManagerInstance,
                 this.debugLoggerInstance,
@@ -174,7 +170,6 @@ public class Paradigm implements DedicatedServerModInitializer {
                 this.permissionsHandlerInstance,
                 this.placeholdersInstance,
                 this.taskSchedulerInstance,
-                this.customToastManagerInstance,
                 this.platformAdapterInstance,
                 this.cooldownConfigHandlerInstance
         );
@@ -183,6 +178,7 @@ public class Paradigm implements DedicatedServerModInitializer {
     }
 
     private void registerModules() {
+        modules.add(new eu.avalanche7.paradigm.modules.commands.Help());
         modules.add(new Announcements());
         modules.add(new MOTD());
         modules.add(new Mentions());
@@ -190,7 +186,7 @@ public class Paradigm implements DedicatedServerModInitializer {
         modules.add(new StaffChat());
         modules.add(new GroupChat(this.groupChatManagerInstance));
         modules.add(new CommandManager());
-        modules.add(new CustomToasts());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.Reload());
         LOGGER.info("Paradigm: Registered {} modules.", modules.size());
     }
 
@@ -208,6 +204,10 @@ public class Paradigm implements DedicatedServerModInitializer {
         }
         telemetryReporter.start();
 
+        if (this.permissionsHandlerInstance != null) {
+            this.permissionsHandlerInstance.registerLuckPermsPermissions();
+        }
+
         modules.forEach(module -> {
             if (module.isEnabled(services)) {
                 module.onEnable(services);
@@ -222,10 +222,31 @@ public class Paradigm implements DedicatedServerModInitializer {
                 module.registerCommands(dispatcher, registryAccess, services);
             }
         });
+        var root = dispatcher.getRoot().getChild("paradigm");
+        if (root != null) {
+            LOGGER.info("[Paradigm] Root /paradigm command node present. Has executes? {}", root.getCommand() != null);
+        } else {
+            LOGGER.warn("[Paradigm] Root /paradigm command node NOT found after registration!");
+        }
     }
 
     public static Services getServices() {
         return servicesInstance;
+    }
+
+    public static List<ParadigmModule> getModules() {
+        return modulesStatic != null ? modulesStatic : List.of();
+    }
+
+    public static String getModVersion() {
+        if (!"unknown".equals(modVersion)) return modVersion;
+        try {
+            return FabricLoader.getInstance().getModContainer(MOD_ID)
+                    .map(c -> c.getMetadata().getVersion().getFriendlyString())
+                    .orElse("unknown");
+        } catch (Throwable t) {
+            return "unknown";
+        }
     }
 
     private void onServerStopping(MinecraftServer server) {
@@ -346,7 +367,7 @@ public class Paradigm implements DedicatedServerModInitializer {
 
         private static String getMinecraftVersionSafe() {
             try {
-                return net.minecraft.SharedConstants.getGameVersion().id();
+                return net.minecraft.SharedConstants.getGameVersion().name();
             } catch (Throwable t) {
                 return null;
             }

@@ -1,18 +1,15 @@
 package eu.avalanche7.paradigm.utils;
 
-import net.minecraft.network.packet.s2c.play.ClearTitleS2CPacket;
-import net.minecraft.network.packet.s2c.play.SubtitleS2CPacket;
-import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.*;
+import net.minecraft.text.Style;
+import net.minecraft.text.TextColor;
 import net.minecraft.util.Formatting;
 
-import java.net.URI;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -22,65 +19,77 @@ public class MessageParser {
     private final Pattern hexPattern = Pattern.compile("&#([A-Fa-f0-9]{6})");
     private final Pattern urlPattern = Pattern.compile("https?://\\S+");
     private final Map<Pattern, BiConsumer<Matcher, TagContext>> tagHandlers;
-    private final Map<String, MutableText> messageCache = new ConcurrentHashMap<>();
     private final Placeholders placeholders;
+    private final IPlatformAdapter platformAdapter;
 
-    public MessageParser(Placeholders placeholders) {
+    public MessageParser(Placeholders placeholders, IPlatformAdapter platformAdapter) {
         this.placeholders = placeholders;
+        this.platformAdapter = platformAdapter;
         this.tagHandlers = new LinkedHashMap<>();
         initializeTagHandlers();
     }
 
     private void initializeTagHandlers() {
-        tagHandlers.put(Pattern.compile("\\[link=(.*?)\\]"), (matcher, context) -> {
+        tagHandlers.put(Pattern.compile("\\[link=(.*?)]"), (matcher, context) -> {
             String url = matcher.group(1);
-            try {
-                context.getText().append(Text.literal(url)
-                                .setStyle(context.getCurrentStyle().withClickEvent(new ClickEvent.OpenUrl(URI.create(formatUrl(url))))))
-                        .append(Text.literal(" ").setStyle(context.getCurrentStyle()));
-            } catch (IllegalArgumentException e) {
-                context.getText().append(Text.literal(url + " ").setStyle(context.getCurrentStyle()));
-            }
+            String formattedUrl = formatUrl(url);
+            IComponent clickable = platformAdapter.createComponentFromLiteral(url)
+                    .withStyle(context.getCurrentStyle())
+                    .onClickOpenUrl(formattedUrl);
+            context.getText().append(clickable);
+            context.getText().append(platformAdapter.createComponentFromLiteral(" ").withStyle(context.getCurrentStyle()));
         });
-        tagHandlers.put(Pattern.compile("\\[command=(.*?)\\]"), (matcher, context) -> {
+
+        tagHandlers.put(Pattern.compile("\\[command=(.*?)]"), (matcher, context) -> {
             String command = matcher.group(1);
             String fullCommand = command.startsWith("/") ? command : "/" + command;
-            context.getText().append(Text.literal(fullCommand)
-                            .setStyle(context.getCurrentStyle().withClickEvent(new ClickEvent.RunCommand(fullCommand))))
-                    .append(Text.literal(" ").setStyle(context.getCurrentStyle()));
+            IComponent clickable = platformAdapter.createComponentFromLiteral(fullCommand)
+                    .withStyle(context.getCurrentStyle())
+                    .onClickRunCommand(fullCommand);
+            context.getText().append(clickable);
+            context.getText().append(platformAdapter.createComponentFromLiteral(" ").withStyle(context.getCurrentStyle()));
         });
-        tagHandlers.put(Pattern.compile("\\[hover=(.*?)\\](.*?)\\[/hover\\]", Pattern.DOTALL), (matcher, context) -> {
+
+        tagHandlers.put(Pattern.compile("\\[hover=(.*?)](.*?)\\[/hover]", Pattern.DOTALL), (matcher, context) -> {
             String hoverTextContent = matcher.group(1);
             String mainTextContent = matcher.group(2);
-            MutableText hoverComponent = parseMessageInternal(hoverTextContent, context.getPlayer(), Style.EMPTY);
-            MutableText textWithHover = Text.literal("");
+            IComponent hoverComponent = parseMessageInternal(mainTextContentOf(hoverTextContent), context.getPlayer(), Style.EMPTY);
+            IComponent textWithHover = platformAdapter.createEmptyComponent();
             parseTextRecursive(mainTextContent, textWithHover, context.getCurrentStyle(), context.getPlayer());
-            applyHoverToComponent(textWithHover, new HoverEvent.ShowText(hoverComponent));
-            context.getText().append(textWithHover);
+            IComponent hovered = textWithHover.onHoverComponent(hoverComponent);
+            context.getText().append(hovered);
         });
-        tagHandlers.put(Pattern.compile("\\[divider\\]"), (matcher, context) -> {
-            context.getText().append(Text.literal("--------------------")
-                    .setStyle(context.getCurrentStyle().withColor(TextColor.fromFormatting(Formatting.GRAY))));
+
+        tagHandlers.put(Pattern.compile("\\[divider]"), (matcher, context) -> {
+            IComponent divider = platformAdapter.createComponentFromLiteral("--------------------")
+                    .withStyle(context.getCurrentStyle())
+                    .withFormatting(Formatting.GRAY);
+            context.getText().append(divider);
         });
-        tagHandlers.put(Pattern.compile("\\[title=(.*?)\\]", Pattern.DOTALL), (matcher, context) -> {
-            if (context.getPlayer() != null) {
+
+        tagHandlers.put(Pattern.compile("\\[title=(.*?)]", Pattern.DOTALL), (matcher, context) -> {
+            ServerPlayerEntity sp = context.getOriginalPlayer();
+            if (sp != null) {
                 String titleText = matcher.group(1);
-                MutableText titleComponent = parseTitleOrSubtitle(titleText, context.getCurrentStyle(), context.getPlayer());
-                context.getPlayer().networkHandler.sendPacket(new ClearTitleS2CPacket(false));
-                context.getPlayer().networkHandler.sendPacket(new TitleS2CPacket(titleComponent));
+                IComponent titleComponent = parseMessageInternal(titleText, context.getPlayer(), context.getCurrentStyle());
+                platformAdapter.clearTitles(sp);
+                platformAdapter.sendTitle(sp, titleComponent.getOriginalText(), platformAdapter.createComponentFromLiteral("").getOriginalText());
             }
         });
-        tagHandlers.put(Pattern.compile("\\[subtitle=(.*?)\\]", Pattern.DOTALL), (matcher, context) -> {
-            if (context.getPlayer() != null) {
+
+        tagHandlers.put(Pattern.compile("\\[subtitle=(.*?)]", Pattern.DOTALL), (matcher, context) -> {
+            ServerPlayerEntity sp = context.getOriginalPlayer();
+            if (sp != null) {
                 String subtitleText = matcher.group(1);
-                MutableText subtitleComponent = parseTitleOrSubtitle(subtitleText, context.getCurrentStyle(), context.getPlayer());
-                context.getPlayer().networkHandler.sendPacket(new SubtitleS2CPacket(subtitleComponent));
+                IComponent subtitleComponent = parseMessageInternal(subtitleText, context.getPlayer(), context.getCurrentStyle());
+                platformAdapter.sendSubtitle(sp, subtitleComponent.getOriginalText());
             }
         });
-        tagHandlers.put(Pattern.compile("\\[center\\](.*?)\\[/center\\]", Pattern.DOTALL), (matcher, context) -> {
+
+        tagHandlers.put(Pattern.compile("\\[center](.*?)\\[/center]", Pattern.DOTALL), (matcher, context) -> {
             String textToCenter = matcher.group(1);
-            MutableText innerComponent = parseMessageInternal(textToCenter, context.getPlayer(), context.getCurrentStyle());
-            String plainInnerText = innerComponent.getString();
+            IComponent innerComponent = parseMessageInternal(textToCenter, context.getPlayer(), context.getCurrentStyle());
+            String plainInnerText = innerComponent.getRawText();
             int approximateChatWidthChars = 53;
             String paddingSpaces = "";
             int textLength = plainInnerText.length();
@@ -93,31 +102,24 @@ public class MessageParser {
                 }
             }
             if (!paddingSpaces.isEmpty()) {
-                context.getText().append(Text.literal(paddingSpaces).setStyle(context.getCurrentStyle()));
+                context.getText().append(platformAdapter.createComponentFromLiteral(paddingSpaces).withStyle(context.getCurrentStyle()));
             }
             context.getText().append(innerComponent);
         });
     }
 
-    private void applyHoverToComponent(MutableText component, HoverEvent hoverEvent) {
-        component.setStyle(component.getStyle().withHoverEvent(hoverEvent));
-        for (Text sibling : component.getSiblings()) {
-            if (sibling instanceof MutableText mutableSibling) {
-                applyHoverToComponent(mutableSibling, hoverEvent);
-            }
-        }
-    }
-
-    public MutableText parseMessage(String rawMessage, ServerPlayerEntity player) {
+    public IComponent parseMessage(String rawMessage, IPlayer player) {
         return parseMessageInternal(rawMessage, player, Style.EMPTY);
     }
 
-    private MutableText parseMessageInternal(String rawMessage, ServerPlayerEntity player, Style initialStyle) {
+    private IComponent parseMessageInternal(String rawMessage, IPlayer player, Style initialStyle) {
         if (rawMessage == null) {
-            return Text.literal("").setStyle(initialStyle);
+            return platformAdapter.createComponentFromLiteral("").withStyle(initialStyle);
         }
 
-        String processedMessage = this.placeholders.replacePlaceholders(rawMessage, player);
+        String processedMessage = this.placeholders.replacePlaceholders(rawMessage,
+                player != null ? player.getOriginalPlayer() : null);
+
         Matcher hexMatcher = hexPattern.matcher(processedMessage);
         StringBuilder sb = new StringBuilder();
         while (hexMatcher.find()) {
@@ -128,19 +130,12 @@ public class MessageParser {
         processedMessage = sb.toString();
         String messageForParsing = processedMessage.replace("&", "§");
 
-        final String finalCacheKey = messageForParsing + "_style_" + initialStyle.hashCode() + (player != null ? player.getUuidAsString() : "null_player");
-        if (messageCache.containsKey(finalCacheKey)) {
-            return messageCache.get(finalCacheKey).copy();
-        }
-
-        MutableText rootComponent = Text.literal("");
+        IComponent rootComponent = platformAdapter.createEmptyComponent();
         parseTextRecursive(messageForParsing, rootComponent, initialStyle, player);
-
-        messageCache.put(finalCacheKey, rootComponent);
         return rootComponent;
     }
 
-    private void parseTextRecursive(String textToParse, MutableText parentComponent, Style currentStyle, ServerPlayerEntity player) {
+    private void parseTextRecursive(String textToParse, IComponent parentComponent, Style currentStyle, IPlayer player) {
         int currentIndex = 0;
         int length = textToParse.length();
         Matcher urlMatcher = urlPattern.matcher(textToParse);
@@ -157,7 +152,8 @@ public class MessageParser {
             if (nextUrlFound) firstEventIndex = Math.min(firstEventIndex, nextUrlStart);
 
             if (firstEventIndex > currentIndex) {
-                parentComponent.append(Text.literal(textToParse.substring(currentIndex, firstEventIndex)).setStyle(currentStyle));
+                String plain = textToParse.substring(currentIndex, firstEventIndex);
+                parentComponent.append(platformAdapter.createComponentFromLiteral(plain).withStyle(currentStyle));
             }
 
             currentIndex = firstEventIndex;
@@ -173,11 +169,11 @@ public class MessageParser {
                                 currentStyle = currentStyle.withColor(TextColor.parse("#" + hex).getOrThrow());
                                 currentIndex += 8;
                             } catch (Exception e) {
-                                parentComponent.append(Text.literal(textToParse.substring(currentIndex, currentIndex + 2)).setStyle(currentStyle));
+                                parentComponent.append(platformAdapter.createComponentFromLiteral(textToParse.substring(currentIndex, currentIndex + 2)).withStyle(currentStyle));
                                 currentIndex += 2;
                             }
                         } else {
-                            parentComponent.append(Text.literal(textToParse.substring(currentIndex, currentIndex + 1)).setStyle(currentStyle));
+                            parentComponent.append(platformAdapter.createComponentFromLiteral(textToParse.substring(currentIndex, currentIndex + 1)).withStyle(currentStyle));
                             currentIndex += 1;
                         }
                     } else {
@@ -186,12 +182,12 @@ public class MessageParser {
                             currentStyle = currentStyle.withFormatting(format);
                             if (format == Formatting.RESET) currentStyle = Style.EMPTY;
                         } else {
-                            parentComponent.append(Text.literal("§").setStyle(currentStyle));
+                            parentComponent.append(platformAdapter.createComponentFromLiteral("§").withStyle(currentStyle));
                         }
                         currentIndex += 2;
                     }
                 } else {
-                    parentComponent.append(Text.literal("§").setStyle(currentStyle));
+                    parentComponent.append(platformAdapter.createComponentFromLiteral("§").withStyle(currentStyle));
                     currentIndex += 1;
                 }
             } else if (nextTagStart == currentIndex) {
@@ -208,46 +204,24 @@ public class MessageParser {
                     }
                 }
                 if (!tagHandled) {
-                    parentComponent.append(Text.literal("[").setStyle(currentStyle));
+                    parentComponent.append(platformAdapter.createComponentFromLiteral("[").withStyle(currentStyle));
                     currentIndex += 1;
                 }
             } else if (nextUrlFound && nextUrlStart == currentIndex) {
                 String url = urlMatcher.group(0);
-                try {
-                    Style urlStyle = currentStyle.withClickEvent(new ClickEvent.OpenUrl(URI.create(formatUrl(url))));
-                    parentComponent.append(Text.literal(url).setStyle(urlStyle));
-                } catch (IllegalArgumentException e) {
-                    parentComponent.append(Text.literal(url).setStyle(currentStyle));
-                }
+                String formattedUrl = formatUrl(url);
+                IComponent urlComp = platformAdapter.createComponentFromLiteral(url)
+                        .withStyle(currentStyle)
+                        .onClickOpenUrl(formattedUrl);
+                parentComponent.append(urlComp);
                 currentIndex = urlMatcher.end();
             } else {
                 if (currentIndex < length) {
-                    parentComponent.append(Text.literal(textToParse.substring(currentIndex, currentIndex + 1)).setStyle(currentStyle));
+                    parentComponent.append(platformAdapter.createComponentFromLiteral(textToParse.substring(currentIndex, currentIndex + 1)).withStyle(currentStyle));
                     currentIndex += 1;
                 }
             }
         }
-    }
-
-    private MutableText parseTitleOrSubtitle(String rawText, Style baseStyle, ServerPlayerEntity player) {
-        MutableText parsedComponent = parseMessageInternal(rawText, player, Style.EMPTY);
-        return applyBaseStyle(parsedComponent, baseStyle);
-    }
-
-    private MutableText applyBaseStyle(MutableText component, Style baseStyle) {
-        MutableText styledComponent = component.copy();
-        styledComponent.setStyle(baseStyle.withParent(styledComponent.getStyle()));
-
-        List<Text> children = new ArrayList<>(styledComponent.getSiblings());
-        styledComponent.getSiblings().clear();
-        for (Text child : children) {
-            if (child instanceof MutableText mutableChild) {
-                styledComponent.append(applyBaseStyle(mutableChild, baseStyle));
-            } else {
-                styledComponent.append(child.copy().setStyle(baseStyle.withParent(child.getStyle())));
-            }
-        }
-        return styledComponent;
     }
 
     private String formatUrl(String url) {
@@ -257,19 +231,24 @@ public class MessageParser {
         return url;
     }
 
-    private static class TagContext {
-        private final MutableText text;
-        private final Style currentStyle;
-        private final ServerPlayerEntity player;
+    private String mainTextContentOf(String s) {
+        return s == null ? "" : s;
+    }
 
-        TagContext(MutableText text, Style style, ServerPlayerEntity player) {
+    private static class TagContext {
+        private final IComponent text;
+        private final Style currentStyle;
+        private final IPlayer player;
+
+        TagContext(IComponent text, Style style, IPlayer player) {
             this.text = text;
             this.currentStyle = style;
             this.player = player;
         }
 
-        public MutableText getText() { return text; }
+        public IComponent getText() { return text; }
         public Style getCurrentStyle() { return currentStyle; }
-        public ServerPlayerEntity getPlayer() { return player; }
+        public IPlayer getPlayer() { return player; }
+        public ServerPlayerEntity getOriginalPlayer() { return player != null ? player.getOriginalPlayer() : null; }
     }
 }
