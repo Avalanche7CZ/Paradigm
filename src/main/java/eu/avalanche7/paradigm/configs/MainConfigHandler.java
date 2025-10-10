@@ -84,8 +84,8 @@ public class MainConfigHandler {
     }
 
     public static void load() {
-        LOGGER.info("[Paradigm] MainConfigHandler.load() started");
         Config defaultConfig = new Config();
+        boolean shouldSaveMerged = false;
 
         if (Files.exists(CONFIG_PATH)) {
             LOGGER.info("[Paradigm] Config file exists, loading from: " + CONFIG_PATH);
@@ -113,6 +113,7 @@ public class MainConfigHandler {
                         Config loadedConfig = GSON.fromJson(result.getFixedJson(), Config.class);
                         if (loadedConfig != null) {
                             mergeConfigs(defaultConfig, loadedConfig);
+                            shouldSaveMerged = true;
                             LOGGER.info("[Paradigm] Successfully loaded main.json configuration");
                         }
                     } else {
@@ -125,6 +126,7 @@ public class MainConfigHandler {
                     Config loadedConfig = GSON.fromJson(content.toString(), Config.class);
                     if (loadedConfig != null) {
                         mergeConfigs(defaultConfig, loadedConfig);
+                        shouldSaveMerged = true;
                         LOGGER.info("[Paradigm] Successfully loaded main.json configuration (without validation)");
                     }
                 }
@@ -134,15 +136,21 @@ public class MainConfigHandler {
             }
         } else {
             LOGGER.info("[Paradigm] main.json not found, generating with default values.");
-        }
-
-        CONFIG = defaultConfig;
-        isLoaded = true;
-
-        if (!Files.exists(CONFIG_PATH)) {
+            CONFIG = defaultConfig;
             save();
             LOGGER.info("[Paradigm] Generated new main.json with default values.");
         }
+
+        CONFIG = defaultConfig;
+        if (shouldSaveMerged) {
+            try {
+                save();
+                LOGGER.info("[Paradigm] Synchronized main.json with new defaults while preserving user values.");
+            } catch (Exception e) {
+                LOGGER.warn("[Paradigm] Failed to write merged main.json: " + e.getMessage());
+            }
+        }
+        isLoaded = true;
 
         LOGGER.info("[Paradigm] MainConfigHandler.load() completed, CONFIG is: " + (CONFIG != null ? "NOT NULL" : "NULL"));
     }

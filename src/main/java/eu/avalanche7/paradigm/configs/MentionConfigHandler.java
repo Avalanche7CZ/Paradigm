@@ -97,6 +97,7 @@ public class MentionConfigHandler {
 
     public static void load() {
         Config defaultConfig = new Config();
+        boolean shouldSaveMerged = false;
 
         if (Files.exists(CONFIG_PATH)) {
             try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
@@ -124,6 +125,7 @@ public class MentionConfigHandler {
                         if (loadedConfig != null) {
                             mergeConfigs(defaultConfig, loadedConfig);
                             LOGGER.info("[Paradigm] Successfully loaded mentions.json configuration");
+                            shouldSaveMerged = true;
                         }
                     } else {
                         LOGGER.warn("[Paradigm] Critical JSON syntax errors in mentions.json: " + result.getMessage());
@@ -134,6 +136,7 @@ public class MentionConfigHandler {
                     Config loadedConfig = GSON.fromJson(content.toString(), Config.class);
                     if (loadedConfig != null) {
                         mergeConfigs(defaultConfig, loadedConfig);
+                        shouldSaveMerged = true;
                     }
                 }
             } catch (Exception e) {
@@ -148,6 +151,14 @@ public class MentionConfigHandler {
         }
 
         CONFIG = defaultConfig;
+        if (shouldSaveMerged) {
+            try {
+                save();
+                LOGGER.info("[Paradigm] Synchronized mentions.json with new defaults while preserving user values.");
+            } catch (Exception e) {
+                LOGGER.warn("[Paradigm] Failed to write merged mentions.json: " + e.getMessage());
+            }
+        }
         isLoaded = true;
     }
 
