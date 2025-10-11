@@ -5,9 +5,10 @@ import com.google.gson.GsonBuilder;
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.io.Reader;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -46,7 +47,7 @@ public class CMConfig {
                 try (Stream<Path> stream = Files.list(configFolderPath)) {
                     stream.filter(path -> path.toString().endsWith(".json"))
                             .forEach(file -> {
-                                try (FileReader reader = new FileReader(file.toFile())) {
+                                try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
                                     CustomCommand[] commands = gson.fromJson(reader, CustomCommand[].class);
                                     if (commands != null) {
                                         for (CustomCommand command : commands) {
@@ -78,7 +79,7 @@ public class CMConfig {
             Files.createDirectories(configFolderPath);
             Path exampleFile = configFolderPath.resolve("examples.json");
 
-            try (FileWriter writer = new FileWriter(exampleFile.toFile())) {
+            try (Writer writer = Files.newBufferedWriter(exampleFile, StandardCharsets.UTF_8)) {
                 gson.toJson(this.loadedCommands, writer);
                 this.debugLogger.debugLog("CMConfig: Commands configuration saved successfully to examples.json.");
             }

@@ -8,9 +8,10 @@ import net.fabricmc.loader.api.FabricLoader;
 import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
 
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.io.Reader;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -33,7 +34,7 @@ public class MOTDConfigHandler {
         boolean shouldSaveMerged = false;
 
         if (Files.exists(CONFIG_FILE_PATH)) {
-            try (FileReader reader = new FileReader(CONFIG_FILE_PATH.toFile())) {
+            try (Reader reader = Files.newBufferedReader(CONFIG_FILE_PATH, StandardCharsets.UTF_8)) {
                 StringBuilder content = new StringBuilder();
                 int c;
                 while ((c = reader.read()) != -1) {
@@ -46,7 +47,7 @@ public class MOTDConfigHandler {
                         if (result.hasIssues()) {
                             LOGGER.info("[Paradigm] Fixed JSON syntax issues in motd.json: " + result.getIssuesSummary());
                             LOGGER.info("[Paradigm] Saving corrected version to preserve user values");
-                            try (FileWriter writer = new FileWriter(CONFIG_FILE_PATH.toFile())) {
+                            try (Writer writer = Files.newBufferedWriter(CONFIG_FILE_PATH, StandardCharsets.UTF_8)) {
                                 writer.write(result.getFixedJson());
                                 LOGGER.info("[Paradigm] Saved corrected motd.json with preserved user values");
                             } catch (IOException saveError) {
@@ -110,7 +111,7 @@ public class MOTDConfigHandler {
         }
         try {
             Files.createDirectories(CONFIG_FILE_PATH.getParent());
-            try (FileWriter writer = new FileWriter(CONFIG_FILE_PATH.toFile())) {
+            try (Writer writer = Files.newBufferedWriter(CONFIG_FILE_PATH, StandardCharsets.UTF_8)) {
                 GSON.toJson(config, writer);
                 LOGGER.info("MOTD configuration saved successfully.");
             }

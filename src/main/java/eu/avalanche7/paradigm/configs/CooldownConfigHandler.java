@@ -8,10 +8,11 @@ import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.FileReader;
-import java.io.FileWriter;
+import java.io.Reader;
+import java.io.Writer;
 import java.io.IOException;
 import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -28,7 +29,7 @@ public class CooldownConfigHandler {
 
     public static void load() {
         if (Files.exists(CONFIG_PATH)) {
-            try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
+            try (Reader reader = Files.newBufferedReader(CONFIG_PATH, StandardCharsets.UTF_8)) {
                 Type type = new TypeToken<Map<UUID, Map<String, Long>>>() {}.getType();
                 Map<UUID, Map<String, Long>> loadedCooldowns = GSON.fromJson(reader, type);
                 if (loadedCooldowns != null) {
@@ -43,7 +44,7 @@ public class CooldownConfigHandler {
     public static void save() {
         try {
             Files.createDirectories(CONFIG_PATH.getParent());
-            try (FileWriter writer = new FileWriter(CONFIG_PATH.toFile())) {
+            try (Writer writer = Files.newBufferedWriter(CONFIG_PATH, StandardCharsets.UTF_8)) {
                 GSON.toJson(cooldowns, writer);
             }
         } catch (IOException e) {
