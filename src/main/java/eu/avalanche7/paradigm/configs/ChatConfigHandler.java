@@ -9,10 +9,11 @@ import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.io.Reader;
+import java.io.Writer;
 import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -84,7 +85,7 @@ public class ChatConfigHandler {
         boolean shouldSaveMerged = false;
 
         if (Files.exists(CONFIG_PATH)) {
-            try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
+            try (Reader reader = Files.newBufferedReader(CONFIG_PATH, StandardCharsets.UTF_8)) {
                 StringBuilder content = new StringBuilder();
                 int c;
                 while ((c = reader.read()) != -1) {
@@ -97,7 +98,7 @@ public class ChatConfigHandler {
                         if (result.hasIssues()) {
                             LOGGER.info("[Paradigm] Fixed JSON syntax issues in chat.json: " + result.getIssuesSummary());
                             LOGGER.info("[Paradigm] Saving corrected version to preserve user values");
-                            try (FileWriter writer = new FileWriter(CONFIG_PATH.toFile())) {
+                            try (Writer writer = Files.newBufferedWriter(CONFIG_PATH, StandardCharsets.UTF_8)) {
                                 writer.write(result.getFixedJson());
                                 LOGGER.info("[Paradigm] Saved corrected chat.json with preserved user values");
                             } catch (IOException saveError) {
@@ -172,7 +173,7 @@ public class ChatConfigHandler {
     public static void save() {
         try {
             Files.createDirectories(CONFIG_PATH.getParent());
-            try (FileWriter writer = new FileWriter(CONFIG_PATH.toFile())) {
+            try (Writer writer = Files.newBufferedWriter(CONFIG_PATH, StandardCharsets.UTF_8)) {
                 GSON.toJson(CONFIG, writer);
             }
         } catch (IOException e) {
