@@ -7,8 +7,11 @@ import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.platform.MinecraftPlayer;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
@@ -22,6 +25,7 @@ import java.util.Calendar;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -33,7 +37,11 @@ public class Restart implements ParadigmModule {
     private Services services;
     private IPlatformAdapter platform;
     private final AtomicBoolean restartInProgress = new AtomicBoolean(false);
-    private ScheduledFuture<?> mainTaskFuture;
+    private ScheduledFuture<?> mainTaskFuture = null;
+    private final List<ScheduledFuture<?>> warningFutures = new ArrayList<>();
+    private ScheduledFuture<?> shutdownFuture = null;
+    private final List<ScheduledFuture<?>> preCommandFutures = new ArrayList<>();
+    private final java.util.Set<Integer> sentWarningMoments = java.util.Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     @Override
     public String getName() {
@@ -55,7 +63,7 @@ public class Restart implements ParadigmModule {
     @Override
     public void onServerStarting(ServerStartingEvent event, Services services) {
         if (platform.getMinecraftServer() != null && isEnabled(services)) {
-            services.getDebugLogger().debugLog(NAME + ": Server is starting, scheduling restarts (TaskScheduler should be initialized).");
+            services.getDebugLogger().debugLog(NAME + ": Server is starting, scheduling restarts.");
             scheduleNextRestart();
         } else {
             services.getDebugLogger().debugLog(NAME + ": Server is starting, but platform or config not ready. Skipping scheduling.");
@@ -64,7 +72,7 @@ public class Restart implements ParadigmModule {
 
     @Override
     public void onEnable(Services services) {
-        services.getDebugLogger().debugLog(NAME + ": Module enabled (no scheduling here, handled in onServerStarting).");
+        services.getDebugLogger().debugLog(NAME + ": Module enabled (deferring restart scheduling to onServerStarting).");
     }
 
     @Override
@@ -80,25 +88,31 @@ public class Restart implements ParadigmModule {
 
     @Override
     public void registerCommands(CommandDispatcher<?> dispatcher, Services services) {
-        CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcherCS = (CommandDispatcher<net.minecraft.commands.CommandSourceStack>) dispatcher;
+        CommandDispatcher<CommandSourceStack> dispatcherCS = (CommandDispatcher<CommandSourceStack>) dispatcher;
         dispatcherCS.register(Commands.literal("restart")
                 .requires(source -> {
                     return platform.hasCommandPermission(platform.wrapCommandSource(source), PermissionsHandler.RESTART_MANAGE_PERMISSION, 2);
                 })
                 .then(Commands.literal("now")
                         .executes(context -> {
-                            initiateRestartSequence(60.0, services.getRestartConfig());
-                            platform.sendSuccess(platform.wrapCommandSource(context.getSource()), platform.createLiteralComponent("Server restart initiated for 60 seconds."), true);
+                            services.getDebugLogger().debugLog(NAME + ": /restart now command executed by " + context.getSource().getTextName());
+                            if (restartInProgress.get()) {
+                                services.getDebugLogger().debugLog(NAME + ": /restart now overriding active restart sequence.");
+                                cancelAndCleanup();
+                            }
+                            initiateRestartSequence(60, services.getRestartConfig());
+                            platform.sendSuccess(platform.wrapCommandSource(context.getSource()), platform.createLiteralComponent("Initiating immediate 60-second restart sequence."), true);
                             return 1;
                         }))
                 .then(Commands.literal("cancel")
                         .executes(context -> {
+                            services.getDebugLogger().debugLog(NAME + ": /restart cancel command executed by " + context.getSource().getTextName());
                             if (restartInProgress.get()) {
                                 cancelAndCleanup();
                                 scheduleNextRestart();
-                                platform.sendSuccess(platform.wrapCommandSource(context.getSource()), platform.createLiteralComponent("Scheduled server restart has been cancelled."), true);
+                                platform.sendSuccess(platform.wrapCommandSource(context.getSource()), platform.createLiteralComponent("The active server restart has been cancelled."), true);
                             } else {
-                                platform.sendFailure(platform.wrapCommandSource(context.getSource()), platform.createLiteralComponent("No scheduled restart to cancel."));
+                                platform.sendFailure(platform.wrapCommandSource(context.getSource()), platform.createLiteralComponent("No restart is currently scheduled to be cancelled."));
                             }
                             return 1;
                         }))
@@ -110,10 +124,29 @@ public class Restart implements ParadigmModule {
     }
 
     private void cancelAndCleanup() {
-        if (mainTaskFuture != null) {
-            mainTaskFuture.cancel(true);
-            mainTaskFuture = null;
+        services.getDebugLogger().debugLog(NAME + ": Initiating cleanup process.");
+        if (mainTaskFuture != null && !mainTaskFuture.isDone()) {
+            mainTaskFuture.cancel(false);
+            services.getDebugLogger().debugLog(NAME + ": Main restart task future cancelled.");
         }
+        mainTaskFuture = null;
+        for (ScheduledFuture<?> f : warningFutures) {
+            if (f != null && !f.isDone()) {
+                f.cancel(false);
+            }
+        }
+        warningFutures.clear();
+        for (ScheduledFuture<?> f : preCommandFutures) {
+            if (f != null && !f.isDone()) {
+                f.cancel(false);
+            }
+        }
+        preCommandFutures.clear();
+        if (shutdownFuture != null && !shutdownFuture.isDone()) {
+            shutdownFuture.cancel(false);
+        }
+        shutdownFuture = null;
+        sentWarningMoments.clear();
         restartInProgress.set(false);
         if (platform != null) {
             platform.removeRestartBossBar();
@@ -125,7 +158,6 @@ public class Restart implements ParadigmModule {
 
     public void scheduleNextRestart() {
         cancelAndCleanup();
-        restartInProgress.set(true);
         RestartConfigHandler.Config config = services.getRestartConfig();
         String restartType = config.restartType.get();
         long delayMillis = -1;
@@ -145,39 +177,20 @@ public class Restart implements ParadigmModule {
         }
 
         if (delayMillis > 0) {
-            final long finalDelay = delayMillis;
-            scheduleRestartWarnings(finalDelay / 1000.0, config);
-            services.getDebugLogger().debugLog(NAME + ": Scheduling shutdown in " + finalDelay + " ms.");
-            mainTaskFuture = services.getTaskScheduler().schedule(() -> {
-                services.getDebugLogger().debugLog(NAME + ": Scheduled restart task fired. Calling initiateRestartSequence.");
-                initiateRestartSequence(finalDelay / 1000.0, config);
-            }, delayMillis, TimeUnit.MILLISECONDS);
+            double totalSeconds = delayMillis / 1000.0;
+            services.getDebugLogger().debugLog(NAME + ": Starting restart countdown now for " + totalSeconds + " seconds.");
+            initiateRestartSequence(totalSeconds, config);
         } else {
-            services.getDebugLogger().debugLog(NAME + ": Not scheduling restart (delayMillis=" + delayMillis + ").");
-        }
-    }
-
-    private void scheduleRestartWarnings(double totalIntervalSeconds, RestartConfigHandler.Config config) {
-        long totalIntervalMillis = (long) (totalIntervalSeconds * 1000);
-        List<Integer> broadcastTimes = new ArrayList<>(config.timerBroadcast.get());
-        Collections.sort(broadcastTimes, Collections.reverseOrder());
-        services.getDebugLogger().debugLog(NAME + ": Scheduling warnings at: " + broadcastTimes + " seconds before restart.");
-        for (final int broadcastTimeSec : broadcastTimes) {
-            long delayUntilWarning = totalIntervalMillis - (broadcastTimeSec * 1000L);
-            if (delayUntilWarning >= 0) {
-                services.getDebugLogger().debugLog(NAME + ": Scheduling warning for " + broadcastTimeSec + "s left (delayUntilWarning=" + delayUntilWarning + ").");
-                services.getTaskScheduler().schedule(() -> {
-                    services.getDebugLogger().debugLog(NAME + ": Warning task fired for " + broadcastTimeSec + "s left. restartInProgress=" + restartInProgress.get());
-                    if (!restartInProgress.get()) return;
-                    sendRestartWarning(broadcastTimeSec, config, totalIntervalSeconds);
-                }, delayUntilWarning, TimeUnit.MILLISECONDS);
-            }
+            services.getDebugLogger().debugLog(NAME + ": No valid restart delay computed. Skipping schedule.");
         }
     }
 
     private long getNextRealTimeDelay(RestartConfigHandler.Config config) {
         List<? extends String> realTimeIntervals = config.realTimeInterval.get();
-        if (realTimeIntervals == null || realTimeIntervals.isEmpty()) return -1;
+        if (realTimeIntervals == null || realTimeIntervals.isEmpty()) {
+            services.getDebugLogger().debugLog(NAME + ": Real-time restart intervals are not configured.");
+            return -1;
+        }
 
         Calendar nowCal = Calendar.getInstance();
         SimpleDateFormat format = new SimpleDateFormat("HH:mm");
@@ -218,20 +231,105 @@ public class Restart implements ParadigmModule {
         }
     }
 
+    private boolean isAsEachPlayerDirective(String commandText) {
+        if (commandText == null) return false;
+        String trimmed = commandText.trim();
+        return trimmed.startsWith("asplayer:") || trimmed.startsWith("each:") || trimmed.startsWith("[asPlayer]");
+    }
+
+    private String stripAsEachPlayerDirective(String commandText) {
+        String trimmed = commandText.trim();
+        if (trimmed.startsWith("[asPlayer]")) {
+            return trimmed.substring("[asPlayer]".length()).trim();
+        }
+        if (trimmed.startsWith("asplayer:")) {
+            return trimmed.substring("asplayer:".length()).trim();
+        }
+        if (trimmed.startsWith("each:")) {
+            return trimmed.substring("each:".length()).trim();
+        }
+        return commandText;
+    }
+
     private void initiateRestartSequence(double totalIntervalSeconds, RestartConfigHandler.Config config) {
-        services.getDebugLogger().debugLog(NAME + ": initiateRestartSequence called. totalIntervalSeconds=" + totalIntervalSeconds + ", restartInProgress=" + restartInProgress.get());
-        scheduleRestartWarnings(totalIntervalSeconds, config);
+        if (!restartInProgress.compareAndSet(false, true)) {
+            services.getDebugLogger().debugLog(NAME + ": Restart sequence already in progress. Ignoring new trigger.");
+            return;
+        }
+
+        sentWarningMoments.clear();
+        services.getDebugLogger().debugLog(NAME + ": Initiating restart sequence. Total duration: " + totalIntervalSeconds + " seconds.");
         long totalIntervalMillis = (long) (totalIntervalSeconds * 1000);
-        services.getDebugLogger().debugLog(NAME + ": Scheduling shutdown in " + totalIntervalMillis + " ms.");
-        services.getTaskScheduler().schedule(() -> {
-            services.getDebugLogger().debugLog(NAME + ": Shutdown task fired. restartInProgress=" + restartInProgress.get());
+        List<Integer> broadcastTimes = new ArrayList<>(config.timerBroadcast.get());
+        Collections.sort(broadcastTimes, Collections.reverseOrder());
+
+        services.getDebugLogger().debugLog(NAME + ": Scheduling " + broadcastTimes.size() + " warning messages.");
+        for (final int broadcastTimeSec : broadcastTimes) {
+            long delayUntilWarning = totalIntervalMillis - (broadcastTimeSec * 1000L);
+            if (delayUntilWarning >= 0) {
+                ScheduledFuture<?> future = services.getTaskScheduler().schedule(() -> {
+                    if (!restartInProgress.get()) return;
+                    if (!sentWarningMoments.add(broadcastTimeSec)) {
+                        services.getDebugLogger().debugLog(NAME + ": Duplicate warning suppressed. Time left: " + broadcastTimeSec + "s.");
+                        return;
+                    }
+                    sendRestartWarning(broadcastTimeSec, config, totalIntervalSeconds);
+                }, delayUntilWarning, TimeUnit.MILLISECONDS);
+                if (future != null) warningFutures.add(future);
+            }
+        }
+
+        List<RestartConfigHandler.PreRestartCommand> preCommands = config.preRestartCommands.get();
+        if (preCommands != null && !preCommands.isEmpty()) {
+            services.getDebugLogger().debugLog(NAME + ": Scheduling " + preCommands.size() + " pre-restart commands.");
+            for (RestartConfigHandler.PreRestartCommand pre : preCommands) {
+                int secondsBefore = Math.max(0, pre.secondsBefore);
+                long delayUntilRun = totalIntervalMillis - (secondsBefore * 1000L);
+                if (delayUntilRun < 0) {
+                    services.getDebugLogger().debugLog(NAME + ": Pre-restart command scheduled too early (" + pre.secondsBefore + "s before) and will be skipped: " + pre.command);
+                    continue;
+                }
+                String commandText = pre.command == null ? "" : pre.command;
+                ScheduledFuture<?> f = services.getTaskScheduler().schedule(() -> {
+                    if (!restartInProgress.get()) return;
+                    if (isAsEachPlayerDirective(commandText)) {
+                        String raw = stripAsEachPlayerDirective(commandText);
+                        List<IPlayer> players = platform.getOnlinePlayers();
+                        services.getDebugLogger().debugLog(NAME + ": Executing pre-restart player-commands (" + secondsBefore + "s before) for " + players.size() + " players: " + raw);
+                        for (IPlayer player : players) {
+                            String perPlayer = services.getPlaceholders().replacePlaceholders(raw, player);
+                            try {
+                                if (player instanceof MinecraftPlayer) {
+                                    ServerPlayer sp = ((MinecraftPlayer) player).getHandle();
+                                    CommandSourceStack src = sp.createCommandSourceStack();
+                                    platform.executeCommandAs(platform.wrapCommandSource(src), perPlayer);
+                                }
+                            } catch (Exception ex) {
+                                services.getDebugLogger().debugLog(NAME + ": Failed executing as player " + player.getName() + ": " + perPlayer, ex);
+                            }
+                        }
+                    } else {
+                        String replaced = services.getPlaceholders().replacePlaceholders(commandText, null);
+                        services.getDebugLogger().debugLog(NAME + ": Executing pre-restart console command (" + secondsBefore + "s before): " + replaced);
+                        platform.executeCommandAsConsole(replaced);
+                    }
+                }, delayUntilRun, TimeUnit.MILLISECONDS);
+                if (f != null) preCommandFutures.add(f);
+            }
+        }
+
+        shutdownFuture = services.getTaskScheduler().schedule(() -> {
             if (!restartInProgress.get()) return;
             performShutdown(config);
         }, totalIntervalMillis, TimeUnit.MILLISECONDS);
     }
 
     private void sendRestartWarning(long timeLeftSeconds, RestartConfigHandler.Config config, double originalTotalIntervalSeconds) {
-        if (platform.getMinecraftServer() == null) return;
+        if (platform.getMinecraftServer() == null) {
+            services.getDebugLogger().debugLog(NAME + ": Server instance is null, cannot send restart warning.");
+            return;
+        }
+        services.getDebugLogger().debugLog(NAME + ": Sending restart warning. Time left: " + timeLeftSeconds + "s.");
 
         List<IPlayer> players = platform.getOnlinePlayers();
         if (!players.isEmpty()) {
@@ -271,7 +369,6 @@ public class Restart implements ParadigmModule {
                     .replace("{minutes}", TIME_FORMATTER.format(minutes))
                     .replace("{seconds}", String.valueOf(seconds))
                     .replace("{time}", formattedTime);
-            // Use message parser for chat
             IComponent parsedMessage = services.getMessageParser().parseMessage(message, player);
             platform.sendSystemMessage(player, parsedMessage);
         }
@@ -281,7 +378,6 @@ public class Restart implements ParadigmModule {
                     .replace("{minutes}", TIME_FORMATTER.format(minutes))
                     .replace("{seconds}", String.valueOf(seconds))
                     .replace("{time}", formattedTime);
-            // Use message parser for title
             IComponent parsedTitle = services.getMessageParser().parseMessage(titleText, player);
             platform.sendTitle(player, parsedTitle, null);
         }
@@ -298,8 +394,16 @@ public class Restart implements ParadigmModule {
     }
 
     private void performShutdown(RestartConfigHandler.Config config) {
+        if (!restartInProgress.get()) return;
         services.getDebugLogger().debugLog(NAME + ": Initiating final shutdown procedure.");
         IComponent parsedReason = services.getMessageParser().parseMessage(config.defaultRestartReason.get(), null);
         platform.shutdownServer(parsedReason);
+    }
+
+    public void rescheduleNextRestart(Services services) {
+        if (services == null) return;
+        this.services = services;
+        cancelAndCleanup();
+        scheduleNextRestart();
     }
 }

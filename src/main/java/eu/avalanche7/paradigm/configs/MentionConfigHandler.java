@@ -9,10 +9,11 @@ import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.FileReader;
-import java.io.FileWriter;
+import java.io.Reader;
+import java.io.Writer;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -21,11 +22,23 @@ public class MentionConfigHandler {
     private static final Logger LOGGER = LoggerFactory.getLogger(Paradigm.MOD_ID);
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     private static final Path CONFIG_PATH = FMLPaths.CONFIGDIR.get().resolve("paradigm/mentions.json");
-    public static Config CONFIG = new Config();
+    public static volatile Config CONFIG = null;
     private static JsonValidator jsonValidator;
+    private static volatile boolean isLoaded = false;
 
     public static void setJsonValidator(DebugLogger debugLogger) {
         jsonValidator = new JsonValidator(debugLogger);
+    }
+
+    public static Config getConfig() {
+        if (!isLoaded || CONFIG == null) {
+            synchronized (MentionConfigHandler.class) {
+                if (!isLoaded || CONFIG == null) {
+                    load();
+                }
+            }
+        }
+        return CONFIG;
     }
 
     public static class Config {
@@ -50,13 +63,32 @@ public class MentionConfigHandler {
         public ConfigEntry<Integer> EVERYONE_MENTION_RATE_LIMIT = new ConfigEntry<>(
                 60, "Cooldown in seconds before @everyone can be used again."
         );
+        public ConfigEntry<Boolean> enableChatNotification = new ConfigEntry<>(
+                true, "Enable or disable chat notifications for mentions."
+        );
+        public ConfigEntry<Boolean> enableTitleNotification = new ConfigEntry<>(
+                true, "Enable or disable title notifications for mentions."
+        );
+        public ConfigEntry<Boolean> enableSubtitleNotification = new ConfigEntry<>(
+                true, "Enable or disable subtitle notifications for mentions."
+        );
+        public ConfigEntry<String> SENDER_FEEDBACK_PLAYER_MESSAGE = new ConfigEntry<>(
+                "You mentioned %s in chat.", "Feedback message shown to the sender after mentioning players. %s is the list of mentioned player names."
+        );
+        public ConfigEntry<String> SENDER_FEEDBACK_EVERYONE_MESSAGE = new ConfigEntry<>(
+                "You mentioned everyone in chat.", "Feedback message shown to the sender after using @everyone."
+        );
+        public ConfigEntry<String> CHAT_APPEND_PREFIX = new ConfigEntry<>(
+                "- ", "Prefix used when appending the leftover message content in chat notifications (after a newline)."
+        );
     }
 
     public static void load() {
         Config defaultConfig = new Config();
+        boolean shouldSaveMerged = false;
 
         if (Files.exists(CONFIG_PATH)) {
-            try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
+            try (Reader reader = Files.newBufferedReader(CONFIG_PATH, StandardCharsets.UTF_8)) {
                 StringBuilder content = new StringBuilder();
                 int c;
                 while ((c = reader.read()) != -1) {
@@ -70,7 +102,7 @@ public class MentionConfigHandler {
                             LOGGER.info("[Paradigm] Fixed JSON syntax issues in mentions.json: " + result.getIssuesSummary());
                             LOGGER.info("[Paradigm] Saving corrected version to preserve user values");
 
-                            try (FileWriter writer = new FileWriter(CONFIG_PATH.toFile())) {
+                            try (Writer writer = Files.newBufferedWriter(CONFIG_PATH, StandardCharsets.UTF_8)) {
                                 writer.write(result.getFixedJson());
                                 LOGGER.info("[Paradigm] Saved corrected mentions.json with preserved user values");
                             } catch (IOException saveError) {
@@ -82,6 +114,7 @@ public class MentionConfigHandler {
                         if (loadedConfig != null) {
                             mergeConfigs(defaultConfig, loadedConfig);
                             LOGGER.info("[Paradigm] Successfully loaded mentions.json configuration");
+                            shouldSaveMerged = true;
                         }
                     } else {
                         LOGGER.warn("[Paradigm] Critical JSON syntax errors in mentions.json: " + result.getMessage());
@@ -92,21 +125,30 @@ public class MentionConfigHandler {
                     Config loadedConfig = GSON.fromJson(content.toString(), Config.class);
                     if (loadedConfig != null) {
                         mergeConfigs(defaultConfig, loadedConfig);
+                        shouldSaveMerged = true;
                     }
                 }
             } catch (Exception e) {
-                LOGGER.warn("[Paradigm] Could not parse mentions.json, using defaults and regenerating file.", e);
+                LOGGER.warn("[Paradigm] Could not parse mentions.json, using defaults for this session.", e);
+                LOGGER.warn("[Paradigm] Your file has NOT been modified. Please check the file manually.");
             }
         } else {
             LOGGER.info("[Paradigm] mentions.json not found, generating with default values.");
-        }
-
-        CONFIG = defaultConfig;
-
-        if (!Files.exists(CONFIG_PATH)) {
+            CONFIG = defaultConfig;
             save();
             LOGGER.info("[Paradigm] Generated new mentions.json with default values.");
         }
+
+        CONFIG = defaultConfig;
+        if (shouldSaveMerged) {
+            try {
+                save();
+                LOGGER.info("[Paradigm] Synchronized mentions.json with new defaults while preserving user values.");
+            } catch (Exception e) {
+                LOGGER.warn("[Paradigm] Failed to write merged mentions.json: " + e.getMessage());
+            }
+        }
+        isLoaded = true;
     }
 
     @SuppressWarnings("unchecked")
@@ -135,7 +177,7 @@ public class MentionConfigHandler {
     public static void save() {
         try {
             Files.createDirectories(CONFIG_PATH.getParent());
-            try (FileWriter writer = new FileWriter(CONFIG_PATH.toFile())) {
+            try (Writer writer = Files.newBufferedWriter(CONFIG_PATH, StandardCharsets.UTF_8)) {
                 GSON.toJson(CONFIG, writer);
             }
         } catch (IOException e) {

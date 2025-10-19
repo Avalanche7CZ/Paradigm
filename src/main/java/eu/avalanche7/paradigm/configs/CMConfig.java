@@ -3,9 +3,10 @@ package eu.avalanche7.paradigm.configs;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
-import java.io.FileReader;
-import java.io.FileWriter;
+import java.io.Reader;
+import java.io.Writer;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -49,7 +50,7 @@ public class CMConfig {
                 try (Stream<Path> stream = Files.list(configFolderPath)) {
                     stream.filter(path -> path.toString().endsWith(".json"))
                             .forEach(file -> {
-                                try (FileReader reader = new FileReader(file.toFile())) {
+                                try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
                                     StringBuilder content = new StringBuilder();
                                     int c;
                                     while ((c = reader.read()) != -1) {
@@ -104,7 +105,7 @@ public class CMConfig {
             Files.createDirectories(configFolderPath);
             Path exampleFile = configFolderPath.resolve("example.json");
 
-            try (FileWriter writer = new FileWriter(exampleFile.toFile())) {
+            try (Writer writer = Files.newBufferedWriter(exampleFile, StandardCharsets.UTF_8)) {
                 gson.toJson(this.loadedCommands, writer);
                 this.debugLogger.debugLog("CMConfig: Commands configuration saved successfully to example.json.");
             }
@@ -219,108 +220,16 @@ public class CMConfig {
         List<CustomCommand.Action> weatherActions = new ArrayList<>();
         weatherActions.add(new CustomCommand.Action("conditional", null, null, null, null, null,
                 List.of(new CustomCommand.Condition("has_permission", "paradigm.weather.admin", null, false)),
-                List.of(new CustomCommand.Action("run_console", null, null, null, null,
-                        List.of("weather $1 ? \"clear\" : \"rain\""), null, null, null)),
-                List.of(new CustomCommand.Action("message", List.of("&cYou need admin permission!"), null, null, null, null, null, null, null))
+                List.of(new CustomCommand.Action("run_console", null, null, null, null, List.of("weather clear"), null, null, null)),
+                List.of(new CustomCommand.Action("message", List.of("&cNo permission."), null, null, null, null, null, null, null))
         ));
-
-        List<CustomCommand.ArgumentDefinition> weatherArgs = new ArrayList<>();
-        weatherArgs.add(new CustomCommand.ArgumentDefinition("clear_weather", "boolean", true, "&cPlease specify true or false!", null, null, null));
-
         defaultCommands.add(new CustomCommand(
-                "setweather",
-                "Sets weather based on boolean input.",
+                "weather",
+                "Changes the weather if you have permission.",
                 "paradigm.weather",
                 false,
                 null,
-                weatherActions,
-                null,
-                null,
-                null,
-                weatherArgs
-        ));
-        List<CustomCommand.Action> gamemodeActions = new ArrayList<>();
-        gamemodeActions.add(new CustomCommand.Action("message", List.of("&aSetting gamemode to $1 for $2..."), null, null, null, null, null, null, null));
-        gamemodeActions.add(new CustomCommand.Action("run_console", null, null, null, null, List.of("gamemode $1 $2"), null, null, null));
-
-        List<CustomCommand.ArgumentDefinition> gamemodeArgs = new ArrayList<>();
-        gamemodeArgs.add(new CustomCommand.ArgumentDefinition("gamemode", "gamemode", true, "&cInvalid gamemode! Use: survival, creative, adventure, or spectator", null, null, null));
-        gamemodeArgs.add(new CustomCommand.ArgumentDefinition("target", "player", true, "&cYou must specify a valid online player!", null, null, null));
-
-        defaultCommands.add(new CustomCommand(
-                "changegm",
-                "Changes gamemode with tab completion for both gamemode and player.",
-                "paradigm.gamemode",
-                false,
-                null,
-                gamemodeActions,
-                null,
-                null,
-                null,
-                gamemodeArgs
-        ));
-        List<CustomCommand.Action> kitActions = new ArrayList<>();
-        kitActions.add(new CustomCommand.Action("message", List.of("&aGiving you the $1 kit!"), null, null, null, null, null, null, null));
-        kitActions.add(new CustomCommand.Action("run_console", null, null, null, null,
-                List.of("give {player} minecraft:diamond_sword 1",
-                       "give {player} minecraft:diamond_pickaxe 1",
-                       "give {player} minecraft:cooked_beef 64"), null, null, null));
-
-        List<CustomCommand.ArgumentDefinition> kitArgs = new ArrayList<>();
-        kitArgs.add(new CustomCommand.ArgumentDefinition("kit_name", "custom", true, "&cAvailable kits: starter, pvp, builder, admin",
-                List.of("starter", "pvp", "builder", "admin"), null, null));
-
-        defaultCommands.add(new CustomCommand(
-                "kit",
-                "Gives predefined kits with custom tab completion.",
-                "paradigm.kit",
-                false,
-                null,
-                kitActions,
-                null,
-                null,
-                null,
-                kitArgs
-        ));
-        List<CustomCommand.Action> worldActions = new ArrayList<>();
-        worldActions.add(new CustomCommand.Action("message", List.of("&aTeleporting to world: $1"), null, null, null, null, null, null, null));
-        worldActions.add(new CustomCommand.Action("run_console", null, null, null, null, List.of("execute in $1 run tp {player} 0 100 0"), null, null, null));
-
-        List<CustomCommand.ArgumentDefinition> worldArgs = new ArrayList<>();
-        worldArgs.add(new CustomCommand.ArgumentDefinition("world", "world", true, "&cInvalid world name!", null, null, null));
-
-        defaultCommands.add(new CustomCommand(
-                "warp",
-                "Warps to a specific world with tab completion.",
-                "paradigm.warp",
-                false,
-                null,
-                worldActions,
-                null,
-                null,
-                null,
-                worldArgs
-        ));
-        List<CustomCommand.Action> broadcastActions = new ArrayList<>();
-        broadcastActions.add(new CustomCommand.Action("run_console", null, null, null, null,
-                List.of("say [$1] $2"), null, null, null));
-
-        List<CustomCommand.ArgumentDefinition> broadcastArgs = new ArrayList<>();
-        broadcastArgs.add(new CustomCommand.ArgumentDefinition("prefix", "custom", false, "&cInvalid prefix!",
-                List.of("INFO", "WARNING", "ALERT", "NEWS"), null, null));
-        broadcastArgs.add(new CustomCommand.ArgumentDefinition("message", "string", true, "&cYou must provide a message!", null, null, null));
-
-        defaultCommands.add(new CustomCommand(
-                "broadcast",
-                "Broadcasts a message with optional prefix (demonstrates optional arguments).",
-                "paradigm.broadcast",
-                false,
-                null,
-                broadcastActions,
-                null,
-                null,
-                null,
-                broadcastArgs
+                weatherActions
         ));
 
         this.loadedCommands = defaultCommands;
@@ -328,7 +237,7 @@ public class CMConfig {
     }
 
     public List<CustomCommand> getLoadedCommands() {
-        return this.loadedCommands;
+        return new ArrayList<>(loadedCommands);
     }
 
     public void reloadCommands() {

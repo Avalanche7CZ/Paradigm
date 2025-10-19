@@ -3,11 +3,11 @@ package eu.avalanche7.paradigm.utils;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
+import eu.avalanche7.paradigm.Paradigm;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import net.minecraft.SharedConstants;
 import net.minecraft.server.MinecraftServer;
 import net.minecraftforge.fml.ModList;
 
@@ -64,7 +64,8 @@ public class TelemetryReporter {
         if (srvObj instanceof MinecraftServer ms) {
             maxPlayers = ms.getMaxPlayers();
         }
-        String mcVersion = SharedConstants.getCurrentVersion().getName();
+        String mcVersion = Paradigm.UpdateChecker.getMinecraftVersionSafe();
+        if (mcVersion == null || mcVersion.isBlank()) mcVersion = "unknown";
         String modVersion = ModList.get().getModContainerById("paradigm")
                 .map(c -> c.getModInfo().getVersion().toString())
                 .orElse("unknown");

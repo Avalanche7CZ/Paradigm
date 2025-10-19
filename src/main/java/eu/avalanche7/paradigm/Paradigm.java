@@ -17,7 +17,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.minecraft.SharedConstants;
 import com.mojang.logging.LogUtils;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
@@ -37,9 +36,11 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import eu.avalanche7.paradigm.webeditor.store.WebEditorStore;
 
 @Mod(Paradigm.MOD_ID)
 public class Paradigm {
@@ -62,7 +63,7 @@ public class Paradigm {
 
     private static Paradigm instance;
     public Paradigm() {
-INSTANCE = this;
+        INSTANCE = this;
     }
     public static Paradigm getInstance() {
         return INSTANCE;
@@ -134,6 +135,8 @@ INSTANCE = this;
         cooldownConfigHandler.loadCooldowns();
         debugLogger.debugLog("Paradigm: CooldownConfigHandler created and cooldowns loaded.");
 
+        WebEditorStore webEditorStore = new WebEditorStore();
+
         debugLogger.debugLog("Paradigm: Creating Services object.");
         return new Services(
                 LOGGER,
@@ -152,7 +155,8 @@ INSTANCE = this;
                 placeholders,
                 taskScheduler,
                 platformAdapter,
-                cooldownConfigHandler
+                cooldownConfigHandler,
+                webEditorStore
         );
     }
 
@@ -167,6 +171,7 @@ INSTANCE = this;
         modules.add(new JoinLeaveMessages());
         modules.add(new eu.avalanche7.paradigm.modules.commands.reload());
         modules.add(new eu.avalanche7.paradigm.modules.commands.help());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.editor());
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
@@ -184,7 +189,7 @@ INSTANCE = this;
             LOGGER.info("Author: Avalanche7CZ");
             LOGGER.info("Discord: https://discord.com/invite/qZDcQdEFqQ");
             LOGGER.info("==================================================");
-            String mcVersion = net.minecraft.SharedConstants.getCurrentVersion().getName();
+            String mcVersion = UpdateChecker.getMinecraftVersionSafe();
             String loader = "forge";
             UpdateChecker.checkForUpdates(version, mcVersion, loader, LOGGER);
         });
@@ -227,7 +232,7 @@ INSTANCE = this;
     }
 
     public static class UpdateChecker {
-        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/1.21.1/version.txt?v=1";
+        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/1.20.1/version.txt?v=1";
         private static final String MODRINTH_PROJECT_ID = "s4i32SJd";
         private static final String CURSEFORGE_SLUG = "paradigm";
         private static final String MODRINTH_PROJECT_PAGE = "https://modrinth.com/mod/" + MODRINTH_PROJECT_ID;
@@ -252,8 +257,13 @@ INSTANCE = this;
         private static boolean checkModrinth(String currentVersion, String mcVersion, String loader, Logger logger) {
             HttpURLConnection conn = null;
             try {
-                String apiUrl = "https://api.modrinth.com/v2/project/" + MODRINTH_PROJECT_ID + "/version?game_versions=" + mcVersion + "&loaders=" + loader;
-                conn = (HttpURLConnection) URI.create(apiUrl).toURL().openConnection();
+                StringBuilder apiUrl = new StringBuilder("https://api.modrinth.com/v2/project/" + MODRINTH_PROJECT_ID + "/version");
+                List<String> params = new ArrayList<>();
+                if (mcVersion != null && !mcVersion.isBlank()) params.add("game_versions=" + URLEncoder.encode(mcVersion, StandardCharsets.UTF_8));
+                if (loader != null && !loader.isBlank()) params.add("loaders=" + URLEncoder.encode(loader, StandardCharsets.UTF_8));
+                if (!params.isEmpty()) apiUrl.append("?").append(String.join("&", params));
+
+                conn = (HttpURLConnection) URI.create(apiUrl.toString()).toURL().openConnection();
                 conn.setRequestProperty("User-Agent", "Paradigm-UpdateChecker/1.0 (+https://modrinth.com/mod/" + MODRINTH_PROJECT_ID + ")");
                 conn.setConnectTimeout(4000);
                 conn.setReadTimeout(6000);
@@ -261,7 +271,6 @@ INSTANCE = this;
                 try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
                     JsonArray arr = JsonParser.parseReader(br).getAsJsonArray();
                     if (arr.isEmpty()) return false;
-
 
                     String newestCompatible = null;
                     String publishedAtNewest = null;
@@ -272,7 +281,7 @@ INSTANCE = this;
                         JsonArray loaders = obj.getAsJsonArray("loaders");
                         if (loaders != null) {
                             for (JsonElement l : loaders) {
-                                if (loader.equalsIgnoreCase(l.getAsString())) { loaderOk = true; break; }
+                                if (loader != null && loader.equalsIgnoreCase(l.getAsString())) { loaderOk = true; break; }
                             }
                         }
                         if (!loaderOk) continue;
@@ -322,12 +331,45 @@ INSTANCE = this;
             return a.compareTo(b) > 0;
         }
 
-        private static String getMinecraftVersionSafe() {
+        public static String getMinecraftVersionSafe() {
             try {
-                return SharedConstants.getCurrentVersion().getName();
-            } catch (Throwable t) {
-                return null;
-            }
+                Class<?> sc = Class.forName("net.minecraft.SharedConstants");
+                try {
+                    Object verObj = sc.getMethod("getCurrentVersion").invoke(null);
+                    if (verObj != null) {
+                        try {
+                            Object name = verObj.getClass().getMethod("getName").invoke(verObj);
+                            if (name instanceof String && !((String) name).isEmpty()) return (String) name;
+                        } catch (NoSuchMethodException e1) {
+                            try {
+                                Object id = verObj.getClass().getMethod("getId").invoke(verObj);
+                                if (id instanceof String && !((String) id).isEmpty()) return (String) id;
+                            } catch (NoSuchMethodException ignored) { }
+                        }
+                    }
+                } catch (NoSuchMethodException e) {
+                    try {
+                        Object str = sc.getMethod("getGameVersion").invoke(null);
+                        if (str instanceof String && !((String) str).isEmpty()) return (String) str;
+                    } catch (NoSuchMethodException ignored) { }
+                }
+                try {
+                    Object vs = sc.getField("VERSION_STRING").get(null);
+                    if (vs instanceof String && !((String) vs).isEmpty()) return (String) vs;
+                } catch (NoSuchFieldException ignored) { }
+            } catch (Throwable t) { }
+            try {
+                Class<?> fv = Class.forName("net.minecraftforge.versions.forge.ForgeVersion");
+                Object mcVer = fv.getField("mcVersion").get(null);
+                if (mcVer instanceof String && !((String) mcVer).isEmpty()) return (String) mcVer;
+            } catch (Throwable t) { }
+            try {
+                Class<?> mcp = Class.forName("net.minecraftforge.versions.mcp.MCPVersion");
+                Object ver = mcp.getMethod("getMCVersion").invoke(null);
+                if (ver instanceof String && !((String) ver).isEmpty()) return (String) ver;
+            } catch (Throwable t) { }
+            return null;
         }
     }
 }
+

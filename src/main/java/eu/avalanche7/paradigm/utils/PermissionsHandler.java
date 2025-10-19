@@ -1,9 +1,13 @@
 package eu.avalanche7.paradigm.utils;
 
 import eu.avalanche7.paradigm.configs.CMConfig;
+import eu.avalanche7.paradigm.data.CustomCommand;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.fml.ModList;
 import org.slf4j.Logger;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 public class PermissionsHandler {
     private final Logger logger;
@@ -19,9 +23,10 @@ public class PermissionsHandler {
     public static final String TITLE_PERMISSION = "paradigm.title";
     public static final String BOSSBAR_PERMISSION = "paradigm.bossbar";
     public static final String RELOAD_PERMISSION = "paradigm.reload";
+    public static final String GROUPCHAT_PERMISSION = "paradigm.groupchat";
 
     public static final int MENTION_EVERYONE_PERMISSION_LEVEL = 2;
-    public static final int MENTION_PLAYER_PERMISSION_LEVEL = 2;
+    public static final int MENTION_PLAYER_PERMISSION_LEVEL = 0;
     public static final int STAFF_CHAT_PERMISSION_LEVEL = 2;
     public static final int RESTART_MANAGE_PERMISSION_LEVEL = 2;
     public static final int BROADCAST_PERMISSION_LEVEL = 2;
@@ -40,6 +45,87 @@ public class PermissionsHandler {
 
     public void initialize() {
         initializeChecker();
+        registerLuckPermsPermissions();
+    }
+
+    public void refreshCustomCommandPermissions() {
+        registerLuckPermsPermissions();
+    }
+
+    public Map<String, String> knownPermissionNodes() {
+        Map<String, String> nodes = new LinkedHashMap<>();
+
+        nodes.put(STAFF_CHAT_PERMISSION, "Access to /sc (Staff Chat) and receiving staff messages.");
+        nodes.put(MENTION_EVERYONE_PERMISSION, "Allows using @everyone to ping all players in Mentions module.");
+        nodes.put(MENTION_PLAYER_PERMISSION, "Allows mentioning individual players in Mentions module.");
+        nodes.put(RESTART_MANAGE_PERMISSION, "Allows managing restarts: /restart now, /restart cancel.");
+        nodes.put(BROADCAST_PERMISSION, "Allows using /paradigm broadcast, actionbar, title, and bossbar commands.");
+        nodes.put(ACTIONBAR_PERMISSION, "Allows sending actionbar messages via /paradigm actionbar.");
+        nodes.put(TITLE_PERMISSION, "Allows sending titles via /paradigm title.");
+        nodes.put(BOSSBAR_PERMISSION, "Allows sending bossbar messages via /paradigm bossbar.");
+        nodes.put(GROUPCHAT_PERMISSION, "Allows using /groupchat commands (create, invite, join, etc.).");
+        nodes.put(RELOAD_PERMISSION, "Allows using /paradigm reload and /customcommandsreload commands.");
+
+        if (cmConfig != null && cmConfig.getLoadedCommands() != null) {
+            for (CustomCommand cmd : cmConfig.getLoadedCommands()) {
+                if (cmd.isRequirePermission() && cmd.getPermission() != null && !cmd.getPermission().trim().isEmpty()) {
+                    String desc = cmd.getDescription() != null && !cmd.getDescription().trim().isEmpty()
+                            ? cmd.getDescription()
+                            : "Custom command: /" + cmd.getName();
+                    nodes.put(cmd.getPermission(), desc);
+                }
+            }
+        }
+
+        return nodes;
+    }
+
+    private void registerLuckPermsPermissions() {
+        if (!ModList.get().isLoaded("luckperms")) {
+            return;
+        }
+        registerPermissionsWithLuckPermsRetry(0);
+    }
+
+    private void registerPermissionsWithLuckPermsRetry(int attemptCount) {
+        if (attemptCount >= 5) {
+            logger.warn("Paradigm: Failed to register permissions with LuckPerms after {} attempts.", attemptCount);
+            return;
+        }
+        try {
+            net.luckperms.api.LuckPerms api = net.luckperms.api.LuckPermsProvider.get();
+            Map<String, String> all = knownPermissionNodes();
+            java.util.UUID dummyUuid = java.util.UUID.fromString("00000000-0000-0000-0000-000000000000");
+            net.luckperms.api.model.user.User dummyUser = api.getUserManager().loadUser(dummyUuid).join();
+            if (dummyUser != null) {
+                for (String node : all.keySet()) {
+                    dummyUser.getCachedData().getPermissionData().checkPermission(node);
+                    debugLogger.debugLog("Registered permission with LuckPerms: " + node);
+                }
+                logger.info("Paradigm: Made {} permissions visible to LuckPerms.", all.size());
+            }
+        } catch (IllegalStateException e) {
+            String msg = e.getMessage();
+            if (msg != null && msg.contains("API isn't loaded")) {
+                debugLogger.debugLog("LuckPerms not ready yet, retrying in " + (attemptCount + 1) + " seconds... (attempt " + (attemptCount + 1) + "/5)");
+                scheduleRetry(attemptCount);
+            } else {
+                logger.warn("Paradigm: Failed to register permissions with LuckPerms: {}", e.getMessage());
+            }
+        } catch (Exception e) {
+            logger.warn("Paradigm: Failed to register permissions with LuckPerms: {}", e.getMessage());
+        }
+    }
+
+    private void scheduleRetry(int attemptCount) {
+        new Thread(() -> {
+            try {
+                Thread.sleep((attemptCount + 1) * 1000L);
+                registerPermissionsWithLuckPermsRetry(attemptCount + 1);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            }
+        }, "Paradigm-LPReg-Retry").start();
     }
 
     private void initializeChecker() {
@@ -105,7 +191,6 @@ public class PermissionsHandler {
 
         private int getPermissionLevelForVanilla(String permission) {
             if (permission == null) return 4;
-
             return switch (permission) {
                 case STAFF_CHAT_PERMISSION -> STAFF_CHAT_PERMISSION_LEVEL;
                 case MENTION_EVERYONE_PERMISSION -> MENTION_EVERYONE_PERMISSION_LEVEL;
@@ -116,8 +201,10 @@ public class PermissionsHandler {
                 case BOSSBAR_PERMISSION -> BOSSBAR_PERMISSION_LEVEL;
                 case RESTART_MANAGE_PERMISSION -> RESTART_MANAGE_PERMISSION_LEVEL;
                 case RELOAD_PERMISSION -> RELOAD_PERMISSION_LEVEL;
-                default -> 0;
+                case GROUPCHAT_PERMISSION -> 0;
+                default -> permission.startsWith("paradigm.") ? 0 : 4;
             };
         }
     }
 }
+

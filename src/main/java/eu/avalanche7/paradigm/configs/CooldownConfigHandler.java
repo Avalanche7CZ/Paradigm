@@ -5,10 +5,11 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 
-import java.io.FileReader;
-import java.io.FileWriter;
+import java.io.Reader;
+import java.io.Writer;
 import java.io.IOException;
 import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
@@ -29,7 +30,7 @@ public class CooldownConfigHandler {
 
     public void loadCooldowns() {
         if (Files.exists(cooldownsFilePath)) {
-            try (FileReader reader = new FileReader(cooldownsFilePath.toFile())) {
+            try (Reader reader = Files.newBufferedReader(cooldownsFilePath, StandardCharsets.UTF_8)) {
                 Type type = new TypeToken<ConcurrentHashMap<UUID, Map<String, Long>>>(){}.getType();
                 Map<UUID, Map<String, Long>> loaded = gson.fromJson(reader, type);
                 if (loaded != null) {
@@ -47,7 +48,7 @@ public class CooldownConfigHandler {
     public void saveCooldowns() {
         try {
             Files.createDirectories(cooldownsFilePath.getParent());
-            try (FileWriter writer = new FileWriter(cooldownsFilePath.toFile())) {
+            try (Writer writer = Files.newBufferedWriter(cooldownsFilePath, StandardCharsets.UTF_8)) {
                 gson.toJson(playerCooldowns, writer);
                 debugLogger.debugLog("CooldownConfigHandler: Saved cooldowns to " + cooldownsFilePath);
             }

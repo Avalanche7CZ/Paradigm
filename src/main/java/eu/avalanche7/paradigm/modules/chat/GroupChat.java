@@ -36,7 +36,11 @@ public class GroupChat implements ParadigmModule, IEventSystem.ChatEventListener
 
     @Override
     public boolean isEnabled(Services services) {
-        return true;
+        try {
+            return services.getChatConfig().enableGroupChat.get();
+        } catch (Throwable ignored) {
+            return true;
+        }
     }
 
     @Override
@@ -70,6 +74,7 @@ public class GroupChat implements ParadigmModule, IEventSystem.ChatEventListener
         dispatcherCS.register(Commands.literal("groupchat")
                 .executes(ctx -> {
                     ICommandSource source = platform.wrapCommandSource(ctx.getSource());
+                    if (!checkGroupEnabled(source)) return 0;
                     IPlayer player = source.getPlayer();
                     if (player != null) {
                         displayHelp(player);
@@ -80,12 +85,14 @@ public class GroupChat implements ParadigmModule, IEventSystem.ChatEventListener
                         .then(Commands.argument("name", StringArgumentType.string())
                                 .executes(ctx -> {
                                     ICommandSource source = platform.wrapCommandSource(ctx.getSource());
+                                    if (!checkGroupEnabled(source)) return 0;
                                     IPlayer player = source.getPlayer();
                                     return player != null && groupChatManager.createGroup(player, StringArgumentType.getString(ctx, "name")) ? 1 : 0;
                                 })))
                 .then(Commands.literal("delete")
                         .executes(ctx -> {
                             ICommandSource source = platform.wrapCommandSource(ctx.getSource());
+                            if (!checkGroupEnabled(source)) return 0;
                             IPlayer player = source.getPlayer();
                             return player != null && groupChatManager.deleteGroup(player) ? 1 : 0;
                         }))
@@ -93,6 +100,7 @@ public class GroupChat implements ParadigmModule, IEventSystem.ChatEventListener
                         .then(Commands.argument("player", EntityArgument.player())
                                 .executes(ctx -> {
                                     ICommandSource source = platform.wrapCommandSource(ctx.getSource());
+                                    if (!checkGroupEnabled(source)) return 0;
                                     IPlayer inviter = source.getPlayer();
                                     IPlayer target = MinecraftPlayer.of(EntityArgument.getPlayer(ctx, "player"));
                                     return inviter != null && groupChatManager.invitePlayer(inviter, target) ? 1 : 0;
@@ -101,6 +109,7 @@ public class GroupChat implements ParadigmModule, IEventSystem.ChatEventListener
                         .then(Commands.argument("name", StringArgumentType.string())
                                 .executes(ctx -> {
                                     ICommandSource source = platform.wrapCommandSource(ctx.getSource());
+                                    if (!checkGroupEnabled(source)) return 0;
                                     IPlayer player = source.getPlayer();
                                     if (player != null) {
                                         groupChatManager.requestJoinGroup(player, StringArgumentType.getString(ctx, "name"));
@@ -111,6 +120,7 @@ public class GroupChat implements ParadigmModule, IEventSystem.ChatEventListener
                 .then(Commands.literal("list")
                         .executes(ctx -> {
                             ICommandSource source = platform.wrapCommandSource(ctx.getSource());
+                            if (!checkGroupEnabled(source)) return 0;
                             IPlayer player = source.getPlayer();
                             if (player != null) {
                                 groupChatManager.listGroups(player);
@@ -121,6 +131,7 @@ public class GroupChat implements ParadigmModule, IEventSystem.ChatEventListener
                         .then(Commands.argument("group", StringArgumentType.string())
                                 .executes(ctx -> {
                                     ICommandSource source = platform.wrapCommandSource(ctx.getSource());
+                                    if (!checkGroupEnabled(source)) return 0;
                                     IPlayer player = source.getPlayer();
                                     if (player != null) {
                                         return groupChatManager.acceptInvite(player, StringArgumentType.getString(ctx, "group")) ? 1 : 0;
@@ -131,6 +142,7 @@ public class GroupChat implements ParadigmModule, IEventSystem.ChatEventListener
                         .then(Commands.argument("player", StringArgumentType.string())
                                 .executes(ctx -> {
                                     ICommandSource source = platform.wrapCommandSource(ctx.getSource());
+                                    if (!checkGroupEnabled(source)) return 0;
                                     IPlayer owner = source.getPlayer();
                                     String playerName = StringArgumentType.getString(ctx, "player");
                                     if (owner != null) {
@@ -142,6 +154,7 @@ public class GroupChat implements ParadigmModule, IEventSystem.ChatEventListener
                         .then(Commands.argument("group", StringArgumentType.string())
                                 .executes(ctx -> {
                                     ICommandSource source = platform.wrapCommandSource(ctx.getSource());
+                                    if (!checkGroupEnabled(source)) return 0;
                                     IPlayer player = source.getPlayer();
                                     if (player != null) {
                                         return groupChatManager.denyInvite(player, StringArgumentType.getString(ctx, "group")) ? 1 : 0;
@@ -152,6 +165,7 @@ public class GroupChat implements ParadigmModule, IEventSystem.ChatEventListener
                         .then(Commands.argument("player", StringArgumentType.string())
                                 .executes(ctx -> {
                                     ICommandSource source = platform.wrapCommandSource(ctx.getSource());
+                                    if (!checkGroupEnabled(source)) return 0;
                                     IPlayer owner = source.getPlayer();
                                     String playerName = StringArgumentType.getString(ctx, "player");
                                     if (owner != null) {
@@ -162,12 +176,14 @@ public class GroupChat implements ParadigmModule, IEventSystem.ChatEventListener
                 .then(Commands.literal("leave")
                         .executes(ctx -> {
                             ICommandSource source = platform.wrapCommandSource(ctx.getSource());
+                            if (!checkGroupEnabled(source)) return 0;
                             IPlayer player = source.getPlayer();
                             return player != null && groupChatManager.leaveGroup(player) ? 1 : 0;
                         }))
                 .then(Commands.literal("toggle")
                         .executes(ctx -> {
                             ICommandSource source = platform.wrapCommandSource(ctx.getSource());
+                            if (!checkGroupEnabled(source)) return 0;
                             IPlayer player = source.getPlayer();
                             if (player != null) {
                                 groupChatManager.toggleGroupChat(player);
@@ -177,6 +193,7 @@ public class GroupChat implements ParadigmModule, IEventSystem.ChatEventListener
                 .then(Commands.literal("help")
                         .executes(ctx -> {
                             ICommandSource source = platform.wrapCommandSource(ctx.getSource());
+                            if (!checkGroupEnabled(source)) return 0;
                             IPlayer player = source.getPlayer();
                             if (player != null) {
                                 displayHelp(player);
@@ -187,6 +204,7 @@ public class GroupChat implements ParadigmModule, IEventSystem.ChatEventListener
                         .then(Commands.argument("player", StringArgumentType.string())
                                 .executes(ctx -> {
                                     ICommandSource source = platform.wrapCommandSource(ctx.getSource());
+                                    if (!checkGroupEnabled(source)) return 0;
                                     IPlayer owner = source.getPlayer();
                                     String targetName = StringArgumentType.getString(ctx, "player");
                                     if (owner != null) {
@@ -195,6 +213,16 @@ public class GroupChat implements ParadigmModule, IEventSystem.ChatEventListener
                                     return 0;
                                 })))
         );
+    }
+
+    private boolean checkGroupEnabled(ICommandSource source) {
+        try {
+            if (!this.services.getChatConfig().enableGroupChat.get()) {
+                platform.sendFailure(source, services.getMessageParser().parseMessage("&cGroup chat is disabled.", null));
+                return false;
+            }
+        } catch (Throwable ignored) {}
+        return true;
     }
 
     @Override
