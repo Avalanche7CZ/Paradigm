@@ -95,6 +95,13 @@ public class StaffChat implements ParadigmModule, IEventSystem.ChatEventListener
     }
 
     private int toggleStaffChatCmd(ICommandSource source) throws CommandSyntaxException {
+        try {
+            if (!services.getChatConfig().enableStaffChat.get()) {
+                platform.sendFailure(source, services.getMessageParser().parseMessage("&cStaff chat is disabled.", null));
+                return 0;
+            }
+        } catch (Throwable ignored) {}
+
         IPlayer player = source.getPlayer();
         if (player != null) {
             toggleStaffChat(((MinecraftPlayer) player).getHandle());
@@ -103,6 +110,13 @@ public class StaffChat implements ParadigmModule, IEventSystem.ChatEventListener
     }
 
     private int sendStaffChatMessageCmd(ICommandSource source, String message) throws CommandSyntaxException {
+        try {
+            if (!services.getChatConfig().enableStaffChat.get()) {
+                platform.sendFailure(source, services.getMessageParser().parseMessage("&cStaff chat is disabled.", null));
+                return 0;
+            }
+        } catch (Throwable ignored) {}
+
         if (platform.getMinecraftServer() == null) {
             platform.sendFailure(source, platform.createLiteralComponent("Server not available."));
             return 0;

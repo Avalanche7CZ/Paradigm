@@ -9,10 +9,11 @@ import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.FileReader;
-import java.io.FileWriter;
+import java.io.Reader;
+import java.io.Writer;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -51,7 +52,7 @@ public class MainConfigHandler {
                 true, "Enables the custom commands module."
         );
         public ConfigEntry<Boolean> telemetryEnable = new ConfigEntry<>(
-                false, "Enables anonymous telemetry (server count, online players). Sends only anonymized metrics."
+                true, "Enables anonymous telemetry (server count, online players). Sends only anonymized metrics."
         );
         public ConfigEntry<Integer> telemetryIntervalSeconds = new ConfigEntry<>(
                 900, "Telemetry ping interval in seconds."
@@ -59,13 +60,17 @@ public class MainConfigHandler {
         public ConfigEntry<String> telemetryServerId = new ConfigEntry<>(
                 "", "Anonymous server ID (auto-generated when empty)."
         );
+        public ConfigEntry<Boolean> webEditorTestUrl = new ConfigEntry<>(
+                false, "Use local testing URL"
+        );
     }
 
     public static void load() {
         Config defaultConfig = new Config();
+        boolean shouldSaveMerged = false;
 
         if (Files.exists(CONFIG_PATH)) {
-            try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
+            try (Reader reader = Files.newBufferedReader(CONFIG_PATH, StandardCharsets.UTF_8)) {
                 StringBuilder content = new StringBuilder();
                 int c;
                 while ((c = reader.read()) != -1) {
@@ -79,7 +84,7 @@ public class MainConfigHandler {
                             LOGGER.info("[Paradigm] Fixed JSON syntax issues in main.json: " + result.getIssuesSummary());
                             LOGGER.info("[Paradigm] Saving corrected version to preserve user values");
 
-                            try (FileWriter writer = new FileWriter(CONFIG_PATH.toFile())) {
+                            try (Writer writer = Files.newBufferedWriter(CONFIG_PATH, StandardCharsets.UTF_8)) {
                                 writer.write(result.getFixedJson());
                                 LOGGER.info("[Paradigm] Saved corrected main.json with preserved user values");
                             } catch (IOException saveError) {
@@ -91,6 +96,7 @@ public class MainConfigHandler {
                         if (loadedConfig != null) {
                             mergeConfigs(defaultConfig, loadedConfig);
                             LOGGER.info("[Paradigm] Successfully loaded main.json configuration");
+                            shouldSaveMerged = true;
                         }
                     } else {
                         LOGGER.warn("[Paradigm] Critical JSON syntax errors in main.json: " + result.getMessage());
@@ -101,6 +107,7 @@ public class MainConfigHandler {
                     Config loadedConfig = GSON.fromJson(content.toString(), Config.class);
                     if (loadedConfig != null) {
                         mergeConfigs(defaultConfig, loadedConfig);
+                        shouldSaveMerged = true;
                     }
                 }
             } catch (Exception e) {
@@ -115,6 +122,13 @@ public class MainConfigHandler {
         if (!Files.exists(CONFIG_PATH)) {
             save();
             LOGGER.info("[Paradigm] Generated new main.json with default values.");
+        } else if (shouldSaveMerged) {
+            try {
+                save();
+                LOGGER.info("[Paradigm] Synchronized main.json with new defaults while preserving user values.");
+            } catch (Exception e) {
+                LOGGER.warn("[Paradigm] Failed to write merged main.json: " + e.getMessage());
+            }
         }
     }
 
@@ -144,7 +158,7 @@ public class MainConfigHandler {
     public static void save() {
         try {
             Files.createDirectories(CONFIG_PATH.getParent());
-            try (FileWriter writer = new FileWriter(CONFIG_PATH.toFile())) {
+            try (Writer writer = Files.newBufferedWriter(CONFIG_PATH, StandardCharsets.UTF_8)) {
                 GSON.toJson(CONFIG, writer);
             }
         } catch (IOException e) {

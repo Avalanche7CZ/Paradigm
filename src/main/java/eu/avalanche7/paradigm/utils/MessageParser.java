@@ -1,3 +1,10 @@
+/*
+ * NOTE FOR PORTING (1.19.2 → 1.18.2):
+ * - Use new TextComponent(String) instead of Component.literal(String).
+ * - Do NOT use Component.literal (does not exist in 1.18.2).
+ * - Check for other API changes between versions.
+ */
+
 package eu.avalanche7.paradigm.utils;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
@@ -207,7 +214,7 @@ public class MessageParser {
             else if (nextUrlFound && nextUrlStart == currentIndex) {
                 String url = urlMatcher.group(0);
                 Style urlStyle = currentStyle.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, formatUrl(url)));
-        parentComponent.append(platformAdapter.createLiteralComponent(url).setStyle(urlStyle));
+                parentComponent.append(platformAdapter.createLiteralComponent(url).setStyle(urlStyle));
                 currentIndex = urlMatcher.end();
             } else {
                 if (currentIndex < length) {

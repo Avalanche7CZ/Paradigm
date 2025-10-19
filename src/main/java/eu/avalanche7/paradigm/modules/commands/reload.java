@@ -98,6 +98,7 @@ public class reload implements ParadigmModule {
                 break;
             case "customcommands":
                 services.getCmConfig().reloadCommands();
+                services.getPermissionsHandler().refreshCustomCommandPermissions();
                 result.append("✔ &aCustom commands reloaded!");
                 break;
             case "all":
@@ -112,6 +113,7 @@ public class reload implements ParadigmModule {
                     .findFirst()
                     .ifPresent(m -> ((eu.avalanche7.paradigm.modules.Restart)m).scheduleNextRestart());
                 services.getCmConfig().reloadCommands();
+                services.getPermissionsHandler().refreshCustomCommandPermissions();
                 Paradigm.getModules().stream()
                     .filter(m -> m instanceof eu.avalanche7.paradigm.modules.Announcements)
                     .findFirst()

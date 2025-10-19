@@ -9,10 +9,11 @@ import net.minecraftforge.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.FileReader;
-import java.io.FileWriter;
+import java.io.Reader;
+import java.io.Writer;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -41,9 +42,9 @@ public class ChatConfigHandler {
                 true,
                 "Shows a boss bar at the top of the screen when a staff member has staff chat toggled on."
         );
-        public ConfigEntry<Boolean> enableGroupChatToasts = new ConfigEntry<>(
+        public ConfigEntry<Boolean> enableGroupChat = new ConfigEntry<>(
                 true,
-                "Enable toast notifications for group chat events (invites, joins, etc.)."
+                "Enable or disable the Group Chat module."
         );
         public ConfigEntry<Boolean> enableJoinLeaveMessages = new ConfigEntry<>(
                 true,
@@ -69,9 +70,10 @@ public class ChatConfigHandler {
 
     public static void load() {
         Config defaultConfig = new Config();
+        boolean shouldSaveMerged = false;
 
         if (Files.exists(CONFIG_PATH)) {
-            try (FileReader reader = new FileReader(CONFIG_PATH.toFile())) {
+            try (Reader reader = Files.newBufferedReader(CONFIG_PATH, StandardCharsets.UTF_8)) {
                 StringBuilder content = new StringBuilder();
                 int c;
                 while ((c = reader.read()) != -1) {
@@ -85,7 +87,7 @@ public class ChatConfigHandler {
                             LOGGER.info("[Paradigm] Fixed JSON syntax issues in chat.json: " + result.getIssuesSummary());
                             LOGGER.info("[Paradigm] Saving corrected version to preserve user values");
 
-                            try (FileWriter writer = new FileWriter(CONFIG_PATH.toFile())) {
+                            try (Writer writer = Files.newBufferedWriter(CONFIG_PATH, StandardCharsets.UTF_8)) {
                                 writer.write(result.getFixedJson());
                                 LOGGER.info("[Paradigm] Saved corrected chat.json with preserved user values");
                             } catch (IOException saveError) {
@@ -97,6 +99,7 @@ public class ChatConfigHandler {
                         if (loadedConfig != null) {
                             mergeConfigs(defaultConfig, loadedConfig);
                             LOGGER.info("[Paradigm] Successfully loaded chat.json configuration");
+                            shouldSaveMerged = true;
                         }
                     } else {
                         LOGGER.warn("[Paradigm] Critical JSON syntax errors in chat.json: " + result.getMessage());
@@ -107,6 +110,7 @@ public class ChatConfigHandler {
                     Config loadedConfig = GSON.fromJson(content.toString(), Config.class);
                     if (loadedConfig != null) {
                         mergeConfigs(defaultConfig, loadedConfig);
+                        shouldSaveMerged = true;
                     }
                 }
             } catch (Exception e) {
@@ -121,6 +125,13 @@ public class ChatConfigHandler {
         if (!Files.exists(CONFIG_PATH)) {
             save();
             LOGGER.info("[Paradigm] Generated new chat.json with default values.");
+        } else if (shouldSaveMerged) {
+            try {
+                save();
+                LOGGER.info("[Paradigm] Synchronized chat.json with new defaults while preserving user values.");
+            } catch (Exception e) {
+                LOGGER.warn("[Paradigm] Failed to write merged chat.json: " + e.getMessage());
+            }
         }
     }
 
@@ -150,7 +161,7 @@ public class ChatConfigHandler {
     public static void save() {
         try {
             Files.createDirectories(CONFIG_PATH.getParent());
-            try (FileWriter writer = new FileWriter(CONFIG_PATH.toFile())) {
+            try (Writer writer = Files.newBufferedWriter(CONFIG_PATH, StandardCharsets.UTF_8)) {
                 GSON.toJson(CONFIG, writer);
             }
         } catch (IOException e) {

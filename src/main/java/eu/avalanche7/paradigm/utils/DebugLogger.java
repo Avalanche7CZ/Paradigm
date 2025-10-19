@@ -80,7 +80,7 @@ public class DebugLogger {
                 if (lastDot > 0) {
                     currentLogger = currentLogger.substring(0, lastDot);
                 } else if (!currentLogger.isEmpty()) {
-                    currentLogger = ""; // Try root logger
+                    currentLogger = "";
                 } else {
                     currentLogger = null;
                 }
