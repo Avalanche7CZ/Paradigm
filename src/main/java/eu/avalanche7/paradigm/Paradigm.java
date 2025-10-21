@@ -73,7 +73,7 @@ public class Paradigm implements DedicatedServerModInitializer {
             modVersion = modContainer.getMetadata().getVersion().getFriendlyString();
             String displayName = modContainer.getMetadata().getName();
 
-            LOGGER.info("Paradigm Fabric mod (1.21.1) has been set up.");
+            LOGGER.info("Paradigm Fabric mod (1.20.1) has been set up.");
             LOGGER.info("==================================================");
             LOGGER.info("{} - Version {}", displayName, getModVersion());
             LOGGER.info("Author: Avalanche7CZ");
@@ -187,6 +187,7 @@ public class Paradigm implements DedicatedServerModInitializer {
         modules.add(new GroupChat(this.groupChatManagerInstance));
         modules.add(new CommandManager());
         modules.add(new eu.avalanche7.paradigm.modules.commands.Reload());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.editor());
         LOGGER.info("Paradigm: Registered {} modules.", modules.size());
     }
 
@@ -264,11 +265,11 @@ public class Paradigm implements DedicatedServerModInitializer {
         if (this.taskSchedulerInstance != null) {
             this.taskSchedulerInstance.onServerStopping();
         }
-        LOGGER.info("Paradigm modules (1.21.1) have been processed for server stop.");
+        LOGGER.info("Paradigm modules (1.20.1) have been processed for server stop.");
     }
 
     public static class UpdateChecker {
-        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/Fabric/1.21.1/version.txt?v=1";
+        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/Fabric/1.20.1/version.txt?v=1";
         private static final String MODRINTH_PROJECT_ID = "s4i32SJd";
         private static final String CURSEFORGE_SLUG = "paradigm";
         private static final String MODRINTH_PROJECT_PAGE = "https://modrinth.com/mod/" + MODRINTH_PROJECT_ID;

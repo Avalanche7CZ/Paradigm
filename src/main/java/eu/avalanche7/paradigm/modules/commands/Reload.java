@@ -14,8 +14,10 @@ import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public class Reload implements ParadigmModule {
     @Override public String getName() { return "Reload"; }
@@ -39,6 +41,11 @@ public class Reload implements ParadigmModule {
                         .requires(src -> src.hasPermissionLevel(2))
                         .then(CommandManager.argument("config", StringArgumentType.word()).suggests(configSuggestions)
                                 .executes(ctx -> {
+                                    Map<ParadigmModule, Boolean> prevEnabled = new HashMap<>();
+                                    for (var m : Paradigm.getModules()) {
+                                        try { prevEnabled.put(m, m.isEnabled(services)); } catch (Throwable ignored) { prevEnabled.put(m, false); }
+                                    }
+
                                     String cfg = StringArgumentType.getString(ctx, "config").toLowerCase(Locale.ROOT);
                                     String msg;
                                     boolean ok = true;
@@ -46,7 +53,7 @@ public class Reload implements ParadigmModule {
                                         case "main" -> { MainConfigHandler.load(); msg = "Main config reloaded."; }
                                         case "announcements" -> { AnnouncementsConfigHandler.load(); rescheduleAnnouncements(); msg = "Announcements config reloaded and rescheduled."; }
                                         case "chat" -> { ChatConfigHandler.load(); msg = "Chat config reloaded."; }
-                                        case "motd" -> { MOTDConfigHandler.loadConfig(); msg = "MOTD config reloaded."; }
+                                        case "motd" -> { MainConfigHandler.load(); MOTDConfigHandler.loadConfig(); msg = "MOTD and main config reloaded."; }
                                         case "mention" -> { MentionConfigHandler.load(); msg = "Mention config reloaded."; }
                                         case "restart" -> { RestartConfigHandler.load(); rescheduleRestart(services); msg = "Restart config reloaded and rescheduled."; }
                                         case "customcommands" -> {
@@ -69,7 +76,10 @@ public class Reload implements ParadigmModule {
                                         }
                                         default -> { ok = false; msg = "Unknown config: " + cfg; }
                                     }
-                                    if (ok) ctx.getSource().sendFeedback(() -> Text.literal("§a" + msg), false);
+                                    if (ok) {
+                                        refreshModuleStates(services, prevEnabled);
+                                        ctx.getSource().sendFeedback(() -> Text.literal("§a" + msg), false);
+                                    }
                                     else ctx.getSource().sendError(Text.literal(msg));
                                     return ok ? 1 : 0;
                                 }))
@@ -89,6 +99,26 @@ public class Reload implements ParadigmModule {
         for (var m : Paradigm.getModules()) {
             if (m instanceof Restart) {
                 ((Restart) m).rescheduleNextRestart(services);
+            }
+        }
+    }
+
+    private void refreshModuleStates(Services services, Map<ParadigmModule, Boolean> prevEnabled) {
+        for (var m : Paradigm.getModules()) {
+            try {
+                boolean before = prevEnabled.getOrDefault(m, false);
+                boolean after;
+                try { after = m.isEnabled(services); } catch (Throwable t) { after = false; }
+
+                if (before && !after) {
+                    m.onDisable(services);
+                } else if (!before && after) {
+                    m.onEnable(services);
+                }
+            } catch (Throwable t) {
+                if (services != null && services.getLogger() != null) {
+                    services.getLogger().warn("Failed to refresh module {}: {}", m.getName(), t.toString());
+                }
             }
         }
     }

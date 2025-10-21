@@ -17,7 +17,8 @@ def getGitCommitHash = { ->
 }
 
 
-version = "${project.mod_version}-${getGitCommitHash()}"
+version = "${project.mod_version}"
+//version = "${project.mod_version}-${getGitCommitHash()}"
 group = project.maven_group
 
 base {
