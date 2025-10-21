@@ -187,6 +187,7 @@ public class Paradigm implements DedicatedServerModInitializer {
         modules.add(new GroupChat(this.groupChatManagerInstance));
         modules.add(new CommandManager());
         modules.add(new eu.avalanche7.paradigm.modules.commands.Reload());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.editor());
         LOGGER.info("Paradigm: Registered {} modules.", modules.size());
     }
 
