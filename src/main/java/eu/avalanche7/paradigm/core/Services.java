@@ -5,6 +5,7 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.*;
 import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
+import eu.avalanche7.paradigm.webeditor.store.WebEditorStore;
 
 public class Services {
 
@@ -28,6 +29,8 @@ public class Services {
     private final TaskScheduler taskSchedulerInstance;
     private final GroupChatManager groupChatManagerInstance;
     private final IPlatformAdapter platformAdapter;
+
+    private final WebEditorStore webEditorStore = new WebEditorStore();
 
 
     public Services(
@@ -126,28 +129,27 @@ public class Services {
     }
 
     public MainConfigHandler.Config getMainConfig() {
-        return mainConfig;
+        return MainConfigHandler.getConfig();
     }
 
     public AnnouncementsConfigHandler.Config getAnnouncementsConfig() {
-        return announcementsConfig;
+        return AnnouncementsConfigHandler.getConfig();
     }
 
     public MOTDConfigHandler.Config getMotdConfig() {
-        return motdConfig;
+        return MOTDConfigHandler.getConfig();
     }
 
     public MentionConfigHandler.Config getMentionConfig() {
-        return mentionConfig;
+        return MentionConfigHandler.getConfig();
     }
 
-
     public RestartConfigHandler.Config getRestartConfig() {
-        return restartConfig;
+        return RestartConfigHandler.getConfig();
     }
 
     public ChatConfigHandler.Config getChatConfig() {
-        return chatConfig;
+        return ChatConfigHandler.getConfig();
     }
 
     public CMConfig getCmConfig() {
@@ -156,5 +158,9 @@ public class Services {
 
     public GroupChatManager getGroupChatManager() {
         return groupChatManagerInstance;
+    }
+
+    public WebEditorStore getWebEditorStore() {
+        return webEditorStore;
     }
 }

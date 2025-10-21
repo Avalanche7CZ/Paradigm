@@ -82,6 +82,10 @@ public class MainConfigHandler {
                 "",
                 "Anonymous server ID (auto-generated when empty)."
         );
+        public ConfigEntry<Boolean> webEditorTestUrl = new ConfigEntry<>(
+                false,
+                "When enabled, use the local web editor test URL (http://localhost:8083) instead of production."
+        );
     }
 
     public static void load() {
