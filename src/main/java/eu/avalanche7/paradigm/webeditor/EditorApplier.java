@@ -167,25 +167,9 @@ public final class EditorApplier {
             JsonElement el = find(files, "motd", "motd.json");
             if (el == null) return ApplyStatus.MISSING;
             MOTDConfigHandler.Config newConfig = GSON.fromJson(el, MOTDConfigHandler.Config.class);
-            if (configsEqual(MOTDConfigHandler.getConfig(), newConfig)) return ApplyStatus.UNCHANGED;
-            // replace / persist via handler
-            MOTDConfigHandler.Config _prev = MOTDConfigHandler.getConfig();
-            // apply by saving new config
-            try {
-                // directly write using handler's saveConfig mechanism
-                // set config by saving newConfig
-                // MOTDConfigHandler exposes saveConfig(), so set via temporary replace
-                // We'll write newConfig to file by calling saveConfig after setting a private field isn't available; instead, use GSON write here
-                java.nio.file.Path path = java.nio.file.Path.of(java.lang.System.getProperty("user.dir")).resolve("config").resolve("paradigm").resolve("motd.json");
-                try { java.nio.file.Files.createDirectories(path.getParent()); } catch (Throwable ignored) {}
-                try (java.io.Writer w = java.nio.file.Files.newBufferedWriter(path, java.nio.charset.StandardCharsets.UTF_8)) {
-                    GSON.toJson(newConfig, w);
-                }
-                // reload handler to pick up changes
-                MOTDConfigHandler.loadConfig();
-            } catch (Throwable ex) {
-                throw new RuntimeException("Failed to apply MOTD config: " + ex.getMessage(), ex);
-            }
+            if (configsEqual(MOTDConfigHandler.CONFIG, newConfig)) return ApplyStatus.UNCHANGED;
+            MOTDConfigHandler.CONFIG = newConfig;
+            MOTDConfigHandler.save();
             return ApplyStatus.APPLIED;
         }, "motd");
         updateCounters(result, "motd", appliedFiles, unchangedFiles, skipped);
@@ -225,17 +209,10 @@ public final class EditorApplier {
         // if (result.status == ApplyStatus.UNCHANGED) unchanged++;
 
         if (applied > 0) {
-            try { MainConfigHandler.load(); } catch (Throwable ignored) {}
-            try { AnnouncementsConfigHandler.load(); } catch (Throwable ignored) {}
-            try { ChatConfigHandler.load(); } catch (Throwable ignored) {}
-            try { MOTDConfigHandler.loadConfig(); } catch (Throwable ignored) {}
-            try { MentionConfigHandler.load(); } catch (Throwable ignored) {}
-            try { RestartConfigHandler.load(); } catch (Throwable ignored) {}
-
             Paradigm.getModules().stream()
                     .filter(m -> m instanceof eu.avalanche7.paradigm.modules.Restart)
                     .findFirst()
-                    .ifPresent(m -> ((eu.avalanche7.paradigm.modules.Restart)m).rescheduleNextRestart(services));
+                    .ifPresent(m -> ((eu.avalanche7.paradigm.modules.Restart)m).scheduleNextRestart());
             Paradigm.getModules().stream()
                     .filter(m -> m instanceof eu.avalanche7.paradigm.modules.Announcements)
                     .findFirst()
@@ -346,125 +323,113 @@ public final class EditorApplier {
 
     private static void reloadAffectedModules(Services services, List<String> appliedFiles) {
         try {
-            final var server = services != null ? services.getMinecraftServer() : null;
-            Runnable task = () -> {
-                for (String fileName : appliedFiles) {
-                    switch (fileName) {
-                        case "main":
-                            Paradigm.getModules().forEach(m -> {
+            for (String fileName : appliedFiles) {
+                switch (fileName) {
+                    case "chat":
+                        Paradigm.getModules().stream()
+                            .filter(m -> m instanceof eu.avalanche7.paradigm.modules.chat.GroupChat ||
+                                         m instanceof eu.avalanche7.paradigm.modules.chat.StaffChat ||
+                                         m instanceof eu.avalanche7.paradigm.modules.chat.JoinLeaveMessages)
+                            .forEach(m -> {
                                 try {
                                     m.onDisable(services);
                                     if (m.isEnabled(services)) {
                                         m.onEnable(services);
                                     }
                                 } catch (Exception e) {
-                                    try { services.getLogger().warn("Failed to reload module {} after main config change", m.getName(), e); } catch (Throwable ignored) {}
+                                    services.getLogger().warn("Failed to reload module {}", m.getName(), e);
                                 }
                             });
-                            Paradigm.getModules().stream()
-                                    .filter(m -> m instanceof eu.avalanche7.paradigm.modules.Announcements)
-                                    .forEach(m -> {
-                                        try { ((eu.avalanche7.paradigm.modules.Announcements)m).rescheduleAnnouncements(); } catch (Throwable ignored) {}
-                                    });
-                            Paradigm.getModules().stream()
-                                    .filter(m -> m instanceof eu.avalanche7.paradigm.modules.Restart)
-                                    .forEach(m -> {
-                                        try { ((eu.avalanche7.paradigm.modules.Restart)m).rescheduleNextRestart(services); } catch (Throwable ignored) {}
-                                    });
-                            break;
-                        case "chat":
-                            Paradigm.getModules().stream()
-                                .filter(m -> m instanceof eu.avalanche7.paradigm.modules.chat.GroupChat ||
-                                             m instanceof eu.avalanche7.paradigm.modules.chat.StaffChat)
-                                .forEach(m -> {
-                                    try {
-                                        m.onDisable(services);
-                                        if (m.isEnabled(services)) {
-                                            m.onEnable(services);
-                                        }
-                                    } catch (Exception e) {
-                                        services.getLogger().warn("Failed to reload module {}", m.getName(), e);
+                        break;
+                    case "motd":
+                        Paradigm.getModules().stream()
+                            .filter(m -> m instanceof eu.avalanche7.paradigm.modules.chat.MOTD)
+                            .forEach(m -> {
+                                try {
+                                    m.onDisable(services);
+                                    if (m.isEnabled(services)) {
+                                        m.onEnable(services);
                                     }
-                                });
-                            break;
-                        case "motd":
-                            Paradigm.getModules().stream()
-                                .filter(m -> m instanceof eu.avalanche7.paradigm.modules.chat.MOTD)
-                                .forEach(m -> {
-                                    try {
-                                        m.onDisable(services);
-                                        if (m.isEnabled(services)) {
-                                            m.onEnable(services);
-                                        }
-                                    } catch (Exception e) {
-                                        services.getLogger().warn("Failed to reload module {}", m.getName(), e);
+                                } catch (Exception e) {
+                                    services.getLogger().warn("Failed to reload module {}", m.getName(), e);
+                                }
+                            });
+                        break;
+                    case "mention":
+                        Paradigm.getModules().stream()
+                            .filter(m -> m instanceof eu.avalanche7.paradigm.modules.Mentions)
+                            .forEach(m -> {
+                                try {
+                                    m.onDisable(services);
+                                    if (m.isEnabled(services)) {
+                                        m.onEnable(services);
                                     }
-                                });
-                            break;
-                        case "mention":
-                            Paradigm.getModules().stream()
-                                .filter(m -> m instanceof eu.avalanche7.paradigm.modules.Mentions)
-                                .forEach(m -> {
-                                    try {
-                                        m.onDisable(services);
-                                        if (m.isEnabled(services)) {
-                                            m.onEnable(services);
-                                        }
-                                    } catch (Exception e) {
-                                        services.getLogger().warn("Failed to reload module {}", m.getName(), e);
+                                } catch (Exception e) {
+                                    services.getLogger().warn("Failed to reload module {}", m.getName(), e);
+                                }
+                            });
+                        break;
+                    case "announcements":
+                        Paradigm.getModules().stream()
+                            .filter(m -> m instanceof eu.avalanche7.paradigm.modules.Announcements)
+                            .forEach(m -> {
+                                try {
+                                    m.onDisable(services);
+                                    if (m.isEnabled(services)) {
+                                        m.onEnable(services);
                                     }
-                                });
-                            break;
-                        case "announcements":
-                            Paradigm.getModules().stream()
+                                    try {
+                                        ((eu.avalanche7.paradigm.modules.Announcements) m).rescheduleAnnouncements();
+                                    } catch (Throwable ignored) {}
+                                } catch (Exception e) {
+                                    services.getLogger().warn("Failed to reload module {}", m.getName(), e);
+                                }
+                            });
+                        break;
+                    case "restart":
+                        Paradigm.getModules().stream()
+                            .filter(m -> m instanceof eu.avalanche7.paradigm.modules.Restart)
+                            .forEach(m -> {
+                                try {
+                                    m.onDisable(services);
+                                    if (m.isEnabled(services)) {
+                                        m.onEnable(services);
+                                    }
+                                    try {
+                                        ((eu.avalanche7.paradigm.modules.Restart) m).scheduleNextRestart();
+                                    } catch (Throwable ignored) {}
+                                } catch (Exception e) {
+                                    services.getLogger().warn("Failed to reload module {}", m.getName(), e);
+                                }
+                            });
+                        break;
+                    case "main":
+                        Paradigm.getModules().forEach(m -> {
+                            try {
+                                m.onDisable(services);
+                                if (m.isEnabled(services)) {
+                                    m.onEnable(services);
+                                }
+                            } catch (Exception e) {
+                                try { services.getLogger().warn("Failed to reload module {}", m.getName(), e); } catch (Throwable ignored) {}
+                            }
+                        });
+                        Paradigm.getModules().stream()
                                 .filter(m -> m instanceof eu.avalanche7.paradigm.modules.Announcements)
                                 .forEach(m -> {
-                                    try {
-                                        m.onDisable(services);
-                                        if (m.isEnabled(services)) {
-                                            m.onEnable(services);
-                                        }
-                                        try {
-                                            ((eu.avalanche7.paradigm.modules.Announcements) m).rescheduleAnnouncements();
-                                        } catch (Throwable ignored) {}
-                                    } catch (Exception e) {
-                                        services.getLogger().warn("Failed to reload module {}", m.getName(), e);
-                                    }
+                                    try { ((eu.avalanche7.paradigm.modules.Announcements) m).rescheduleAnnouncements(); } catch (Throwable ignored) {}
                                 });
-                            break;
-                        case "restart":
-                            Paradigm.getModules().stream()
+                        Paradigm.getModules().stream()
                                 .filter(m -> m instanceof eu.avalanche7.paradigm.modules.Restart)
                                 .forEach(m -> {
-                                    try {
-                                        m.onDisable(services);
-                                        if (m.isEnabled(services)) {
-                                            m.onEnable(services);
-                                        }
-                                        try {
-                                            ((eu.avalanche7.paradigm.modules.Restart) m).rescheduleNextRestart(services);
-                                        } catch (Throwable ignored) {}
-                                    } catch (Exception e) {
-                                        services.getLogger().warn("Failed to reload module {}", m.getName(), e);
-                                    }
+                                    try { ((eu.avalanche7.paradigm.modules.Restart) m).scheduleNextRestart(); } catch (Throwable ignored) {}
                                 });
-                            break;
-                    }
+                        break;
                 }
-            };
-
-            if (server != null) {
-                try {
-                    server.execute(task);
-                } catch (Throwable t) {
-                    try { services.getLogger().warn("Paradigm WebEditor: server.execute failed, running reload synchronously", t); } catch (Throwable ignored) {}
-                    task.run();
-                }
-            } else {
-                task.run();
             }
-        } catch (Exception ex) {
-            try { services.getLogger().warn("Paradigm WebEditor: Failed to reload affected modules", ex); } catch (Throwable ignored) {}
+            services.getLogger().info("Paradigm WebEditor: Reloaded affected modules");
+        } catch (Exception e) {
+            services.getLogger().warn("Paradigm WebEditor: Error while reloading modules", e);
         }
     }
 

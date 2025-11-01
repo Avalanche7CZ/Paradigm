@@ -5,13 +5,13 @@ import com.google.gson.GsonBuilder;
 import eu.avalanche7.paradigm.Paradigm;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 import eu.avalanche7.paradigm.utils.JsonValidator;
-import net.fabricmc.loader.api.FabricLoader;
+import net.neoforged.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -21,7 +21,7 @@ public class MentionConfigHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Paradigm.MOD_ID);
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
-    private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("paradigm/mentions.json");
+    private static final Path CONFIG_PATH = FMLPaths.CONFIGDIR.get().resolve("paradigm/mentions.json");
     public static volatile Config CONFIG = null;
     private static JsonValidator jsonValidator;
     private static volatile boolean isLoaded = false;
@@ -43,56 +43,43 @@ public class MentionConfigHandler {
 
     public static class Config {
         public ConfigEntry<String> MENTION_SYMBOL = new ConfigEntry<>(
-                "@",
-                "The symbol used for mentions (e.g., '@')."
+                "@", "The character used to trigger a player mention (e.g., @player)."
         );
         public ConfigEntry<String> INDIVIDUAL_MENTION_MESSAGE = new ConfigEntry<>(
-                "§4%s §cmentioned you in chat!",
-                "The message sent to a player when they are individually mentioned. %s is the mentioner's name."
+                "&c%s mentioned you in chat!", "The message shown to a mentioned player. %s is the sender's name."
         );
         public ConfigEntry<String> EVERYONE_MENTION_MESSAGE = new ConfigEntry<>(
-                "§4%s §cmentioned everyone in chat!",
-                "The message sent to everyone when @everyone is used. %s is the mentioner's name."
+                "&c%s mentioned @everyone!", "The message shown when @everyone is mentioned."
         );
         public ConfigEntry<String> INDIVIDUAL_TITLE_MESSAGE = new ConfigEntry<>(
-                "§4%s §cmentioned you!",
-                "The title message shown to a player when they are individually mentioned. %s is the mentioner's name."
+                "&c%s mentioned you!", "The title message shown to a mentioned player."
         );
         public ConfigEntry<String> EVERYONE_TITLE_MESSAGE = new ConfigEntry<>(
-                "§4%s §cmentioned everyone!",
-                "The title message shown to everyone when @everyone is used. %s is the mentioner's name."
+                "&c%s mentioned @everyone!", "The title message shown when @everyone is mentioned."
         );
         public ConfigEntry<Integer> INDIVIDUAL_MENTION_RATE_LIMIT = new ConfigEntry<>(
-                30,
-                "The cooldown in seconds for individual player mentions."
+                30, "Cooldown in seconds before a player can be mentioned again."
         );
         public ConfigEntry<Integer> EVERYONE_MENTION_RATE_LIMIT = new ConfigEntry<>(
-                60,
-                "The cooldown in seconds for @everyone mentions."
+                60, "Cooldown in seconds before @everyone can be used again."
         );
         public ConfigEntry<Boolean> enableChatNotification = new ConfigEntry<>(
-                true,
-                "Enable or disable chat notifications for mentions."
+                true, "Enable or disable chat notifications for mentions."
         );
         public ConfigEntry<Boolean> enableTitleNotification = new ConfigEntry<>(
-                true,
-                "Enable or disable title notifications for mentions."
+                true, "Enable or disable title notifications for mentions."
         );
         public ConfigEntry<Boolean> enableSubtitleNotification = new ConfigEntry<>(
-                true,
-                "Enable or disable subtitle notifications for mentions."
+                true, "Enable or disable subtitle notifications for mentions."
         );
         public ConfigEntry<String> SENDER_FEEDBACK_PLAYER_MESSAGE = new ConfigEntry<>(
-                "You mentioned %s in chat.",
-                "Feedback message shown to the sender after mentioning players. %s is the list of mentioned player names."
+                "You mentioned %s in chat.", "Feedback message shown to the sender after mentioning players. %s is the list of mentioned player names."
         );
         public ConfigEntry<String> SENDER_FEEDBACK_EVERYONE_MESSAGE = new ConfigEntry<>(
-                "You mentioned everyone in chat.",
-                "Feedback message shown to the sender after using @everyone."
+                "You mentioned everyone in chat.", "Feedback message shown to the sender after using @everyone."
         );
         public ConfigEntry<String> CHAT_APPEND_PREFIX = new ConfigEntry<>(
-                "- ",
-                "Prefix used when appending the leftover message content in chat notifications (after a newline)."
+                "- ", "Prefix used when appending the leftover message content in chat notifications (after a newline)."
         );
     }
 
@@ -114,6 +101,7 @@ public class MentionConfigHandler {
                         if (result.hasIssues()) {
                             LOGGER.info("[Paradigm] Fixed JSON syntax issues in mentions.json: " + result.getIssuesSummary());
                             LOGGER.info("[Paradigm] Saving corrected version to preserve user values");
+
                             try (Writer writer = Files.newBufferedWriter(CONFIG_PATH, StandardCharsets.UTF_8)) {
                                 writer.write(result.getFixedJson());
                                 LOGGER.info("[Paradigm] Saved corrected mentions.json with preserved user values");

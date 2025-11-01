@@ -4,122 +4,146 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import eu.avalanche7.paradigm.Paradigm;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.CommandSourceStack;
+
 import eu.avalanche7.paradigm.configs.*;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.Announcements;
-import eu.avalanche7.paradigm.modules.Restart;
-import net.minecraft.command.CommandRegistryAccess;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.text.Text;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
+import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
-public class Reload implements ParadigmModule {
-    @Override public String getName() { return "Reload"; }
-    @Override public boolean isEnabled(Services services) { return true; }
-    @Override public void onLoad(Object e, Services s, Object b) {}
-    @Override public void onServerStarting(Object e, Services s) {}
-    @Override public void onEnable(Services s) {}
-    @Override public void onDisable(Services s) {}
-    @Override public void onServerStopping(Object e, Services s) {}
-    @Override public void registerEventListeners(Object bus, Services s) {}
+public class reload implements ParadigmModule {
+    private static final String NAME = "Reload";
+    private IPlatformAdapter platform;
 
     @Override
-    public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {
-        SuggestionProvider<ServerCommandSource> configSuggestions = (ctx, builder) -> {
-            List<String> options = List.of("main", "announcements", "chat", "motd", "mention", "restart", "customcommands", "all");
-            options.forEach(builder::suggest);
-            return builder.buildFuture();
-        };
-        dispatcher.register(CommandManager.literal("paradigm")
-                .then(CommandManager.literal("reload")
-                        .requires(src -> src.hasPermissionLevel(2))
-                        .then(CommandManager.argument("config", StringArgumentType.word()).suggests(configSuggestions)
-                                .executes(ctx -> {
-                                    Map<ParadigmModule, Boolean> prevEnabled = new HashMap<>();
-                                    for (var m : Paradigm.getModules()) {
-                                        try { prevEnabled.put(m, m.isEnabled(services)); } catch (Throwable ignored) { prevEnabled.put(m, false); }
-                                    }
+    public String getName() {
+        return NAME;
+    }
 
-                                    String cfg = StringArgumentType.getString(ctx, "config").toLowerCase(Locale.ROOT);
-                                    String msg;
-                                    boolean ok = true;
-                                    switch (cfg) {
-                                        case "main" -> { MainConfigHandler.load(); msg = "Main config reloaded."; }
-                                        case "announcements" -> { AnnouncementsConfigHandler.load(); rescheduleAnnouncements(); msg = "Announcements config reloaded and rescheduled."; }
-                                        case "chat" -> { ChatConfigHandler.load(); msg = "Chat config reloaded."; }
-                                        case "motd" -> { MainConfigHandler.load(); MOTDConfigHandler.loadConfig(); msg = "MOTD and main config reloaded."; }
-                                        case "mention" -> { MentionConfigHandler.load(); msg = "Mention config reloaded."; }
-                                        case "restart" -> { RestartConfigHandler.load(); rescheduleRestart(services); msg = "Restart config reloaded and rescheduled."; }
-                                        case "customcommands" -> {
-                                            services.getCmConfig().reloadCommands();
-                                            services.getPermissionsHandler().refreshCustomCommandPermissions();
-                                            msg = "Custom commands config reloaded. §e§lNote: Command changes require a server restart to take effect!";
-                                        }
-                                        case "all" -> {
-                                            MainConfigHandler.load();
-                                            AnnouncementsConfigHandler.load();
-                                            ChatConfigHandler.load();
-                                            MOTDConfigHandler.loadConfig();
-                                            MentionConfigHandler.load();
-                                            RestartConfigHandler.load();
-                                            services.getCmConfig().reloadCommands();
-                                            services.getPermissionsHandler().refreshCustomCommandPermissions();
-                                            rescheduleAnnouncements();
-                                            rescheduleRestart(services);
-                                            msg = "All configs reloaded; schedules refreshed. §e§lNote: Custom command changes require server restart!";
-                                        }
-                                        default -> { ok = false; msg = "Unknown config: " + cfg; }
-                                    }
-                                    if (ok) {
-                                        refreshModuleStates(services, prevEnabled);
-                                        ctx.getSource().sendFeedback(() -> Text.literal("§a" + msg), false);
-                                    }
-                                    else ctx.getSource().sendError(Text.literal(msg));
-                                    return ok ? 1 : 0;
-                                }))
+    @Override
+    public boolean isEnabled(Services services) {
+        return true;
+    }
+
+    @Override
+    public void onLoad(FMLCommonSetupEvent event, Services services, IEventBus modEventBus) {}
+
+    @Override public void onServerStarting(ServerStartingEvent event, Services services) {}
+    @Override public void onEnable(Services services) {}
+    @Override public void onDisable(Services services) {}
+    @Override public void onServerStopping(ServerStoppingEvent event, Services services) {}
+    @Override public void registerEventListeners(IEventBus forgeEventBus, Services services) {}
+
+    @Override
+    public void registerCommands(CommandDispatcher<?> dispatcher, Services services) {
+        this.platform = services.getPlatformAdapter();
+        @SuppressWarnings("unchecked")
+        CommandDispatcher<CommandSourceStack> dispatcherCS = (CommandDispatcher<CommandSourceStack>) dispatcher;
+
+        SuggestionProvider<CommandSourceStack> configSuggestions = (ctx, builder) -> {
+            List<String> options = List.of("main", "announcements", "chat", "motd", "mention", "restart", "customcommands", "all");
+            return SharedSuggestionProvider.suggest(options, builder);
+        };
+
+        dispatcherCS.register(
+            Commands.literal("paradigm")
+                .requires(source -> platform.hasCommandPermission(source, "paradigm.command.reload", 2))
+                .then(Commands.literal("reload")
+                    .then(Commands.argument("config", StringArgumentType.word())
+                        .suggests(configSuggestions)
+                        .executes(ctx -> {
+                            ICommandSource wrappedSource = platform.wrapCommandSource(ctx.getSource());
+                            return reloadConfig(wrappedSource, services, platform, StringArgumentType.getString(ctx, "config"));
+                        })
+                    )
                 )
         );
     }
 
-    private void rescheduleAnnouncements() {
-        for (var m : Paradigm.getModules()) {
-            if (m instanceof Announcements) {
-                ((Announcements) m).rescheduleAnnouncements();
-            }
+    private int reloadConfig(ICommandSource source, Services services, IPlatformAdapter platform, String configRaw) {
+        String config = configRaw.toLowerCase(Locale.ROOT);
+        boolean found = true;
+        StringBuilder result = new StringBuilder();
+        String color = "&a";
+        switch (config) {
+            case "main":
+                MainConfigHandler.load();
+                result.append("✔ &aMain config reloaded!");
+                break;
+            case "announcements":
+                AnnouncementsConfigHandler.load();
+                Paradigm.getModules().stream()
+                    .filter(m -> m instanceof eu.avalanche7.paradigm.modules.Announcements)
+                    .findFirst()
+                    .ifPresent(m -> ((eu.avalanche7.paradigm.modules.Announcements)m).rescheduleAnnouncements());
+                result.append("✔ &aAnnouncements config reloaded!");
+                break;
+            case "chat":
+                ChatConfigHandler.load();
+                result.append("✔ &aChat config reloaded!");
+                break;
+            case "motd":
+                MOTDConfigHandler.load();
+                result.append("✔ &aMOTD config reloaded!");
+                break;
+            case "mention":
+                MentionConfigHandler.load();
+                result.append("✔ &aMention config reloaded!");
+                break;
+            case "restart":
+                RestartConfigHandler.load();
+                Paradigm.getModules().stream()
+                    .filter(m -> m instanceof eu.avalanche7.paradigm.modules.Restart)
+                    .findFirst()
+                    .ifPresent(m -> ((eu.avalanche7.paradigm.modules.Restart)m).scheduleNextRestart());
+                result.append("✔ &aRestart config reloaded!");
+                break;
+            case "customcommands":
+                services.getCmConfig().reloadCommands();
+                services.getPermissionsHandler().refreshCustomCommandPermissions();
+                result.append("✔ &aCustom commands reloaded!");
+                break;
+            case "all":
+                MainConfigHandler.load();
+                AnnouncementsConfigHandler.load();
+                ChatConfigHandler.load();
+                MOTDConfigHandler.load();
+                MentionConfigHandler.load();
+                RestartConfigHandler.load();
+                Paradigm.getModules().stream()
+                    .filter(m -> m instanceof eu.avalanche7.paradigm.modules.Restart)
+                    .findFirst()
+                    .ifPresent(m -> ((eu.avalanche7.paradigm.modules.Restart)m).scheduleNextRestart());
+                services.getCmConfig().reloadCommands();
+                services.getPermissionsHandler().refreshCustomCommandPermissions();
+                Paradigm.getModules().stream()
+                    .filter(m -> m instanceof eu.avalanche7.paradigm.modules.Announcements)
+                    .findFirst()
+                    .ifPresent(m -> ((eu.avalanche7.paradigm.modules.Announcements)m).rescheduleAnnouncements());
+                result.append("✔ &aAll configs reloaded!");
+                break;
+            default:
+                found = false;
+                color = "&c";
+                result.append("✖ &cUnknown config: ").append(config).append("! Valid: main, announcements, chat, motd, mention, restart, customcommands, all");
         }
-    }
-
-    private void rescheduleRestart(Services services) {
-        for (var m : Paradigm.getModules()) {
-            if (m instanceof Restart) {
-                ((Restart) m).rescheduleNextRestart(services);
-            }
+        IComponent message = services.getMessageParser().parseMessage(color + result, null);
+        if (found) {
+            platform.sendSuccess(source, message, false);
+        } else {
+            platform.sendFailure(source, message);
         }
-    }
-
-    private void refreshModuleStates(Services services, Map<ParadigmModule, Boolean> prevEnabled) {
-        for (var m : Paradigm.getModules()) {
-            try {
-                boolean before = prevEnabled.getOrDefault(m, false);
-                boolean after;
-                try { after = m.isEnabled(services); } catch (Throwable t) { after = false; }
-
-                if (before && !after) {
-                    m.onDisable(services);
-                } else if (!before && after) {
-                    m.onEnable(services);
-                }
-            } catch (Throwable t) {
-                if (services != null && services.getLogger() != null) {
-                    services.getLogger().warn("Failed to refresh module {}: {}", m.getName(), t.toString());
-                }
-            }
-        }
+        return found ? 1 : 0;
     }
 }

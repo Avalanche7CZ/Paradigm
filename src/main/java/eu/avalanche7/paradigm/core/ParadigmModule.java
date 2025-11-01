@@ -1,25 +1,19 @@
 package eu.avalanche7.paradigm.core;
 
 import com.mojang.brigadier.CommandDispatcher;
-import net.minecraft.command.CommandRegistryAccess;
-import net.minecraft.server.command.ServerCommandSource;
+import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 
 public interface ParadigmModule {
     String getName();
-
-    boolean isEnabled(Services services);
-
-    void onLoad(Object event, Services services, Object modEventBus);
-
-    void onServerStarting(Object event, Services services);
-
+    void onLoad(FMLCommonSetupEvent event, Services services, IEventBus modEventBus);
+    void onServerStarting(ServerStartingEvent event, Services services);
     void onEnable(Services services);
-
     void onDisable(Services services);
-
-    void onServerStopping(Object event, Services services);
-
-    void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services);
-
-    void registerEventListeners(Object eventBus, Services services);
+    void onServerStopping(ServerStoppingEvent event, Services services);
+    void registerCommands(CommandDispatcher<?> dispatcher, Services services);
+    void registerEventListeners(IEventBus forgeEventBus, Services services);
+    boolean isEnabled(Services services);
 }

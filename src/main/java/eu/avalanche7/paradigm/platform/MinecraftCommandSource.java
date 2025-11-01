@@ -2,20 +2,24 @@ package eu.avalanche7.paradigm.platform;
 
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.server.level.ServerPlayer;
+import javax.annotation.Nullable;
 
+/**
+ * Minecraft implementation of ICommandSource
+ */
 public class MinecraftCommandSource implements ICommandSource {
-    private final ServerCommandSource source;
+    private final CommandSourceStack source;
     private final IPlayer player;
 
-    public MinecraftCommandSource(ServerCommandSource source) {
+    public MinecraftCommandSource(CommandSourceStack source) {
         this.source = source;
-        ServerPlayerEntity sp = source.getPlayer();
-        this.player = sp != null ? MinecraftPlayer.of(sp) : null;
+        this.player = source.getEntity() instanceof ServerPlayer sp ? MinecraftPlayer.of(sp) : null;
     }
 
     @Override
+    @Nullable
     public IPlayer getPlayer() {
         return player;
     }
@@ -30,7 +34,7 @@ public class MinecraftCommandSource implements ICommandSource {
 
     @Override
     public boolean hasPermissionLevel(int level) {
-        return source.hasPermissionLevel(level);
+        return source.hasPermission(level);
     }
 
     @Override
@@ -43,11 +47,11 @@ public class MinecraftCommandSource implements ICommandSource {
         return source;
     }
 
-    public ServerCommandSource getHandle() {
+    public CommandSourceStack getHandle() {
         return source;
     }
 
-    public static ICommandSource of(ServerCommandSource source) {
+    public static ICommandSource of(CommandSourceStack source) {
         return new MinecraftCommandSource(source);
     }
 }

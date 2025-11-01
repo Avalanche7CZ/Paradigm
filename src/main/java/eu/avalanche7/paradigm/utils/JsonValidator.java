@@ -174,7 +174,7 @@ public class JsonValidator {
         for (String line : lines) {
             String trimmed = line.trim();
             if (trimmed.matches("^\\s*[a-zA-Z_][a-zA-Z0-9_]*\\s*:.*") &&
-                    !trimmed.matches("^\\s*\".*\"\\s*:.*")) {
+                !trimmed.matches("^\\s*\".*\"\\s*:.*")) {
                 int colonIndex = trimmed.indexOf(':');
                 if (colonIndex > 0) {
                     String propertyName = trimmed.substring(0, colonIndex).trim();
@@ -238,7 +238,7 @@ public class JsonValidator {
             String trimmed = line.trim();
             String nextLine = (i + 1 < lines.length) ? lines[i + 1].trim() : "";
             if (trimmed.endsWith("\"") && !trimmed.contains(":") &&
-                    nextLine.startsWith("\"") && !nextLine.isEmpty() && !trimmed.endsWith("\",")) {
+                nextLine.startsWith("\"") && !nextLine.isEmpty() && !trimmed.endsWith("\",")) {
                 result.append(line).append(',').append('\n');
                 foundIssues = true;
             }

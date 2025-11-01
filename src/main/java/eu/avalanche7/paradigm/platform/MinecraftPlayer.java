@@ -1,18 +1,16 @@
 package eu.avalanche7.paradigm.platform;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import net.minecraft.server.network.ServerPlayerEntity;
-
-import java.util.UUID;
+import net.minecraft.server.level.ServerPlayer;
 
 public class MinecraftPlayer implements IPlayer {
-    private final ServerPlayerEntity player;
+    private final ServerPlayer player;
 
-    public MinecraftPlayer(ServerPlayerEntity player) {
+    public MinecraftPlayer(ServerPlayer player) {
         this.player = player;
     }
 
-    public ServerPlayerEntity getHandle() {
+    public ServerPlayer getHandle() {
         return player;
     }
 
@@ -22,16 +20,11 @@ public class MinecraftPlayer implements IPlayer {
     }
 
     @Override
-    public UUID getUUID() {
-        return player.getUuid();
+    public String getUUID() {
+        return player.getUUID().toString();
     }
 
-    @Override
-    public ServerPlayerEntity getOriginalPlayer() {
-        return player;
-    }
-
-    public static IPlayer of(ServerPlayerEntity player) {
+    public static IPlayer of(ServerPlayer player) {
         return new MinecraftPlayer(player);
     }
 }

@@ -1,112 +1,142 @@
 plugins {
-    id 'fabric-loom' version '1.7-SNAPSHOT'
+    id 'java-library'
     id 'maven-publish'
+    id 'idea'
+    id 'net.neoforged.moddev' version '2.0.116'
 }
 
-def getGitCommitHash = { ->
-    try {
-        def stdout = new ByteArrayOutputStream()
-        exec {
-            commandLine 'git', 'rev-parse', '--short', 'HEAD'
-            standardOutput = stdout
-        }
-        return stdout.toString().trim()
-    } catch (Exception e) {
-        return "unknown"
-    }
-}
 
 
 version = project.mod_version
 group = project.maven_group
 
+def archivesBaseName = project.hasProperty('archives_base_name') ? project.archives_base_name : (project.hasProperty('mod_id') ? project.mod_id : project.name)
+def modId = project.hasProperty('mod_id') ? project.mod_id : archivesBaseName
+
+def modName = project.hasProperty('mod_name') ? project.mod_name : archivesBaseName
+
 base {
-    archivesName = project.archives_base_name
+    archivesName = archivesBaseName
 }
 
 repositories {
+    mavenLocal()
+    maven { url "https://maven.neoforged.net/releases/" }
+    maven { url "https://maven.neoforged.net/" }
     maven { url "https://maven.shedaniel.me/" }
     maven { url "https://maven.terraformersmc.com/releases/" }
-    // Add Maven Central for better dependency resolution
     mavenCentral()
 }
 
-dependencies {
-    minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
-    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
-
-    compileOnly('net.luckperms:api:5.4')
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
 }
 
-loom {
-    // Configure Loom for better compatibility
+neoForge {
+    version = project.neo_version
+
+    parchment {
+        mappingsVersion = project.hasProperty('yarn_mappings') ? project.yarn_mappings : project.parchment_mappings_version
+        minecraftVersion = project.minecraft_version
+    }
+
     runs {
+        client {
+            client()
+            systemProperty 'neoforge.enabledGameTestNamespaces', archivesBaseName
+        }
+
         server {
-            runDir = "run"
+            server()
+            programArgument '--nogui'
+            systemProperty 'neoforge.enabledGameTestNamespaces', archivesBaseName
+        }
+
+        gameTestServer {
+            type = "gameTestServer"
+            systemProperty 'neoforge.enabledGameTestNamespaces', archivesBaseName
+        }
+
+        data {
+            data()
+            programArguments.addAll '--mod', archivesBaseName, '--all', '--output', file('src/generated/resources/').getAbsolutePath(), '--existing', file('src/main/resources/').getAbsolutePath()
+        }
+
+        configureEach {
+            systemProperty 'forge.logging.markers', 'REGISTRIES'
+            logLevel = org.slf4j.event.Level.DEBUG
+        }
+    }
+
+    mods {
+        "${archivesBaseName}" {
+            sourceSet(sourceSets.main)
         }
     }
 }
 
-processResources {
-    inputs.property "version", project.version
-    inputs.property "minecraft_version", project.minecraft_version
-    inputs.property "loader_version", project.loader_version
-    filteringCharset "UTF-8"
-
-    filesMatching("fabric.mod.json") {
-        expand "version": project.version,
-                "minecraft_version": project.minecraft_version,
-                "loader_version": project.loader_version
-    }
+sourceSets.main.resources {
+    srcDir 'src/generated/resources'
 }
 
-def targetJavaVersion = 21
-tasks.withType(JavaCompile).configureEach {
-    it.options.encoding = "UTF-8"
-    // Ensure compatibility across versions
-    it.options.compilerArgs.addAll(['-Xlint:deprecation', '-Xlint:unchecked'])
-    if (targetJavaVersion >= 17 || JavaVersion.current().isJava10Compatible()) {
-        it.options.release.set(targetJavaVersion)
-    }
-}
-
-java {
-    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
-    if (JavaVersion.current() < javaVersion) {
-        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
-    }
-    withSourcesJar()
+dependencies {
+    compileOnly 'net.luckperms:api:5.4'
 }
 
 jar {
-    from("LICENSE") {
-        rename { "${it}_${project.archivesBaseName}"}
-    }
 
-    // Add manifest attributes for better mod identification
     manifest {
         attributes([
             "Specification-Title": "Paradigm",
             "Specification-Vendor": "Avalanche7CZ",
             "Specification-Version": project.version,
             "Implementation-Title": project.name,
-            "Implementation-Version": "${project.mod_version}-${getGitCommitHash()}",
+            "Implementation-Version": "${project.mod_version}",
             "Implementation-Vendor": "Avalanche7CZ",
             "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
         ])
     }
 }
 
+var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
+    var replaceProperties = [
+            minecraft_version      : project.minecraft_version,
+            minecraft_version_range: project.hasProperty('minecraft_version_range') ? project.minecraft_version_range : project.minecraft_version,
+            neo_version            : project.hasProperty('neo_version') ? project.neo_version : project.minecraft_version,
+            neo_version_range      : project.hasProperty('neo_version_range') ? project.neo_version_range : project.minecraft_version,
+            loader_version_range   : project.hasProperty('loader_version_range') ? project.loader_version_range : "",
+            mod_id                 : modId,
+            mod_name               : modName,
+            mod_license            : project.hasProperty('mod_license') ? project.mod_license : "MIT",
+            mod_version            : project.mod_version,
+            mod_authors            : project.hasProperty('mod_authors') ? project.mod_authors : "",
+            mod_description        : project.hasProperty('mod_description') ? project.mod_description : ""
+    ]
+    inputs.properties replaceProperties
+    expand replaceProperties
+    from "src/main/templates"
+    into "build/generated/sources/modMetadata"
+}
+
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata
+
 publishing {
     publications {
-        create("mavenJava", MavenPublication) {
-            artifactId = project.archives_base_name
+        register('mavenJava', MavenPublication) {
             from components.java
         }
     }
-
     repositories {
+        maven {
+            url "file://${project.projectDir}/repo"
+        }
+    }
+}
+
+idea {
+    module {
+        downloadSources = true
+        downloadJavadoc = true
     }
 }

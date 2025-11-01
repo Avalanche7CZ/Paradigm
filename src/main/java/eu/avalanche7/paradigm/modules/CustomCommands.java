@@ -16,17 +16,17 @@ import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.SharedSuggestionProvider;
-import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
+import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 
 import java.util.List;
 
-public class CommandManager implements ParadigmModule {
+public class CustomCommands implements ParadigmModule {
 
     private static final String NAME = "CustomCommands";
     private Services services;
@@ -48,7 +48,6 @@ public class CommandManager implements ParadigmModule {
         this.platform = services.getPlatformAdapter();
         services.getDebugLogger().debugLog(NAME + " module loaded.");
         services.getCmConfig().loadCommands();
-        services.getPermissionsHandler().refreshCustomCommandPermissions();
     }
 
     @Override
@@ -64,50 +63,43 @@ public class CommandManager implements ParadigmModule {
     public void onServerStopping(ServerStoppingEvent event, Services services) {}
 
     @Override
-    @SuppressWarnings("unchecked")
     public void registerCommands(CommandDispatcher<?> dispatcher, Services services) {
-        CommandDispatcher<CommandSourceStack> d = (CommandDispatcher<CommandSourceStack>) dispatcher;
+        CommandDispatcher<CommandSourceStack> dispatcherCS = (CommandDispatcher<CommandSourceStack>) dispatcher;
 
         services.getCmConfig().getLoadedCommands().forEach(command -> {
-            if (d.getRoot().getChild(command.getName()) != null) {
-                services.getDebugLogger().debugLog(NAME + ": Skipping registration of custom command '" + command.getName() + "' because it conflicts with an existing command.");
-                return;
-            }
-
             LiteralArgumentBuilder<CommandSourceStack> commandBuilder = Commands.literal(command.getName())
                     .requires(source -> platform.hasPermissionForCustomCommand(source, command));
 
             if (command.getArguments().isEmpty()) {
                 commandBuilder = commandBuilder
                         .executes(ctx -> {
-                            ICommandSource src = platform.wrapCommandSource(ctx.getSource());
-                            executeCustomCommand(src, command, new String[0]);
+                            ICommandSource source = platform.wrapCommandSource(ctx.getSource());
+                            executeCustomCommand(source, command, new String[0]);
                             return 1;
                         })
                         .then(Commands.argument("args", StringArgumentType.greedyString())
                                 .executes(ctx -> {
                                     String rawArgs = StringArgumentType.getString(ctx, "args");
                                     String[] argsTokens = tokenizeArgs(rawArgs);
-                                    ICommandSource src = platform.wrapCommandSource(ctx.getSource());
-                                    executeCustomCommand(src, command, argsTokens);
+                                    ICommandSource source = platform.wrapCommandSource(ctx.getSource());
+                                    executeCustomCommand(source, command, argsTokens);
                                     return 1;
                                 }));
             } else {
                 commandBuilder = buildTypedCommand(commandBuilder, command, 0);
             }
 
-            d.register(commandBuilder);
+            dispatcherCS.register(commandBuilder);
         });
 
-        d.register(
+        dispatcherCS.register(
                 Commands.literal("customcommandsreload")
                         .requires(source -> source.hasPermission(2))
                         .executes(ctx -> {
                             services.getCmConfig().reloadCommands();
-                            services.getPermissionsHandler().refreshCustomCommandPermissions();
                             IComponent message = services.getMessageParser().parseMessage("&aReloaded custom commands from config.", null);
-                            ICommandSource src = platform.wrapCommandSource(ctx.getSource());
-                            platform.sendSuccess(src, message, false);
+                            ICommandSource source = platform.wrapCommandSource(ctx.getSource());
+                            platform.sendSuccess(source, message, false);
                             return 1;
                         })
         );
@@ -115,39 +107,51 @@ public class CommandManager implements ParadigmModule {
 
     private LiteralArgumentBuilder<CommandSourceStack> buildTypedCommand(LiteralArgumentBuilder<CommandSourceStack> builder, CustomCommand command, int argIndex) {
         List<CustomCommand.ArgumentDefinition> args = command.getArguments();
+
         if (argIndex >= args.size()) {
             return builder.executes(ctx -> executeTypedCommand(ctx, command, args));
         }
+
         CustomCommand.ArgumentDefinition argDef = args.get(argIndex);
         RequiredArgumentBuilder<CommandSourceStack, ?> argBuilder = createArgumentBuilder(argDef);
+
         argBuilder = argBuilder.suggests(createSuggestionProvider(argDef));
+
         if (!argDef.isRequired()) {
             builder = builder.executes(ctx -> executeTypedCommand(ctx, command, args));
         }
+
         if (argIndex == args.size() - 1) {
             argBuilder = argBuilder.executes(ctx -> executeTypedCommand(ctx, command, args));
         } else {
             argBuilder = argBuilder.then(buildNextArgument(command, argIndex + 1));
         }
+
         return builder.then(argBuilder);
     }
 
     private RequiredArgumentBuilder<CommandSourceStack, ?> buildNextArgument(CustomCommand command, int argIndex) {
         List<CustomCommand.ArgumentDefinition> args = command.getArguments();
+
         if (argIndex >= args.size()) {
             return Commands.argument("dummy", StringArgumentType.string());
         }
+
         CustomCommand.ArgumentDefinition argDef = args.get(argIndex);
         RequiredArgumentBuilder<CommandSourceStack, ?> argBuilder = createArgumentBuilder(argDef);
+
         argBuilder = argBuilder.suggests(createSuggestionProvider(argDef));
+
         if (!argDef.isRequired()) {
             argBuilder = argBuilder.executes(ctx -> executeTypedCommand(ctx, command, args));
         }
+
         if (argIndex == args.size() - 1) {
             argBuilder = argBuilder.executes(ctx -> executeTypedCommand(ctx, command, args));
         } else {
             argBuilder = argBuilder.then(buildNextArgument(command, argIndex + 1));
         }
+
         return argBuilder;
     }
 
@@ -194,23 +198,23 @@ public class CommandManager implements ParadigmModule {
 
     private int executeTypedCommand(CommandContext<CommandSourceStack> ctx, CustomCommand command, List<CustomCommand.ArgumentDefinition> argDefs) {
         ICommandSource source = platform.wrapCommandSource(ctx.getSource());
+
         String[] validatedArgs = new String[argDefs.size()];
         for (int i = 0; i < argDefs.size(); i++) {
             CustomCommand.ArgumentDefinition argDef = argDefs.get(i);
             try {
                 Object value = getArgumentValue(ctx, argDef);
                 if (value == null && argDef.isRequired()) {
-                    IPlayer p = source.getPlayer();
-                    platform.sendFailure(source, services.getMessageParser().parseMessage(argDef.getErrorMessage(), p));
+                    platform.sendFailure(source, services.getMessageParser().parseMessage(argDef.getErrorMessage(), source.getPlayer()));
                     return 0;
                 }
                 validatedArgs[i] = value != null ? value.toString() : "";
             } catch (Exception e) {
-                IPlayer p = source.getPlayer();
-                platform.sendFailure(source, services.getMessageParser().parseMessage(argDef.getErrorMessage(), p));
+                platform.sendFailure(source, services.getMessageParser().parseMessage(argDef.getErrorMessage(), source.getPlayer()));
                 return 0;
             }
         }
+
         executeCustomCommand(source, command, validatedArgs);
         return 1;
     }
@@ -237,14 +241,6 @@ public class CommandManager implements ParadigmModule {
 
     private void executeCustomCommand(ICommandSource source, CustomCommand command, String[] argsTokens) {
         IPlayer player = source.getPlayer();
-
-        if (command.isRequirePermission()) {
-            if (player != null && !platform.hasPermission(player, command.getPermission())) {
-                platform.sendFailure(source, services.getMessageParser().parseMessage(command.getPermissionErrorMessage(), player));
-                return;
-            }
-        }
-
         CustomCommand.AreaRestriction area = command.getAreaRestriction();
         if (area != null) {
             if (player == null) {
@@ -261,9 +257,11 @@ public class CommandManager implements ParadigmModule {
             long lastUsage = services.getCooldownConfigHandler().getLastUsage(java.util.UUID.fromString(player.getUUID()), command.getName());
             long cooldownMillis = command.getCooldownSeconds() * 1000L;
             long currentTime = System.currentTimeMillis();
+
             if (currentTime < lastUsage + cooldownMillis) {
                 long remainingMillis = (lastUsage + cooldownMillis) - currentTime;
                 long remainingSeconds = (remainingMillis / 1000) + (remainingMillis % 1000 > 0 ? 1 : 0);
+
                 String cooldownMessage = command.getCooldownMessage();
                 if (cooldownMessage == null || cooldownMessage.isEmpty()) {
                     cooldownMessage = "&cThis command is on cooldown! Please wait &e{remaining_time} &cseconds.";
@@ -285,15 +283,14 @@ public class CommandManager implements ParadigmModule {
     }
 
     private void executeActions(ICommandSource source, List<CustomCommand.Action> actions, IPlayer player, String[] argsTokens, String rawArgs) {
-        if (actions == null) return;
         for (CustomCommand.Action action : actions) {
             switch (action.getType()) {
                 case "message":
                     if (action.getText() != null) {
                         for (String line : action.getText()) {
                             String expandedLine = expandCommand(line, player, argsTokens, rawArgs);
-                            IComponent formatted = services.getMessageParser().parseMessage(expandedLine, player);
-                            platform.sendSuccess(source, formatted, false);
+                            IComponent formattedMessage = services.getMessageParser().parseMessage(expandedLine, player);
+                            platform.sendSuccess(source, formattedMessage, false);
                         }
                     }
                     break;
@@ -338,9 +335,11 @@ public class CommandManager implements ParadigmModule {
 
     private String expandCommand(String cmd, IPlayer player, String[] argsTokens, String rawArgs) {
         String out = platform.replacePlaceholders(cmd, player);
+
         if (out.contains("$*")) {
             out = out.replace("$*", rawArgs == null ? "" : rawArgs);
         }
+
         for (int i = 0; i < argsTokens.length; i++) {
             String token = "$" + (i + 1);
             if (out.contains(token)) {
@@ -351,12 +350,13 @@ public class CommandManager implements ParadigmModule {
                 out = out.replace(token, argValue);
             }
         }
+
         out = out.replaceAll("\\$(?:[1-9][0-9]*)", "");
         return out.trim();
     }
 
     private boolean checkAllConditions(ICommandSource source, List<CustomCommand.Condition> conditions, IPlayer player) {
-        if (conditions == null || conditions.isEmpty()) {
+        if (conditions.isEmpty()) {
             return true;
         }
         for (CustomCommand.Condition condition : conditions) {
@@ -369,6 +369,7 @@ public class CommandManager implements ParadigmModule {
 
     private boolean checkCondition(ICommandSource source, CustomCommand.Condition condition, IPlayer player) {
         boolean result = false;
+
         if (player == null) {
             switch (condition.getType()) {
                 case "has_permission":
@@ -378,6 +379,7 @@ public class CommandManager implements ParadigmModule {
                     return false;
             }
         }
+
         switch (condition.getType()) {
             case "has_permission":
                 if (player != null && condition.getValue() != null) {

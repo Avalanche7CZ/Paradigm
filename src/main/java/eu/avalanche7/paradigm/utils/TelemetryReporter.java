@@ -3,12 +3,13 @@ package eu.avalanche7.paradigm.utils;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
+import eu.avalanche7.paradigm.Paradigm;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.fabricmc.loader.api.FabricLoader;
+import net.neoforged.fml.ModList;
 
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -31,12 +32,12 @@ public class TelemetryReporter {
     }
 
     public void start() {
-        if (!MainConfigHandler.CONFIG.telemetryEnable.value) return;
-        if (MainConfigHandler.CONFIG.telemetryServerId.value == null || MainConfigHandler.CONFIG.telemetryServerId.value.isBlank()) {
+        if (!MainConfigHandler.CONFIG.telemetryEnable.get()) return;
+        if (MainConfigHandler.CONFIG.telemetryServerId.get() == null || MainConfigHandler.CONFIG.telemetryServerId.get().isBlank()) {
             MainConfigHandler.CONFIG.telemetryServerId.value = UUID.randomUUID().toString();
             MainConfigHandler.save();
         }
-        int interval = Math.max(60, MainConfigHandler.CONFIG.telemetryIntervalSeconds.value == null ? 900 : MainConfigHandler.CONFIG.telemetryIntervalSeconds.value);
+        int interval = Math.max(60, MainConfigHandler.CONFIG.telemetryIntervalSeconds.get() == null ? 900 : MainConfigHandler.CONFIG.telemetryIntervalSeconds.get());
         active = true;
         services.getTaskScheduler().scheduleAtFixedRate(this::reportOnceSafe, 10, interval, TimeUnit.SECONDS);
     }
@@ -56,20 +57,21 @@ public class TelemetryReporter {
 
     private void reportOnce() throws Exception {
         IPlatformAdapter platform = services.getPlatformAdapter();
-        List<ServerPlayerEntity> players = platform.getOnlinePlayers();
+        List<IPlayer> players = platform.getOnlinePlayers();
         int online = players != null ? players.size() : 0;
         int maxPlayers = 0;
         Object srvObj = platform.getMinecraftServer();
         if (srvObj instanceof MinecraftServer ms) {
-            maxPlayers = ms.getPlayerManager().getMaxPlayerCount();
+            maxPlayers = ms.getMaxPlayers();
         }
-        String mcVersion = platform.getMinecraftVersion();
-        String modVersion = FabricLoader.getInstance().getModContainer("paradigm")
-                .map(c -> c.getMetadata().getVersion().getFriendlyString())
+        String mcVersion = Paradigm.UpdateChecker.getMinecraftVersionSafe();
+        if (mcVersion == null || mcVersion.isBlank()) mcVersion = "unknown";
+        String modVersion = ModList.get().getModContainerById("paradigm")
+                .map(c -> c.getModInfo().getVersion().toString())
                 .orElse("unknown");
         JsonObject payload = new JsonObject();
         payload.addProperty("timestamp", Instant.now().toString());
-        payload.addProperty("serverId", MainConfigHandler.CONFIG.telemetryServerId.value);
+        payload.addProperty("serverId", MainConfigHandler.CONFIG.telemetryServerId.get());
         payload.addProperty("mcVersion", mcVersion);
         payload.addProperty("modVersion", modVersion);
         payload.addProperty("onlinePlayers", online);

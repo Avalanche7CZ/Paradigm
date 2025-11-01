@@ -5,137 +5,103 @@ import com.google.gson.GsonBuilder;
 import eu.avalanche7.paradigm.Paradigm;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 import eu.avalanche7.paradigm.utils.JsonValidator;
-import net.fabricmc.loader.api.FabricLoader;
+import net.neoforged.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 public class RestartConfigHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Paradigm.MOD_ID);
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
-    private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("paradigm/restarts.json");
-    public static volatile Config CONFIG = null;
+    private static final Path CONFIG_PATH = FMLPaths.CONFIGDIR.get().resolve("paradigm/restart.json");
+    public static Config CONFIG = new Config();
     private static JsonValidator jsonValidator;
-    private static volatile boolean isLoaded = false;
 
     public static void setJsonValidator(DebugLogger debugLogger) {
         jsonValidator = new JsonValidator(debugLogger);
     }
 
-    public static Config getConfig() {
-        if (!isLoaded || CONFIG == null) {
-            synchronized (RestartConfigHandler.class) {
-                if (!isLoaded || CONFIG == null) {
-                    load();
-                }
-            }
-        }
-        return CONFIG;
+    public static class PreRestartCommand {
+        public int secondsBefore;
+        public String command;
     }
 
     public static class Config {
         public ConfigEntry<String> restartType = new ConfigEntry<>(
                 "Realtime",
-                "The method for scheduling restarts. Use \"Fixed\" for intervals or \"Realtime\" for specific times of day."
+                "The method for scheduling restarts. Use \"Fixed\" for intervals, \"Realtime\" for specific times, or \"None\"."
         );
-
         public ConfigEntry<Double> restartInterval = new ConfigEntry<>(
                 6.0,
                 "If restartType is \"Fixed\", this is the interval in hours between restarts."
         );
-
         public ConfigEntry<List<String>> realTimeInterval = new ConfigEntry<>(
                 Arrays.asList("00:00", "06:00", "12:00", "18:00"),
-                "If restartType is \"Realtime\", this is a list of times (in HH:mm format) to restart the server."
+                "If restartType is \"Realtime\", this is a list of times (in HH:mm 24-hour format) to restart the server."
         );
-
         public ConfigEntry<Boolean> bossbarEnabled = new ConfigEntry<>(
                 true,
-                "Enable or disable the boss bar warning for restarts."
+                "Enable a boss bar for the restart countdown."
         );
-
         public ConfigEntry<String> bossBarMessage = new ConfigEntry<>(
                 "&cThe server will be restarting in {minutes}:{seconds}",
-                "The message to display in the boss bar. Placeholders: {hours}, {minutes}, {seconds}, {time}."
+                "Message for the boss bar. Placeholders: {hours}, {minutes}, {seconds}, {time}."
         );
-
         public ConfigEntry<Boolean> timerUseChat = new ConfigEntry<>(
                 true,
-                "Enable or disable sending restart warnings to the chat."
+                "Broadcast restart warnings in chat."
         );
-
         public ConfigEntry<String> BroadcastMessage = new ConfigEntry<>(
                 "&cThe server will be restarting in &e{time}",
-                "The message to broadcast in chat. Placeholders: {hours}, {minutes}, {seconds}, {time}."
+                "Custom message for chat warnings. Placeholders: {hours}, {minutes}, {seconds}, {time}."
         );
-
         public ConfigEntry<List<Integer>> timerBroadcast = new ConfigEntry<>(
                 Arrays.asList(3600, 1800, 600, 300, 120, 60, 30, 10, 5, 4, 3, 2, 1),
                 "A list of times in seconds before a restart to broadcast a warning."
         );
-
         public ConfigEntry<String> defaultRestartReason = new ConfigEntry<>(
                 "&6The server is restarting!",
-                "The default kick message shown to players when the server restarts."
+                "The kick message shown to players when the server restarts."
         );
-
         public ConfigEntry<Boolean> playSoundEnabled = new ConfigEntry<>(
                 true,
-                "Enable or disable playing a sound effect for restart warnings."
+                "Enable notification sounds for restart warnings."
         );
-
+        public ConfigEntry<String> playSoundString = new ConfigEntry<>(
+                "minecraft:block.note_block.pling",
+                "The sound event ID to play for warnings (e.g., 'minecraft:entity.player.levelup')."
+        );
         public ConfigEntry<Double> playSoundFirstTime = new ConfigEntry<>(
                 60.0,
-                "The time in seconds before a restart at which to start playing warning sounds."
+                "Time in seconds before restart to begin playing warning sounds."
         );
-
         public ConfigEntry<Boolean> titleEnabled = new ConfigEntry<>(
                 true,
-                "Enable or disable the on-screen title warning for restarts."
+                "Enable title messages for restart warnings."
         );
-
         public ConfigEntry<Integer> titleStayTime = new ConfigEntry<>(
                 2,
-                "How long the title warning should stay on screen, in seconds."
+                "Duration in seconds for the title message to stay on screen."
         );
-
         public ConfigEntry<String> titleMessage = new ConfigEntry<>(
                 "&cRestarting in {minutes}:{seconds}",
-                "The message to display as a title. Placeholders: {hours}, {minutes}, {seconds}, {time}."
+                "Message for the title warning. Use '\\n' for a subtitle."
         );
-
         public ConfigEntry<List<PreRestartCommand>> preRestartCommands = new ConfigEntry<>(
-                Arrays.asList(
-                        new PreRestartCommand(30, "broadcast &e[Paradigm] Restarting in 30 seconds..."),
-                        new PreRestartCommand(10, "[asPlayer] tell {player_name} &cServer restarting in {seconds}s")
-                ),
-                "Commands to run seconds before the restart. Each item has 'secondsBefore' and 'command'. Use [asPlayer], asplayer:, or each: at the start to run the command once per online player as that player (with per-player placeholders). Without a marker, the command runs as console."
+                Collections.emptyList(),
+                "Optional commands to run before restart. Each entry has 'secondsBefore' and 'command'. Prefix with 'each:' or 'asplayer:' or '[asPlayer]' to execute once per online player; otherwise runs as console. Placeholders supported."
         );
-    }
-
-    public static class PreRestartCommand {
-        public int secondsBefore;
-        public String command;
-
-        public PreRestartCommand() {
-            this.secondsBefore = 5;
-            this.command = "broadcast &e[Paradigm] Restarting soon...";
-        }
-
-        public PreRestartCommand(int secondsBefore, String command) {
-            this.secondsBefore = secondsBefore;
-            this.command = command;
-        }
     }
 
     public static void load() {
@@ -154,11 +120,12 @@ public class RestartConfigHandler {
                     JsonValidator.ValidationResult result = jsonValidator.validateAndFix(content.toString());
                     if (result.isValid()) {
                         if (result.hasIssues()) {
-                            LOGGER.info("[Paradigm] Fixed JSON syntax issues in restarts.json: " + result.getIssuesSummary());
+                            LOGGER.info("[Paradigm] Fixed JSON syntax issues in restart.json: " + result.getIssuesSummary());
                             LOGGER.info("[Paradigm] Saving corrected version to preserve user values");
+                            Files.createDirectories(CONFIG_PATH.getParent());
                             try (Writer writer = Files.newBufferedWriter(CONFIG_PATH, StandardCharsets.UTF_8)) {
                                 writer.write(result.getFixedJson());
-                                LOGGER.info("[Paradigm] Saved corrected restarts.json with preserved user values");
+                                LOGGER.info("[Paradigm] Saved corrected restart.json with preserved user values");
                             } catch (IOException saveError) {
                                 LOGGER.warn("[Paradigm] Failed to save corrected file: " + saveError.getMessage());
                             }
@@ -167,11 +134,11 @@ public class RestartConfigHandler {
                         Config loadedConfig = GSON.fromJson(result.getFixedJson(), Config.class);
                         if (loadedConfig != null) {
                             mergeConfigs(defaultConfig, loadedConfig);
-                            LOGGER.info("[Paradigm] Successfully loaded restarts.json configuration");
+                            LOGGER.info("[Paradigm] Successfully loaded restart.json configuration");
                             shouldSaveMerged = true;
                         }
                     } else {
-                        LOGGER.warn("[Paradigm] Critical JSON syntax errors in restarts.json: " + result.getMessage());
+                        LOGGER.warn("[Paradigm] Critical JSON syntax errors in restart.json: " + result.getMessage());
                         LOGGER.warn("[Paradigm] Please fix the JSON syntax manually. Using default values for this session.");
                         LOGGER.warn("[Paradigm] Your file has NOT been modified - fix the syntax and restart the server.");
                     }
@@ -183,26 +150,25 @@ public class RestartConfigHandler {
                     }
                 }
             } catch (Exception e) {
-                LOGGER.warn("[Paradigm] Could not parse restarts.json, using defaults for this session.", e);
-                LOGGER.warn("[Paradigm] Your file has NOT been modified. Please check the file manually.");
+                LOGGER.warn("[Paradigm] Could not parse restart.json, using defaults and regenerating file.", e);
             }
         } else {
-            LOGGER.info("[Paradigm] restarts.json not found, generating with default values.");
-            CONFIG = defaultConfig;
-            save();
-            LOGGER.info("[Paradigm] Generated new restarts.json with default values.");
+            LOGGER.info("[Paradigm] restart.json not found, generating with default values.");
         }
 
         CONFIG = defaultConfig;
-        if (shouldSaveMerged) {
+
+        if (!Files.exists(CONFIG_PATH)) {
+            save();
+            LOGGER.info("[Paradigm] Generated new restart.json with default values.");
+        } else if (shouldSaveMerged) {
             try {
                 save();
-                LOGGER.info("[Paradigm] Synchronized restarts.json with new defaults while preserving user values.");
+                LOGGER.info("[Paradigm] Synchronized restart.json with new defaults while preserving user values.");
             } catch (Exception e) {
-                LOGGER.warn("[Paradigm] Failed to write merged restarts.json: " + e.getMessage());
+                LOGGER.warn("[Paradigm] Failed to write merged restart.json: " + e.getMessage());
             }
         }
-        isLoaded = true;
     }
 
     @SuppressWarnings("unchecked")

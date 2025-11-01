@@ -350,15 +350,8 @@ public class WebEditorSocket {
                         try {
                             if (this.owner != null) {
                                 String cmd = "/paradigm editor trust " + (nonce == null ? "nonce" : nonce);
-                                IComponent clickable = services.getPlatformAdapter().createComponentFromLiteral("Click to trust this editor (" + (browser == null ? "unknown" : browser) + ")").onClickRunCommand(cmd).onHoverText("Run " + cmd);
-                                try {
-                                    Object orig = this.owner.getOriginalSource();
-                                    if (orig instanceof net.minecraft.server.command.ServerCommandSource scs) {
-                                        services.getPlatformAdapter().sendSuccess(scs, clickable.getOriginalText(), false);
-                                    } else {
-                                        services.getLogger().info("Paradigm WebEditor: owner original source is not a ServerCommandSource for owner={}", this.owner.getSourceName());
-                                    }
-                                } catch (Throwable ignored) {}
+                                IComponent clickable = services.getPlatformAdapter().createLiteralComponent("Click to trust this editor (" + (browser == null ? "unknown" : browser) + ")").onClickRunCommand(cmd).onHoverText("Run " + cmd);
+                                services.getPlatformAdapter().sendSuccess(this.owner, clickable, false);
                             }
                         } catch (Throwable ignored) {}
                         try {
@@ -385,13 +378,7 @@ public class WebEditorSocket {
                     try {
                         if (this.owner != null && !reconnected) {
                             String msgTxt = "Web Editor socket connected.";
-                            IComponent comp = services.getPlatformAdapter().createComponentFromLiteral(msgTxt);
-                            try {
-                                Object orig = this.owner.getOriginalSource();
-                                if (orig instanceof net.minecraft.server.command.ServerCommandSource scs) {
-                                    services.getPlatformAdapter().sendSuccess(scs, comp.getOriginalText(), false);
-                                }
-                            } catch (Throwable ignored) {}
+                            services.getPlatformAdapter().sendSuccess(this.owner, services.getPlatformAdapter().createLiteralComponent(msgTxt), false);
                         }
                     } catch (Throwable ignored) {}
                 } catch (Exception e) {

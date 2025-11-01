@@ -34,6 +34,8 @@ import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.webeditor.socket.BytesocksClient;
 import eu.avalanche7.paradigm.webeditor.socket.WebEditorSocket;
+import net.neoforged.fml.ModList;
+import net.neoforged.fml.loading.FMLPaths;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
@@ -276,26 +278,22 @@ public class WebEditorSession {
         meta.addProperty("plugin", "Paradigm");
         String version = "unknown";
         try {
-            try {
-                version = net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer(Paradigm.MOD_ID)
-                        .map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("unknown");
-            } catch (Throwable ignored) {
-                version = "unknown";
-            }
-         } catch (Throwable ignored) {}
-         meta.addProperty("version", version);
-         root.add("metadata", meta);
+            version = ModList.get().getModContainerById(Paradigm.MOD_ID)
+                    .map(mc -> mc.getModInfo().getVersion().toString()).orElse("unknown");
+        } catch (Throwable ignored) {}
+        meta.addProperty("version", version);
+        root.add("metadata", meta);
 
-         JsonObject files = new JsonObject();
-         files.add("main", new com.google.gson.Gson().toJsonTree(MainConfigHandler.CONFIG));
-         files.add("announcements", new com.google.gson.Gson().toJsonTree(AnnouncementsConfigHandler.CONFIG));
-         files.add("chat", new com.google.gson.Gson().toJsonTree(ChatConfigHandler.CONFIG));
-         files.add("motd", new com.google.gson.Gson().toJsonTree(MOTDConfigHandler.getConfig()));
-         files.add("mentions", new com.google.gson.Gson().toJsonTree(MentionConfigHandler.CONFIG));
-         files.add("restart", new com.google.gson.Gson().toJsonTree(RestartConfigHandler.CONFIG));
+        JsonObject files = new JsonObject();
+        files.add("main", new com.google.gson.Gson().toJsonTree(MainConfigHandler.CONFIG));
+        files.add("announcements", new com.google.gson.Gson().toJsonTree(AnnouncementsConfigHandler.CONFIG));
+        files.add("chat", new com.google.gson.Gson().toJsonTree(ChatConfigHandler.CONFIG));
+        files.add("motd", new com.google.gson.Gson().toJsonTree(MOTDConfigHandler.CONFIG));
+        files.add("mentions", new com.google.gson.Gson().toJsonTree(MentionConfigHandler.CONFIG));
+        files.add("restart", new com.google.gson.Gson().toJsonTree(RestartConfigHandler.CONFIG));
 
-         try {
-            java.nio.file.Path cfgDir = net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir().resolve("paradigm");
+        try {
+            java.nio.file.Path cfgDir = FMLPaths.GAMEDIR.get().resolve("config").resolve("paradigm");
             if (java.nio.file.Files.isDirectory(cfgDir)) {
                 try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.list(cfgDir)) {
                     stream.filter(java.nio.file.Files::isRegularFile)
@@ -318,44 +316,46 @@ public class WebEditorSession {
                           });
                 }
             }
-         } catch (Throwable ignored) {}
-         try {
-            java.nio.file.Path commandsDir = net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir().resolve("paradigm").resolve("commands");
-             JsonObject ccRoot = new JsonObject();
-             JsonObject ccFiles = new JsonObject();
-             JsonArray ccAll = new JsonArray();
-             if (java.nio.file.Files.isDirectory(commandsDir)) {
-                 try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.list(commandsDir)) {
-                     stream.filter(java.nio.file.Files::isRegularFile)
-                             .filter(p -> p.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".json"))
-                             .sorted()
-                             .forEach(p -> {
-                                 String name = p.getFileName().toString();
-                                 String base = name.substring(0, name.length() - 5);
-                                 try {
-                                     String content = java.nio.file.Files.readString(p, java.nio.charset.StandardCharsets.UTF_8);
-                                     com.google.gson.JsonElement parsed = com.google.gson.JsonParser.parseString(content);
-                                     if (parsed != null && parsed.isJsonArray()) {
-                                         ccFiles.add(base, parsed);
-                                         for (JsonElement el : parsed.getAsJsonArray()) {
-                                             ccAll.add(el);
-                                         }
-                                     } else if (parsed != null && parsed.isJsonObject()) {
-                                         // tolerate single-object file by wrapping into array
-                                         JsonArray arr = new JsonArray();
-                                         arr.add(parsed);
-                                         ccFiles.add(base, arr);
-                                         ccAll.add(parsed);
-                                     }
-                                 } catch (Throwable ignored) {}
-                             });
-                 }
-             }
-             ccRoot.add("files", ccFiles);
-             ccRoot.add("all", ccAll);
-             files.add("customCommands", ccRoot);
-         } catch (Throwable ignored) {}
-         root.add("files", files);
+        } catch (Throwable ignored) {}
+        try {
+            java.nio.file.Path commandsDir = FMLPaths.GAMEDIR.get()
+                    .resolve("config").resolve("paradigm").resolve("commands");
+            JsonObject ccRoot = new JsonObject();
+            JsonObject ccFiles = new JsonObject();
+            JsonArray ccAll = new JsonArray();
+            if (java.nio.file.Files.isDirectory(commandsDir)) {
+                try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.list(commandsDir)) {
+                    stream.filter(java.nio.file.Files::isRegularFile)
+                            .filter(p -> p.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".json"))
+                            .sorted()
+                            .forEach(p -> {
+                                String name = p.getFileName().toString();
+                                String base = name.substring(0, name.length() - 5);
+                                try {
+                                    String content = java.nio.file.Files.readString(p, java.nio.charset.StandardCharsets.UTF_8);
+                                    com.google.gson.JsonElement parsed = com.google.gson.JsonParser.parseString(content);
+                                    if (parsed != null && parsed.isJsonArray()) {
+                                        ccFiles.add(base, parsed);
+                                        for (JsonElement el : parsed.getAsJsonArray()) {
+                                            ccAll.add(el);
+                                        }
+                                    } else if (parsed != null && parsed.isJsonObject()) {
+                                        // tolerate single-object file by wrapping into array
+                                        JsonArray arr = new JsonArray();
+                                        arr.add(parsed);
+                                        ccFiles.add(base, arr);
+                                        ccAll.add(parsed);
+                                    }
+                                } catch (Throwable ignored) {}
+                            });
+                }
+            }
+            ccRoot.add("files", ccFiles);
+            ccRoot.add("all", ccAll);
+            files.add("customCommands", ccRoot);
+        } catch (Throwable ignored) {}
+
+        root.add("files", files);
 
         JsonArray sections = buildSectionsFromFiles(files);
         // add a dedicated section descriptor for complex custom commands

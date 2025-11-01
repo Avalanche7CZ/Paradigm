@@ -20,7 +20,7 @@ public class TaskScheduler {
 
     public void initialize(MinecraftServer serverInstance) {
         if (this.executorService == null || this.executorService.isShutdown()) {
-            this.executorService = Executors.newScheduledThreadPool(2);
+            this.executorService = Executors.newScheduledThreadPool(1);
             debugLogger.debugLog("TaskScheduler: Executor service created.");
         }
         this.serverRef.set(serverInstance);
@@ -45,14 +45,6 @@ public class TaskScheduler {
             return null;
         }
         return executorService.schedule(() -> syncExecute(task), delay, unit);
-    }
-
-    public ScheduledFuture<?> scheduleRaw(Runnable task, long delay, TimeUnit unit) {
-        if (executorService == null || executorService.isShutdown()) {
-            debugLogger.debugLog("TaskScheduler: Cannot schedule raw task, executor service is not running.");
-            return null;
-        }
-        return executorService.schedule(task, delay, unit);
     }
 
     private void syncExecute(Runnable task) {

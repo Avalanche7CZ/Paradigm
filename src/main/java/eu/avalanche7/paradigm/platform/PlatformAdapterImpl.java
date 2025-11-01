@@ -1,39 +1,33 @@
 package eu.avalanche7.paradigm.platform;
 
 import eu.avalanche7.paradigm.data.CustomCommand;
-import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.platform.Interfaces.*;
 import eu.avalanche7.paradigm.utils.*;
-import net.minecraft.entity.boss.BossBar;
-import net.minecraft.entity.boss.ServerBossBar;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.item.Items;
-import net.minecraft.network.packet.s2c.play.ClearTitleS2CPacket;
-import net.minecraft.network.packet.s2c.play.OverlayMessageS2CPacket;
-import net.minecraft.network.packet.s2c.play.PlaySoundS2CPacket;
-import net.minecraft.network.packet.s2c.play.SubtitleS2CPacket;
-import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.RegistryKeys;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundClearTitlesPacket;
+import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.sound.SoundEvent;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.World;
-import org.jetbrains.annotations.Nullable;
-
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import net.minecraft.server.level.ServerBossEvent;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.BossEvent;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.core.registries.BuiltInRegistries;
+import javax.annotation.Nullable;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundSource;
 
 public class PlatformAdapterImpl implements IPlatformAdapter {
 
@@ -43,8 +37,9 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     private final Placeholders placeholders;
     private final TaskScheduler taskScheduler;
     private final DebugLogger debugLogger;
-    private final Map<UUID, ServerBossBar> persistentBossBars = new HashMap<>();
-    private ServerBossBar restartBossBar;
+    private final Map<UUID, ServerBossEvent> persistentBossBars = new HashMap<>();
+    private ServerBossEvent restartBossBar;
+    private final MinecraftEventSystem eventSystem;
 
     public PlatformAdapterImpl(
             PermissionsHandler permissionsHandler,
@@ -56,6 +51,8 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         this.placeholders = placeholders;
         this.taskScheduler = taskScheduler;
         this.debugLogger = debugLogger;
+        this.eventSystem = new MinecraftEventSystem();
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.register(this.eventSystem);
     }
 
     @Override
@@ -64,385 +61,505 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
-    public MinecraftServer getMinecraftServer() {
+    public Object getMinecraftServer() {
         return this.server;
     }
 
     @Override
-    public void setMinecraftServer(MinecraftServer server) {
-        this.server = server;
+    public void setMinecraftServer(Object server) {
+        this.server = (MinecraftServer) server;
     }
 
     @Override
-    public List<ServerPlayerEntity> getOnlinePlayers() {
-        if (server == null) return new ArrayList<>();
-        return server.getPlayerManager().getPlayerList();
+    public List<IPlayer> getOnlinePlayers() {
+        List<IPlayer> players = new ArrayList<>();
+        for (ServerPlayer player : ((MinecraftServer) getMinecraftServer()).getPlayerList().getPlayers()) {
+            players.add(new MinecraftPlayer(player));
+        }
+        return players;
     }
 
     @Override
     @Nullable
-    public ServerPlayerEntity getPlayerByName(String name) {
-        if (server == null) return null;
-        return server.getPlayerManager().getPlayer(name);
+    public IPlayer getPlayerByName(String name) {
+        ServerPlayer player = ((MinecraftServer) getMinecraftServer()).getPlayerList().getPlayerByName(name);
+        return player != null ? new MinecraftPlayer(player) : null;
     }
 
     @Override
     @Nullable
-    public ServerPlayerEntity getPlayerByUuid(UUID uuid) {
-        if (server == null) return null;
-        return server.getPlayerManager().getPlayer(uuid);
+    public IPlayer getPlayerByUuid(UUID uuid) {
+        ServerPlayer player = ((MinecraftServer) getMinecraftServer()).getPlayerList().getPlayer(uuid);
+        return player != null ? new MinecraftPlayer(player) : null;
     }
 
     @Override
-    public String getPlayerName(ServerPlayerEntity player) {
-        return player.getName().getString();
+    public String getPlayerName(IPlayer player) {
+        return player.getName();
     }
 
     @Override
-    public Text getPlayerDisplayName(ServerPlayerEntity player) {
-        return player.getDisplayName();
+    public IComponent getPlayerDisplayName(IPlayer player) {
+        ServerPlayer mcPlayer = ((MinecraftPlayer) player).getHandle();
+        return new MinecraftComponent(mcPlayer.getDisplayName().copy());
     }
 
     @Override
-    public MutableText createLiteralComponent(String text) {
-        return Text.literal(text);
+    public IComponent createLiteralComponent(String text) {
+        return new MinecraftComponent(Component.literal(text));
     }
 
     @Override
-    public MutableText createTranslatableComponent(String key, Object... args) {
-        return Text.translatable(key, args);
+    public IComponent createTranslatableComponent(String key, Object... args) {
+        return new MinecraftComponent(Component.translatable(key, args));
     }
 
     @Override
-    public ItemStack createItemStack(String itemId) {
-        Item item = Registries.ITEM.get(Identifier.of(itemId));
-        return item != Items.AIR ? new ItemStack(item) : new ItemStack(Items.STONE);
+    public Object createItemStack(String itemId) {
+        var item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(itemId));
+        return item != null ? new ItemStack(item) : new ItemStack(Items.STONE);
     }
 
     @Override
-    public boolean hasPermission(ServerPlayerEntity player, String permissionNode) {
-        return permissionsHandler.hasPermission(player, permissionNode);
+    public boolean hasPermission(IPlayer player, String permissionNode) {
+        return permissionsHandler.hasPermission(((MinecraftPlayer) player).getHandle(), permissionNode);
     }
 
     @Override
-    public boolean hasPermission(ServerPlayerEntity player, String permissionNode, int vanillaLevel) {
-        return this.hasPermission(player, permissionNode) || player.hasPermissionLevel(vanillaLevel);
+    public boolean hasPermission(IPlayer player, String permissionNode, int vanillaLevel) {
+        ServerPlayer mcPlayer = ((MinecraftPlayer) player).getHandle();
+        return permissionsHandler.hasPermission(mcPlayer, permissionNode) || mcPlayer.hasPermissions(vanillaLevel);
     }
 
     @Override
-    public void sendSystemMessage(ServerPlayerEntity player, Text message) {
-        player.sendMessage(message);
+    public boolean hasPermissionNode(IPlayer player, String permission) {
+        return hasPermission(player, permission);
     }
 
     @Override
-    public void broadcastSystemMessage(Text message) {
-        if (server != null && server.getPlayerManager() != null) {
-            server.getPlayerManager().broadcast(message, false);
+    public void sendSystemMessage(IPlayer player, IComponent message) {
+        ServerPlayer mcPlayer = ((MinecraftPlayer) player).getHandle();
+        mcPlayer.sendSystemMessage(((MinecraftComponent) message).getHandle());
+    }
+
+    @Override
+    public void broadcastSystemMessage(IComponent message) {
+        if (getMinecraftServer() != null) {
+            ((MinecraftServer) getMinecraftServer()).getPlayerList().broadcastSystemMessage(((MinecraftComponent) message).getHandle(), false);
         }
     }
 
     @Override
-    public void broadcastChatMessage(Text message) {
-        if (server != null && server.getPlayerManager() != null) {
-            server.getPlayerManager().broadcast(message, false);
+    public void broadcastChatMessage(IComponent message) {
+        if (getMinecraftServer() != null) {
+            ((MinecraftServer) getMinecraftServer()).getPlayerList().broadcastSystemMessage(((MinecraftComponent) message).getHandle(), false);
         }
     }
 
     @Override
-    public void broadcastSystemMessage(Text message, String header, String footer, @Nullable ServerPlayerEntity playerContext) {
-        if (messageParser == null || server == null) return;
+    public void broadcastSystemMessage(IComponent message, String header, String footer, @Nullable IPlayer playerContext) {
+        if (messageParser == null) return;
+        IComponent headerComp = messageParser.parseMessage(header, playerContext);
+        IComponent footerComp = messageParser.parseMessage(footer, playerContext);
+        getOnlinePlayers().forEach(p -> {
+            sendSystemMessage(p, headerComp);
+            sendSystemMessage(p, message);
+            sendSystemMessage(p, footerComp);
+        });
+    }
 
-        if (playerContext != null) {
-            IPlayer iPlayerContext = wrapPlayer(playerContext);
-            IComponent headerComp = messageParser.parseMessage(header, iPlayerContext);
-            IComponent footerComp = messageParser.parseMessage(footer, iPlayerContext);
-            getOnlinePlayers().forEach(p -> {
-                sendSystemMessage(p, headerComp.getOriginalText());
-                sendSystemMessage(p, message);
-                sendSystemMessage(p, footerComp.getOriginalText());
-            });
-        } else {
-            getOnlinePlayers().forEach(p -> {
-                IPlayer iPlayer = wrapPlayer(p);
-                IComponent headerComp = messageParser.parseMessage(header, iPlayer);
-                IComponent footerComp = messageParser.parseMessage(footer, iPlayer);
-                sendSystemMessage(p, headerComp.getOriginalText());
-                sendSystemMessage(p, message);
-                sendSystemMessage(p, footerComp.getOriginalText());
-            });
+    @Override
+    public void sendTitle(IPlayer player, IComponent title, IComponent subtitle) {
+        ServerPlayer mcPlayer = ((MinecraftPlayer) player).getHandle();
+        mcPlayer.connection.send(new ClientboundSetTitleTextPacket(((MinecraftComponent) title).getHandle()));
+        if (subtitle != null && !subtitle.getRawText().isEmpty()) {
+            mcPlayer.connection.send(new ClientboundSetSubtitleTextPacket(((MinecraftComponent) subtitle).getHandle()));
         }
     }
 
     @Override
-    public void sendTitle(ServerPlayerEntity player, Text title, Text subtitle) {
-        player.networkHandler.sendPacket(new TitleS2CPacket(title));
-        if (subtitle != null && !subtitle.getString().isEmpty()) {
-            player.networkHandler.sendPacket(new SubtitleS2CPacket(subtitle));
+    public void sendSubtitle(IPlayer player, IComponent subtitle) {
+        ServerPlayer mcPlayer = ((MinecraftPlayer) player).getHandle();
+        if (subtitle != null && !subtitle.getRawText().isEmpty()) {
+            mcPlayer.connection.send(new ClientboundSetSubtitleTextPacket(((MinecraftComponent) subtitle).getHandle()));
         }
     }
 
     @Override
-    public void sendSubtitle(ServerPlayerEntity player, Text subtitle) {
-        if (subtitle != null && !subtitle.getString().isEmpty()) {
-            player.networkHandler.sendPacket(new SubtitleS2CPacket(subtitle));
+    public void sendActionBar(IPlayer player, IComponent message) {
+        ServerPlayer mcPlayer = ((MinecraftPlayer) player).getHandle();
+        mcPlayer.connection.send(new ClientboundSetActionBarTextPacket(((MinecraftComponent) message).getHandle()));
+    }
+
+    @Override
+    public void clearTitles(IPlayer player) {
+        ServerPlayer mcPlayer = ((MinecraftPlayer) player).getHandle();
+        mcPlayer.connection.send(new ClientboundClearTitlesPacket(true));
+    }
+
+    @Override
+    public void sendSystemMessage(IPlayer player, String message) {
+        if (messageParser != null) {
+            IComponent parsed = messageParser.parseMessage(message, player);
+            sendSystemMessage(player, parsed);
         }
     }
 
     @Override
-    public void sendActionBar(ServerPlayerEntity player, Text message) {
-        player.networkHandler.sendPacket(new OverlayMessageS2CPacket(message));
-    }
-
-    private BossBar.Color toMinecraftColor(BossBarColor color) {
-        return BossBar.Color.valueOf(color.name());
-    }
-
-    private BossBar.Style toMinecraftOverlay(BossBarOverlay overlay) {
-        return BossBar.Style.valueOf(overlay.name());
+    public void sendActionBar(IPlayer player, String message) {
+        if (messageParser != null) {
+            IComponent parsed = messageParser.parseMessage(message, player);
+            sendActionBar(player, parsed);
+        }
     }
 
     @Override
-    public void sendBossBar(List<ServerPlayerEntity> players, Text message, int durationSeconds, BossBarColor color, float progress) {
-        ServerBossBar bossEvent = new ServerBossBar(message, toMinecraftColor(color), BossBar.Style.PROGRESS);
-        bossEvent.setPercent(progress);
-        players.forEach(bossEvent::addPlayer);
+    public void sendBossBar(List<IPlayer> players, String message, int durationSeconds, BossBarColor color, float progress) {
+        if (messageParser != null) {
+            IComponent parsed = messageParser.parseMessage(message, !players.isEmpty() ? players.getFirst() : null);
+            sendBossBar(players, parsed, durationSeconds, color, progress);
+        }
+    }
+
+    private BossEvent.BossBarColor toMinecraftColor(BossBarColor color) {
+        return BossEvent.BossBarColor.valueOf(color.name());
+    }
+
+    private BossEvent.BossBarOverlay toMinecraftOverlay(BossBarOverlay overlay) {
+        return BossEvent.BossBarOverlay.valueOf(overlay.name());
+    }
+
+    @Override
+    public void sendBossBar(List<IPlayer> players, IComponent message, int durationSeconds, BossBarColor color, float progress) {
+        Component mcMessage = ((MinecraftComponent) message).getHandle();
+        ServerBossEvent bossEvent = new ServerBossEvent(mcMessage, toMinecraftColor(color), BossEvent.BossBarOverlay.PROGRESS);
+        bossEvent.setProgress(progress);
+        players.forEach(p -> bossEvent.addPlayer(((MinecraftPlayer) p).getHandle()));
         taskScheduler.schedule(() -> {
-            bossEvent.clearPlayers();
+            bossEvent.removeAllPlayers();
             bossEvent.setVisible(false);
         }, durationSeconds, TimeUnit.SECONDS);
     }
 
     @Override
-    public void showPersistentBossBar(ServerPlayerEntity player, Text message, BossBarColor color, BossBarOverlay overlay) {
+    public void showPersistentBossBar(IPlayer player, IComponent message, BossBarColor color, BossBarOverlay overlay) {
         removePersistentBossBar(player);
-        ServerBossBar bossEvent = new ServerBossBar(message, toMinecraftColor(color), toMinecraftOverlay(overlay));
-        bossEvent.addPlayer(player);
-        persistentBossBars.put(player.getUuid(), bossEvent);
+        Component mcMessage = ((MinecraftComponent) message).getHandle();
+        ServerBossEvent bossEvent = new ServerBossEvent(mcMessage, toMinecraftColor(color), toMinecraftOverlay(overlay));
+        bossEvent.addPlayer(((MinecraftPlayer) player).getHandle());
+        persistentBossBars.put(UUID.fromString(player.getUUID()), bossEvent);
     }
 
     @Override
-    public void removePersistentBossBar(ServerPlayerEntity player) {
-        ServerBossBar bossBar = persistentBossBars.remove(player.getUuid());
+    public void removePersistentBossBar(IPlayer player) {
+        ServerBossEvent bossBar = persistentBossBars.remove(UUID.fromString(player.getUUID()));
         if (bossBar != null) {
-            bossBar.clearPlayers();
+            bossBar.removePlayer(((MinecraftPlayer) player).getHandle());
         }
     }
 
     @Override
-    public void createOrUpdateRestartBossBar(Text message, BossBarColor color, float progress) {
+    public void createOrUpdateRestartBossBar(IComponent message, BossBarColor color, float progress) {
+        Component mcMessage = ((MinecraftComponent) message).getHandle();
         if (restartBossBar == null) {
-            restartBossBar = new ServerBossBar(message, toMinecraftColor(color), BossBar.Style.PROGRESS);
+            restartBossBar = new ServerBossEvent(mcMessage, toMinecraftColor(color), BossEvent.BossBarOverlay.PROGRESS);
             restartBossBar.setVisible(true);
-            getOnlinePlayers().forEach(restartBossBar::addPlayer);
+            getOnlinePlayers().forEach(p -> restartBossBar.addPlayer(((MinecraftPlayer) p).getHandle()));
         }
-        restartBossBar.setName(message);
-        restartBossBar.setPercent(progress);
+        restartBossBar.setName(mcMessage);
+        restartBossBar.setProgress(progress);
+    }
+
+    @Override
+    public void createOrUpdateRestartBossBar(String message, BossBarColor color, float progress) {
+        if (messageParser != null) {
+            IComponent parsed = messageParser.parseMessage(message, null);
+            createOrUpdateRestartBossBar(parsed, color, progress);
+        }
     }
 
     @Override
     public void removeRestartBossBar() {
         if (restartBossBar != null) {
             restartBossBar.setVisible(false);
-            restartBossBar.clearPlayers();
+            restartBossBar.removeAllPlayers();
             restartBossBar = null;
         }
     }
 
     @Override
-    public void clearTitles(ServerPlayerEntity player) {
-        player.networkHandler.sendPacket(new ClearTitleS2CPacket(true));
-    }
-
-    @Override
-    public void playSound(ServerPlayerEntity player, String soundId, net.minecraft.sound.SoundCategory category, float volume, float pitch) {
-        SoundEvent soundEvent = Registries.SOUND_EVENT.get(Identifier.of(soundId));
-        if (soundEvent != null) {
-            player.networkHandler.sendPacket(new PlaySoundS2CPacket(
-                    Registries.SOUND_EVENT.getEntry(soundEvent),
-                    category,
-                    player.getX(), player.getY(), player.getZ(),
-                    volume, pitch, player.getWorld().getRandom().nextLong()
-            ));
+    public void sendTitle(IPlayer player, String title, String subtitle) {
+        if (messageParser != null) {
+            IComponent titleComp = messageParser.parseMessage(title, player);
+            IComponent subtitleComp = subtitle != null ? messageParser.parseMessage(subtitle, player) : createLiteralComponent("");
+            sendTitle(player, titleComp, subtitleComp);
         }
     }
 
     @Override
-    public void executeCommandAs(ServerCommandSource source, String command) {
-        getMinecraftServer().getCommandManager().executeWithPrefix(source, command);
+    public void shutdownServer(IComponent kickMessage) {
+        MinecraftServer server = (MinecraftServer) getMinecraftServer();
+        if (server != null && kickMessage instanceof MinecraftComponent mc) {
+            try {
+                server.getPlayerList().broadcastSystemMessage(mc.getHandle(), false);
+                server.saveEverything(true, true, true);
+                server.halt(false);
+            } catch (Exception e) {
+                e.printStackTrace();
+                System.out.println("[Paradigm-Debug] PlatformAdapterImpl: Exception during shutdown: " + e.getMessage());
+            }
+        }
+    }
+
+    @Override
+    public void shutdownServer(String kickMessage) {
+        MinecraftServer server = (MinecraftServer) getMinecraftServer();
+        if (server != null) {
+            try {
+                System.out.println("[Paradigm-Debug] PlatformAdapterImpl: shutdownServer called with message: " + kickMessage);
+                server.getPlayerList().broadcastSystemMessage(Component.literal(kickMessage), false);
+                server.saveEverything(true, true, true);
+                System.out.println("[Paradigm-Debug] PlatformAdapterImpl: Calling server.halt(false)");
+                server.halt(false);
+                System.out.println("[Paradigm-Debug] PlatformAdapterImpl: server.halt(false) called");
+            } catch (Exception e) {
+                e.printStackTrace();
+                System.out.println("[Paradigm-Debug] PlatformAdapterImpl: Exception during shutdown: " + e.getMessage());
+            }
+        } else {
+            System.out.println("[Paradigm-Debug] PlatformAdapterImpl: shutdownServer called but server is null!");
+        }
+    }
+
+    @Override
+    public void sendSuccess(Object source, IComponent message, boolean toOps) {
+        if (source instanceof CommandSourceStack stack && message instanceof MinecraftComponent mc) {
+            stack.sendSuccess(() -> mc.getHandle(), toOps);
+        }
+    }
+
+    @Override
+    public void sendFailure(Object source, IComponent message) {
+        if (source instanceof CommandSourceStack stack && message instanceof MinecraftComponent mc) {
+            stack.sendFailure(mc.getHandle());
+        }
+    }
+
+    @Override
+    public boolean hasCommandPermission(Object source, String permission) {
+        if (!(source instanceof CommandSourceStack stack)) return true;
+        if (!(stack.getEntity() instanceof ServerPlayer player)) return true;
+        return permissionsHandler.hasPermission(player, permission);
+    }
+
+    @Override
+    public boolean hasCommandPermission(Object source, String permission, int vanillaLevel) {
+        if (!(source instanceof CommandSourceStack stack)) return true;
+        if (!(stack.getEntity() instanceof ServerPlayer player)) return true;
+        return permissionsHandler.hasPermission(player, permission) || player.hasPermissions(vanillaLevel);
+    }
+
+    @Override
+    public void executeCommandAs(Object source, String command) {
+        if (server == null || command == null || source == null) return;
+        if (source instanceof CommandSourceStack stack) {
+            var dispatcher = server.getCommands().getDispatcher();
+            var parseResults = dispatcher.parse(command, stack);
+            try {
+                dispatcher.execute(parseResults);
+            } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
+                debugLogger.debugLog("Command execution failed: " + command, e);
+            }
+        }
     }
 
     @Override
     public void executeCommandAsConsole(String command) {
-        if (server == null) return;
-        ServerCommandSource consoleSource = server.getCommandSource().withLevel(4);
-        server.getCommandManager().executeWithPrefix(consoleSource, command);
+        if (server == null || command == null) return;
+        CommandSourceStack console = server.createCommandSourceStack();
+        var dispatcher = server.getCommands().getDispatcher();
+        var parseResults = dispatcher.parse(command, console);
+        try {
+            dispatcher.execute(parseResults);
+        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException e) {
+            debugLogger.debugLog("Console command execution failed: " + command, e);
+        }
     }
 
     @Override
-    public String replacePlaceholders(String text, @Nullable ServerPlayerEntity player) {
+    public void teleportPlayer(IPlayer player, double x, double y, double z) {
+        if (player instanceof MinecraftPlayer mcPlayer) {
+            mcPlayer.getHandle().teleportTo(x, y, z);
+        }
+    }
+
+    @Override
+    public boolean playerHasItem(IPlayer player, String itemId, int amount) {
+        ServerPlayer mcPlayer = ((MinecraftPlayer) player).getHandle();
+        if (mcPlayer == null || itemId == null) {
+            return false;
+        }
+        try {
+            Item item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(itemId));
+            if (item == null || item == Items.AIR) {
+                debugLogger.debugLog("PlatformAdapter: Could not find item with ID: " + itemId);
+                return false;
+            }
+            return mcPlayer.getInventory().countItem(item) >= amount;
+        } catch (Exception e) {
+            debugLogger.debugLog("Error checking player items: " + itemId, e);
+            return false;
+        }
+    }
+
+    @Override
+    public boolean isPlayerInArea(IPlayer player, String worldId, List<Integer> corner1, List<Integer> corner2) {
+        ServerPlayer mcPlayer = ((MinecraftPlayer) player).getHandle();
+        if (mcPlayer == null || worldId == null || corner1 == null || corner2 == null || corner1.size() != 3 || corner2.size() != 3) {
+            return false;
+        }
+
+        try {
+            ResourceKey<Level> targetWorldKey = ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(worldId));
+            if (!mcPlayer.level().dimension().equals(targetWorldKey)) {
+                return false;
+            }
+
+            Vec3 pos = mcPlayer.position();
+            double pX = pos.x();
+            double pY = pos.y();
+            double pZ = pos.z();
+
+            double x1 = Math.min(corner1.get(0), corner2.get(0));
+            double y1 = Math.min(corner1.get(1), corner2.get(1));
+            double z1 = Math.min(corner1.get(2), corner2.get(2));
+            double x2 = Math.max(corner1.get(0), corner2.get(0));
+            double y2 = Math.max(corner1.get(1), corner2.get(1));
+            double z2 = Math.max(corner1.get(2), corner2.get(2));
+
+            return pX >= x1 && pX <= x2 && pY >= y1 && pY <= y2 && pZ >= z1 && pZ <= z2;
+        } catch (Exception e) {
+            debugLogger.debugLog("Error checking player area: " + worldId, e);
+            return false;
+        }
+    }
+
+    @Override
+    public boolean isModLoaded(String modId) {
+        try {
+            return net.neoforged.fml.ModList.get().isLoaded(modId);
+        } catch (Exception e) {
+            debugLogger.debugLog("Error checking mod loaded: " + modId, e);
+            return false;
+        }
+    }
+
+    @Override
+    public void playSound(IPlayer player, String soundId, SoundCategory category, float volume, float pitch) {
+        if (!(player instanceof MinecraftPlayer)) return;
+        ServerPlayer mcPlayer = ((MinecraftPlayer) player).getHandle();
+        try {
+            SoundEvent soundEvent = BuiltInRegistries.SOUND_EVENT.get(ResourceLocation.parse(soundId));
+            if (soundEvent != null) {
+                SoundSource mcCategory = SoundSource.valueOf(category.name());
+                mcPlayer.playNotifySound(soundEvent, mcCategory, volume, pitch);
+            }
+        } catch (Exception e) {
+            debugLogger.debugLog("Failed to play sound: " + soundId, e);
+        }
+    }
+
+    @Override
+    public ICommandSource wrapCommandSource(Object source) {
+        if (source instanceof CommandSourceStack stack) {
+            return new MinecraftCommandSource(stack);
+        }
+        throw new IllegalArgumentException("Unsupported command source type: " + source.getClass());
+    }
+
+    @Override
+    public void sendSuccess(ICommandSource source, IComponent message, boolean toOps) {
+        if (source instanceof MinecraftCommandSource mcSource && message instanceof MinecraftComponent mc) {
+            mcSource.getHandle().sendSuccess(() -> mc.getHandle(), toOps);
+        }
+    }
+
+    @Override
+    public void sendFailure(ICommandSource source, IComponent message) {
+        if (source instanceof MinecraftCommandSource mcSource && message instanceof MinecraftComponent mc) {
+            mcSource.getHandle().sendFailure(mc.getHandle());
+        }
+    }
+
+    @Override
+    public boolean hasCommandPermission(ICommandSource source, String permission) {
+        IPlayer player = source.getPlayer();
+        if (player != null) {
+            return hasPermission(player, permission);
+        }
+        return true;
+    }
+
+    @Override
+    public boolean hasCommandPermission(ICommandSource source, String permission, int vanillaLevel) {
+        IPlayer player = source.getPlayer();
+        if (player != null) {
+            return hasPermission(player, permission, vanillaLevel);
+        }
+        return true;
+    }
+
+    public String replacePlaceholders(String text, @Nullable IPlayer player) {
         return placeholders.replacePlaceholders(text, player);
     }
 
     @Override
-    public boolean hasPermissionForCustomCommand(ServerCommandSource source, CustomCommand command) {
+    public boolean hasPermissionForCustomCommand(Object source, CustomCommand command) {
+        if (!(source instanceof CommandSourceStack)) return true;
+        CommandSourceStack stack = (CommandSourceStack) source;
         if (!command.isRequirePermission()) {
             return true;
         }
-        if (!(source.getEntity() instanceof ServerPlayerEntity player)) {
+        if (!(stack.getEntity() instanceof ServerPlayer player)) {
             return true;
         }
         boolean hasPerm = permissionsHandler.hasPermission(player, command.getPermission());
+        if (!hasPerm && messageParser != null) {
+            String errorMessage = command.getPermissionErrorMessage();
+            IComponent parsed = messageParser.parseMessage(errorMessage, new MinecraftPlayer(player));
+            player.sendSystemMessage(((MinecraftComponent) parsed).getHandle());
+        }
         return hasPerm;
     }
 
     @Override
-    public void shutdownServer(Text kickMessage) {
-        if (server != null) {
-            try {
-                debugLogger.debugLog("PlatformAdapter: Initiating server shutdown sequence.");
-                server.getPlayerManager().broadcast(kickMessage, false);
-                server.saveAll(true, true, true);
-                server.stop(false);
-                taskScheduler.scheduleRaw(() -> {
-                    debugLogger.debugLog("PlatformAdapter: Forcing JVM exit with status 1 to trigger auto-restart.");
-                    System.exit(1);
-                }, 500, TimeUnit.MILLISECONDS);
-
-            } catch (Exception e) {
-                debugLogger.debugLog("PlatformAdapter: Failed to shutdown server: " + e.getMessage(), e);
-            }
-        } else {
-            debugLogger.debugLog("PlatformAdapter: Shutdown called but server instance is null.");
+    public void executeCommandAs(ICommandSource source, String command) {
+        if (source instanceof MinecraftCommandSource mcSource) {
+            executeCommandAs(mcSource.getHandle(), command);
         }
     }
-
     @Override
-    public void sendSuccess(ServerCommandSource source, Text message, boolean toOps) {
-        source.sendFeedback(() -> message, toOps);
-    }
-
-    @Override
-    public void sendFailure(ServerCommandSource source, Text message) {
-        source.sendError(message);
-    }
-
-    @Override
-    public void teleportPlayer(ServerPlayerEntity player, double x, double y, double z) {
-        player.requestTeleport(x, y, z);
-    }
-
-    @Override
-    public boolean playerHasItem(ServerPlayerEntity player, String itemId, int amount) {
-        if (player == null || itemId == null) {
-            return false;
-        }
-        Item item = Registries.ITEM.get(Identifier.of(itemId));
-        if (item == Items.AIR) {
-            debugLogger.debugLog("PlatformAdapter: Could not find item with ID: " + itemId);
-            return false;
-        }
-        return player.getInventory().count(item) >= amount;
-    }
-
-    @Override
-    public boolean isPlayerInArea(ServerPlayerEntity player, String worldId, List<Integer> corner1, List<Integer> corner2) {
-        if (player == null || worldId == null || corner1 == null || corner2 == null || corner1.size() != 3 || corner2.size() != 3) {
-            return false;
-        }
-
-        Identifier worldIdentifier = Identifier.of(worldId);
-        net.minecraft.registry.RegistryKey<World> targetWorldKey = net.minecraft.registry.RegistryKey.of(RegistryKeys.WORLD, worldIdentifier);
-
-        if (!player.getWorld().getRegistryKey().equals(targetWorldKey)) {
-            return false;
-        }
-
-        Vec3d pos = player.getPos();
-        double pX = pos.getX();
-        double pY = pos.getY();
-        double pZ = pos.getZ();
-
-        double x1 = Math.min(corner1.get(0), corner2.get(0));
-        double y1 = Math.min(corner1.get(1), corner2.get(1));
-        double z1 = Math.min(corner1.get(2), corner2.get(2));
-        double x2 = Math.max(corner1.get(0), corner2.get(0));
-        double y2 = Math.max(corner1.get(1), corner2.get(1));
-        double z2 = Math.max(corner1.get(2), corner2.get(2));
-
-        return pX >= x1 && pX <= x2 && pY >= y1 && pY <= y2 && pZ >= z1 && pZ <= z2;
-    }
-
-    @Override
-    public List<String> getOnlinePlayerNames() {
-        return getOnlinePlayers().stream()
-                .map(this::getPlayerName)
-                .toList();
+    public IEventSystem getEventSystem() {
+        return eventSystem;
     }
 
     @Override
     public List<String> getWorldNames() {
-        if (server == null) return List.of();
         List<String> worldNames = new ArrayList<>();
-        for (net.minecraft.server.world.ServerWorld world : server.getWorlds()) {
-            worldNames.add(world.getRegistryKey().getValue().toString());
+        if (server != null) {
+            for (ServerLevel level : server.getAllLevels()) {
+                worldNames.add(level.dimension().location().toString());
+            }
         }
         return worldNames;
     }
 
     @Override
-    public IPlayer wrapPlayer(ServerPlayerEntity player) {
-        return MinecraftPlayer.of(player);
-    }
-
-    @Override
-    public IComponent createEmptyComponent() {
-        return new MinecraftComponent(Text.literal(""));
-    }
-
-    @Override
-    public IComponent parseFormattingCode(String code, IComponent currentComponent) {
-        if (code == null || code.isEmpty()) return currentComponent;
-
-        net.minecraft.util.Formatting format = net.minecraft.util.Formatting.byCode(code.charAt(0));
-        if (format != null) {
-            if (format == net.minecraft.util.Formatting.RESET) {
-                return currentComponent.resetStyle();
-            }
-            return currentComponent.withFormatting(format);
+    public List<String> getOnlinePlayerNames() {
+        List<String> playerNames = new ArrayList<>();
+        for (IPlayer player : getOnlinePlayers()) {
+            playerNames.add(player.getName());
         }
-        return currentComponent;
-    }
-
-    @Override
-    public IComponent parseHexColor(String hex, IComponent currentComponent) {
-        if (hex == null || hex.length() != 6) return currentComponent;
-
-        try {
-            return currentComponent.withColor(hex);
-        } catch (Exception e) {
-            debugLogger.debugLog("Failed to parse hex color: " + hex, e);
-            return currentComponent;
-        }
-    }
-
-    @Override
-    public IComponent wrap(Text text) {
-        if (text == null) {
-            return createEmptyComponent();
-        }
-        if (text instanceof MutableText mt) {
-            return new MinecraftComponent(mt);
-        }
-        return new MinecraftComponent(text);
-    }
-
-    @Override
-    public IComponent createComponentFromLiteral(String text) {
-        return new MinecraftComponent(Text.literal(text != null ? text : ""));
-    }
-
-    @Override
-    public String getMinecraftVersion() {
-        return net.minecraft.SharedConstants.getGameVersion().getName();
+        return playerNames;
     }
 }

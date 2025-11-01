@@ -5,13 +5,13 @@ import com.google.gson.GsonBuilder;
 import eu.avalanche7.paradigm.Paradigm;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 import eu.avalanche7.paradigm.utils.JsonValidator;
-import net.fabricmc.loader.api.FabricLoader;
+import net.neoforged.fml.loading.FMLPaths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -21,24 +21,12 @@ public class ChatConfigHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Paradigm.MOD_ID);
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
-    private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("paradigm/chat.json");
-    public static volatile Config CONFIG = null;
+    private static final Path CONFIG_PATH = FMLPaths.CONFIGDIR.get().resolve("paradigm/chat.json");
+    public static Config CONFIG = new Config();
     private static JsonValidator jsonValidator;
-    private static volatile boolean isLoaded = false;
 
     public static void setJsonValidator(DebugLogger debugLogger) {
         jsonValidator = new JsonValidator(debugLogger);
-    }
-
-    public static Config getConfig() {
-        if (!isLoaded || CONFIG == null) {
-            synchronized (ChatConfigHandler.class) {
-                if (!isLoaded || CONFIG == null) {
-                    load();
-                }
-            }
-        }
-        return CONFIG;
     }
 
     public static class Config {
@@ -56,7 +44,7 @@ public class ChatConfigHandler {
         );
         public ConfigEntry<Boolean> enableGroupChat = new ConfigEntry<>(
                 true,
-                "Enables or disables the Group Chat feature and its commands."
+                "Enable or disable the Group Chat module."
         );
         public ConfigEntry<Boolean> enableJoinLeaveMessages = new ConfigEntry<>(
                 true,
@@ -98,6 +86,7 @@ public class ChatConfigHandler {
                         if (result.hasIssues()) {
                             LOGGER.info("[Paradigm] Fixed JSON syntax issues in chat.json: " + result.getIssuesSummary());
                             LOGGER.info("[Paradigm] Saving corrected version to preserve user values");
+
                             try (Writer writer = Files.newBufferedWriter(CONFIG_PATH, StandardCharsets.UTF_8)) {
                                 writer.write(result.getFixedJson());
                                 LOGGER.info("[Paradigm] Saved corrected chat.json with preserved user values");
@@ -125,18 +114,18 @@ public class ChatConfigHandler {
                     }
                 }
             } catch (Exception e) {
-                LOGGER.warn("[Paradigm] Could not parse chat.json, using defaults for this session.", e);
-                LOGGER.warn("[Paradigm] Your file has NOT been modified. Please check the file manually.");
+                LOGGER.warn("[Paradigm] Could not parse chat.json, using defaults and regenerating file.", e);
             }
         } else {
             LOGGER.info("[Paradigm] chat.json not found, generating with default values.");
-            CONFIG = defaultConfig;
-            save();
-            LOGGER.info("[Paradigm] Generated new chat.json with default values.");
         }
 
         CONFIG = defaultConfig;
-        if (shouldSaveMerged) {
+
+        if (!Files.exists(CONFIG_PATH)) {
+            save();
+            LOGGER.info("[Paradigm] Generated new chat.json with default values.");
+        } else if (shouldSaveMerged) {
             try {
                 save();
                 LOGGER.info("[Paradigm] Synchronized chat.json with new defaults while preserving user values.");
@@ -144,7 +133,6 @@ public class ChatConfigHandler {
                 LOGGER.warn("[Paradigm] Failed to write merged chat.json: " + e.getMessage());
             }
         }
-        isLoaded = true;
     }
 
     @SuppressWarnings("unchecked")

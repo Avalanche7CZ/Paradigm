@@ -1,28 +1,27 @@
 package eu.avalanche7.paradigm.platform;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.text.Style;
-import net.minecraft.text.ClickEvent;
-import net.minecraft.text.HoverEvent;
-import net.minecraft.text.TextColor;
-import net.minecraft.util.Formatting;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.TextColor;
+import net.minecraft.ChatFormatting;
 import java.util.List;
-import java.util.function.UnaryOperator;
 
 public class MinecraftComponent implements IComponent {
-    private final MutableText component;
+    private final MutableComponent component;
 
-    public MinecraftComponent(MutableText component) {
+    public MinecraftComponent(MutableComponent component) {
         this.component = component;
     }
 
-    public MinecraftComponent(Text component) {
+    public MinecraftComponent(Component component) {
         this.component = component.copy();
     }
 
-    public MutableText getHandle() {
+    public MutableComponent getHandle() {
         return component;
     }
 
@@ -46,17 +45,15 @@ public class MinecraftComponent implements IComponent {
     public IComponent append(IComponent sibling) {
         if (sibling instanceof MinecraftComponent mc) {
             component.append(mc.getHandle());
+        } else if (sibling != null) {
+            System.err.println("[Paradigm] Warning: Tried to append non-MinecraftComponent: " + sibling.getClass().getName());
         }
         return this;
     }
 
     @Override
-    public List<IComponent> getSiblings() {
-        return component.getSiblings().stream()
-            .filter(c -> c instanceof MutableText)
-            .map(c -> new MinecraftComponent((MutableText)c))
-            .map(c -> (IComponent)c)
-            .toList();
+    public List<?> getSiblings() {
+        return component.getSiblings();
     }
 
     @Override
@@ -65,109 +62,67 @@ public class MinecraftComponent implements IComponent {
     }
 
     @Override
-    public IComponent withStyle(Formatting formatting) {
-        return new MinecraftComponent(component.copy().styled(s -> s.withFormatting(formatting)));
+    public IComponent withStyle(ChatFormatting formatting) {
+        return new MinecraftComponent(component.copy().withStyle(formatting));
     }
 
     @Override
     public IComponent withStyle(Style style) {
-        return new MinecraftComponent(component.copy().styled(s -> style));
+        return new MinecraftComponent(component.copy().withStyle(style));
     }
 
     @Override
-    public IComponent withStyle(UnaryOperator<Style> styleUpdater) {
-        return new MinecraftComponent(component.copy().styled(styleUpdater));
+    public IComponent withStyle(java.util.function.UnaryOperator<Style> styleUpdater) {
+        return new MinecraftComponent(component.copy().withStyle(styleUpdater));
     }
 
     @Override
     public IComponent withColor(int rgb) {
-        return new MinecraftComponent(component.copy().styled(s -> s.withColor(TextColor.fromRgb(rgb))));
+        return new MinecraftComponent(component.copy().withStyle(s -> s.withColor(TextColor.fromRgb(rgb))));
     }
 
     @Override
     public IComponent withColorHex(String hex) {
-        if (hex == null || hex.isEmpty()) return copy();
+        if (hex == null || hex.isEmpty()) return this.copy();
         String cleaned = hex.startsWith("#") ? hex.substring(1) : hex;
         try {
             int rgb = Integer.parseInt(cleaned, 16);
             return withColor(rgb);
         } catch (NumberFormatException e) {
-            return copy();
+            return this.copy();
         }
-    }
-
-    @Override
-    public IComponent withFormatting(Formatting formatting) {
-        if (formatting == null) return copy();
-        return new MinecraftComponent(component.copy().styled(s -> s.withFormatting(formatting)));
-    }
-
-    @Override
-    public IComponent withColor(String hexOrFormatCode) {
-        if (hexOrFormatCode == null || hexOrFormatCode.isEmpty()) return copy();
-
-        if (hexOrFormatCode.startsWith("#")) {
-            return withColorHex(hexOrFormatCode.substring(1));
-        }
-
-        try {
-            int rgb = Integer.parseInt(hexOrFormatCode, 16);
-            return withColor(rgb);
-        } catch (NumberFormatException e) {
-            Formatting format = Formatting.byName(hexOrFormatCode);
-            if (format != null && format.isColor()) {
-                return withFormatting(format);
-            }
-            return copy();
-        }
-    }
-
-    @Override
-    public IComponent resetStyle() {
-        return new MinecraftComponent(component.copy().styled(s -> Style.EMPTY));
     }
 
     @Override
     public IComponent onClickRunCommand(String command) {
-        return new MinecraftComponent(component.copy().styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command))));
+        return new MinecraftComponent(component.copy().withStyle(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, command))));
     }
 
     @Override
     public IComponent onClickSuggestCommand(String command) {
-        return new MinecraftComponent(component.copy().styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, command))));
+        return new MinecraftComponent(component.copy().withStyle(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, command))));
     }
 
     @Override
     public IComponent onClickOpenUrl(String url) {
         String u = url == null ? "" : (url.startsWith("http://") || url.startsWith("https://") ? url : "https://" + url);
-        return new MinecraftComponent(component.copy().styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, u))));
-    }
-
-    @Override
-    public IComponent onClickCopyToClipboard(String text) {
-        String value = text != null ? text : "";
-        return new MinecraftComponent(component.copy().styled(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, value))));
+        return new MinecraftComponent(component.copy().withStyle(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, u))));
     }
 
     @Override
     public IComponent onHoverText(String text) {
-        Text hover = Text.literal(text != null ? text : "");
-        return new MinecraftComponent(component.copy().styled(s -> s.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hover))));
+        Component hover = Component.literal(text != null ? text : "");
+        return new MinecraftComponent(component.copy().withStyle(s -> s.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hover))));
     }
 
     @Override
     public IComponent onHoverComponent(IComponent comp) {
-        Text hover;
+        Component hover;
         if (comp instanceof MinecraftComponent mc) {
             hover = mc.getHandle();
         } else {
-            hover = Text.literal(comp != null ? comp.getRawText() : "");
+            hover = Component.literal(comp != null ? comp.getRawText() : "");
         }
-        return new MinecraftComponent(component.copy().styled(s -> s.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hover))));
-    }
-
-    @Override
-    public Text getOriginalText() {
-        return component;
+        return new MinecraftComponent(component.copy().withStyle(s -> s.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hover))));
     }
 }

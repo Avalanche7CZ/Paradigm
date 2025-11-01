@@ -3,15 +3,12 @@ package eu.avalanche7.paradigm.core;
 import eu.avalanche7.paradigm.configs.*;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.*;
-import net.minecraft.server.MinecraftServer;
-import org.slf4j.Logger;
 import eu.avalanche7.paradigm.webeditor.store.WebEditorStore;
+import org.slf4j.Logger;
 
 public class Services {
 
-    private MinecraftServer server;
     private final Logger logger;
-
     private final MainConfigHandler.Config mainConfig;
     private final AnnouncementsConfigHandler.Config announcementsConfig;
     private final MOTDConfigHandler.Config motdConfig;
@@ -19,8 +16,6 @@ public class Services {
     private final RestartConfigHandler.Config restartConfig;
     private final ChatConfigHandler.Config chatConfig;
     private final CMConfig cmConfigInstance;
-    private final CooldownConfigHandler cooldownConfigHandler;
-
     private final DebugLogger debugLoggerInstance;
     private final Lang langInstance;
     private final MessageParser messageParserInstance;
@@ -29,9 +24,8 @@ public class Services {
     private final TaskScheduler taskSchedulerInstance;
     private final GroupChatManager groupChatManagerInstance;
     private final IPlatformAdapter platformAdapter;
-
-    private final WebEditorStore webEditorStore = new WebEditorStore();
-
+    private final CooldownConfigHandler cooldownConfigHandler;
+    private final WebEditorStore webEditorStore;
 
     public Services(
             Logger logger,
@@ -50,7 +44,8 @@ public class Services {
             Placeholders placeholders,
             TaskScheduler taskScheduler,
             IPlatformAdapter platformAdapter,
-            CooldownConfigHandler cooldownConfigHandler
+            CooldownConfigHandler cooldownConfigHandler,
+            WebEditorStore webEditorStore
     ) {
         this.logger = logger;
         this.mainConfig = mainConfig;
@@ -69,35 +64,18 @@ public class Services {
         this.taskSchedulerInstance = taskScheduler;
         this.platformAdapter = platformAdapter;
         this.cooldownConfigHandler = cooldownConfigHandler;
+        this.webEditorStore = webEditorStore;
+
+        initializeJsonValidators();
     }
 
-    public void setServer(MinecraftServer server) {
-        this.server = server;
-        if (this.server != null && this.taskSchedulerInstance != null) {
-            this.taskSchedulerInstance.initialize(this.server);
-        }
-        if (this.permissionsHandlerInstance != null) {
-            this.permissionsHandlerInstance.initialize();
-        }
-        if (this.platformAdapter != null) {
-            this.platformAdapter.setMinecraftServer(server);
-            this.platformAdapter.provideMessageParser(this.messageParserInstance);
-        }
-    }
-
-    public MinecraftServer getMinecraftServer() {
-        if (this.server == null && logger != null) {
-            logger.warn("Paradigm Services: MinecraftServer instance requested before it was set!");
-        }
-        return server;
-    }
-
-    public CooldownConfigHandler getCooldownConfigHandler() {
-        return cooldownConfigHandler;
-    }
-
-    public IPlatformAdapter getPlatformAdapter() {
-        return platformAdapter;
+    private void initializeJsonValidators() {
+        ChatConfigHandler.setJsonValidator(debugLoggerInstance);
+        AnnouncementsConfigHandler.setJsonValidator(debugLoggerInstance);
+        MentionConfigHandler.setJsonValidator(debugLoggerInstance);
+        RestartConfigHandler.setJsonValidator(debugLoggerInstance);
+        MainConfigHandler.setJsonValidator(debugLoggerInstance);
+        MOTDConfigHandler.setJsonValidator(debugLoggerInstance);
     }
 
     public Logger getLogger() {
@@ -129,27 +107,27 @@ public class Services {
     }
 
     public MainConfigHandler.Config getMainConfig() {
-        return MainConfigHandler.getConfig();
+        return MainConfigHandler.CONFIG;
     }
 
     public AnnouncementsConfigHandler.Config getAnnouncementsConfig() {
-        return AnnouncementsConfigHandler.getConfig();
+        return AnnouncementsConfigHandler.CONFIG;
     }
 
     public MOTDConfigHandler.Config getMotdConfig() {
-        return MOTDConfigHandler.getConfig();
+        return MOTDConfigHandler.CONFIG;
     }
 
     public MentionConfigHandler.Config getMentionConfig() {
-        return MentionConfigHandler.getConfig();
+        return MentionConfigHandler.CONFIG;
     }
 
     public RestartConfigHandler.Config getRestartConfig() {
-        return RestartConfigHandler.getConfig();
+        return RestartConfigHandler.CONFIG;
     }
 
     public ChatConfigHandler.Config getChatConfig() {
-        return ChatConfigHandler.getConfig();
+        return ChatConfigHandler.CONFIG;
     }
 
     public CMConfig getCmConfig() {
@@ -158,6 +136,14 @@ public class Services {
 
     public GroupChatManager getGroupChatManager() {
         return groupChatManagerInstance;
+    }
+
+    public IPlatformAdapter getPlatformAdapter() {
+        return platformAdapter;
+    }
+
+    public CooldownConfigHandler getCooldownConfigHandler() {
+        return cooldownConfigHandler;
     }
 
     public WebEditorStore getWebEditorStore() {

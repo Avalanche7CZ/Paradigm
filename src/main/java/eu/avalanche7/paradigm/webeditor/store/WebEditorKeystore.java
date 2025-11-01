@@ -59,6 +59,7 @@ public final class WebEditorKeystore {
         try {
             load();
         } catch (Exception e) {
+            // ignore
         }
     }
 
@@ -84,7 +85,7 @@ public final class WebEditorKeystore {
         }
         IPlayer p = sender.getPlayer();
         if (p == null) return false;
-        String uuid = p.getUUID() == null ? null : p.getUUID().toString();
+        String uuid = p.getUUID();
         String stored = this.trustedPlayerKeys.get(uuid);
         return h.equals(stored);
     }
@@ -99,7 +100,7 @@ public final class WebEditorKeystore {
         }
         IPlayer p = sender.getPlayer();
         if (p == null) return false;
-        String uuid = p.getUUID() == null ? null : p.getUUID().toString();
+        String uuid = p.getUUID();
         String prev = this.trustedPlayerKeys.put(uuid, h);
         try { save(); } catch (Exception ignored) {}
         return !h.equals(prev);
@@ -121,7 +122,7 @@ public final class WebEditorKeystore {
         } else {
             IPlayer p = sender.getPlayer();
             if (p == null) return false;
-            String uuid = p.getUUID() == null ? null : p.getUUID().toString();
+            String uuid = p.getUUID();
             if (hashOrAll != null && !hashOrAll.isEmpty()) {
                 String cur = this.trustedPlayerKeys.get(uuid);
                 if (hashOrAll.equals(cur)) {
@@ -146,8 +147,7 @@ public final class WebEditorKeystore {
         } else {
             IPlayer p = sender.getPlayer();
             if (p != null) {
-                String uuid = p.getUUID() == null ? null : p.getUUID().toString();
-                String v = this.trustedPlayerKeys.get(uuid);
+                String v = this.trustedPlayerKeys.get(p.getUUID());
                 if (v != null) out.add(v);
             }
         }

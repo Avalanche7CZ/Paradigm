@@ -1,0 +1,117 @@
+package eu.avalanche7.paradigm.modules.chat;
+
+import com.mojang.brigadier.CommandDispatcher;
+import eu.avalanche7.paradigm.configs.ChatConfigHandler;
+import eu.avalanche7.paradigm.core.ParadigmModule;
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.stats.Stats;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
+
+public class JoinLeaveMessages implements ParadigmModule {
+
+    private static final String NAME = "JoinLeaveMessages";
+    private Services services;
+    private IPlatformAdapter platform;
+
+    public JoinLeaveMessages() {
+    }
+
+    @Override
+    public String getName() {
+        return NAME;
+    }
+
+    @Override
+    public boolean isEnabled(Services services) {
+        ChatConfigHandler.Config config = services.getChatConfig();
+        return config.enableJoinLeaveMessages.get() || config.enableFirstJoinMessage.get();
+    }
+
+    @Override
+    public void onLoad(FMLCommonSetupEvent event, Services services, IEventBus modEventBus) {
+        this.services = services;
+        this.platform = services.getPlatformAdapter();
+        services.getDebugLogger().debugLog(NAME + " module loaded.");
+    }
+
+    @Override
+    public void onServerStarting(ServerStartingEvent event, Services services) {
+    }
+
+    @Override
+    public void onEnable(Services services) {
+    }
+
+    @Override
+    public void onDisable(Services services) {
+    }
+
+    @Override
+    public void onServerStopping(ServerStoppingEvent event, Services services) {
+    }
+
+    @Override
+    public void registerCommands(CommandDispatcher<?> dispatcher, Services services) {
+    }
+
+    @Override
+    public void registerEventListeners(IEventBus forgeEventBus, Services services) {
+        forgeEventBus.register(this);
+    }
+
+    @SubscribeEvent
+    public void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
+        if (this.services == null || !isEnabled(this.services) || !(event.getEntity() instanceof ServerPlayer)) {
+            return;
+        }
+        ServerPlayer player = (ServerPlayer) event.getEntity();
+        ChatConfigHandler.Config chatConfig = services.getChatConfig();
+
+        boolean isFirstJoin = player.getStats().getValue(Stats.CUSTOM.get(Stats.LEAVE_GAME)) == 0;
+
+        String messageFormat = null;
+        String logMessage = null;
+
+        if (isFirstJoin && chatConfig.enableFirstJoinMessage.get()) {
+            messageFormat = chatConfig.firstJoinMessageFormat.get();
+            logMessage = "Sent FIRST join message for ";
+        } else if (chatConfig.enableJoinLeaveMessages.get()) {
+            messageFormat = chatConfig.joinMessageFormat.get();
+            logMessage = "Sent regular join message for ";
+        }
+
+        if (messageFormat != null) {
+            IPlayer iPlayer = eu.avalanche7.paradigm.platform.MinecraftPlayer.of(player);
+            IComponent formattedMessage = services.getMessageParser().parseMessage(messageFormat, iPlayer);
+            platform.broadcastSystemMessage(formattedMessage);
+            services.getDebugLogger().debugLog(logMessage + platform.getPlayerName(iPlayer));
+        }
+    }
+
+    @SubscribeEvent
+    public void onPlayerLeave(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (this.services == null || !isEnabled(this.services) || !(event.getEntity() instanceof ServerPlayer)) {
+            return;
+        }
+        ServerPlayer player = (ServerPlayer) event.getEntity();
+        ChatConfigHandler.Config chatConfig = services.getChatConfig();
+
+        if (chatConfig.enableJoinLeaveMessages.get()) {
+            String leaveMessageFormat = chatConfig.leaveMessageFormat.get();
+            IPlayer iPlayer = eu.avalanche7.paradigm.platform.MinecraftPlayer.of(player);
+            IComponent formattedMessage = services.getMessageParser().parseMessage(leaveMessageFormat, iPlayer);
+            platform.broadcastSystemMessage(formattedMessage);
+            services.getDebugLogger().debugLog("Sent leave message for " + platform.getPlayerName(iPlayer));
+        }
+    }
+}
