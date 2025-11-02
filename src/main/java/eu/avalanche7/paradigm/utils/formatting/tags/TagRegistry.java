@@ -26,6 +26,7 @@ public class TagRegistry {
         registerTag(new GradientTag(platformAdapter));
         registerTag(new RainbowTag(platformAdapter));
         registerTag(new CenterTag(platformAdapter));
+        registerTag(new EmojiTag());
     }
 
     public void registerTag(Tag tag) {

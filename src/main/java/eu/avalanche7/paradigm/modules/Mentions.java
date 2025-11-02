@@ -138,7 +138,24 @@ public class Mentions implements ParadigmModule, IEventSystem.ChatEventListener 
         if (mentionedSomeone) {
             event.setCancelled(true);
             finalMessageComponent.append(platform.createLiteralComponent(rawMessage.substring(lastEnd)));
-            IComponent finalMessage = platform.createTranslatableComponent("chat.type.text", platform.getPlayerDisplayName(sender), finalMessageComponent);
+
+            net.minecraft.network.chat.Component senderDisplayName;
+            if (platform.getPlayerDisplayName(sender) instanceof eu.avalanche7.paradigm.platform.MinecraftComponent mc1) {
+                senderDisplayName = mc1.getHandle();
+            } else {
+                senderDisplayName = net.minecraft.network.chat.Component.literal(sender.getName());
+            }
+
+            net.minecraft.network.chat.Component messageContent;
+            if (finalMessageComponent instanceof eu.avalanche7.paradigm.platform.MinecraftComponent mc2) {
+                messageContent = mc2.getHandle();
+            } else {
+                messageContent = net.minecraft.network.chat.Component.literal(finalMessageComponent.getRawText());
+            }
+
+            net.minecraft.network.chat.Component chatMessage = net.minecraft.network.chat.Component.translatable("chat.type.text", senderDisplayName, messageContent);
+            IComponent finalMessage = new eu.avalanche7.paradigm.platform.MinecraftComponent(chatMessage);
+
             platform.broadcastChatMessage(finalMessage);
             markMentionIndividualUsed(sender);
             sendSenderFeedbackPlayers(sender, rawMessage, mentionedNames, allPlayersPattern);

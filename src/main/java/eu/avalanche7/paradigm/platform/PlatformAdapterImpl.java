@@ -525,13 +525,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         if (!(stack.getEntity() instanceof ServerPlayer player)) {
             return true;
         }
-        boolean hasPerm = permissionsHandler.hasPermission(player, command.getPermission());
-        if (!hasPerm && messageParser != null) {
-            String errorMessage = command.getPermissionErrorMessage();
-            IComponent parsed = messageParser.parseMessage(errorMessage, new MinecraftPlayer(player));
-            player.sendSystemMessage(((MinecraftComponent) parsed).getHandle());
-        }
-        return hasPerm;
+        return permissionsHandler.hasPermission(player, command.getPermission());
     }
 
     @Override

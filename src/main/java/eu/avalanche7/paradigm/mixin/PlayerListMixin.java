@@ -3,7 +3,11 @@ package eu.avalanche7.paradigm.mixin;
 import eu.avalanche7.paradigm.Paradigm;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.MinecraftComponent;
+import eu.avalanche7.paradigm.platform.MinecraftPlayer;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.PlayerList;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -17,7 +21,7 @@ public abstract class PlayerListMixin {
         System.out.println("[Paradigm-Mixin] PlayerListMixin loaded!");
     }
 
-    @Inject(method = "*(Lnet/minecraft/network/chat/Component;Z)V", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "broadcastSystemMessage(Lnet/minecraft/network/chat/Component;Z)V", at = @At("HEAD"), cancellable = true)
     private void paradigm$filterJoinLeaveMessages(Component message, boolean overlay, CallbackInfo ci) {
         if (message == null) return;
 
@@ -32,6 +36,50 @@ public abstract class PlayerListMixin {
         if (joinLeaveEnabled) {
             System.out.println("[Paradigm-Mixin] Suppressed vanilla: " + paradigm$safeToString(message));
             ci.cancel();
+        }
+    }
+
+    @Inject(method = "broadcastChatMessage(Lnet/minecraft/network/chat/PlayerChatMessage;Lnet/minecraft/server/level/ServerPlayer;Lnet/minecraft/network/chat/ChatType$Bound;)V",
+            at = @At("HEAD"), cancellable = true)
+    private void paradigm$formatChatMessage(net.minecraft.network.chat.PlayerChatMessage playerChatMessage, ServerPlayer sender, net.minecraft.network.chat.ChatType.Bound boundChatType, CallbackInfo ci) {
+        Services services = Paradigm.getServices();
+        if (services == null) return;
+
+        ChatConfigHandler.Config cfg = services.getChatConfig();
+        if (cfg == null || !Boolean.TRUE.equals(cfg.enableCustomChatFormat.get())) {
+            return;
+        }
+
+        try {
+            String messageText = playerChatMessage.decoratedContent().getString();
+            String customFormat = cfg.customChatFormat.get();
+
+            if (customFormat == null || customFormat.isEmpty()) {
+                return;
+            }
+
+            String formattedText = customFormat.replace("{message}", messageText);
+
+            formattedText = services.getPlaceholders().replacePlaceholders(formattedText, new MinecraftPlayer(sender));
+
+            IComponent parsedComponent = services.getMessageParser().parseMessage(formattedText, new MinecraftPlayer(sender));
+
+            Component finalMessage;
+            if (parsedComponent instanceof MinecraftComponent mc) {
+                finalMessage = mc.getHandle();
+            } else {
+                finalMessage = Component.literal(formattedText);
+            }
+
+            PlayerList playerList = (PlayerList) (Object) this;
+            for (ServerPlayer player : playerList.getPlayers()) {
+                player.sendSystemMessage(finalMessage);
+            }
+
+            ci.cancel();
+        } catch (Exception e) {
+            System.err.println("[Paradigm-Mixin] Error formatting chat message: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
