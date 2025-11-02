@@ -1,11 +1,18 @@
 package eu.avalanche7.paradigm.utils.formatting.tags;
 
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.formatting.FormattingContext;
 import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
 
 public class ColorTag implements Tag {
+    private final IPlatformAdapter platformAdapter;
+
+    public ColorTag(IPlatformAdapter platformAdapter) {
+        this.platformAdapter = platformAdapter;
+    }
+
     @Override
     public String getName() {
         return "color";
@@ -23,9 +30,9 @@ public class ColorTag implements Tag {
 
     @Override
     public void process(FormattingContext context, String arguments) {
-        TextColor color = parseColor(arguments);
-        if (color != null) {
-            Style newStyle = context.getCurrentStyle().withColor(color);
+        Integer colorRgb = platformAdapter.parseColorToRgb(arguments);
+        if (colorRgb != null) {
+            Style newStyle = context.getCurrentStyle().withColor(TextColor.fromRgb(colorRgb));
             context.pushStyle(newStyle);
         }
     }
@@ -46,29 +53,6 @@ public class ColorTag implements Tag {
             }
         }
         return false;
-    }
-
-    private TextColor parseColor(String colorArg) {
-        if (colorArg == null || colorArg.isEmpty()) {
-            return null;
-        }
-
-        if (colorArg.startsWith("#")) {
-            try {
-                int rgb = Integer.parseInt(colorArg.substring(1), 16);
-                return TextColor.fromRgb(rgb);
-            } catch (NumberFormatException e) {
-                return null;
-            }
-        }
-
-        for (ChatFormatting format : ChatFormatting.values()) {
-            if (format.isColor() && format.getName() != null && format.getName().equalsIgnoreCase(colorArg)) {
-                return TextColor.fromLegacyFormat(format);
-            }
-        }
-
-        return null;
     }
 }
 

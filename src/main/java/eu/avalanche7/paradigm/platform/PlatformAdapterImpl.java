@@ -564,4 +564,50 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         }
         return playerNames;
     }
+
+    @Override
+    public Integer parseColorToRgb(String colorName) {
+        if (colorName == null || colorName.isEmpty()) {
+            return null;
+        }
+
+        if (colorName.startsWith("#")) {
+            try {
+                return Integer.parseInt(colorName.substring(1), 16);
+            } catch (NumberFormatException e) {
+                return null;
+            }
+        }
+
+        for (net.minecraft.ChatFormatting format : net.minecraft.ChatFormatting.values()) {
+            if (format.isColor() && format.getName() != null && format.getName().equalsIgnoreCase(colorName)) {
+                return format.getColor();
+            }
+        }
+
+        return null;
+    }
+
+    @Override
+    public String getColorNameFromFormatting(Object formatting) {
+        if (formatting instanceof net.minecraft.ChatFormatting chatFormatting) {
+            return chatFormatting.getName();
+        }
+        return null;
+    }
+
+    @Override
+    public boolean isValidColorName(String name) {
+        if (name == null || name.isEmpty()) {
+            return false;
+        }
+
+        for (net.minecraft.ChatFormatting format : net.minecraft.ChatFormatting.values()) {
+            if (format.isColor() && format.getName() != null && format.getName().equalsIgnoreCase(name)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

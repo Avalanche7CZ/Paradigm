@@ -28,6 +28,9 @@
 * **Interactive Elements:** Add clickable links, runnable commands, and hover tooltips to any message
 * **Placeholder System:** Support for dynamic placeholders in announcements and messages
 * **Multilingual Support:** Built-in translations for Czech, English, and Russian with extensible language system
+* **Server List MOTD:** Display custom formatted messages in the Minecraft server list browser with random rotation and custom icon support
+* **Server Icons:** Use custom 64x64 PNG icons with random rotation or specific selection per MOTD
+* **In-Game MOTD:** Show personalized welcome messages to players when they join
 
 ### 🎮 Custom Commands & Server Management
 * **Custom Command Creation:** Define custom server commands with multiple actions and flexible arguments

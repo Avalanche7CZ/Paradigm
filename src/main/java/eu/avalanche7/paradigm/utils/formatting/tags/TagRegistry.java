@@ -14,18 +14,18 @@ public class TagRegistry {
     }
 
     private void registerDefaultTags() {
-        registerTag(new ColorTag());
+        registerTag(new ColorTag(platformAdapter));
         registerTag(new DecorationTag(DecorationTag.Decoration.BOLD));
         registerTag(new DecorationTag(DecorationTag.Decoration.ITALIC));
         registerTag(new DecorationTag(DecorationTag.Decoration.UNDERLINE));
         registerTag(new DecorationTag(DecorationTag.Decoration.STRIKETHROUGH));
         registerTag(new DecorationTag(DecorationTag.Decoration.OBFUSCATED));
-        registerTag(new ClickTag());
-        registerTag(new HoverTag());
+        registerTag(new ClickTag(platformAdapter));
+        registerTag(new HoverTag(platformAdapter));
         registerTag(new ResetTag());
         registerTag(new GradientTag(platformAdapter));
-        registerTag(new RainbowTag());
-        registerTag(new CenterTag());
+        registerTag(new RainbowTag(platformAdapter));
+        registerTag(new CenterTag(platformAdapter));
     }
 
     public void registerTag(Tag tag) {

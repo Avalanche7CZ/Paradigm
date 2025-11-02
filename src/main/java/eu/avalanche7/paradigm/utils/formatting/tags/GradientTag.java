@@ -103,19 +103,13 @@ public class GradientTag implements Tag {
 
         for (int i = 0; i < colorParts.length; i++) {
             String colorStr = colorParts[i].trim();
-            if (colorStr.startsWith("#")) {
-                try {
-                    result[i] = Integer.parseInt(colorStr.substring(1), 16);
-                } catch (NumberFormatException e) {
-                    result[i] = 0xFFFFFF;
-                }
-            } else {
-                result[i] = 0xFFFFFF;
-            }
+            Integer colorRgb = platformAdapter.parseColorToRgb(colorStr);
+            result[i] = colorRgb != null ? colorRgb : 0xFFFFFF;
         }
 
         return result;
     }
+
 
     private int interpolateColor(int color1, int color2, float progress) {
         int r1 = (color1 >> 16) & 0xFF;

@@ -1,6 +1,7 @@
 package eu.avalanche7.paradigm.utils.formatting.tags;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.MinecraftComponent;
 import eu.avalanche7.paradigm.utils.formatting.FormattingContext;
 import eu.avalanche7.paradigm.utils.formatting.FormattingParser;
@@ -9,7 +10,11 @@ import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.Style;
 
 public class HoverTag implements Tag {
-    private HoverEvent hoverEvent;
+    private final IPlatformAdapter platformAdapter;
+
+    public HoverTag(IPlatformAdapter platformAdapter) {
+        this.platformAdapter = platformAdapter;
+    }
 
     @Override
     public String getName() {
@@ -51,7 +56,7 @@ public class HoverTag implements Tag {
             hoverComponent = Component.literal(hoverText);
         }
 
-        this.hoverEvent = new HoverEvent(HoverEvent.Action.SHOW_TEXT, hoverComponent);
+        HoverEvent hoverEvent = new HoverEvent(HoverEvent.Action.SHOW_TEXT, hoverComponent);
         Style newStyle = context.getCurrentStyle().withHoverEvent(hoverEvent);
         context.pushStyle(newStyle);
     }

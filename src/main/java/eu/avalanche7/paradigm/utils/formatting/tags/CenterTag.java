@@ -1,13 +1,19 @@
 package eu.avalanche7.paradigm.utils.formatting.tags;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.MinecraftComponent;
 import eu.avalanche7.paradigm.utils.formatting.FormattingContext;
 import net.minecraft.network.chat.Component;
 
 public class CenterTag implements Tag {
+    private final IPlatformAdapter platformAdapter;
     private IComponent centeredContent;
     private int approximateChatWidthChars = 53;
+
+    public CenterTag(IPlatformAdapter platformAdapter) {
+        this.platformAdapter = platformAdapter;
+    }
 
     @Override
     public String getName() {

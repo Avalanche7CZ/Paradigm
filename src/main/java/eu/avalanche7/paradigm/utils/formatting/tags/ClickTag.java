@@ -1,10 +1,17 @@
 package eu.avalanche7.paradigm.utils.formatting.tags;
 
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.formatting.FormattingContext;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Style;
 
 public class ClickTag implements Tag {
+    private final IPlatformAdapter platformAdapter;
+
+    public ClickTag(IPlatformAdapter platformAdapter) {
+        this.platformAdapter = platformAdapter;
+    }
+
     public enum ClickAction {
         OPEN_URL("open_url", ClickEvent.Action.OPEN_URL),
         RUN_COMMAND("run_cmd", ClickEvent.Action.RUN_COMMAND),
@@ -99,7 +106,7 @@ public class ClickTag implements Tag {
                name.equalsIgnoreCase("suggest_command") || name.equalsIgnoreCase("cmd") ||
                name.equalsIgnoreCase("suggest") || name.equalsIgnoreCase("copy_to_clipboard") ||
                name.equalsIgnoreCase("copy") || name.equalsIgnoreCase("change_page") ||
-               name.equalsIgnoreCase("page");
+               name.equalsIgnoreCase("page") || name.equalsIgnoreCase("run_command");
     }
 }
 

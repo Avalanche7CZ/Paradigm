@@ -98,11 +98,20 @@ public class MOTDConfigHandler {
     }
 
     private static void mergeConfigs(Config defaults, Config loaded) {
-        if (loaded != null && loaded.motdLines != null) {
-            defaults.motdLines = loaded.motdLines;
-            LOGGER.debug("[Paradigm] Preserved user MOTD lines");
+        if (loaded != null) {
+            if (loaded.motdLines != null) {
+                defaults.motdLines = loaded.motdLines;
+                LOGGER.debug("[Paradigm] Preserved user MOTD lines");
+            }
+            if (loaded.motds != null) {
+                defaults.motds = loaded.motds;
+                LOGGER.debug("[Paradigm] Preserved user server list MOTDs");
+            }
+            defaults.iconEnabled = loaded.iconEnabled;
+            defaults.serverlistMotdEnabled = loaded.serverlistMotdEnabled;
+            LOGGER.debug("[Paradigm] Preserved user MOTD configuration");
         } else {
-            LOGGER.debug("[Paradigm] Using default MOTD lines");
+            LOGGER.debug("[Paradigm] Using default MOTD configuration");
         }
     }
 
@@ -119,50 +128,116 @@ public class MOTDConfigHandler {
 
     public static class Config {
         public List<String> motdLines;
+        public boolean iconEnabled;
+        public boolean serverlistMotdEnabled;
+        public List<ServerListMOTD> motds;
 
         public Config() {
             this.motdLines = List.of(
                     "",
-                    "<center><color:#55FFFF>=============================================</center>",
-                    "<center><color:#FF55FF><bold>Welcome to Paradigm Server</bold></color></center>",
-                    "<center><color:#55FFFF>=============================================</center>",
+                    "<center><color:aqua>=============================================</center>",
+                    "<center><color:light_purple><bold>Welcome to Paradigm Server</bold></color></center>",
+                    "<center><color:aqua>=============================================</center>",
                     "",
-                    "<center><color:#FFFF55><bold>Hello <color:#55FF55>{player}</color>!</bold></color></center>",
+                    "<center><color:yellow><bold>Hello <color:green>{player}</color>!</bold></color></center>",
                     "",
                     "<bold><color:#55FFFF>Server Information:</color></bold>",
                     "<color:#AAAAAA>- <color:#55FF55>Level:</color> <color:#FFFFFF>{player_level}</color>",
                     "<color:#AAAAAA>- <color:#55FF55>Health:</color> <color:#FFFFFF>{player_health}</color>/<color:#55FF55>{max_player_health}</color>",
                     "<color:#AAAAAA>- <color:#55FF55>Status:</color> <color:#55FF55>Online & Ready</color>",
                     "",
-                    "<bold><color:#FF55FF>Quick Commands:</color></bold>",
-                    "<color:#AAAAAA>- <click:execute:/rules><color:#55FFFF><underline>/rules</underline></color></click> - <color:#AAAAAA>Read server rules</color>",
-                    "<color:#AAAAAA>- <click:execute:/help><color:#55FFFF><underline>/help</underline></color></click> - <color:#AAAAAA>Get help</color>",
-                    "<color:#AAAAAA>- <click:suggest_command:/msg><color:#55FFFF><underline>/msg</underline></color></click> - <color:#AAAAAA>Send message</color>",
-                    "<color:#AAAAAA>- <click:execute:/spawn><color:#55FFFF><underline>/spawn</underline></color></click> - <color:#AAAAAA>Go to spawn</color>",
+                    "<bold><color:light_purple>Quick Commands:</color></bold>",
+                    "<color:gray>- <click:execute:/rules><color:aqua><underline>/rules</underline></color></click> - <color:gray>Read server rules</color>",
+                    "<color:gray>- <click:execute:/help><color:aqua><underline>/help</underline></color></click> - <color:gray>Get help</color>",
+                    "<color:gray>- <click:suggest_command:/msg><color:aqua><underline>/msg</underline></color></click> - <color:gray>Send message</color>",
+                    "<color:gray>- <click:execute:/spawn><color:aqua><underline>/spawn</underline></color></click> - <color:gray>Go to spawn</color>",
                     "",
                     "<bold><color:#00FFFF>Connect With Us:</color></bold>",
                     "<color:#AAAAAA>- <click:open_url:https://discord.gg/paradigm><color:#5555FF><underline>Discord Server</underline></color></click> - <color:#AAAAAA>Join community</color>",
                     "<color:#AAAAAA>- <click:open_url:https://example.com><color:#5555FF><underline>Website</underline></color></click> - <color:#AAAAAA>Visit us online</color>",
                     "<color:#AAAAAA>- <click:copy:admin@paradigm.com><color:#5555FF><underline>Copy Email</underline></color></click> - <color:#AAAAAA>Click to copy</color>",
                     "",
-                    "<bold><color:#FFD700>Feature Showcase:</color></bold>",
+                    "<bold><color:gold>Feature Showcase:</color></bold>",
                     "<rainbow>Rainbow Text Effect</rainbow>",
                     "<gradient:#FF0000:#00FF00:#0000FF>Smooth Gradient Colors</gradient>",
+                    "<gradient:red:green:blue>Named Color Gradient</gradient>",
                     "<bold>Bold</bold> <italic>Italic</italic> <underline>Underline</underline> <strikethrough>Strike</strikethrough>",
                     "<bold><italic><underline>Multiple decorations combined</underline></italic></bold>",
-                    "<hover:'<color:#55FF55>Colored tooltip text</color>'>Hover for colored tooltip</hover>",
+                    "<hover:'<color:green>Colored tooltip text</color>'>Hover for colored tooltip</hover>",
                     "",
-                    "<bold><color:#AAAAAA>Legacy Format Support:</color></bold>",
-                    "&cRed &aGreen &bCyan &eYellow &fWhite",
+                    "<bold><color:gray>Legacy & Named Colors:</color></bold>",
+                    "<color:red>Red</color> <color:green>Green</color> <color:aqua>Cyan</color> <color:yellow>Yellow</color> <color:white>White</color>",
+                    "<color:dark_red>Dark Red</color> <color:dark_green>Dark Green</color> <color:dark_blue>Dark Blue</color>",
+                    "&cLegacy Red &aLegacy Green &bLegacy Cyan &eLegacy Yellow &fLegacy White",
                     "&lBold &r&oItalic &r&nUnderline &r&mStrike",
-                    "&l&cBold Red &r&o&9Italic Blue &rNormal",
-                    "&#FF5555Custom Hex &#00FF00Another Hex",
+                    "&#FF5555Custom Hex <color:#00FF00>Hex with tag</color>",
                     "",
-                    "<center><color:#55FFFF>=============================================</center>",
-                    "<center><color:#FFFF55><bold>Have fun and enjoy your stay!</bold></color></center>",
-                    "<center><color:#55FFFF>=============================================</center>",
+                    "<center><color:aqua>=============================================</center>",
+                    "<center><color:yellow><bold>Have fun and enjoy your stay!</bold></color></center>",
+                    "<center><color:aqua>=============================================</center>",
                     ""
             );
+            this.iconEnabled = true;
+            this.serverlistMotdEnabled = true;
+            this.motds = List.of(
+                    new ServerListMOTD(
+                        "random",
+                        "<gradient:aqua:cyan>✦ Paradigm Server ✦</gradient>",
+                        "<color:light_purple><bold>Modded Survival</bold></color>",
+                        new PlayerCountDisplay(
+                            null,
+                            "<gradient:aqua:cyan>✦ Paradigm Server ✦</gradient>\n<color:white>━━━━━━━━━━━━━━━━━━━━━</color>\n<color:light_purple><bold>Modded Survival Experience</bold></color>\n<color:green>✓ Custom Mods</color>\n<color:green>✓ Active Community</color>\n<color:green>✓ 24/7 Online</color>\n<color:white>━━━━━━━━━━━━━━━━━━━━━</color>\n<rainbow>» Join us today! «</rainbow>",
+                            100,
+                            true
+                        )
+                    )
+            );
+        }
+    }
+
+    public static class ServerListMOTD {
+        public String icon;
+        public String line1;
+        public String line2;
+        public PlayerCountDisplay playerCount;
+
+        public ServerListMOTD(String icon, String line1, String line2) {
+            this.icon = icon;
+            this.line1 = line1;
+            this.line2 = line2;
+            this.playerCount = null;
+        }
+
+        public ServerListMOTD(String icon, String line1, String line2, PlayerCountDisplay playerCount) {
+            this.icon = icon;
+            this.line1 = line1;
+            this.line2 = line2;
+            this.playerCount = playerCount;
+        }
+
+        public ServerListMOTD() {
+            this("random", "", "");
+        }
+    }
+
+    public static class PlayerCountDisplay {
+        public String displayText;
+        public String hoverText;
+        public Integer maxPlayers;
+        public boolean showActualCount;
+
+        public PlayerCountDisplay(String displayText, String hoverText, Integer maxPlayers, boolean showActualCount) {
+            this.displayText = displayText;
+            this.hoverText = hoverText;
+            this.maxPlayers = maxPlayers;
+            this.showActualCount = showActualCount;
+        }
+
+        public PlayerCountDisplay() {
+            this.displayText = null;
+            this.hoverText = null;
+            this.maxPlayers = null;
+            this.showActualCount = true;
         }
     }
 }

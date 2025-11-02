@@ -1,6 +1,7 @@
 package eu.avalanche7.paradigm.utils.formatting.tags;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.MinecraftComponent;
 import eu.avalanche7.paradigm.utils.formatting.FormattingContext;
 import net.minecraft.network.chat.Component;
@@ -9,10 +10,15 @@ import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.TextColor;
 
 public class RainbowTag implements Tag {
+    private final IPlatformAdapter platformAdapter;
     private float frequency = 0.1f;
     private float saturation = 1.0f;
     private float offset = 0.0f;
     private IComponent rainbowContent;
+
+    public RainbowTag(IPlatformAdapter platformAdapter) {
+        this.platformAdapter = platformAdapter;
+    }
 
     @Override
     public String getName() {
