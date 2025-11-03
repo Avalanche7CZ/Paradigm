@@ -8,7 +8,6 @@ import com.mojang.brigadier.context.CommandContext;
 import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
@@ -16,8 +15,8 @@ import eu.avalanche7.paradigm.utils.PermissionsHandler;
 import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.server.network.ServerPlayerEntity;
 
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
@@ -135,7 +134,9 @@ public class Announcements implements ParadigmModule {
             services.getDebugLogger().debugLog(NAME + ": Announcements already scheduled, skipping.");
             return;
         }
-        cancelAllTasks();
+        if (globalTask != null || actionbarTask != null || titleTask != null || bossbarTask != null) {
+            cancelAllTasks();
+        }
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
         if (platform == null) {
             services.getDebugLogger().debugLog(NAME + ": Cannot schedule announcements, platform adapter is null.");
@@ -160,6 +161,9 @@ public class Announcements implements ParadigmModule {
             long interval = config.bossbarInterval.value;
             bossbarTask = services.getTaskScheduler().scheduleAtFixedRate(this::broadcastBossbarMessages, interval, interval, TimeUnit.SECONDS);
             services.getDebugLogger().debugLog(NAME + ": Scheduled bossbar messages with interval: " + interval + " seconds");
+        } else {
+            clearAllBossBars();
+            services.getDebugLogger().debugLog(NAME + ": Bossbar announcements disabled, cleared all boss bars.");
         }
         announcementsScheduled = true;
     }
@@ -184,7 +188,18 @@ public class Announcements implements ParadigmModule {
             bossbarTask.cancel(false);
             bossbarTask = null;
             services.getDebugLogger().debugLog(NAME + ": Cancelled bossbar messages task.");
+            clearAllBossBars();
         }
+    }
+
+    private void clearAllBossBars() {
+        if (platform == null) return;
+        List<ServerPlayerEntity> players = platform.getOnlinePlayers();
+        if (players == null || players.isEmpty()) return;
+        for (ServerPlayerEntity player : players) {
+            platform.removePersistentBossBar(player);
+        }
+        services.getDebugLogger().debugLog(NAME + ": Cleared all boss bars from online players.");
     }
 
     private String getNextMessage(List<String> messages, String orderMode, String type) {
@@ -323,7 +338,7 @@ public class Announcements implements ParadigmModule {
 
     public int broadcastTitleCmd(CommandContext<ServerCommandSource> context) {
         String titleAndSubtitle = StringArgumentType.getString(context, "titleAndSubtitle");
-        // ICommandSource source = platform.wrapCommandSource(context.getSource()); // Fix this if needed
+        // ICommandSource source = platform.wrapCommandSource(context.getSource());
         services.getDebugLogger().debugLog(NAME + ": /paradigm title command executed with message: " + titleAndSubtitle);
         String[] parts = titleAndSubtitle.split(" \\|\\| ", 2);
         platform.getOnlinePlayers().forEach(target -> {
@@ -339,7 +354,7 @@ public class Announcements implements ParadigmModule {
 
     public int broadcastMessageCmd(CommandContext<ServerCommandSource> context, String type) {
         String messageStr = StringArgumentType.getString(context, "message");
-        // ICommandSource source = platform.wrapCommandSource(context.getSource()); // Fix this if needed
+        // ICommandSource source = platform.wrapCommandSource(context.getSource());
         services.getDebugLogger().debugLog(NAME + ": /paradigm " + type + " command executed with message: " + messageStr);
         switch (type) {
             case "broadcast" -> {
@@ -395,6 +410,7 @@ public class Announcements implements ParadigmModule {
     public void rescheduleAnnouncements() {
         if (services == null) return;
         services.getDebugLogger().debugLog(NAME + ": Rescheduling announcements on config reload.");
+        clearAllBossBars();
         cancelAllTasks();
         announcementsScheduled = false;
         scheduleConfiguredAnnouncements();

@@ -75,21 +75,21 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public List<ServerPlayerEntity> getOnlinePlayers() {
-        if (server == null) return new ArrayList<>();
+        if (server == null || server.getPlayerManager() == null) return new ArrayList<>();
         return server.getPlayerManager().getPlayerList();
     }
 
     @Override
     @Nullable
     public ServerPlayerEntity getPlayerByName(String name) {
-        if (server == null) return null;
+        if (server == null || server.getPlayerManager() == null) return null;
         return server.getPlayerManager().getPlayer(name);
     }
 
     @Override
     @Nullable
     public ServerPlayerEntity getPlayerByUuid(UUID uuid) {
-        if (server == null) return null;
+        if (server == null || server.getPlayerManager() == null) return null;
         return server.getPlayerManager().getPlayer(uuid);
     }
 
