@@ -36,8 +36,8 @@ import java.util.stream.Collectors;
 public class Mentions implements ParadigmModule {
 
     private static final String NAME = "Mentions";
-    private final HashMap<UUID, Long> lastIndividualMentionTime = new HashMap<>();
-    private long lastEveryoneMentionTime = 0;
+    private final HashMap<UUID, Long> lastIndividualMentionBySender = new HashMap<>();
+    private final HashMap<UUID, Long> lastEveryoneMentionBySender = new HashMap<>();
     private Services services;
 
     @Override
@@ -112,7 +112,7 @@ public class Mentions implements ParadigmModule {
             event.setCanceled(true);
             return;
         }
-        if (!canMentionEveryone(sender, mentionConfig)) {
+        if (!canMentionEveryoneNow(sender, mentionConfig)) {
             sender.sendMessage(this.services.getMessageParser().parseMessage("&cYou are mentioning everyone too frequently. Please wait.", null));
             event.setCanceled(true);
             return;
@@ -120,6 +120,7 @@ public class Mentions implements ParadigmModule {
 
         this.services.getDebugLogger().debugLog("Mention everyone detected in chat by " + sender.getName());
         notifyEveryone(sender.getServer().getPlayerList().getPlayers(), sender, rawMessage, false, mentionConfig, matchedEveryoneMention);
+        markMentionEveryoneUsed(sender);
         event.setCanceled(true);
     }
 
@@ -129,18 +130,33 @@ public class Mentions implements ParadigmModule {
         Pattern allPlayersPattern = buildAllPlayersMentionPattern(players, mentionSymbol);
         Matcher mentionMatcher = allPlayersPattern.matcher(rawMessage);
 
+        if (!mentionMatcher.find()) return;
+        mentionMatcher.reset();
+
+        if (!hasPermission(sender, PermissionsHandler.MENTION_PLAYER_PERMISSION, PermissionsHandler.MENTION_PLAYER_PERMISSION_LEVEL)) {
+            return;
+        }
+
+        if (!canMentionIndividualNow(sender, mentionConfig)) {
+            sender.sendMessage(this.services.getMessageParser().parseMessage("&cYou are mentioning players too frequently. Please wait.", null));
+            event.setCanceled(true);
+            return;
+        }
+
         boolean mentionedSomeone = false;
         while (mentionMatcher.find()) {
             String playerName = mentionMatcher.group(1);
             EntityPlayerMP targetPlayer = sender.getServer().getPlayerList().getPlayerByUsername(playerName);
 
             if (targetPlayer != null) {
-                if (hasPermission(sender, PermissionsHandler.MENTION_PLAYER_PERMISSION, PermissionsHandler.MENTION_PLAYER_PERMISSION_LEVEL) && canMentionPlayer(sender, targetPlayer, mentionConfig)) {
-                    this.services.getDebugLogger().debugLog("Mention player detected: " + targetPlayer.getName() + " by " + sender.getName());
-                    notifyPlayer(targetPlayer, sender, rawMessage, false, mentionConfig, mentionMatcher.group(0));
-                    mentionedSomeone = true;
-                }
+                this.services.getDebugLogger().debugLog("Mention player detected: " + targetPlayer.getName() + " by " + sender.getName());
+                notifyPlayer(targetPlayer, sender, rawMessage, false, mentionConfig, mentionMatcher.group(0));
+                mentionedSomeone = true;
             }
+        }
+
+        if (mentionedSomeone) {
+            markMentionIndividualUsed(sender);
         }
     }
 
@@ -159,13 +175,14 @@ public class Mentions implements ParadigmModule {
                 if (!hasPermission(senderPlayer, PermissionsHandler.MENTION_EVERYONE_PERMISSION, PermissionsHandler.MENTION_EVERYONE_PERMISSION_LEVEL)) {
                     throw new CommandException("You do not have permission to mention everyone.");
                 }
-                if (!canMentionEveryone(senderPlayer, mentionConfig)) {
+                if (!canMentionEveryoneNow(senderPlayer, mentionConfig)) {
                     throw new CommandException("You are mentioning everyone too frequently.");
                 }
-            } else {
-                lastEveryoneMentionTime = System.currentTimeMillis();
             }
             notifyEveryone(players, senderPlayer, message, isConsole, mentionConfig, mentionConfig.MENTION_SYMBOL.value + "everyone");
+            if (senderPlayer != null) {
+                markMentionEveryoneUsed(senderPlayer);
+            }
             CommandBase.notifyCommandListener(sender, this.getCommand(), "Mentioned everyone successfully.", new Object[0]);
             return 1;
         }
@@ -176,9 +193,9 @@ public class Mentions implements ParadigmModule {
             if (message.contains(mention)) {
                 if (senderPlayer != null) {
                     if (!hasPermission(senderPlayer, PermissionsHandler.MENTION_PLAYER_PERMISSION, PermissionsHandler.MENTION_PLAYER_PERMISSION_LEVEL)) continue;
-                    if (!canMentionPlayer(senderPlayer, targetPlayer, mentionConfig)) continue;
-                } else {
-                    lastIndividualMentionTime.put(targetPlayer.getUniqueID(), System.currentTimeMillis());
+                    if (!canMentionIndividualNow(senderPlayer, mentionConfig)) {
+                        throw new CommandException("You are mentioning players too frequently.");
+                    }
                 }
                 notifyPlayer(targetPlayer, senderPlayer, message, isConsole, mentionConfig, mention);
                 mentionedSomeone = true;
@@ -186,6 +203,9 @@ public class Mentions implements ParadigmModule {
         }
 
         if (mentionedSomeone) {
+            if (senderPlayer != null) {
+                markMentionIndividualUsed(senderPlayer);
+            }
             CommandBase.notifyCommandListener(sender, this.getCommand(), "Mentioned player(s) successfully.", new Object[0]);
         } else {
             throw new CommandException("No valid mentions found in the message.");
@@ -193,25 +213,36 @@ public class Mentions implements ParadigmModule {
         return mentionedSomeone ? 1 : 0;
     }
 
-    private boolean canMentionEveryone(EntityPlayerMP sender, MentionConfigHandler.Config config) {
-        if (sender != null && sender.canUseCommand(2, "")) return true;
+    private boolean canMentionEveryoneNow(EntityPlayerMP sender, MentionConfigHandler.Config config) {
+        if (sender == null) return true;
+        if (sender.canUseCommand(2, "")) return true;
         long rateLimit = config.EVERYONE_MENTION_RATE_LIMIT.value;
         if (rateLimit <= 0) return true;
         long currentTime = System.currentTimeMillis();
-        if (currentTime - lastEveryoneMentionTime < rateLimit * 1000L) return false;
-        lastEveryoneMentionTime = currentTime;
-        return true;
+        UUID senderUUID = sender.getUniqueID();
+        Long last = lastEveryoneMentionBySender.get(senderUUID);
+        return !(last != null && currentTime - last < rateLimit * 1000L);
     }
 
-    private boolean canMentionPlayer(EntityPlayerMP sender, EntityPlayerMP targetPlayer, MentionConfigHandler.Config config) {
-        if (sender != null && sender.canUseCommand(2, "")) return true;
+    private void markMentionEveryoneUsed(EntityPlayerMP sender) {
+        if (sender == null) return;
+        lastEveryoneMentionBySender.put(sender.getUniqueID(), System.currentTimeMillis());
+    }
+
+    private boolean canMentionIndividualNow(EntityPlayerMP sender, MentionConfigHandler.Config config) {
+        if (sender == null) return true;
+        if (sender.canUseCommand(2, "")) return true;
         long rateLimit = config.INDIVIDUAL_MENTION_RATE_LIMIT.value;
         if (rateLimit <= 0) return true;
         long currentTime = System.currentTimeMillis();
-        UUID targetUUID = targetPlayer.getUniqueID();
-        if (lastIndividualMentionTime.containsKey(targetUUID) && currentTime - lastIndividualMentionTime.get(targetUUID) < rateLimit * 1000L) return false;
-        lastIndividualMentionTime.put(targetUUID, currentTime);
-        return true;
+        UUID senderUUID = sender.getUniqueID();
+        Long last = lastIndividualMentionBySender.get(senderUUID);
+        return !(last != null && currentTime - last < rateLimit * 1000L);
+    }
+
+    private void markMentionIndividualUsed(EntityPlayerMP sender) {
+        if (sender == null) return;
+        lastIndividualMentionBySender.put(sender.getUniqueID(), System.currentTimeMillis());
     }
 
     private void notifyEveryone(List<EntityPlayerMP> players, EntityPlayerMP sender, String originalMessage, boolean isConsole, MentionConfigHandler.Config config, String matchedEveryoneMention) {
