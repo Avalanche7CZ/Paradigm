@@ -356,111 +356,220 @@ public class WebEditorSession {
         root.add("files", files);
 
         JsonArray sections = buildSectionsFromFiles(files);
-        // add a dedicated section descriptor for complex custom commands
-        // JsonObject ccSection = buildCustomCommandsSection();
-        // if (ccSection != null) sections.add(ccSection);
+        JsonObject ccSection = buildCustomCommandsSection();
+         if (ccSection != null) sections.add(ccSection);
         root.add("sections", sections);
         root.addProperty("schemaVersion", 1);
 
         return root;
     }
 
-    // private static JsonObject buildCustomCommandsSection() {
-    //     JsonObject section = new JsonObject();
-    //     section.addProperty("key", "customCommands");
-    //     section.addProperty("title", "Custom Commands");
-    //     section.addProperty("filename", "commands/*.json");
-    //     section.addProperty("type", "customCommands");
-    //
-    //     JsonObject model = new JsonObject();
-    //     JsonObject cmd = new JsonObject();
-    //     JsonObject fields = new JsonObject();
-    //
-    //     JsonObject s = new JsonObject(); s.addProperty("type", "string"); s.addProperty("displayName", "Name"); fields.add("name", s);
-    //     s = new JsonObject(); s.addProperty("type", "string"); s.addProperty("displayName", "Description"); fields.add("description", s);
-    //     s = new JsonObject(); s.addProperty("type", "string"); s.addProperty("displayName", "Permission"); fields.add("permission", s);
-    //     s = new JsonObject(); s.addProperty("type", "boolean"); s.addProperty("displayName", "Require OP"); fields.add("requireOp", s);
-    //     s = new JsonObject(); s.addProperty("type", "number"); s.addProperty("displayName", "Cooldown Seconds"); fields.add("cooldownSeconds", s);
-    //     s = new JsonObject(); s.addProperty("type", "string"); s.addProperty("displayName", "Cooldown Message"); fields.add("cooldownMessage", s);
-    //
-    //     JsonObject area = new JsonObject();
-    //     JsonObject af = new JsonObject();
-    //     JsonObject afs;
-    //     afs = new JsonObject(); afs.addProperty("type", "string"); afs.addProperty("displayName", "World"); af.add("world", afs);
-    //     afs = new JsonObject(); afs.addProperty("type", "number[]"); afs.addProperty("displayName", "Corner 1 (x,y,z)"); af.add("corner1", afs);
-    //     afs = new JsonObject(); afs.addProperty("type", "number[]"); afs.addProperty("displayName", "Corner 2 (x,y,z)"); af.add("corner2", afs);
-    //     afs = new JsonObject(); afs.addProperty("type", "string"); afs.addProperty("displayName", "Restriction Message"); af.add("restrictionMessage", afs);
-    //     area.addProperty("type", "object");
-    //     area.add("fields", af);
-    //     fields.add("areaRestriction", area);
-    //
-    //     JsonObject arg = new JsonObject();
-    //     JsonObject argFields = new JsonObject();
-    //     JsonObject a;
-    //     a = new JsonObject(); a.addProperty("type", "string"); a.addProperty("displayName", "Name"); argFields.add("name", a);
-    //     a = new JsonObject(); a.addProperty("type", "enum"); a.add("options", asArray("string","integer","boolean","player","world","gamemode","custom")); a.addProperty("displayName", "Type"); argFields.add("type", a);
-    //     a = new JsonObject(); a.addProperty("type", "boolean"); a.addProperty("displayName", "Required"); argFields.add("required", a);
-    //     a = new JsonObject(); a.addProperty("type", "string"); a.addProperty("displayName", "Error Message"); argFields.add("errorMessage", a);
-    //     a = new JsonObject(); a.addProperty("type", "string[]"); a.addProperty("displayName", "Custom Completions"); argFields.add("customCompletions", a);
-    //     a = new JsonObject(); a.addProperty("type", "number"); a.addProperty("displayName", "Min Value"); argFields.add("minValue", a);
-    //     a = new JsonObject(); a.addProperty("type", "number"); a.addProperty("displayName", "Max Value"); argFields.add("maxValue", a);
-    //     arg.addProperty("type", "object");
-    //     arg.add("fields", argFields);
-    //     fields.add("arguments", arrayOf(arg));
-    //
-    //     JsonObject cond = new JsonObject();
-    //     JsonObject condFields = new JsonObject();
-    //     JsonObject c;
-    //     c = new JsonObject(); c.addProperty("type", "enum"); c.add("options", asArray("has_permission","has_item","is_op")); c.addProperty("displayName", "Type"); condFields.add("type", c);
-    //     c = new JsonObject(); c.addProperty("type", "string"); c.addProperty("displayName", "Value"); condFields.add("value", c);
-    //     c = new JsonObject(); c.addProperty("type", "number"); c.addProperty("displayName", "Item Amount"); condFields.add("itemAmount", c);
-    //     c = new JsonObject(); c.addProperty("type", "boolean"); c.addProperty("displayName", "Negate"); condFields.add("negate", c);
-    //     cond.addProperty("type", "object");
-    //     cond.add("fields", condFields);
-    //
-    //     JsonObject action = new JsonObject();
-    //     JsonObject actionFields = new JsonObject();
-    //     JsonObject ac;
-    //     ac = new JsonObject(); ac.addProperty("type", "enum"); ac.add("options", asArray("message","teleport","run_command","runcmd","run_console","conditional")); ac.addProperty("displayName", "Type"); actionFields.add("type", ac);
-    //     ac = new JsonObject(); ac.addProperty("type", "string[]"); ac.addProperty("displayName", "Text"); actionFields.add("text", ac);
-    //     ac = new JsonObject(); ac.addProperty("type", "number"); ac.addProperty("displayName", "X"); actionFields.add("x", ac);
-    //     ac = new JsonObject(); ac.addProperty("type", "number"); ac.addProperty("displayName", "Y"); actionFields.add("y", ac);
-    //     ac = new JsonObject(); ac.addProperty("type", "number"); ac.addProperty("displayName", "Z"); actionFields.add("z", ac);
-    //     ac = new JsonObject(); ac.addProperty("type", "string[]"); ac.addProperty("displayName", "Commands"); actionFields.add("commands", ac);
-    //     ac = new JsonObject(); ac.addProperty("type", "array"); ac.add("item", cond); ac.addProperty("displayName", "Conditions"); actionFields.add("conditions", ac);
-    //     ac = new JsonObject(); ac.addProperty("type", "array"); ac.add("item", action); ac.addProperty("displayName", "On Success"); actionFields.add("onSuccess", ac);
-    //     ac = new JsonObject(); ac.addProperty("type", "array"); ac.add("item", action); ac.addProperty("displayName", "On Failure"); actionFields.add("onFailure", ac);
-    //     action.addProperty("type", "object");
-    //     action.add("fields", actionFields);
-    //
-    //     JsonObject actionsArr = new JsonObject();
-    //     actionsArr.addProperty("type", "array");
-    //     actionsArr.add("item", action);
-    //     actionsArr.addProperty("displayName", "Actions");
-    //     fields.add("actions", actionsArr);
-    //
-    //     cmd.addProperty("type", "object");
-    //     cmd.add("fields", fields);
-    //
-    //     JsonObject commandsArr = new JsonObject();
-    //     commandsArr.addProperty("type", "array");
-    //     commandsArr.add("item", cmd);
-    //     model.add("commands", commandsArr);
-    //
-    //     section.add("model", model);
-    //     return section;
-    // }
+     private static JsonObject buildCustomCommandsSection() {
+         JsonObject section = new JsonObject();
+         section.addProperty("key", "customCommands");
+         section.addProperty("title", "Custom Commands");
+         section.addProperty("filename", "commands/*.json");
+         section.addProperty("type", "array");
+
+         JsonObject commandSchema = new JsonObject();
+         commandSchema.addProperty("type", "object");
+         JsonObject cmdFields = new JsonObject();
+
+         JsonObject nameField = new JsonObject();
+         nameField.addProperty("type", "string");
+         nameField.addProperty("displayName", "Command Name");
+         nameField.addProperty("description", "The name of the command (without /)");
+         cmdFields.add("name", nameField);
+
+         JsonObject descField = new JsonObject();
+         descField.addProperty("type", "string");
+         descField.addProperty("displayName", "Description");
+         descField.addProperty("description", "Command description shown in help");
+         cmdFields.add("description", descField);
+
+         JsonObject permField = new JsonObject();
+         permField.addProperty("type", "string");
+         permField.addProperty("displayName", "Permission");
+         permField.addProperty("description", "Permission node required to use this command");
+         cmdFields.add("permission", permField);
+
+         JsonObject requirePermField = new JsonObject();
+         requirePermField.addProperty("type", "boolean");
+         requirePermField.addProperty("displayName", "Require Permission");
+         requirePermField.addProperty("description", "Whether permission is required");
+         cmdFields.add("requirePermission", requirePermField);
+
+         JsonObject permErrorField = new JsonObject();
+         permErrorField.addProperty("type", "string");
+         permErrorField.addProperty("displayName", "Permission Error Message");
+         permErrorField.addProperty("description", "Message shown when player lacks permission");
+         cmdFields.add("permissionErrorMessage", permErrorField);
+
+         JsonObject cooldownField = new JsonObject();
+         cooldownField.addProperty("type", "number");
+         cooldownField.addProperty("displayName", "Cooldown (seconds)");
+         cooldownField.addProperty("description", "Cooldown in seconds between uses");
+         cmdFields.add("cooldown_seconds", cooldownField);
+
+         JsonObject cooldownMsgField = new JsonObject();
+         cooldownMsgField.addProperty("type", "string");
+         cooldownMsgField.addProperty("displayName", "Cooldown Message");
+         cooldownMsgField.addProperty("description", "Message shown when command is on cooldown. Use {remaining_time} for seconds left");
+         cmdFields.add("cooldown_message", cooldownMsgField);
+
+         JsonObject areaRestrictionField = new JsonObject();
+         areaRestrictionField.addProperty("type", "object");
+         areaRestrictionField.addProperty("displayName", "Area Restriction");
+         areaRestrictionField.addProperty("description", "Restrict command to specific area");
+         JsonObject areaFields = new JsonObject();
+         JsonObject worldField = new JsonObject();
+         worldField.addProperty("type", "string");
+         worldField.addProperty("displayName", "World");
+         worldField.addProperty("description", "World dimension (e.g., minecraft:overworld)");
+         areaFields.add("world", worldField);
+         JsonObject corner1Field = new JsonObject();
+         corner1Field.addProperty("type", "number[]");
+         corner1Field.addProperty("displayName", "Corner 1 [x, y, z]");
+         areaFields.add("corner1", corner1Field);
+         JsonObject corner2Field = new JsonObject();
+         corner2Field.addProperty("type", "number[]");
+         corner2Field.addProperty("displayName", "Corner 2 [x, y, z]");
+         areaFields.add("corner2", corner2Field);
+         JsonObject restrictMsgField = new JsonObject();
+         restrictMsgField.addProperty("type", "string");
+         restrictMsgField.addProperty("displayName", "Restriction Message");
+         areaFields.add("restriction_message", restrictMsgField);
+         areaRestrictionField.add("fields", areaFields);
+         cmdFields.add("area_restriction", areaRestrictionField);
+
+         JsonObject argSchema = new JsonObject();
+         argSchema.addProperty("type", "object");
+         JsonObject argFields = new JsonObject();
+         JsonObject argNameField = new JsonObject();
+         argNameField.addProperty("type", "string");
+         argNameField.addProperty("displayName", "Argument Name");
+         argFields.add("name", argNameField);
+         JsonObject argTypeField = new JsonObject();
+         argTypeField.addProperty("type", "enum");
+         argTypeField.add("options", asArray("string", "integer", "boolean", "player", "world", "gamemode", "custom"));
+         argTypeField.addProperty("displayName", "Argument Type");
+         argFields.add("type", argTypeField);
+         JsonObject argReqField = new JsonObject();
+         argReqField.addProperty("type", "boolean");
+         argReqField.addProperty("displayName", "Required");
+         argFields.add("required", argReqField);
+         JsonObject argErrField = new JsonObject();
+         argErrField.addProperty("type", "string");
+         argErrField.addProperty("displayName", "Error Message");
+         argFields.add("errorMessage", argErrField);
+         JsonObject argCompField = new JsonObject();
+         argCompField.addProperty("type", "string[]");
+         argCompField.addProperty("displayName", "Custom Completions");
+         argFields.add("customCompletions", argCompField);
+         JsonObject argMinField = new JsonObject();
+         argMinField.addProperty("type", "number");
+         argMinField.addProperty("displayName", "Min Value");
+         argFields.add("minValue", argMinField);
+         JsonObject argMaxField = new JsonObject();
+         argMaxField.addProperty("type", "number");
+         argMaxField.addProperty("displayName", "Max Value");
+         argFields.add("maxValue", argMaxField);
+         argSchema.add("fields", argFields);
+         JsonObject argumentsArrayField = new JsonObject();
+         argumentsArrayField.addProperty("type", "array");
+         argumentsArrayField.add("item", argSchema);
+         argumentsArrayField.addProperty("displayName", "Arguments");
+         argumentsArrayField.addProperty("description", "Command arguments with type validation");
+         cmdFields.add("arguments", argumentsArrayField);
+
+         JsonObject condSchema = new JsonObject();
+         condSchema.addProperty("type", "object");
+         JsonObject condFields = new JsonObject();
+         JsonObject condTypeField = new JsonObject();
+         condTypeField.addProperty("type", "enum");
+         condTypeField.add("options", asArray("has_permission", "has_item", "is_op"));
+         condTypeField.addProperty("displayName", "Condition Type");
+         condFields.add("type", condTypeField);
+         JsonObject condValueField = new JsonObject();
+         condValueField.addProperty("type", "string");
+         condValueField.addProperty("displayName", "Value");
+         condValueField.addProperty("description", "Permission node or item ID");
+         condFields.add("value", condValueField);
+         JsonObject condAmountField = new JsonObject();
+         condAmountField.addProperty("type", "number");
+         condAmountField.addProperty("displayName", "Item Amount");
+         condFields.add("item_amount", condAmountField);
+         JsonObject condNegateField = new JsonObject();
+         condNegateField.addProperty("type", "boolean");
+         condNegateField.addProperty("displayName", "Negate");
+         condNegateField.addProperty("description", "Invert the condition (NOT)");
+         condFields.add("negate", condNegateField);
+         condSchema.add("fields", condFields);
+
+         JsonObject actionSchema = new JsonObject();
+         actionSchema.addProperty("type", "object");
+         JsonObject actionFields = new JsonObject();
+         JsonObject actionTypeField = new JsonObject();
+         actionTypeField.addProperty("type", "enum");
+         actionTypeField.add("options", asArray("message", "teleport", "run_command", "runcmd", "run_console", "conditional"));
+         actionTypeField.addProperty("displayName", "Action Type");
+         actionTypeField.addProperty("description", "Type of action to perform");
+         actionFields.add("type", actionTypeField);
+         JsonObject actionTextField = new JsonObject();
+         actionTextField.addProperty("type", "string[]");
+         actionTextField.addProperty("displayName", "Messages");
+         actionTextField.addProperty("description", "Messages to send (for message action). Use {player} for player name, $1 $2 etc for arguments");
+         actionFields.add("text", actionTextField);
+         JsonObject actionXField = new JsonObject();
+         actionXField.addProperty("type", "number");
+         actionXField.addProperty("displayName", "X Coordinate");
+         actionFields.add("x", actionXField);
+         JsonObject actionYField = new JsonObject();
+         actionYField.addProperty("type", "number");
+         actionYField.addProperty("displayName", "Y Coordinate");
+         actionFields.add("y", actionYField);
+         JsonObject actionZField = new JsonObject();
+         actionZField.addProperty("type", "number");
+         actionZField.addProperty("displayName", "Z Coordinate");
+         actionFields.add("z", actionZField);
+         JsonObject actionCmdsField = new JsonObject();
+         actionCmdsField.addProperty("type", "string[]");
+         actionCmdsField.addProperty("displayName", "Commands");
+         actionCmdsField.addProperty("description", "Commands to run. Use {player} for player name, $1 $2 etc for arguments");
+         actionFields.add("commands", actionCmdsField);
+         JsonObject actionCondsField = new JsonObject();
+         actionCondsField.addProperty("type", "array");
+         actionCondsField.add("item", condSchema);
+         actionCondsField.addProperty("displayName", "Conditions");
+         actionCondsField.addProperty("description", "Conditions for conditional action");
+         actionFields.add("conditions", actionCondsField);
+         JsonObject actionSuccessRef = new JsonObject();
+         actionSuccessRef.addProperty("type", "actionArray");
+         actionSuccessRef.addProperty("displayName", "On Success");
+         actionSuccessRef.addProperty("description", "Actions to run when conditions pass");
+         actionFields.add("on_success", actionSuccessRef);
+         JsonObject actionFailureRef = new JsonObject();
+         actionFailureRef.addProperty("type", "actionArray");
+         actionFailureRef.addProperty("displayName", "On Failure");
+         actionFailureRef.addProperty("description", "Actions to run when conditions fail");
+         actionFields.add("on_failure", actionFailureRef);
+         actionSchema.add("fields", actionFields);
+
+         JsonObject actionsArrayField = new JsonObject();
+         actionsArrayField.addProperty("type", "array");
+         actionsArrayField.add("item", actionSchema);
+         actionsArrayField.addProperty("displayName", "Actions");
+         actionsArrayField.addProperty("description", "Actions to execute when command is run");
+         cmdFields.add("actions", actionsArrayField);
+
+         commandSchema.add("fields", cmdFields);
+         section.add("item", commandSchema);
+         return section;
+     }
 
     private static JsonArray asArray(String... values) {
         JsonArray arr = new JsonArray();
         for (String v : values) arr.add(v);
-        return arr;
-    }
-
-    private static JsonObject arrayOf(JsonObject itemSchema) {
-        JsonObject arr = new JsonObject();
-        arr.addProperty("type", "array");
-        arr.add("item", itemSchema);
         return arr;
     }
 
