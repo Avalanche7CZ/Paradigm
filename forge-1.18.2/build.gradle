@@ -4,11 +4,20 @@ plugins {
     id 'net.minecraftforge.gradle' version '[6.0.16,6.2)'
 }
 
-group = rootProject.ext.mod_group_id
-version = rootProject.ext.mod_version
+// Ensure properties are available with defaults
+if (!project.hasProperty('mod_group_id')) { project.ext.mod_group_id = 'eu.avalanche7' }
+if (!project.hasProperty('mod_version')) { project.ext.mod_version = '2.0.0' }
+if (!project.hasProperty('mod_id')) { project.ext.mod_id = 'paradigm' }
+if (!project.hasProperty('minecraft_version')) { project.ext.minecraft_version = '1.18.2' }
+if (!project.hasProperty('forge_version')) { project.ext.forge_version = '40.2.21' }
+if (!project.hasProperty('mapping_channel')) { project.ext.mapping_channel = 'official' }
+if (!project.hasProperty('mapping_version')) { project.ext.mapping_version = '1.18.2' }
+
+group = project.ext.mod_group_id
+version = project.ext.mod_version
 
 base {
-    archivesName = rootProject.ext.mod_id
+    archivesName = project.ext.mod_id
 }
 
 java {
@@ -16,7 +25,7 @@ java {
 }
 
 minecraft {
-    mappings channel: rootProject.ext.mapping_channel, version: rootProject.ext.mapping_version
+    mappings channel: project.ext.mapping_channel, version: project.ext.mapping_version
     copyIdeResources = true
 
     runs {
@@ -26,20 +35,20 @@ minecraft {
             property 'forge.logging.console.level', 'debug'
 
             mods {
-                "${rootProject.ext.mod_id}" {
+                "${project.ext.mod_id}" {
                     source sourceSets.main
                 }
             }
         }
 
         server {
-            property 'forge.enabledGameTestNamespaces', rootProject.ext.mod_id
+            property 'forge.enabledGameTestNamespaces', project.ext.mod_id
             args '--nogui'
         }
 
         data {
             workingDirectory project.file('run-data')
-            args '--mod', rootProject.ext.mod_id, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+            args '--mod', project.ext.mod_id, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
         }
     }
 }
@@ -68,24 +77,24 @@ processResources {
 }
 
 dependencies {
-    minecraft "net.minecraftforge:forge:${rootProject.ext.minecraft_version}-${rootProject.ext.forge_version}"
+    minecraft "net.minecraftforge:forge:${project.ext.minecraft_version}-${project.ext.forge_version}"
     compileOnly('net.luckperms:api:5.4')
     implementation 'com.google.code.gson:gson:2.10.1'
 }
 
 tasks.named('processResources', ProcessResources).configure {
     var replaceProperties = [
-        minecraft_version: rootProject.ext.minecraft_version,
-        minecraft_version_range: rootProject.ext.minecraft_version_range,
-        forge_version: rootProject.ext.forge_version,
-        forge_version_range: rootProject.ext.forge_version_range,
-        loader_version_range: rootProject.ext.loader_version_range,
-        mod_id: rootProject.ext.mod_id,
-        mod_name: rootProject.ext.mod_name,
-        mod_license: rootProject.ext.mod_license,
-        mod_version: rootProject.ext.mod_version,
-        mod_authors: rootProject.ext.mod_authors,
-        mod_description: rootProject.ext.mod_description ?: '',
+        minecraft_version: project.ext.minecraft_version,
+        minecraft_version_range: project.ext.minecraft_version_range,
+        forge_version: project.ext.forge_version,
+        forge_version_range: project.ext.forge_version_range,
+        loader_version_range: project.ext.loader_version_range,
+        mod_id: project.ext.mod_id,
+        mod_name: project.ext.mod_name,
+        mod_license: project.ext.mod_license,
+        mod_version: project.ext.mod_version,
+        mod_authors: project.ext.mod_authors,
+        mod_description: project.ext.mod_description ?: '',
     ]
 
     inputs.properties replaceProperties
@@ -96,20 +105,24 @@ tasks.named('processResources', ProcessResources).configure {
 }
 
 tasks.named('jar', Jar).configure {
-    archiveFileName.set("paradigm-${rootProject.ext.minecraft_version}-${rootProject.ext.mod_version}.jar")
+    archiveFileName.set("paradigm-${project.ext.minecraft_version}-${project.ext.mod_version}.jar")
 
     manifest {
         attributes([
-            "Specification-Title": rootProject.ext.mod_id,
-            "Specification-Vendor": rootProject.ext.mod_authors,
+            "Specification-Title": project.ext.mod_id,
+            "Specification-Vendor": project.ext.mod_authors,
             "Specification-Version": "1",
             "Implementation-Title": project.name,
             "Implementation-Version": project.jar.archiveVersion,
-            "Implementation-Vendor": rootProject.ext.mod_authors,
+            "Implementation-Vendor": project.ext.mod_authors,
             "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
         ])
     }
 
     finalizedBy 'reobfJar'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
 }
 

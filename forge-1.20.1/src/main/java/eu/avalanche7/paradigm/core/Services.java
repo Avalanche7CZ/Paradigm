@@ -3,6 +3,7 @@ package eu.avalanche7.paradigm.core;
 import eu.avalanche7.paradigm.configs.*;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.*;
+import eu.avalanche7.paradigm.webeditor.store.WebEditorStore;
 import org.slf4j.Logger;
 
 public class Services {
@@ -23,6 +24,7 @@ public class Services {
     private final TaskScheduler taskSchedulerInstance;
     private final GroupChatManager groupChatManagerInstance;
     private final IPlatformAdapter platformAdapter;
+    private final WebEditorStore webEditorStore;
     private final CooldownConfigHandler cooldownConfigHandler;
 
     public Services(
@@ -42,7 +44,8 @@ public class Services {
             Placeholders placeholders,
             TaskScheduler taskScheduler,
             IPlatformAdapter platformAdapter,
-            CooldownConfigHandler cooldownConfigHandler
+            CooldownConfigHandler cooldownConfigHandler,
+            WebEditorStore webEditorStore
     ) {
         this.logger = logger;
         this.mainConfig = mainConfig;
@@ -61,6 +64,7 @@ public class Services {
         this.taskSchedulerInstance = taskScheduler;
         this.platformAdapter = platformAdapter;
         this.cooldownConfigHandler = cooldownConfigHandler;
+        this.webEditorStore = webEditorStore;
 
         initializeJsonValidators();
     }
@@ -140,5 +144,9 @@ public class Services {
 
     public CooldownConfigHandler getCooldownConfigHandler() {
         return cooldownConfigHandler;
+    }
+
+    public WebEditorStore getWebEditorStore() {
+        return webEditorStore;
     }
 }

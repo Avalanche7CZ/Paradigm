@@ -13,6 +13,7 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.PlatformAdapterImpl;
 import eu.avalanche7.paradigm.utils.*;
 import eu.avalanche7.paradigm.utils.TelemetryReporter;
+import eu.avalanche7.paradigm.webeditor.store.WebEditorStore;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -134,6 +135,9 @@ public class Paradigm {
         cooldownConfigHandler.loadCooldowns();
         debugLogger.debugLog("Paradigm: CooldownConfigHandler created and cooldowns loaded.");
 
+        WebEditorStore webEditorStore = new WebEditorStore();
+        debugLogger.debugLog("Paradigm: WebEditorStore created.");
+
         debugLogger.debugLog("Paradigm: Creating Services object.");
         return new Services(
                 LOGGER,
@@ -152,7 +156,8 @@ public class Paradigm {
                 placeholders,
                 taskScheduler,
                 platformAdapter,
-                cooldownConfigHandler
+                cooldownConfigHandler,
+                webEditorStore
         );
     }
 

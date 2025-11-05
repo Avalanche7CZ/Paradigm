@@ -59,6 +59,9 @@ public class MainConfigHandler {
         public ConfigEntry<String> telemetryServerId = new ConfigEntry<>(
                 "", "Anonymous server ID (auto-generated when empty)."
         );
+        public ConfigEntry<Boolean> webEditorTestUrl = new ConfigEntry<>(
+                false, "Use local testing URL"
+        );
     }
 
     public static void load() {

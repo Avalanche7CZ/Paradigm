@@ -1,31 +1,54 @@
-plugins {
-    id 'java'
-}
+// Root build file - delegates to subprojects
+// Each forge version module handles its own configuration
 
-apply from: 'versions.gradle'
-
-allprojects {
-    group = 'eu.avalanche7'
-    version = '2.0.0'
-
-    repositories {
-        mavenCentral()
-    }
+// ============================================
+// CENTRALIZED MOD VERSION - Change here only!
+// ============================================
+ext {
+    modVersion = '2.0.0'
+    modGroupId = 'eu.avalanche7'
+    modId = 'paradigm'
+    modName = 'Paradigm'
+    modLicense = 'CC-BY-NC-ND-4.0'
+    modAuthors = 'Avalanche7CZ'
+    modDescription = ''
 }
 
 subprojects {
-    def versionInfo = rootProject.ext.versions["forge_${name.replace('forge-', '').replace('.', '_')}"]
-    if (versionInfo) {
-        def mcVersion = versionInfo.mcVersion
-        def versionPropsFile = rootProject.file("gradle/versions/forge-${mcVersion}.gradle.properties")
+    // Load version-specific properties for each module BEFORE evaluation
+    def versionName = name.replace('forge-', '')
+    def versionPropsFile = rootProject.file("gradle/versions/forge-${versionName}.gradle.properties")
 
-        if (versionPropsFile.exists()) {
-            Properties versionProps = new Properties()
-            versionProps.load(new FileInputStream(versionPropsFile))
-            versionProps.each { key, value ->
-                ext[key] = value
+    if (versionPropsFile.exists()) {
+        // Load properties file
+        Properties props = new Properties()
+        versionPropsFile.withInputStream { stream ->
+            props.load(stream)
+        }
+
+        // Set properties on the project's ext before configuration
+        props.each { key, value ->
+            // Skip gradle-specific properties and mod version (use root version instead)
+            if (!key.toString().startsWith('org.gradle') && key.toString() != 'mod_version') {
+                project.ext.set(key.toString(), value.toString())
             }
         }
+
+        // Override with centralized mod properties
+        project.ext.mod_version = rootProject.ext.modVersion
+        project.ext.mod_group_id = rootProject.ext.modGroupId
+        project.ext.mod_id = rootProject.ext.modId
+        project.ext.mod_name = rootProject.ext.modName
+        project.ext.mod_license = rootProject.ext.modLicense
+        project.ext.mod_authors = rootProject.ext.modAuthors
+        project.ext.mod_description = rootProject.ext.modDescription
+
+        println "Loaded properties for ${name}: minecraft=${project.ext.minecraft_version}, forge=${project.ext.forge_version}, mod_version=${project.ext.mod_version}"
+    } else {
+        println "WARNING: No properties file found for ${name} at ${versionPropsFile}"
     }
 }
+
+// Default task delegates to all subprojects
+defaultTasks 'build'
 

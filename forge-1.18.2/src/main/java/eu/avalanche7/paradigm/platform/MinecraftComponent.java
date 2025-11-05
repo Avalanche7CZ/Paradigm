@@ -1,12 +1,7 @@
 package eu.avalanche7.paradigm.platform;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
-import net.minecraft.network.chat.MutableComponent;
-import net.minecraft.network.chat.Style;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.ClickEvent;
-import net.minecraft.network.chat.HoverEvent;
-import net.minecraft.network.chat.TextColor;
+import net.minecraft.network.chat.*;
 import net.minecraft.ChatFormatting;
 import java.util.List;
 
