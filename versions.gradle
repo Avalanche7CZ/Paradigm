@@ -1,0 +1,65 @@
+ext {
+    versions = [
+        forge_1_21_1: [
+            mcVersion: '1.21.1',
+            forgeVersion: '52.1.0',
+            loader: 'forge',
+            mappingChannel: 'official'
+        ],
+        forge_1_20_1: [
+            mcVersion: '1.20.1',
+            forgeVersion: '47.4.2',
+            loader: 'forge',
+            mappingChannel: 'official'
+        ],
+        forge_1_19_2: [
+            mcVersion: '1.19.2',
+            forgeVersion: '41.1.0',
+            loader: 'forge',
+            mappingChannel: 'official'
+        ],
+        forge_1_18_2: [
+            mcVersion: '1.18.2',
+            forgeVersion: '40.2.21',
+            loader: 'forge',
+            mappingChannel: 'official'
+        ],
+        neoforge_1_21_1: [
+            mcVersion: '1.21.1',
+            forgeVersion: '52.1.0',
+            loader: 'neoforge',
+            mappingChannel: 'official'
+        ],
+        neoforge_1_20_1: [
+            mcVersion: '1.20.1',
+            forgeVersion: '47.4.2',
+            loader: 'neoforge',
+            mappingChannel: 'official'
+        ],
+        fabric_1_21_8: [
+            mcVersion: '1.21.8',
+            fabricVersion: '0.16.14',
+            loader: 'fabric',
+            mappingChannel: 'official'
+        ],
+        fabric_1_21_6: [
+            mcVersion: '1.21.6',
+            fabricVersion: '0.16.14',
+            loader: 'fabric',
+            mappingChannel: 'official'
+        ],
+        fabric_1_21_1: [
+            mcVersion: '1.21.1',
+            fabricVersion: '0.16.14',
+            loader: 'fabric',
+            mappingChannel: 'official'
+        ],
+        fabric_1_20_1: [
+            mcVersion: '1.20.1',
+            fabricVersion: '0.14.21',
+            loader: 'fabric',
+            mappingChannel: 'official'
+        ]
+    ]
+}
+

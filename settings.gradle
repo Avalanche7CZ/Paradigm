@@ -5,6 +5,7 @@ pluginManagement {
             name = 'MinecraftForge'
             url = 'https://maven.minecraftforge.net/'
         }
+        mavenCentral()
     }
 }
 
@@ -13,3 +14,9 @@ plugins {
 }
 
 rootProject.name = 'Paradigm'
+
+include 'forge-1.18.2'
+include 'forge-1.19.2'
+include 'forge-1.20.1'
+include 'forge-1.21.1'
+

@@ -1,0 +1,125 @@
+plugins {
+    id 'eclipse'
+    id 'idea'
+    id 'net.minecraftforge.gradle' version '[6.0.16,6.2)'
+}
+
+group = rootProject.ext.mod_group_id
+version = rootProject.ext.mod_version
+
+base {
+    archivesName = rootProject.ext.mod_id
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+minecraft {
+    mappings channel: rootProject.ext.mapping_channel, version: rootProject.ext.mapping_version
+    copyIdeResources = true
+
+    runs {
+        configureEach {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+
+            mods {
+                "${rootProject.ext.mod_id}" {
+                    source sourceSets.main
+                }
+            }
+        }
+
+        server {
+            property 'forge.enabledGameTestNamespaces', rootProject.ext.mod_id
+            args '--nogui'
+        }
+
+        data {
+            workingDirectory project.file('run-data')
+            args '--mod', rootProject.ext.mod_id, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+        }
+    }
+}
+
+sourceSets.main.resources {
+    srcDir 'src/generated/resources'
+}
+
+repositories {
+    mavenCentral()
+    maven { url "https://maven.minecraftforge.net/" }
+    maven { url "https://repo.lucko.me/" }
+}
+
+processResources {
+    expand(project.properties)
+
+    filesMatching('META-INF/mods.toml') {
+        expand([
+            mod_id: rootProject.ext.mod_id,
+            mod_name: rootProject.ext.mod_name,
+            mod_version: rootProject.ext.mod_version,
+            mod_group_id: rootProject.ext.mod_group_id ?: '',
+            mod_authors: rootProject.ext.mod_authors ?: '',
+            mod_license: rootProject.ext.mod_license ?: '',
+            loader_version_range: rootProject.ext.loader_version_range ?: '',
+            minecraft_version: rootProject.ext.minecraft_version ?: '',
+            forge_version: rootProject.ext.forge_version ?: '',
+            mapping_channel: rootProject.ext.mapping_channel ?: '',
+            mapping_version: rootProject.ext.mapping_version ?: ''
+        ])
+    }
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${rootProject.ext.minecraft_version}-${rootProject.ext.forge_version}"
+    compileOnly('net.luckperms:api:5.4')
+    implementation 'com.google.code.gson:gson:2.10.1'
+}
+
+tasks.named('processResources', ProcessResources).configure {
+    var replaceProperties = [
+        minecraft_version: rootProject.ext.minecraft_version,
+        minecraft_version_range: rootProject.ext.minecraft_version_range,
+        forge_version: rootProject.ext.forge_version,
+        forge_version_range: rootProject.ext.forge_version_range,
+        loader_version_range: rootProject.ext.loader_version_range,
+        mod_id: rootProject.ext.mod_id,
+        mod_name: rootProject.ext.mod_name,
+        mod_license: rootProject.ext.mod_license,
+        mod_version: rootProject.ext.mod_version,
+        mod_authors: rootProject.ext.mod_authors,
+        mod_description: rootProject.ext.mod_description ?: '',
+    ]
+
+    inputs.properties replaceProperties
+
+    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+        expand replaceProperties + [project: project]
+    }
+}
+
+tasks.named('jar', Jar).configure {
+    archiveFileName.set("paradigm-${rootProject.ext.minecraft_version}-${rootProject.ext.mod_version}.jar")
+
+    manifest {
+        attributes([
+            "Specification-Title": rootProject.ext.mod_id,
+            "Specification-Vendor": rootProject.ext.mod_authors,
+            "Specification-Version": "1",
+            "Implementation-Title": project.name,
+            "Implementation-Version": project.jar.archiveVersion,
+            "Implementation-Vendor": rootProject.ext.mod_authors,
+            "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+            "MixinConfigs": "paradigm.mixins.json"
+        ])
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
