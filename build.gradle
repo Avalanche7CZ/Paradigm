@@ -52,3 +52,43 @@ subprojects {
 // Default task delegates to all subprojects
 defaultTasks 'build'
 
+// Automatically collect built jars from subprojects into artifacts/jars
+subprojects { proj ->
+    // Configure after project evaluation to ensure `jar` task exists
+    proj.afterEvaluate {
+        try {
+            def jarTasks = proj.tasks.matching { it.name == 'jar' }
+            jarTasks.configureEach { jarTask ->
+                jarTask.doLast {
+                    try {
+                        def artifactsDir = rootProject.file('artifacts/jars')
+                        if (!artifactsDir.exists()) {
+                            artifactsDir.mkdirs()
+                        }
+                        // Resolve archive file (Gradle 6+/7+ API)
+                        def archiveFile = null
+                        try {
+                            archiveFile = jarTask.archiveFile.get().asFile
+                        } catch (Exception e) {
+                            // fallback for older Gradle API
+                            archiveFile = new File(proj.buildDir, "libs/${proj.name}-${proj.version}.jar")
+                        }
+                        if (archiveFile != null && archiveFile.exists()) {
+                            def dest = new File(artifactsDir, archiveFile.getName())
+                            project.logger.lifecycle("Copying ${archiveFile} -> ${dest}")
+                            dest.withOutputStream { os ->
+                                archiveFile.withInputStream { is -> os << is }
+                            }
+                        } else {
+                            project.logger.lifecycle("No jar found to copy for project ${proj.name} (looked for: ${archiveFile})")
+                        }
+                    } catch (Exception ex) {
+                        project.logger.warn("Failed to copy jar for project ${proj.name}: ${ex}")
+                    }
+                }
+            }
+        } catch (Exception e) {
+            proj.logger.warn("Artifact-collector: failed to attach to jar task for project ${proj.name}: ${e}")
+        }
+    }
+}
