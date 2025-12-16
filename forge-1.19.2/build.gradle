@@ -1,7 +1,7 @@
 plugins {
     id 'eclipse'
     id 'idea'
-    id 'net.minecraftforge.gradle' version '[6.0.16,6.2)'
+    id 'net.minecraftforge.gradle' version '6.0.+'
 }
 
 // Ensure properties are available with defaults
@@ -21,12 +21,20 @@ base {
 }
 
 java {
-    toolchain.languageVersion = JavaLanguageVersion.of(21)
+    toolchain.languageVersion = JavaLanguageVersion.of(17)
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 17
+    options.compilerArgs += [
+        "-AoutRefMap=paradigm.refmap.json",
+        "-AdefaultObfuscationEnv=searge"
+    ]
 }
 
 minecraft {
     mappings channel: project.ext.mapping_channel, version: project.ext.mapping_version
-    copyIdeResources = true
 
     runs {
         configureEach {
@@ -87,6 +95,8 @@ dependencies {
     minecraft "net.minecraftforge:forge:${project.ext.minecraft_version}-${project.ext.forge_version}"
     compileOnly('net.luckperms:api:5.4')
     implementation 'com.google.code.gson:gson:2.10.1'
+    compileOnly 'org.spongepowered:mixin:0.8.5'
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
 
 tasks.named('processResources', ProcessResources).configure {
@@ -126,9 +136,12 @@ tasks.named('jar', Jar).configure {
             "MixinConfigs": "paradigm.mixins.json"
         ])
     }
+
+    finalizedBy 'reobfJar'
 }
 
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8'
+tasks.register('reobf') {
+    group = 'build'
+    description = 'Run reobfJar for runtime compatibility.'
+    dependsOn 'reobfJar'
 }
-

@@ -34,7 +34,7 @@ public abstract class ServerStatusMixin {
         System.out.println("[Paradigm-Mixin] ServerStatusMixin (ServerStatusPacketListenerImpl) loaded!");
     }
 
-    @Shadow
+    @Shadow(remap = false)
     @Final
     private Connection connection;
 
@@ -47,8 +47,8 @@ public abstract class ServerStatusMixin {
     @Unique
     private static boolean paradigm$iconsLoaded = false;
 
-    @Inject(method = "handleStatusRequest", at = @At("HEAD"), cancellable = true)
-    private void paradigm$modifyStatusRequest(CallbackInfo ci) {
+    @Inject(method = "*(Lnet/minecraft/network/protocol/status/ServerboundStatusRequestPacket;)V", at = @At("HEAD"), cancellable = true, remap = false)
+    private void paradigm$modifyStatusRequest(ServerboundStatusRequestPacket packet, CallbackInfo ci) {
         System.out.println("[Paradigm-Mixin] handleStatusRequest called!");
 
         Services services = Paradigm.getServices();

@@ -47,6 +47,14 @@ subprojects {
     } else {
         println "WARNING: No properties file found for ${name} at ${versionPropsFile}"
     }
+
+    // Ensure repositories for all subprojects
+    repositories {
+        mavenLocal()
+        mavenCentral()
+        maven { url 'https://maven.minecraftforge.net' }
+        maven { url 'https://repo.lucko.me' }
+    }
 }
 
 // Default task delegates to all subprojects
@@ -54,41 +62,105 @@ defaultTasks 'build'
 
 // Automatically collect built jars from subprojects into artifacts/jars
 subprojects { proj ->
-    // Configure after project evaluation to ensure `jar` task exists
     proj.afterEvaluate {
         try {
-            def jarTasks = proj.tasks.matching { it.name == 'jar' }
-            jarTasks.configureEach { jarTask ->
-                jarTask.doLast {
+            def artifactsDir = rootProject.file('artifacts/jars')
+            if (!artifactsDir.exists()) artifactsDir.mkdirs()
+
+            def copyArtifact = { File fromFile ->
+                if (fromFile != null && fromFile.exists()) {
+                    def dest = new File(artifactsDir, fromFile.getName())
+                    proj.logger.lifecycle("Copying ${fromFile} -> ${dest}")
+                    dest.withOutputStream { os -> fromFile.withInputStream { is -> os << is } }
+                } else {
+                    proj.logger.lifecycle("No jar found to copy for project ${proj.name} (looked for: ${fromFile})")
+                }
+            }
+
+            def reobf = proj.tasks.findByName('reobfJar')
+            if (reobf != null) {
+                reobf.doLast {
                     try {
-                        def artifactsDir = rootProject.file('artifacts/jars')
-                        if (!artifactsDir.exists()) {
-                            artifactsDir.mkdirs()
-                        }
-                        // Resolve archive file (Gradle 6+/7+ API)
-                        def archiveFile = null
+                        File candidate
                         try {
-                            archiveFile = jarTask.archiveFile.get().asFile
-                        } catch (Exception e) {
-                            // fallback for older Gradle API
-                            archiveFile = new File(proj.buildDir, "libs/${proj.name}-${proj.version}.jar")
+                            candidate = proj.tasks.named('jar', Jar).get().archiveFile.get().asFile
+                        } catch (Exception ignored) {
+                            candidate = new File(proj.buildDir, "libs/${proj.name}-${proj.version}.jar")
                         }
-                        if (archiveFile != null && archiveFile.exists()) {
-                            def dest = new File(artifactsDir, archiveFile.getName())
-                            project.logger.lifecycle("Copying ${archiveFile} -> ${dest}")
-                            dest.withOutputStream { os ->
-                                archiveFile.withInputStream { is -> os << is }
-                            }
-                        } else {
-                            project.logger.lifecycle("No jar found to copy for project ${proj.name} (looked for: ${archiveFile})")
-                        }
+                        copyArtifact(candidate)
                     } catch (Exception ex) {
-                        project.logger.warn("Failed to copy jar for project ${proj.name}: ${ex}")
+                        proj.logger.warn("Artifact-collector(reobf): failed for project ${proj.name}: ${ex}")
+                    }
+                }
+            } else {
+                proj.tasks.matching { it.name == 'jar' }.configureEach { jarTask ->
+                    jarTask.doLast {
+                        try {
+                            File candidate
+                            try {
+                                candidate = jarTask.archiveFile.get().asFile
+                            } catch (Exception ignored) {
+                                candidate = new File(proj.buildDir, "libs/${proj.name}-${proj.version}.jar")
+                            }
+                            copyArtifact(candidate)
+                        } catch (Exception ex) {
+                            proj.logger.warn("Artifact-collector(jar): failed for project ${proj.name}: ${ex}")
+                        }
                     }
                 }
             }
         } catch (Exception e) {
-            proj.logger.warn("Artifact-collector: failed to attach to jar task for project ${proj.name}: ${e}")
+            proj.logger.warn("Artifact-collector: failed to attach for project ${proj.name}: ${e}")
         }
     }
+}
+
+['1.18.2','1.19.2','1.20.1','1.21.1'].each { v ->
+    tasks.register("buildForge${v.replace('.','_')}") { t ->
+        group = 'forge-builds'
+        description = "Build Forge ${v} only"
+        dependsOn ":forge-${v}:build"
+    }
+    tasks.register("cleanForge${v.replace('.','_')}") { t ->
+        group = 'forge-builds'
+        description = "Clean Forge ${v} only"
+        dependsOn ":forge-${v}:clean"
+    }
+}
+
+// Build all forge versions sequentially
+tasks.register('buildAllForge') {
+    group = 'forge-builds'
+    description = 'Build all Forge versions'
+    dependsOn ':forge-1.18.2:build', ':forge-1.19.2:build', ':forge-1.20.1:build', ':forge-1.21.1:build'
+}
+
+// Clean all forge versions
+tasks.register('cleanAllForge') {
+    group = 'forge-builds'
+    description = 'Clean all Forge versions'
+    dependsOn ':forge-1.18.2:clean', ':forge-1.19.2:clean', ':forge-1.20.1:clean', ':forge-1.21.1:clean'
+}
+
+// Remove old collected jars
+tasks.register('purgeArtifacts') {
+    group = 'forge-builds'
+    description = 'Delete collected jars in artifacts/jars'
+    doLast {
+        def dir = file('artifacts/jars')
+        if (dir.exists()) {
+            dir.listFiles()?.each { f -> f.delete() }
+            logger.lifecycle("Purged artifacts/jars")
+        } else {
+            logger.lifecycle("No artifacts/jars directory to purge")
+        }
+    }
+}
+
+// Clean everything including subprojects build dirs and root artifacts
+tasks.register('cleanAll') {
+    group = 'forge-builds'
+    description = 'Full clean: subprojects + artifacts'
+    dependsOn 'cleanAllForge'
+    dependsOn 'purgeArtifacts'
 }

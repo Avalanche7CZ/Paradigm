@@ -1,0 +1,16 @@
+
+> Configure project :
+Loaded properties for forge-1.18.2: minecraft=1.18.2, forge=40.2.21, mod_version=2.0.0
+Loaded properties for forge-1.19.2: minecraft=1.19.2, forge=43.3.0, mod_version=2.0.0
+Loaded properties for forge-1.20.1: minecraft=1.20.1, forge=47.4.2, mod_version=2.0.0
+Loaded properties for forge-1.21.1: minecraft=1.21.1, forge=52.1.0, mod_version=2.0.0
+
+> Task :forge-1.18.2:clean
+> Task :forge-1.19.2:clean
+> Task :forge-1.20.1:clean
+> Task :forge-1.21.1:clean
+
+> Task :forge-1.18.2:compileJava
+
+> Task :forge-1.18.2:compileJava FAILED
+5 actionable tasks: 5 executed

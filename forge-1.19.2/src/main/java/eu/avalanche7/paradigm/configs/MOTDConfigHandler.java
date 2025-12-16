@@ -98,11 +98,20 @@ public class MOTDConfigHandler {
     }
 
     private static void mergeConfigs(Config defaults, Config loaded) {
-        if (loaded != null && loaded.motdLines != null) {
-            defaults.motdLines = loaded.motdLines;
-            LOGGER.debug("[Paradigm] Preserved user MOTD lines");
+        if (loaded != null) {
+            if (loaded.motdLines != null) {
+                defaults.motdLines = loaded.motdLines;
+                LOGGER.debug("[Paradigm] Preserved user MOTD lines");
+            }
+            if (loaded.motds != null) {
+                defaults.motds = loaded.motds;
+                LOGGER.debug("[Paradigm] Preserved user server list MOTDs");
+            }
+            defaults.iconEnabled = loaded.iconEnabled;
+            defaults.serverlistMotdEnabled = loaded.serverlistMotdEnabled;
+            LOGGER.debug("[Paradigm] Preserved user MOTD configuration");
         } else {
-            LOGGER.debug("[Paradigm] Using default MOTD lines");
+            LOGGER.debug("[Paradigm] Using default MOTD configuration");
         }
     }
 
@@ -119,31 +128,118 @@ public class MOTDConfigHandler {
 
     public static class Config {
         public List<String> motdLines;
+        public boolean iconEnabled;
+        public boolean serverlistMotdEnabled;
+        public List<ServerListMOTD> motds;
 
         public Config() {
             this.motdLines = List.of(
-                    "&6====================================================",
-                    "&a[center]&bWelcome to &dOur Awesome Server!&b[/center]",
-                    "&a[title=Welcome Message]",
-                    "&a[subtitle=Welcome Message]",
-                    "&aHello &b{player}&a, and welcome!",
-                    "&7This is the Message of the Day to inform you about server features.",
-                    "&3",
-                    "&9[divider]",
-                    "&bServer Website: &c[link=http://example.com]&b (Click to visit!)",
-                    "&bJoin our Discord: &c[link=https://discord.gg/yourdiscord]&b (For community & support)",
-                    "&9[divider]",
-                    "&3",
-                    "&eCommands to get started:",
-                    "&7- &bType &3[command=rules] &7to see server rules.",
-                    "&7- &bType &3[command=shop] &7to visit our webshop.",
-                    "&3",
-                    "&e[hover=&aServer Info]Hover over me to see server information![/hover]",
-                    "&dYour current health is: &f{player_health}&d/&f{max_player_health}",
-                    "&dYour level is: &f{player_level}",
-                    "&3",
-                    "&6===================================================="
+                    "",
+                    "<center><color:aqua>═══════════════════════════════════════════</center>",
+                    "<center><color:light_purple><bold>Welcome to Paradigm Server</bold></color></center>",
+                    "<center><color:aqua>═══════════════════════════════════════════</center>",
+                    "",
+                    "<center><color:yellow><bold>Hello <color:green>{player}</color>!</bold></color></center>",
+                    "",
+                    "<emoji:star> <bold><color:#55FFFF>Server Information:</color></bold>",
+                    "<emoji:check> <color:#AAAAAA><color:#55FF55>Level:</color> <color:#FFFFFF>{player_level}</color></color>",
+                    "<emoji:heart> <color:#AAAAAA><color:#55FF55>Health:</color> <color:#FFFFFF>{player_health}</color>/<color:#55FF55>{max_player_health}</color></color>",
+                    "<emoji:diamond> <color:#AAAAAA><color:#55FF55>Status:</color> <color:#55FF55>Online & Ready</color></color>",
+                    "",
+                    "<emoji:sword> <bold><color:light_purple>Quick Commands:</color></bold>",
+                    "<emoji:arrow_right> <color:gray><click:execute:/rules><color:aqua><underline>/rules</underline></color></click> - Read server rules</color>",
+                    "<emoji:arrow_right> <color:gray><click:execute:/help><color:aqua><underline>/help</underline></color></click> - Get help</color>",
+                    "<emoji:arrow_right> <color:gray><click:suggest_command:/msg><color:aqua><underline>/msg</underline></color></click> - Send message</color>",
+                    "<emoji:arrow_right> <color:gray><click:execute:/spawn><color:aqua><underline>/spawn</underline></color></click> - Go to spawn</color>",
+                    "",
+                    "<emoji:bell> <bold><color:#00FFFF>Connect With Us:</color></bold>",
+                    "<emoji:link> <color:#AAAAAA><click:open_url:https://discord.gg/paradigm><color:#5555FF><underline>Discord Server</underline></color></click> - Join community</color>",
+                    "<emoji:link> <color:#AAAAAA><click:open_url:https://example.com><color:#5555FF><underline>Website</underline></color></click> - Visit us online</color>",
+                    "<emoji:link> <color:#AAAAAA><click:copy:admin@paradigm.com><color:#5555FF><underline>Copy Email</underline></color></click> - Click to copy</color>",
+                    "",
+                    "<emoji:fire> <bold><color:gold>Feature Showcase:</color></bold>",
+                    "<emoji:star> <rainbow>Rainbow Text Effect</rainbow>",
+                    "<emoji:sparkles> <gradient:#FF0000:#00FF00:#0000FF>Smooth Gradient Colors</gradient>",
+                    "<emoji:star> <gradient:red:green:blue>Named Color Gradient</gradient>",
+                    "<emoji:check> <bold>Bold</bold> <emoji:check> <italic>Italic</italic> <emoji:check> <underline>Underline</underline>",
+                    "<emoji:boom> <bold><italic><underline>Multiple decorations combined</underline></italic></bold>",
+                    "<emoji:info> <hover:'This is a simple hover tooltip'>Hover over this</hover>",
+                    "<emoji:info> <hover:'Colored tooltip: <color:green>This is green!</color>'>Colored hover</hover>",
+                    "",
+                    "<emoji:palette> <bold><color:gray>Legacy & Named Colors:</color></bold>",
+                    "<color:red>Red</color> <color:green>Green</color> <color:aqua>Cyan</color> <color:yellow>Yellow</color> <color:white>White</color>",
+                    "<color:dark_red>Dark Red</color> <color:dark_green>Dark Green</color> <color:dark_blue>Dark Blue</color>",
+                    "&cLegacy Red &aLegacy Green &bLegacy Cyan &eLegacy Yellow &fLegacy White",
+                    "&lBold &r&oItalic &r&nUnderline &r&mStrike",
+                    "&#FF5555Custom Hex <color:#00FF00>Hex with tag</color>",
+                    "",
+                    "<emoji:trophy> <emoji:trophy> <emoji:trophy> <emoji:trophy>",
+                    "<center><color:aqua>═══════════════════════════════════════════</center>",
+                    "<center><color:yellow><bold>Have fun and enjoy your stay! <emoji:heart></bold></color></center>",
+                    "<center><color:aqua>═══════════════════════════════════════════</center>",
+                    ""
             );
+            this.iconEnabled = true;
+            this.serverlistMotdEnabled = true;
+            this.motds = List.of(
+                    new ServerListMOTD(
+                        "random",
+                        "<gradient:aqua:cyan>✦ Paradigm Server ✦</gradient>",
+                        "<color:light_purple><bold>Modded Survival</bold></color>",
+                        new PlayerCountDisplay(
+                            null,
+                            "<gradient:aqua:cyan>✦ Paradigm Server ✦</gradient>\n<color:white>━━━━━━━━━━━━━━━━━━━━━</color>\n<color:light_purple><bold>Modded Survival Experience</bold></color>\n<color:green>✓ Custom Mods</color>\n<color:green>✓ Active Community</color>\n<color:green>✓ 24/7 Online</color>\n<color:white>━━━━━━━━━━━━━━━━━━━━━</color>\n<rainbow>» Join us today! «</rainbow>",
+                            100,
+                            true
+                        )
+                    )
+            );
+        }
+    }
+
+    public static class ServerListMOTD {
+        public String icon;
+        public String line1;
+        public String line2;
+        public PlayerCountDisplay playerCount;
+
+        public ServerListMOTD(String icon, String line1, String line2) {
+            this.icon = icon;
+            this.line1 = line1;
+            this.line2 = line2;
+            this.playerCount = null;
+        }
+
+        public ServerListMOTD(String icon, String line1, String line2, PlayerCountDisplay playerCount) {
+            this.icon = icon;
+            this.line1 = line1;
+            this.line2 = line2;
+            this.playerCount = playerCount;
+        }
+
+        public ServerListMOTD() {
+            this("random", "", "");
+        }
+    }
+
+    public static class PlayerCountDisplay {
+        public String displayText;
+        public String hoverText;
+        public Integer maxPlayers;
+        public boolean showActualCount;
+
+        public PlayerCountDisplay(String displayText, String hoverText, Integer maxPlayers, boolean showActualCount) {
+            this.displayText = displayText;
+            this.hoverText = hoverText;
+            this.maxPlayers = maxPlayers;
+            this.showActualCount = showActualCount;
+        }
+
+        public PlayerCountDisplay() {
+            this.displayText = null;
+            this.hoverText = null;
+            this.maxPlayers = null;
+            this.showActualCount = true;
         }
     }
 }

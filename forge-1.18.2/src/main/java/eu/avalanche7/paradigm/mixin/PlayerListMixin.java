@@ -11,12 +11,14 @@ import eu.avalanche7.paradigm.Paradigm;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ChatType;
 import net.minecraft.server.players.PlayerList;
 import net.minecraft.network.chat.TranslatableComponent;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import java.util.UUID;
 
 @Mixin(PlayerList.class)
 public abstract class PlayerListMixin {
@@ -25,8 +27,8 @@ public abstract class PlayerListMixin {
         System.out.println("[Paradigm-Mixin] PlayerListMixin loaded!");
     }
 
-    @Inject(method = "*(Lnet/minecraft/network/chat/Component;Z)V", at = @At("HEAD"), cancellable = true)
-    private void paradigm$filterJoinLeaveMessages(Component message, boolean overlay, CallbackInfo ci) {
+    @Inject(method = "*(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/ChatType;Ljava/util/UUID;)V", at = @At("HEAD"), cancellable = true, remap = false)
+    private void paradigm$filterJoinLeaveMessages(Component message, ChatType chatType, UUID uuid, CallbackInfo ci) {
         if (message == null) return;
 
         int type = paradigm$getVanillaJoinLeaveType(message);

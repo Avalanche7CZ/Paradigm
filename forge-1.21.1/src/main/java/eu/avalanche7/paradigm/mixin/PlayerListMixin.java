@@ -21,7 +21,7 @@ public abstract class PlayerListMixin {
         System.out.println("[Paradigm-Mixin] PlayerListMixin loaded!");
     }
 
-    @Inject(method = "broadcastSystemMessage(Lnet/minecraft/network/chat/Component;Z)V", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "*(Lnet/minecraft/network/chat/Component;Z)V", at = @At("HEAD"), cancellable = true, remap = false)
     private void paradigm$filterJoinLeaveMessages(Component message, boolean overlay, CallbackInfo ci) {
         if (message == null) return;
 
@@ -39,8 +39,8 @@ public abstract class PlayerListMixin {
         }
     }
 
-    @Inject(method = "broadcastChatMessage(Lnet/minecraft/network/chat/PlayerChatMessage;Lnet/minecraft/server/level/ServerPlayer;Lnet/minecraft/network/chat/ChatType$Bound;)V",
-            at = @At("HEAD"), cancellable = true)
+    @Inject(method = "*(Lnet/minecraft/network/chat/PlayerChatMessage;Lnet/minecraft/server/level/ServerPlayer;Lnet/minecraft/network/chat/ChatType$Bound;)V",
+            at = @At("HEAD"), cancellable = true, remap = false)
     private void paradigm$formatChatMessage(net.minecraft.network.chat.PlayerChatMessage playerChatMessage, ServerPlayer sender, net.minecraft.network.chat.ChatType.Bound boundChatType, CallbackInfo ci) {
         Services services = Paradigm.getServices();
         if (services == null) return;

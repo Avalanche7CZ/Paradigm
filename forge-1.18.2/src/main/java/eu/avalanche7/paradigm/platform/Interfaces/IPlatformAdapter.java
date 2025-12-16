@@ -71,4 +71,7 @@ public interface IPlatformAdapter {
     IEventSystem getEventSystem();
     List<String> getWorldNames();
     List<String> getOnlinePlayerNames();
+    Integer parseColorToRgb(String colorName);
+    String getColorNameFromFormatting(Object formatting);
+    boolean isValidColorName(String name);
 }

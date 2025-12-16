@@ -2,6 +2,7 @@ package eu.avalanche7.paradigm.modules;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
@@ -90,18 +91,18 @@ public class Announcements implements ParadigmModule {
         services.getDebugLogger().debugLog("{}: Registering commands.", NAME);
         CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcherCS = (CommandDispatcher<net.minecraft.commands.CommandSourceStack>) dispatcher;
         dispatcherCS.register(
-                Commands.literal("paradigm")
+                LiteralArgumentBuilder.<net.minecraft.commands.CommandSourceStack>literal("paradigm")
                         .requires(source -> source.hasPermission(2))
-                        .then(Commands.literal("broadcast")
+                        .then(LiteralArgumentBuilder.<net.minecraft.commands.CommandSourceStack>literal("broadcast")
                                 .then(Commands.argument("message", StringArgumentType.greedyString())
                                         .executes(this::broadcastMessageCmd)))
-                        .then(Commands.literal("actionbar")
+                        .then(LiteralArgumentBuilder.<net.minecraft.commands.CommandSourceStack>literal("actionbar")
                                 .then(Commands.argument("message", StringArgumentType.greedyString())
                                         .executes(this::broadcastMessageCmd)))
-                        .then(Commands.literal("title")
+                        .then(LiteralArgumentBuilder.<net.minecraft.commands.CommandSourceStack>literal("title")
                                 .then(Commands.argument("titleAndSubtitle", StringArgumentType.greedyString())
                                         .executes(this::broadcastTitleCmd)))
-                        .then(Commands.literal("bossbar")
+                        .then(LiteralArgumentBuilder.<net.minecraft.commands.CommandSourceStack>literal("bossbar")
                                 .then(Commands.argument("interval", IntegerArgumentType.integer(1))
                                         .then(Commands.argument("color", StringArgumentType.word())
                                                 .suggests((ctx, builder) -> {

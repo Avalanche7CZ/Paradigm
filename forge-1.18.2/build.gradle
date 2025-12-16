@@ -1,7 +1,7 @@
 plugins {
     id 'eclipse'
     id 'idea'
-    id 'net.minecraftforge.gradle' version '[6.0.16,6.2)'
+    id 'net.minecraftforge.gradle' version '6.0.+'
 }
 
 // Ensure properties are available with defaults
@@ -21,12 +21,20 @@ base {
 }
 
 java {
-    toolchain.languageVersion = JavaLanguageVersion.of(21)
+    toolchain.languageVersion = JavaLanguageVersion.of(17)
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 17
+    options.compilerArgs += [
+        "-AoutRefMap=paradigm.refmap.json",
+        "-AdefaultObfuscationEnv=searge"
+    ]
 }
 
 minecraft {
     mappings channel: project.ext.mapping_channel, version: project.ext.mapping_version
-    copyIdeResources = true
 
     runs {
         configureEach {
@@ -63,23 +71,32 @@ repositories {
     maven { url "https://repo.lucko.me/" }
 }
 
-tasks.withType(JavaCompile) {
-    options.encoding = 'UTF-8'
-}
-
 processResources {
-    from(sourceSets.main.resources.srcDirs) {
-        include 'lang/**'
-    }
     expand(project.properties)
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    filteringCharset = 'UTF-8'
+
+    filesMatching('META-INF/mods.toml') {
+        expand([
+            mod_id: project.ext.mod_id,
+            mod_name: project.ext.mod_name,
+            mod_version: project.ext.mod_version,
+            mod_group_id: project.ext.mod_group_id ?: '',
+            mod_authors: project.ext.mod_authors ?: '',
+            mod_license: project.ext.mod_license ?: '',
+            loader_version_range: project.ext.loader_version_range ?: '',
+            minecraft_version: project.ext.minecraft_version ?: '',
+            forge_version: project.ext.forge_version ?: '',
+            mapping_channel: project.ext.mapping_channel ?: '',
+            mapping_version: project.ext.mapping_version ?: ''
+        ])
+    }
 }
 
 dependencies {
     minecraft "net.minecraftforge:forge:${project.ext.minecraft_version}-${project.ext.forge_version}"
     compileOnly('net.luckperms:api:5.4')
     implementation 'com.google.code.gson:gson:2.10.1'
+    compileOnly 'org.spongepowered:mixin:0.8.5'
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
 
 tasks.named('processResources', ProcessResources).configure {
@@ -115,14 +132,16 @@ tasks.named('jar', Jar).configure {
             "Implementation-Title": project.name,
             "Implementation-Version": project.jar.archiveVersion,
             "Implementation-Vendor": project.ext.mod_authors,
-            "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+            "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+            "MixinConfigs": "paradigm.mixins.json"
         ])
     }
 
     finalizedBy 'reobfJar'
 }
 
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8'
+tasks.register('reobf') {
+    group = 'build'
+    description = 'Run reobfJar for runtime compatibility.'
+    dependsOn 'reobfJar'
 }
-
