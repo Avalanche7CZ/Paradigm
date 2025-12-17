@@ -222,11 +222,11 @@ public class Restart implements ParadigmModule {
             }
         }
 
-        if (minDelayMillis != Long.MAX_VALUE) {
+        if (minDelayMillis != Long.MAX_VALUE && minDelayMillis > 0) {
             services.getDebugLogger().debugLog(NAME + ": Next real-time restart is scheduled for " + nextRestartTime + " (in " + minDelayMillis + "ms).");
             return minDelayMillis;
         } else {
-            services.getDebugLogger().debugLog(NAME + ": No upcoming real-time restart found for today.");
+            services.getDebugLogger().debugLog(NAME + ": No upcoming real-time restart found. All configured times have passed for today.");
             return -1;
         }
     }

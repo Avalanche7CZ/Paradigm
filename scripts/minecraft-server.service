@@ -1,0 +1,93 @@
+# ====================================================================
+# Paradigm Minecraft Server Systemd Service
+# ====================================================================
+# This service file ensures automatic restart after server shutdown
+# Required for Paradigm's Restart module to work properly
+# ====================================================================
+#
+# Installation Instructions:
+# 1. Copy this file to: /etc/systemd/system/minecraft-server.service
+# 2. Edit the configuration below to match your setup
+# 3. Reload systemd: sudo systemctl daemon-reload
+# 4. Enable service: sudo systemctl enable minecraft-server
+# 5. Start service: sudo systemctl start minecraft-server
+# 6. View logs: sudo journalctl -u minecraft-server -f
+#
+# Commands:
+# - Start:   sudo systemctl start minecraft-server
+# - Stop:    sudo systemctl stop minecraft-server
+# - Restart: sudo systemctl restart minecraft-server
+# - Status:  sudo systemctl status minecraft-server
+# - Logs:    sudo journalctl -u minecraft-server -f
+#
+# ====================================================================
+
+[Unit]
+Description=Paradigm Minecraft Server
+After=network.target
+Documentation=https://github.com/Avalanche7CZ/Paradigm
+
+[Service]
+Type=simple
+
+# User and group (CHANGE THIS - DO NOT RUN AS ROOT!)
+User=minecraft
+Group=minecraft
+
+# Working directory (CHANGE THIS to your server directory)
+WorkingDirectory=/opt/minecraft
+
+# Java and server configuration (ADJUST THESE)
+# Memory allocation
+Environment="MIN_RAM=2048"
+Environment="MAX_RAM=4096"
+# Server jar name
+Environment="SERVER_JAR=forge-server.jar"
+
+# Server start command with optimized JVM flags
+ExecStart=/usr/bin/java \
+    -Xms${MIN_RAM}M \
+    -Xmx${MAX_RAM}M \
+    -XX:+UseG1GC \
+    -XX:+ParallelRefProcEnabled \
+    -XX:MaxGCPauseMillis=200 \
+    -XX:+UnlockExperimentalVMOptions \
+    -XX:+DisableExplicitGC \
+    -XX:G1NewSizePercent=30 \
+    -XX:G1MaxNewSizePercent=40 \
+    -XX:G1HeapRegionSize=8M \
+    -XX:G1ReservePercent=20 \
+    -XX:G1HeapWastePercent=5 \
+    -XX:G1MixedGCCountTarget=4 \
+    -XX:InitiatingHeapOccupancyPercent=15 \
+    -XX:G1MixedGCLiveThresholdPercent=90 \
+    -XX:G1RSetUpdatingPauseTimePercent=5 \
+    -XX:SurvivorRatio=32 \
+    -XX:+PerfDisableSharedMem \
+    -XX:MaxTenuringThreshold=1 \
+    -jar ${SERVER_JAR} \
+    nogui
+
+# Restart configuration - THIS IS CRITICAL FOR PARADIGM
+Restart=always
+RestartSec=10
+
+# Standard output and error logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=minecraft-server
+
+# Security settings (optional but recommended)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/minecraft
+
+# Resource limits (optional)
+# LimitNOFILE=65536
+# LimitNPROC=4096
+
+[Install]
+WantedBy=multi-user.target
+
