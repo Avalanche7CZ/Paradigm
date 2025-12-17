@@ -189,7 +189,7 @@ public class Paradigm {
             LOGGER.info("Author: Avalanche7CZ");
             LOGGER.info("Discord: https://discord.com/invite/qZDcQdEFqQ");
             LOGGER.info("==================================================");
-            String mcVersion = net.minecraft.SharedConstants.getCurrentVersion().getName();
+            String mcVersion = UpdateChecker.getMinecraftVersionSafe();
             String loader = "forge";
             UpdateChecker.checkForUpdates(version, mcVersion, loader, LOGGER);
         });
@@ -327,12 +327,44 @@ public class Paradigm {
             return a.compareTo(b) > 0;
         }
 
-        private static String getMinecraftVersionSafe() {
+        public static String getMinecraftVersionSafe() {
             try {
-                return SharedConstants.getCurrentVersion().getName();
-            } catch (Throwable t) {
-                return null;
-            }
+                Class<?> sc = Class.forName("net.minecraft.SharedConstants");
+                try {
+                    Object verObj = sc.getMethod("getCurrentVersion").invoke(null);
+                    if (verObj != null) {
+                        try {
+                            Object name = verObj.getClass().getMethod("getName").invoke(verObj);
+                            if (name instanceof String && !((String) name).isEmpty()) return (String) name;
+                        } catch (NoSuchMethodException e1) {
+                            try {
+                                Object id = verObj.getClass().getMethod("getId").invoke(verObj);
+                                if (id instanceof String && !((String) id).isEmpty()) return (String) id;
+                            } catch (NoSuchMethodException ignored) { }
+                        }
+                    }
+                } catch (NoSuchMethodException e) {
+                    try {
+                        Object str = sc.getMethod("getGameVersion").invoke(null);
+                        if (str instanceof String && !((String) str).isEmpty()) return (String) str;
+                    } catch (NoSuchMethodException ignored) { }
+                }
+                try {
+                    Object vs = sc.getField("VERSION_STRING").get(null);
+                    if (vs instanceof String && !((String) vs).isEmpty()) return (String) vs;
+                } catch (NoSuchFieldException ignored) { }
+            } catch (Throwable t) { }
+            try {
+                Class<?> fv = Class.forName("net.minecraftforge.versions.forge.ForgeVersion");
+                Object mcVer = fv.getField("mcVersion").get(null);
+                if (mcVer instanceof String && !((String) mcVer).isEmpty()) return (String) mcVer;
+            } catch (Throwable t) { }
+            try {
+                Class<?> mcp = Class.forName("net.minecraftforge.versions.mcp.MCPVersion");
+                Object ver = mcp.getMethod("getMCVersion").invoke(null);
+                if (ver instanceof String && !((String) ver).isEmpty()) return (String) ver;
+            } catch (Throwable t) { }
+            return null;
         }
     }
 }

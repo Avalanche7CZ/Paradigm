@@ -12,20 +12,28 @@ import net.minecraft.network.protocol.status.ServerStatus;
 import net.minecraft.network.protocol.status.ServerboundStatusRequestPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerStatusPacketListenerImpl;
+import net.minecraftforge.fml.loading.FMLPaths;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.lang.reflect.Field;
-import java.util.Random;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.*;
 
 @Mixin(ServerStatusPacketListenerImpl.class)
 public abstract class ServerStatusMixin {
 
     static {
-        System.out.println("[Paradigm-Mixin] ServerStatusMixin loaded for 1.18.2!");
+
     }
 
     @Unique
@@ -43,30 +51,39 @@ public abstract class ServerStatusMixin {
         return null;
     }
 
+    @Unique
+    private static final Map<String, String> paradigm$iconCache = new HashMap<>();
+
+    @Unique
+    private static final List<String> paradigm$availableIcons = new ArrayList<>();
+
+    @Unique
+    private static boolean paradigm$iconsLoaded = false;
+
     @Inject(method = "*(Lnet/minecraft/network/protocol/status/ServerboundStatusRequestPacket;)V", at = @At("HEAD"), cancellable = true, remap = false)
     private void paradigm$modifyStatusRequest(ServerboundStatusRequestPacket packet, CallbackInfo ci) {
-        System.out.println("[Paradigm-Mixin] handleStatusRequest called!");
+
 
         Services services = Paradigm.getServices();
         if (services == null) {
-            System.out.println("[Paradigm-Mixin] Services is null!");
+
             return;
         }
 
         MOTDConfigHandler.Config cfg = services.getMotdConfig();
         if (cfg == null) {
-            System.out.println("[Paradigm-Mixin] Config is null!");
+
             return;
         }
 
         if (!cfg.serverlistMotdEnabled) {
-            System.out.println("[Paradigm-Mixin] Server list MOTD is disabled!");
+
             return;
         }
 
         java.util.List<MOTDConfigHandler.ServerListMOTD> motds = cfg.motds;
         if (motds == null || motds.isEmpty()) {
-            System.out.println("[Paradigm-Mixin] No MOTDs configured!");
+
             return;
         }
 
@@ -74,18 +91,18 @@ public abstract class ServerStatusMixin {
             MinecraftServer server = (MinecraftServer) services.getPlatformAdapter().getMinecraftServer();
 
             if (server == null) {
-                System.out.println("[Paradigm-Mixin] Server is null!");
+
                 return;
             }
 
             ServerStatus originalStatus = server.getStatus();
             if (originalStatus == null) {
-                System.out.println("[Paradigm-Mixin] Original status is null!");
+
                 return;
             }
 
             MOTDConfigHandler.ServerListMOTD selectedMotd = motds.get(new Random().nextInt(motds.size()));
-            System.out.println("[Paradigm-Mixin] Selected MOTD: " + selectedMotd.line1 + " / " + selectedMotd.line2);
+
 
             String line1 = selectedMotd.line1 != null ? selectedMotd.line1 : "";
             String line2 = selectedMotd.line2 != null ? selectedMotd.line2 : "";
@@ -108,22 +125,299 @@ public abstract class ServerStatusMixin {
                 motdComponent = new TextComponent(line1).append(new TextComponent("\n")).append(new TextComponent(line2));
             }
 
+            String favicon = null;
+
+            if (cfg.iconEnabled) {
+                Optional<String> faviconString = paradigm$loadIcon(selectedMotd.icon);
+                System.out.println("[Paradigm-Mixin] Icon loaded: " + faviconString.isPresent());
+                if (faviconString.isPresent()) {
+                    favicon = faviconString.get();
+                }
+            }
+
+            if (favicon == null) {
+                favicon = originalStatus.getFavicon();
+            }
+
+            ServerStatus.Players players = originalStatus.getPlayers();
+            if (selectedMotd.playerCount != null) {
+                players = paradigm$createCustomPlayerCount(selectedMotd.playerCount, originalStatus.getPlayers(), services);
+
+            }
+
             originalStatus.setDescription(motdComponent);
-            System.out.println("[Paradigm-Mixin] Modified originalStatus description directly");
-            System.out.println("  - Players: " + originalStatus.getPlayers());
-            System.out.println("  - Version: " + (originalStatus.getVersion() != null ? originalStatus.getVersion().getName() : "null"));
+            if (favicon != null) {
+                originalStatus.setFavicon(favicon);
+            }
+            if (players != null) {
+                originalStatus.setPlayers(players);
+            }
 
             Connection conn = paradigm$getConnection();
             if (conn != null) {
                 conn.send(new ClientboundStatusResponsePacket(originalStatus));
-                System.out.println("[Paradigm-Mixin] Successfully sent modified ServerStatus!");
+
                 ci.cancel();
             } else {
-                System.out.println("[Paradigm-Mixin] Failed to get connection!");
+
             }
         } catch (Exception e) {
             System.out.println("[Paradigm-Mixin] Error modifying status: " + e.getMessage());
             e.printStackTrace();
+        }
+    }
+
+    @Unique
+    private ServerStatus.Players paradigm$createCustomPlayerCount(
+            MOTDConfigHandler.PlayerCountDisplay customDisplay,
+            ServerStatus.Players originalPlayers,
+            Services services) {
+
+
+        System.out.println("[Paradigm-Mixin] customDisplay: " + (customDisplay != null ? "present" : "null"));
+        if (customDisplay != null) {
+
+
+            System.out.println("[Paradigm-Mixin] customDisplay.hoverText: " + (customDisplay.hoverText != null ? "present (" + customDisplay.hoverText.length() + " chars)" : "null"));
+        }
+
+        if (customDisplay == null) {
+
+            return originalPlayers;
+        }
+
+        try {
+            int onlineCount = 0;
+            int maxCount = customDisplay.maxPlayers != null ? customDisplay.maxPlayers : 100;
+
+            if (originalPlayers != null) {
+                try {
+                    List<Integer> intFields = new ArrayList<>();
+
+                    for (Field field : ServerStatus.Players.class.getDeclaredFields()) {
+                        field.setAccessible(true);
+                        Object value = field.get(originalPlayers);
+                        if (value instanceof Integer) {
+                            intFields.add((Integer) value);
+                        }
+                    }
+                    if (intFields.size() >= 2) {
+                        int first = intFields.get(0);
+                        int second = intFields.get(1);
+                        if (first <= second) {
+                            onlineCount = first;
+                            if (customDisplay.maxPlayers == null) {
+                                maxCount = second;
+                            }
+                        } else {
+                            onlineCount = second;
+                            if (customDisplay.maxPlayers == null) {
+                                maxCount = first;
+                            }
+                        }
+                    }
+
+
+                } catch (Exception e) {
+                    System.out.println("[Paradigm-Mixin] Failed to get player counts: " + e.getMessage());
+                }
+            }
+
+            List<com.mojang.authlib.GameProfile> playerSample = new ArrayList<>();
+
+            if (customDisplay.hoverText != null && !customDisplay.hoverText.isEmpty()) {
+                String[] lines = customDisplay.hoverText.split("\\n");
+
+                for (String line : lines) {
+                    if (line.isEmpty()) continue;
+
+                    eu.avalanche7.paradigm.platform.Interfaces.IComponent parsedLine =
+                        services.getMessageParser().parseMessage(line, null);
+
+                    Component lineComponent;
+                    if (parsedLine instanceof eu.avalanche7.paradigm.platform.MinecraftComponent mc) {
+                        lineComponent = mc.getHandle();
+                    } else {
+                        lineComponent = new TextComponent(line);
+                    }
+
+                    String plainText = paradigm$componentToLegacyText(lineComponent);
+                    playerSample.add(new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), plainText));
+                }
+            } else if (originalPlayers != null) {
+                com.mojang.authlib.GameProfile[] originalSample = originalPlayers.getSample();
+                if (originalSample != null && originalSample.length > 0) {
+                    playerSample = new ArrayList<>(java.util.Arrays.asList(originalSample));
+                }
+            }
+
+            int displayCount = customDisplay.showActualCount ? onlineCount : Math.max(0, maxCount - 1);
+
+
+
+
+
+
+
+            ServerStatus.Players newPlayers = new ServerStatus.Players(
+                maxCount,
+                displayCount
+            );
+
+            if (!playerSample.isEmpty()) {
+                try {
+                    boolean found = false;
+                    for (Field field : ServerStatus.Players.class.getDeclaredFields()) {
+                        if (field.getType().isArray()) {
+                            Class<?> componentType = field.getType().getComponentType();
+                            if (componentType != null && componentType.getName().contains("GameProfile")) {
+                                field.setAccessible(true);
+                                field.set(newPlayers, playerSample.toArray(new com.mojang.authlib.GameProfile[0]));
+                                System.out.println("[Paradigm-Mixin] Successfully set player sample with " + playerSample.size() + " entries");
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (!found) {
+
+                    }
+                } catch (Exception e) {
+                    System.out.println("[Paradigm-Mixin] Failed to set sample: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            } else {
+
+            }
+
+            return newPlayers;
+        } catch (Exception e) {
+            System.out.println("[Paradigm-Mixin] Error creating custom player count: " + e.getMessage());
+            e.printStackTrace();
+            return originalPlayers;
+        }
+    }
+
+    @Unique
+    private String paradigm$componentToLegacyText(Component component) {
+        StringBuilder result = new StringBuilder();
+        paradigm$appendComponentLegacy(component, result);
+        return result.toString();
+    }
+
+    @Unique
+    private void paradigm$appendComponentLegacy(Component component, StringBuilder builder) {
+        component.visit((style, text) -> {
+            net.minecraft.network.chat.TextColor color = style.getColor();
+            if (color != null) {
+                net.minecraft.ChatFormatting formatting = paradigm$getFormattingForColor(color.getValue());
+                if (formatting != null) {
+                    builder.append('§').append(formatting.getChar());
+                }
+            }
+
+            if (style.isBold()) builder.append("§l");
+            if (style.isItalic()) builder.append("§o");
+            if (style.isUnderlined()) builder.append("§n");
+            if (style.isStrikethrough()) builder.append("§m");
+            if (style.isObfuscated()) builder.append("§k");
+
+            builder.append(text);
+            return Optional.empty();
+        }, component.getStyle());
+    }
+
+    @Unique
+    private net.minecraft.ChatFormatting paradigm$getFormattingForColor(int rgb) {
+        for (net.minecraft.ChatFormatting formatting : net.minecraft.ChatFormatting.values()) {
+            if (formatting.isColor() && formatting.getColor() != null && formatting.getColor() == rgb) {
+                return formatting;
+            }
+        }
+        return null;
+    }
+
+    @Unique
+    private Optional<String> paradigm$loadIcon(String iconName) {
+        if (iconName == null || iconName.isEmpty()) {
+            return Optional.empty();
+        }
+
+        if (!paradigm$iconsLoaded) {
+            paradigm$loadAvailableIcons();
+            paradigm$iconsLoaded = true;
+        }
+
+        if ("random".equalsIgnoreCase(iconName)) {
+            if (paradigm$availableIcons.isEmpty()) {
+                return Optional.empty();
+            }
+            iconName = paradigm$availableIcons.get(new Random().nextInt(paradigm$availableIcons.size()));
+        }
+
+        if (paradigm$iconCache.containsKey(iconName)) {
+            return Optional.of(paradigm$iconCache.get(iconName));
+        }
+
+        Path iconsDir = FMLPaths.CONFIGDIR.get().resolve("paradigm/icons");
+        Path iconPath = iconsDir.resolve(iconName + ".png");
+
+        if (!Files.exists(iconPath)) {
+
+            return Optional.empty();
+        }
+
+        try {
+            BufferedImage image = ImageIO.read(iconPath.toFile());
+            if (image == null) {
+
+                return Optional.empty();
+            }
+
+            if (image.getWidth() != 64 || image.getHeight() != 64) {
+
+                return Optional.empty();
+            }
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ImageIO.write(image, "PNG", baos);
+            byte[] iconBytes = baos.toByteArray();
+
+            String encodedIcon = "data:image/png;base64," + java.util.Base64.getEncoder().encodeToString(iconBytes);
+            paradigm$iconCache.put(iconName, encodedIcon);
+
+
+            return Optional.of(encodedIcon);
+        } catch (IOException e) {
+            System.out.println("[Paradigm-Mixin] Error loading icon " + iconPath + ": " + e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    @Unique
+    private void paradigm$loadAvailableIcons() {
+        Path iconsDir = FMLPaths.CONFIGDIR.get().resolve("paradigm/icons");
+
+        try {
+            if (!Files.exists(iconsDir)) {
+                Files.createDirectories(iconsDir);
+
+                return;
+            }
+
+            try (DirectoryStream<Path> stream = Files.newDirectoryStream(iconsDir, "*.png")) {
+                for (Path entry : stream) {
+                    String fileName = entry.getFileName().toString();
+                    String iconName = fileName.substring(0, fileName.length() - 4);
+                    paradigm$availableIcons.add(iconName);
+                }
+            }
+
+            if (!paradigm$availableIcons.isEmpty()) {
+                System.out.println("[Paradigm-Mixin] Found " + paradigm$availableIcons.size() + " icon(s) in icons directory");
+            }
+        } catch (IOException e) {
+            System.out.println("[Paradigm-Mixin] Error loading icons directory: " + e.getMessage());
         }
     }
 }

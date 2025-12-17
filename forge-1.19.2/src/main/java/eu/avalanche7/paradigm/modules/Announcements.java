@@ -1,8 +1,10 @@
 package eu.avalanche7.paradigm.modules;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
@@ -16,7 +18,6 @@ import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
-import com.mojang.brigadier.arguments.IntegerArgumentType;
 
 import java.util.Collections;
 import java.util.List;
@@ -94,24 +95,24 @@ public class Announcements implements ParadigmModule {
                 LiteralArgumentBuilder.<net.minecraft.commands.CommandSourceStack>literal("paradigm")
                         .requires(source -> source.hasPermission(2))
                         .then(LiteralArgumentBuilder.<net.minecraft.commands.CommandSourceStack>literal("broadcast")
-                                .then(Commands.argument("message", StringArgumentType.greedyString())
+                                .then(RequiredArgumentBuilder.<net.minecraft.commands.CommandSourceStack, String>argument("message", StringArgumentType.greedyString())
                                         .executes(this::broadcastMessageCmd)))
                         .then(LiteralArgumentBuilder.<net.minecraft.commands.CommandSourceStack>literal("actionbar")
-                                .then(Commands.argument("message", StringArgumentType.greedyString())
+                                .then(RequiredArgumentBuilder.<net.minecraft.commands.CommandSourceStack, String>argument("message", StringArgumentType.greedyString())
                                         .executes(this::broadcastMessageCmd)))
                         .then(LiteralArgumentBuilder.<net.minecraft.commands.CommandSourceStack>literal("title")
-                                .then(Commands.argument("titleAndSubtitle", StringArgumentType.greedyString())
+                                .then(RequiredArgumentBuilder.<net.minecraft.commands.CommandSourceStack, String>argument("titleAndSubtitle", StringArgumentType.greedyString())
                                         .executes(this::broadcastTitleCmd)))
                         .then(LiteralArgumentBuilder.<net.minecraft.commands.CommandSourceStack>literal("bossbar")
-                                .then(Commands.argument("interval", IntegerArgumentType.integer(1))
-                                        .then(Commands.argument("color", StringArgumentType.word())
+                                .then(RequiredArgumentBuilder.<net.minecraft.commands.CommandSourceStack, Integer>argument("interval", IntegerArgumentType.integer(1))
+                                        .then(RequiredArgumentBuilder.<net.minecraft.commands.CommandSourceStack, String>argument("color", StringArgumentType.word())
                                                 .suggests((ctx, builder) -> {
                                                     for (IPlatformAdapter.BossBarColor color : IPlatformAdapter.BossBarColor.values()) {
                                                         builder.suggest(color.name());
                                                     }
                                                     return builder.buildFuture();
                                                 })
-                                                .then(Commands.argument("message", StringArgumentType.greedyString())
+                                                .then(RequiredArgumentBuilder.<net.minecraft.commands.CommandSourceStack, String>argument("message", StringArgumentType.greedyString())
                                                         .executes(this::broadcastMessageCmd))))));
     }
 
