@@ -37,14 +37,12 @@ public class HoverTag implements Tag {
             return;
         }
 
-        System.out.println("[Paradigm-HoverTag] Raw arguments: " + arguments);
-
         String hoverText = arguments;
         if (hoverText.startsWith("'") && hoverText.endsWith("'")) {
             hoverText = hoverText.substring(1, hoverText.length() - 1);
+        } else if (hoverText.startsWith("\"") && hoverText.endsWith("\"")) {
+            hoverText = hoverText.substring(1, hoverText.length() - 1);
         }
-
-        System.out.println("[Paradigm-HoverTag] After quote removal: " + hoverText);
 
         FormattingParser parser = context.getParser();
         Component hoverComponent;
@@ -53,21 +51,16 @@ public class HoverTag implements Tag {
             IComponent parsed = parser.parse(hoverText, context.getPlayer());
             if (parsed instanceof MinecraftComponent mc) {
                 hoverComponent = mc.getHandle();
-                System.out.println("[Paradigm-HoverTag] Parsed as MinecraftComponent");
             } else {
                 hoverComponent = Component.literal(hoverText);
-                System.out.println("[Paradigm-HoverTag] Fallback to literal");
             }
         } else {
             hoverComponent = Component.literal(hoverText);
-            System.out.println("[Paradigm-HoverTag] No parser available");
         }
 
         HoverEvent hoverEvent = new HoverEvent(HoverEvent.Action.SHOW_TEXT, hoverComponent);
         Style newStyle = context.getCurrentStyle().withHoverEvent(hoverEvent);
         context.pushStyle(newStyle);
-
-        System.out.println("[Paradigm-HoverTag] Hover event created successfully");
     }
 
     @Override

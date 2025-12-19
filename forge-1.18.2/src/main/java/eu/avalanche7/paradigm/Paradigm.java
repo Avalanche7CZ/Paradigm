@@ -99,6 +99,7 @@ public class Paradigm {
         MentionConfigHandler.load();
         RestartConfigHandler.load();
         ChatConfigHandler.load();
+        EmojiConfigHandler.CONFIG.loadEmojis();
 
         DebugLogger debugLogger = new DebugLogger(MainConfigHandler.CONFIG);
         debugLogger.debugLog("Paradigm: DebugLogger constructed and all configs loaded.");

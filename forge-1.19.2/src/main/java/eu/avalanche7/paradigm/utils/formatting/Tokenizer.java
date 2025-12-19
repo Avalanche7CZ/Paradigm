@@ -28,7 +28,7 @@ public class Tokenizer {
                         tokens.add(new Token(Token.TokenType.TAG_CLOSE, "</>", position));
                         position += 3;
                     } else {
-                        int closePos = input.indexOf('>', position);
+                        int closePos = findMatchingBracket(position);
                         if (closePos != -1) {
                             String tagContent = input.substring(position + 2, closePos);
                             tokens.add(new Token(Token.TokenType.TAG_CLOSE, "</" + tagContent + ">", position));
@@ -39,7 +39,7 @@ public class Tokenizer {
                         }
                     }
                 } else {
-                    int closePos = input.indexOf('>', position);
+                    int closePos = findMatchingBracket(position);
                     if (closePos != -1) {
                         String tagContent = input.substring(position + 1, closePos);
                         if (tagContent.endsWith("/")) {
@@ -67,6 +67,45 @@ public class Tokenizer {
 
         tokens.add(new Token(Token.TokenType.EOF, "", position));
         return tokens;
+    }
+
+    private int findMatchingBracket(int startPos) {
+        if (startPos >= input.length() || input.charAt(startPos) != '<') {
+            return -1;
+        }
+
+        int pos = startPos + 1;
+        boolean inSingleQuote = false;
+        boolean inDoubleQuote = false;
+        int depth = 0;
+
+        while (pos < input.length()) {
+            char c = input.charAt(pos);
+
+            if (c == '\\' && pos + 1 < input.length()) {
+                pos += 2;
+                continue;
+            }
+
+            if (c == '\'' && !inDoubleQuote) {
+                inSingleQuote = !inSingleQuote;
+            } else if (c == '"' && !inSingleQuote) {
+                inDoubleQuote = !inDoubleQuote;
+            } else if (!inSingleQuote && !inDoubleQuote) {
+                if (c == '<') {
+                    depth++;
+                } else if (c == '>') {
+                    if (depth == 0) {
+                        return pos;
+                    }
+                    depth--;
+                }
+            }
+
+            pos++;
+        }
+
+        return -1;
     }
 }
 

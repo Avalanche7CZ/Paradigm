@@ -46,7 +46,6 @@ public abstract class ServerStatusMixin {
                 }
             }
         } catch (Exception e) {
-            System.out.println("[Paradigm-Mixin] Failed to get connection: " + e.getMessage());
         }
         return null;
     }
@@ -121,7 +120,6 @@ public abstract class ServerStatusMixin {
                     motdComponent = new TextComponent(line1).append(new TextComponent("\n")).append(new TextComponent(line2));
                 }
             } catch (Exception parseError) {
-                System.out.println("[Paradigm-Mixin] Error parsing MOTD: " + parseError.getMessage());
                 motdComponent = new TextComponent(line1).append(new TextComponent("\n")).append(new TextComponent(line2));
             }
 
@@ -129,7 +127,6 @@ public abstract class ServerStatusMixin {
 
             if (cfg.iconEnabled) {
                 Optional<String> faviconString = paradigm$loadIcon(selectedMotd.icon);
-                System.out.println("[Paradigm-Mixin] Icon loaded: " + faviconString.isPresent());
                 if (faviconString.isPresent()) {
                     favicon = faviconString.get();
                 }
@@ -162,7 +159,6 @@ public abstract class ServerStatusMixin {
 
             }
         } catch (Exception e) {
-            System.out.println("[Paradigm-Mixin] Error modifying status: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -174,11 +170,9 @@ public abstract class ServerStatusMixin {
             Services services) {
 
 
-        System.out.println("[Paradigm-Mixin] customDisplay: " + (customDisplay != null ? "present" : "null"));
         if (customDisplay != null) {
 
 
-            System.out.println("[Paradigm-Mixin] customDisplay.hoverText: " + (customDisplay.hoverText != null ? "present (" + customDisplay.hoverText.length() + " chars)" : "null"));
         }
 
         if (customDisplay == null) {
@@ -219,7 +213,6 @@ public abstract class ServerStatusMixin {
 
 
                 } catch (Exception e) {
-                    System.out.println("[Paradigm-Mixin] Failed to get player counts: " + e.getMessage());
                 }
             }
 
@@ -273,7 +266,6 @@ public abstract class ServerStatusMixin {
                             if (componentType != null && componentType.getName().contains("GameProfile")) {
                                 field.setAccessible(true);
                                 field.set(newPlayers, playerSample.toArray(new com.mojang.authlib.GameProfile[0]));
-                                System.out.println("[Paradigm-Mixin] Successfully set player sample with " + playerSample.size() + " entries");
                                 found = true;
                                 break;
                             }
@@ -283,7 +275,6 @@ public abstract class ServerStatusMixin {
 
                     }
                 } catch (Exception e) {
-                    System.out.println("[Paradigm-Mixin] Failed to set sample: " + e.getMessage());
                     e.printStackTrace();
                 }
             } else {
@@ -292,7 +283,6 @@ public abstract class ServerStatusMixin {
 
             return newPlayers;
         } catch (Exception e) {
-            System.out.println("[Paradigm-Mixin] Error creating custom player count: " + e.getMessage());
             e.printStackTrace();
             return originalPlayers;
         }
@@ -389,7 +379,6 @@ public abstract class ServerStatusMixin {
 
             return Optional.of(encodedIcon);
         } catch (IOException e) {
-            System.out.println("[Paradigm-Mixin] Error loading icon " + iconPath + ": " + e.getMessage());
             return Optional.empty();
         }
     }
@@ -414,10 +403,8 @@ public abstract class ServerStatusMixin {
             }
 
             if (!paradigm$availableIcons.isEmpty()) {
-                System.out.println("[Paradigm-Mixin] Found " + paradigm$availableIcons.size() + " icon(s) in icons directory");
             }
         } catch (IOException e) {
-            System.out.println("[Paradigm-Mixin] Error loading icons directory: " + e.getMessage());
         }
     }
 }

@@ -84,6 +84,12 @@ public class ClickTag implements Tag {
             value = value.substring(1, value.length() - 1);
         }
 
+        if (action == ClickAction.RUN_COMMAND || action == ClickAction.RUN_COMMAND_ALT) {
+            while (value.startsWith("/")) {
+                value = value.substring(1);
+            }
+        }
+
         if ((action == ClickAction.EXECUTE || action == ClickAction.EXECUTE_ALT) && !value.startsWith("/")) {
             value = "/" + value;
         }
@@ -100,7 +106,13 @@ public class ClickTag implements Tag {
 
     @Override
     public boolean matchesTagName(String name) {
-        return name.equalsIgnoreCase("click");
+        return name.equalsIgnoreCase("click") || name.equalsIgnoreCase("open_url") ||
+               name.equalsIgnoreCase("url") || name.equalsIgnoreCase("run_cmd") ||
+               name.equalsIgnoreCase("execute") || name.equalsIgnoreCase("exec") ||
+               name.equalsIgnoreCase("suggest_command") || name.equalsIgnoreCase("cmd") ||
+               name.equalsIgnoreCase("suggest") || name.equalsIgnoreCase("copy_to_clipboard") ||
+               name.equalsIgnoreCase("copy") || name.equalsIgnoreCase("change_page") ||
+               name.equalsIgnoreCase("page") || name.equalsIgnoreCase("run_command");
     }
 }
 

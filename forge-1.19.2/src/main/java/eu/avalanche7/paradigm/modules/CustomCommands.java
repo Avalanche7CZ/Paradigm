@@ -16,6 +16,7 @@ import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.platform.MinecraftPlayer;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.SharedSuggestionProvider;
@@ -78,6 +79,7 @@ public class CustomCommands implements ParadigmModule {
                             return 1;
                         })
                         .then(Commands.argument("args", StringArgumentType.greedyString())
+                                .requires(source -> platform.hasPermissionForCustomCommand(source, command))
                                 .executes(ctx -> {
                                     String rawArgs = StringArgumentType.getString(ctx, "args");
                                     String[] argsTokens = tokenizeArgs(rawArgs);
@@ -241,6 +243,17 @@ public class CustomCommands implements ParadigmModule {
 
     private void executeCustomCommand(ICommandSource source, CustomCommand command, String[] argsTokens) {
         IPlayer player = source.getPlayer();
+
+        if (command.isRequirePermission() && player != null) {
+            if (player instanceof MinecraftPlayer mcPlayer) {
+                if (!services.getPermissionsHandler().hasPermission(mcPlayer.getHandle(), command.getPermission())) {
+                    String errorMessage = command.getPermissionErrorMessage();
+                    platform.sendFailure(source, services.getMessageParser().parseMessage(errorMessage, player));
+                    return;
+                }
+            }
+        }
+
         CustomCommand.AreaRestriction area = command.getAreaRestriction();
         if (area != null) {
             if (player == null) {

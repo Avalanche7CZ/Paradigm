@@ -84,9 +84,6 @@ public class FormattingParser {
                     String tagName = colonIndex >= 0 ? tagContent.substring(0, colonIndex) : tagContent;
                     String arguments = colonIndex >= 0 ? tagContent.substring(colonIndex + 1) : "";
 
-                    System.out.println("[Paradigm-Parser] TAG_OPEN - Full content: " + tagContent);
-                    System.out.println("[Paradigm-Parser] TAG_OPEN - Tag name: " + tagName);
-                    System.out.println("[Paradigm-Parser] TAG_OPEN - Arguments: " + arguments);
 
                     Tag tag = tagRegistry.getTag(tagName);
                     if (tag != null && tag.canOpen()) {
@@ -188,7 +185,6 @@ public class FormattingParser {
             } else if (c == '"' && !inSingleQuote && !inAngleBracket) {
                 inDoubleQuote = !inDoubleQuote;
             } else if (c == ':' && !inSingleQuote && !inDoubleQuote && !inAngleBracket) {
-                System.out.println("[Paradigm-Parser] findFirstColon: Found colon at position " + i + " in: " + text);
                 return i;
             }
         }

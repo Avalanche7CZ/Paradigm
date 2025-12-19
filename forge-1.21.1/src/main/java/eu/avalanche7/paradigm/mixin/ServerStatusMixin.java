@@ -32,7 +32,7 @@ import java.util.*;
 public abstract class ServerStatusMixin {
 
     static {
-        System.out.println("[Paradigm-Mixin] ServerStatusMixin (ServerStatusPacketListenerImpl) loaded!");
+
     }
 
     @Shadow(remap = false)
@@ -50,28 +50,28 @@ public abstract class ServerStatusMixin {
 
     @Inject(method = "*(Lnet/minecraft/network/protocol/status/ServerboundStatusRequestPacket;)V", at = @At("HEAD"), cancellable = true, remap = false)
     private void paradigm$modifyStatusRequest(ServerboundStatusRequestPacket packet, CallbackInfo ci) {
-        System.out.println("[Paradigm-Mixin] handleStatusRequest called!");
+
 
         Services services = Paradigm.getServices();
         if (services == null) {
-            System.out.println("[Paradigm-Mixin] Services is null!");
+
             return;
         }
 
         MOTDConfigHandler.Config cfg = services.getMotdConfig();
         if (cfg == null) {
-            System.out.println("[Paradigm-Mixin] Config is null!");
+
             return;
         }
 
         if (!cfg.serverlistMotdEnabled) {
-            System.out.println("[Paradigm-Mixin] Server list MOTD is disabled!");
+
             return;
         }
 
         List<MOTDConfigHandler.ServerListMOTD> motds = cfg.motds;
         if (motds == null || motds.isEmpty()) {
-            System.out.println("[Paradigm-Mixin] No MOTDs configured!");
+
             return;
         }
 
@@ -79,18 +79,18 @@ public abstract class ServerStatusMixin {
             MinecraftServer server = (MinecraftServer) services.getPlatformAdapter().getMinecraftServer();
 
             if (server == null) {
-                System.out.println("[Paradigm-Mixin] Server is null!");
+
                 return;
             }
 
             ServerStatus originalStatus = server.getStatus();
             if (originalStatus == null) {
-                System.out.println("[Paradigm-Mixin] Original status is null!");
+
                 return;
             }
 
             MOTDConfigHandler.ServerListMOTD selectedMotd = motds.get(new Random().nextInt(motds.size()));
-            System.out.println("[Paradigm-Mixin] Selected MOTD: " + selectedMotd.line1 + " / " + selectedMotd.line2);
+
 
             String line1 = selectedMotd.line1 != null ? selectedMotd.line1 : "";
             String line2 = selectedMotd.line2 != null ? selectedMotd.line2 : "";
@@ -107,7 +107,7 @@ public abstract class ServerStatusMixin {
                     motdComponent = Component.literal(line1).append("\n").append(Component.literal(line2));
                 }
             } catch (Exception parseError) {
-                System.out.println("[Paradigm-Mixin] Error parsing MOTD: " + parseError.getMessage());
+
                 motdComponent = Component.literal(line1).append("\n").append(Component.literal(line2));
             }
 
@@ -115,7 +115,7 @@ public abstract class ServerStatusMixin {
 
             if (cfg.iconEnabled) {
                 favicon = paradigm$loadIcon(selectedMotd.icon);
-                System.out.println("[Paradigm-Mixin] Icon loaded: " + favicon.isPresent());
+
             }
 
             if (favicon.isEmpty()) {
@@ -125,7 +125,7 @@ public abstract class ServerStatusMixin {
             Optional<ServerStatus.Players> players = originalStatus.players();
             if (selectedMotd.playerCount != null) {
                 players = paradigm$createCustomPlayerCount(selectedMotd.playerCount, originalStatus.players(), services);
-                System.out.println("[Paradigm-Mixin] Custom player count applied");
+
             }
 
             ServerStatus modifiedStatus = new ServerStatus(
@@ -138,11 +138,11 @@ public abstract class ServerStatusMixin {
             );
 
             this.connection.send(new ClientboundStatusResponsePacket(modifiedStatus));
-            System.out.println("[Paradigm-Mixin] Successfully sent modified ServerStatus!");
+
 
             ci.cancel();
         } catch (Exception e) {
-            System.out.println("[Paradigm-Mixin] Error modifying status: " + e.getMessage());
+
             e.printStackTrace();
         }
     }
@@ -198,7 +198,7 @@ public abstract class ServerStatusMixin {
                 playerSample
             ));
         } catch (Exception e) {
-            System.out.println("[Paradigm-Mixin] Error creating custom player count: " + e.getMessage());
+
             e.printStackTrace();
             return originalPlayers;
         }
@@ -269,19 +269,19 @@ public abstract class ServerStatusMixin {
         Path iconPath = iconsDir.resolve(iconName + ".png");
 
         if (!Files.exists(iconPath)) {
-            System.out.println("[Paradigm-Mixin] Icon file not found: " + iconPath);
+
             return Optional.empty();
         }
 
         try {
             BufferedImage image = ImageIO.read(iconPath.toFile());
             if (image == null) {
-                System.out.println("[Paradigm-Mixin] Failed to read icon: " + iconPath);
+
                 return Optional.empty();
             }
 
             if (image.getWidth() != 64 || image.getHeight() != 64) {
-                System.out.println("[Paradigm-Mixin] Icon must be 64x64 pixels: " + iconPath);
+
                 return Optional.empty();
             }
 
@@ -292,10 +292,10 @@ public abstract class ServerStatusMixin {
             ServerStatus.Favicon favicon = new ServerStatus.Favicon(iconBytes);
             paradigm$iconCache.put(iconName, favicon);
 
-            System.out.println("[Paradigm-Mixin] Successfully loaded icon: " + iconName);
+
             return Optional.of(favicon);
         } catch (IOException e) {
-            System.out.println("[Paradigm-Mixin] Error loading icon " + iconPath + ": " + e.getMessage());
+
             return Optional.empty();
         }
     }
@@ -307,7 +307,7 @@ public abstract class ServerStatusMixin {
         try {
             if (!Files.exists(iconsDir)) {
                 Files.createDirectories(iconsDir);
-                System.out.println("[Paradigm-Mixin] Created icons directory: " + iconsDir);
+
                 return;
             }
 
@@ -320,10 +320,10 @@ public abstract class ServerStatusMixin {
             }
 
             if (!paradigm$availableIcons.isEmpty()) {
-                System.out.println("[Paradigm-Mixin] Found " + paradigm$availableIcons.size() + " icon(s) in icons directory");
+
             }
         } catch (IOException e) {
-            System.out.println("[Paradigm-Mixin] Error loading icons directory: " + e.getMessage());
+
         }
     }
 }

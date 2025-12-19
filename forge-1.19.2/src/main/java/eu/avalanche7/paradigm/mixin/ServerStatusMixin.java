@@ -68,7 +68,7 @@ public abstract class ServerStatusMixin {
                 }
             }
         } catch (Exception e) {
-            System.out.println("[Paradigm-Mixin] Failed to get players field: " + e.getMessage());
+
         }
         return Optional.empty();
     }
@@ -88,7 +88,7 @@ public abstract class ServerStatusMixin {
                 }
             }
         } catch (Exception e) {
-            System.out.println("[Paradigm-Mixin] Failed to get version field: " + e.getMessage());
+
         }
         return Optional.empty();
     }
@@ -109,7 +109,7 @@ public abstract class ServerStatusMixin {
                 }
             }
         } catch (Exception e) {
-            System.out.println("[Paradigm-Mixin] Failed to get favicon field: " + e.getMessage());
+
         }
         return Optional.empty();
     }
@@ -127,7 +127,7 @@ public abstract class ServerStatusMixin {
                 }
             }
         } catch (Exception e) {
-            System.out.println("[Paradigm-Mixin] Failed to get enforcesSecureChat field: " + e.getMessage());
+
         }
         return false;
     }
@@ -191,7 +191,7 @@ public abstract class ServerStatusMixin {
                     motdComponent = Component.literal(line1).append("\n").append(Component.literal(line2));
                 }
             } catch (Exception parseError) {
-                System.out.println("[Paradigm-Mixin] Error parsing MOTD: " + parseError.getMessage());
+
                 motdComponent = Component.literal(line1).append("\n").append(Component.literal(line2));
             }
 
@@ -199,7 +199,7 @@ public abstract class ServerStatusMixin {
 
             if (cfg.iconEnabled) {
                 favicon = paradigm$loadIconAsString(selectedMotd.icon);
-                System.out.println("[Paradigm-Mixin] Icon loaded: " + favicon.isPresent());
+
             }
 
             if (favicon.isEmpty()) {
@@ -229,7 +229,7 @@ public abstract class ServerStatusMixin {
 
             }
         } catch (Exception e) {
-            System.out.println("[Paradigm-Mixin] Error modifying status: " + e.getMessage());
+
             e.printStackTrace();
         }
     }
@@ -247,7 +247,7 @@ public abstract class ServerStatusMixin {
             }
 
         } catch (Exception e) {
-            System.out.println("[Paradigm-Mixin] Failed to set description: " + e.getMessage());
+
         }
     }
 
@@ -266,7 +266,7 @@ public abstract class ServerStatusMixin {
                         }
                     }
                     field.set(status, favicon);
-                    System.out.println("[Paradigm-Mixin] Successfully set favicon field: " + field.getName());
+
                     found = true;
                     break;
                 }
@@ -275,7 +275,7 @@ public abstract class ServerStatusMixin {
 
             }
         } catch (Exception e) {
-            System.out.println("[Paradigm-Mixin] Failed to set favicon: " + e.getMessage());
+
             e.printStackTrace();
         }
     }
@@ -298,7 +298,7 @@ public abstract class ServerStatusMixin {
             }
 
         } catch (Exception e) {
-            System.out.println("[Paradigm-Mixin] Failed to set players: " + e.getMessage());
+
         }
     }
 
@@ -309,11 +309,11 @@ public abstract class ServerStatusMixin {
             Services services) {
 
 
-        System.out.println("[Paradigm-Mixin] customDisplay: " + (customDisplay != null ? "present" : "null"));
+
         if (customDisplay != null) {
 
 
-            System.out.println("[Paradigm-Mixin] customDisplay.hoverText: " + (customDisplay.hoverText != null ? "present (" + customDisplay.hoverText.length() + " chars)" : "null"));
+
         }
 
         if (customDisplay == null) {
@@ -354,7 +354,7 @@ public abstract class ServerStatusMixin {
 
 
                 } catch (Exception e) {
-                    System.out.println("[Paradigm-Mixin] Failed to get player counts: " + e.getMessage());
+
                 }
             }
 
@@ -397,7 +397,7 @@ public abstract class ServerStatusMixin {
                         }
                     }
                 } catch (Exception e) {
-                    System.out.println("[Paradigm-Mixin] Failed to get sample: " + e.getMessage());
+
                 }
             }
 
@@ -419,7 +419,7 @@ public abstract class ServerStatusMixin {
                         if (List.class.isAssignableFrom(field.getType())) {
                             field.setAccessible(true);
                             field.set(newPlayers, playerSample);
-                            System.out.println("[Paradigm-Mixin] Successfully set player sample (List) with " + playerSample.size() + " entries");
+
                             found = true;
                             break;
                         }
@@ -432,7 +432,7 @@ public abstract class ServerStatusMixin {
                                 if (componentType != null && componentType.getName().contains("GameProfile")) {
                                     field.setAccessible(true);
                                     field.set(newPlayers, playerSample.toArray(new com.mojang.authlib.GameProfile[0]));
-                                    System.out.println("[Paradigm-Mixin] Successfully set player sample (Array) with " + playerSample.size() + " entries");
+
                                     found = true;
                                     break;
                                 }
@@ -442,11 +442,11 @@ public abstract class ServerStatusMixin {
                     
                     if (!found) {
                         for (Field field : ServerStatus.Players.class.getDeclaredFields()) {
-                            System.out.println("[Paradigm-Mixin]   - " + field.getName() + ": " + field.getType().getName());
+
                         }
                     }
                 } catch (Exception e) {
-                    System.out.println("[Paradigm-Mixin] Failed to set sample: " + e.getMessage());
+
                     e.printStackTrace();
                 }
             } else {
@@ -455,7 +455,7 @@ public abstract class ServerStatusMixin {
 
             return Optional.of(newPlayers);
         } catch (Exception e) {
-            System.out.println("[Paradigm-Mixin] Error creating custom player count: " + e.getMessage());
+
             e.printStackTrace();
             return originalPlayers;
         }
@@ -560,7 +560,7 @@ public abstract class ServerStatusMixin {
 
             return Optional.of(encodedIcon);
         } catch (IOException e) {
-            System.out.println("[Paradigm-Mixin] Error loading icon " + iconPath + ": " + e.getMessage());
+
             return Optional.empty();
         }
     }
@@ -585,10 +585,10 @@ public abstract class ServerStatusMixin {
             }
 
             if (!paradigm$availableIcons.isEmpty()) {
-                System.out.println("[Paradigm-Mixin] Found " + paradigm$availableIcons.size() + " icon(s) in icons directory");
+
             }
         } catch (IOException e) {
-            System.out.println("[Paradigm-Mixin] Error loading icons directory: " + e.getMessage());
+
         }
     }
 }
