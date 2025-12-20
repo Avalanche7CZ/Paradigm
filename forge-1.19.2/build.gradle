@@ -21,12 +21,12 @@ base {
 }
 
 java {
-    toolchain.languageVersion = JavaLanguageVersion.of(17)
+    toolchain.languageVersion = JavaLanguageVersion.of(Integer.parseInt(project.ext.java_version.toString()))
 }
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
-    options.release = 17
+    options.release = Integer.parseInt(project.ext.java_version.toString())
     options.compilerArgs += [
         "-AoutRefMap=paradigm.refmap.json",
         "-AdefaultObfuscationEnv=searge"

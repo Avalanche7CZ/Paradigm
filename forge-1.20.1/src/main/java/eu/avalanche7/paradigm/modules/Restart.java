@@ -10,6 +10,7 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.platform.MinecraftPlayer;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
@@ -62,7 +63,7 @@ public class Restart implements ParadigmModule {
     @Override
     public void onServerStarting(ServerStartingEvent event, Services services) {
         if (platform.getMinecraftServer() != null && isEnabled(services)) {
-            services.getDebugLogger().debugLog(NAME + ": Server is starting, scheduling restarts (TaskScheduler should be initialized).");
+            services.getDebugLogger().debugLog(NAME + ": Server is starting, scheduling restarts.");
             scheduleNextRestart();
         } else {
             services.getDebugLogger().debugLog(NAME + ": Server is starting, but platform or config not ready. Skipping scheduling.");
@@ -71,7 +72,7 @@ public class Restart implements ParadigmModule {
 
     @Override
     public void onEnable(Services services) {
-        services.getDebugLogger().debugLog(NAME + ": Module enabled (no scheduling here, handled in onServerStarting).");
+        services.getDebugLogger().debugLog(NAME + ": Module enabled (deferring restart scheduling to onServerStarting).");
     }
 
     @Override
@@ -87,25 +88,31 @@ public class Restart implements ParadigmModule {
 
     @Override
     public void registerCommands(CommandDispatcher<?> dispatcher, Services services) {
-        CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcherCS = (CommandDispatcher<net.minecraft.commands.CommandSourceStack>) dispatcher;
+        CommandDispatcher<CommandSourceStack> dispatcherCS = (CommandDispatcher<CommandSourceStack>) dispatcher;
         dispatcherCS.register(Commands.literal("restart")
                 .requires(source -> {
                     return platform.hasCommandPermission(platform.wrapCommandSource(source), PermissionsHandler.RESTART_MANAGE_PERMISSION, 2);
                 })
                 .then(Commands.literal("now")
                         .executes(context -> {
-                            initiateRestartSequence(60.0, services.getRestartConfig());
-                            platform.sendSuccess(platform.wrapCommandSource(context.getSource()), platform.createLiteralComponent("Server restart initiated for 60 seconds."), true);
+                            services.getDebugLogger().debugLog(NAME + ": /restart now command executed by " + context.getSource().getTextName());
+                            if (restartInProgress.get()) {
+                                services.getDebugLogger().debugLog(NAME + ": /restart now overriding active restart sequence.");
+                                cancelAndCleanup();
+                            }
+                            initiateRestartSequence(60, services.getRestartConfig());
+                            platform.sendSuccess(platform.wrapCommandSource(context.getSource()), platform.createLiteralComponent("Initiating immediate 60-second restart sequence."), true);
                             return 1;
                         }))
                 .then(Commands.literal("cancel")
                         .executes(context -> {
+                            services.getDebugLogger().debugLog(NAME + ": /restart cancel command executed by " + context.getSource().getTextName());
                             if (restartInProgress.get()) {
                                 cancelAndCleanup();
                                 scheduleNextRestart();
-                                platform.sendSuccess(platform.wrapCommandSource(context.getSource()), platform.createLiteralComponent("Scheduled server restart has been cancelled."), true);
+                                platform.sendSuccess(platform.wrapCommandSource(context.getSource()), platform.createLiteralComponent("The active server restart has been cancelled."), true);
                             } else {
-                                platform.sendFailure(platform.wrapCommandSource(context.getSource()), platform.createLiteralComponent("No scheduled restart to cancel."));
+                                platform.sendFailure(platform.wrapCommandSource(context.getSource()), platform.createLiteralComponent("No restart is currently scheduled to be cancelled."));
                             }
                             return 1;
                         }))
@@ -175,6 +182,52 @@ public class Restart implements ParadigmModule {
             initiateRestartSequence(totalSeconds, config);
         } else {
             services.getDebugLogger().debugLog(NAME + ": No valid restart delay computed. Skipping schedule.");
+        }
+    }
+
+    private long getNextRealTimeDelay(RestartConfigHandler.Config config) {
+        List<? extends String> realTimeIntervals = config.realTimeInterval.get();
+        if (realTimeIntervals == null || realTimeIntervals.isEmpty()) {
+            services.getDebugLogger().debugLog(NAME + ": Real-time restart intervals are not configured.");
+            return -1;
+        }
+
+        Calendar nowCal = Calendar.getInstance();
+        SimpleDateFormat format = new SimpleDateFormat("HH:mm");
+        long minDelayMillis = Long.MAX_VALUE;
+        String nextRestartTime = "N/A";
+
+        for (String restartTimeStr : realTimeIntervals) {
+            try {
+                Date restartTime = format.parse(restartTimeStr);
+                Calendar restartCal = Calendar.getInstance();
+                restartCal.setTime(restartTime);
+                restartCal.set(Calendar.YEAR, nowCal.get(Calendar.YEAR));
+                restartCal.set(Calendar.MONTH, nowCal.get(Calendar.MONTH));
+                restartCal.set(Calendar.DAY_OF_MONTH, nowCal.get(Calendar.DAY_OF_MONTH));
+                restartCal.set(Calendar.SECOND, 0);
+                restartCal.set(Calendar.MILLISECOND, 0);
+
+                if (nowCal.after(restartCal)) {
+                    restartCal.add(Calendar.DAY_OF_MONTH, 1);
+                }
+
+                long delayMillis = restartCal.getTimeInMillis() - nowCal.getTimeInMillis();
+                if (delayMillis > 0 && delayMillis < minDelayMillis) {
+                    minDelayMillis = delayMillis;
+                    nextRestartTime = format.format(restartCal.getTime());
+                }
+            } catch (ParseException e) {
+                services.getDebugLogger().debugLog(NAME + ": Error parsing restart time: " + restartTimeStr, e);
+            }
+        }
+
+        if (minDelayMillis != Long.MAX_VALUE && minDelayMillis > 0) {
+            services.getDebugLogger().debugLog(NAME + ": Next real-time restart is scheduled for " + nextRestartTime + " (in " + minDelayMillis + "ms).");
+            return minDelayMillis;
+        } else {
+            services.getDebugLogger().debugLog(NAME + ": No upcoming real-time restart found. All configured times have passed for today.");
+            return -1;
         }
     }
 
@@ -248,7 +301,7 @@ public class Restart implements ParadigmModule {
                             try {
                                 if (player instanceof MinecraftPlayer) {
                                     ServerPlayer sp = ((MinecraftPlayer) player).getHandle();
-                                    net.minecraft.commands.CommandSourceStack src = sp.createCommandSourceStack();
+                                    CommandSourceStack src = sp.createCommandSourceStack();
                                     platform.executeCommandAs(platform.wrapCommandSource(src), perPlayer);
                                 }
                             } catch (Exception ex) {
@@ -271,51 +324,12 @@ public class Restart implements ParadigmModule {
         }, totalIntervalMillis, TimeUnit.MILLISECONDS);
     }
 
-    private long getNextRealTimeDelay(RestartConfigHandler.Config config) {
-        List<? extends String> realTimeIntervals = config.realTimeInterval.get();
-        if (realTimeIntervals == null || realTimeIntervals.isEmpty()) return -1;
-
-        Calendar nowCal = Calendar.getInstance();
-        SimpleDateFormat format = new SimpleDateFormat("HH:mm");
-        long minDelayMillis = Long.MAX_VALUE;
-        String nextRestartTime = "N/A";
-
-        for (String restartTimeStr : realTimeIntervals) {
-            try {
-                Date restartTime = format.parse(restartTimeStr);
-                Calendar restartCal = Calendar.getInstance();
-                restartCal.setTime(restartTime);
-                restartCal.set(Calendar.YEAR, nowCal.get(Calendar.YEAR));
-                restartCal.set(Calendar.MONTH, nowCal.get(Calendar.MONTH));
-                restartCal.set(Calendar.DAY_OF_MONTH, nowCal.get(Calendar.DAY_OF_MONTH));
-                restartCal.set(Calendar.SECOND, 0);
-                restartCal.set(Calendar.MILLISECOND, 0);
-
-                if (nowCal.after(restartCal)) {
-                    restartCal.add(Calendar.DAY_OF_MONTH, 1);
-                }
-
-                long delayMillis = restartCal.getTimeInMillis() - nowCal.getTimeInMillis();
-                if (delayMillis > 0 && delayMillis < minDelayMillis) {
-                    minDelayMillis = delayMillis;
-                    nextRestartTime = format.format(restartCal.getTime());
-                }
-            } catch (ParseException e) {
-                services.getDebugLogger().debugLog(NAME + ": Error parsing restart time: " + restartTimeStr, e);
-            }
-        }
-
-        if (minDelayMillis != Long.MAX_VALUE && minDelayMillis > 0) {
-            services.getDebugLogger().debugLog(NAME + ": Next real-time restart is scheduled for " + nextRestartTime + " (in " + minDelayMillis + "ms).");
-            return minDelayMillis;
-        } else {
-            services.getDebugLogger().debugLog(NAME + ": No upcoming real-time restart found. All configured times have passed for today.");
-            return -1;
-        }
-    }
-
     private void sendRestartWarning(long timeLeftSeconds, RestartConfigHandler.Config config, double originalTotalIntervalSeconds) {
-        if (platform.getMinecraftServer() == null) return;
+        if (platform.getMinecraftServer() == null) {
+            services.getDebugLogger().debugLog(NAME + ": Server instance is null, cannot send restart warning.");
+            return;
+        }
+        services.getDebugLogger().debugLog(NAME + ": Sending restart warning. Time left: " + timeLeftSeconds + "s.");
 
         List<IPlayer> players = platform.getOnlinePlayers();
         if (!players.isEmpty()) {
@@ -355,7 +369,6 @@ public class Restart implements ParadigmModule {
                     .replace("{minutes}", TIME_FORMATTER.format(minutes))
                     .replace("{seconds}", String.valueOf(seconds))
                     .replace("{time}", formattedTime);
-            // Use message parser for chat
             IComponent parsedMessage = services.getMessageParser().parseMessage(message, player);
             platform.sendSystemMessage(player, parsedMessage);
         }
@@ -365,7 +378,6 @@ public class Restart implements ParadigmModule {
                     .replace("{minutes}", TIME_FORMATTER.format(minutes))
                     .replace("{seconds}", String.valueOf(seconds))
                     .replace("{time}", formattedTime);
-            // Use message parser for title
             IComponent parsedTitle = services.getMessageParser().parseMessage(titleText, player);
             platform.sendTitle(player, parsedTitle, null);
         }

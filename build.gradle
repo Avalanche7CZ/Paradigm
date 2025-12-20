@@ -5,7 +5,7 @@
 // CENTRALIZED MOD VERSION - Change here only!
 // ============================================
 ext {
-    modVersion = '2.0.0'
+    modVersion = '2.0.0b'
     modGroupId = 'eu.avalanche7'
     modId = 'paradigm'
     modName = 'Paradigm'
