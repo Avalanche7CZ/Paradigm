@@ -66,6 +66,8 @@ public class Services {
         this.cooldownConfigHandler = cooldownConfigHandler;
         this.webEditorStore = webEditorStore;
 
+        this.placeholdersInstance.setDebugLogger(debugLogger);
+
         initializeJsonValidators();
     }
 

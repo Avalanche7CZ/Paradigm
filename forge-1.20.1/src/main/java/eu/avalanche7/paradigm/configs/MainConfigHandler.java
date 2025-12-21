@@ -51,7 +51,7 @@ public class MainConfigHandler {
                 true, "Enables the custom commands module."
         );
         public ConfigEntry<Boolean> telemetryEnable = new ConfigEntry<>(
-                false, "Enables anonymous telemetry (server count, online players). Sends only anonymized metrics."
+                true, "Enables anonymous telemetry (server count, online players). Sends only anonymized metrics."
         );
         public ConfigEntry<Integer> telemetryIntervalSeconds = new ConfigEntry<>(
                 900, "Telemetry ping interval in seconds."

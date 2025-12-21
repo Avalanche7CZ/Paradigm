@@ -7,18 +7,21 @@ import net.minecraft.server.level.ServerPlayer;
 public class Placeholders {
 
     private Object luckPerms;
-    private boolean luckPermsAvailable = false;
+    private Boolean luckPermsAvailable = null;
 
     public Placeholders() {
+    }
+
+    private void initLuckPerms() {
+        if (luckPermsAvailable != null) return;
+
         try {
             Class<?> providerClass = Class.forName("net.luckperms.api.LuckPermsProvider");
             java.lang.reflect.Method getMethod = providerClass.getMethod("get");
             this.luckPerms = getMethod.invoke(null);
             this.luckPermsAvailable = true;
-            System.out.println("[Paradigm] LuckPerms integration enabled!");
         } catch (Exception e) {
             this.luckPermsAvailable = false;
-            System.out.println("[Paradigm] LuckPerms not found, running without LuckPerms support.");
         }
     }
 
@@ -37,7 +40,9 @@ public class Placeholders {
         replacedText = replacedText.replace("{player_health}", String.format("%.1f", mcPlayer.getHealth()));
         replacedText = replacedText.replace("{max_player_health}", String.format("%.1f", mcPlayer.getMaxHealth()));
 
-        if (luckPermsAvailable) {
+        initLuckPerms();
+
+        if (luckPermsAvailable != null && luckPermsAvailable) {
             replacedText = replaceLuckPermsPlaceholders(replacedText, mcPlayer);
         } else {
             replacedText = replacedText.replace("{player_prefix}", "");
@@ -117,8 +122,14 @@ public class Placeholders {
                 replacedText = replacedText.replace("{player_groups}", "");
             }
 
+            if (debugLogger != null) {
+                debugLogger.debugLog("Final text after LP placeholders: '" + replacedText + "'");
+            }
             return replacedText;
         } catch (Exception e) {
+            if (debugLogger != null) {
+                debugLogger.debugLog("Error replacing LP placeholders: " + e.getMessage());
+            }
             return text;
         }
     }

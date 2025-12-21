@@ -24,8 +24,8 @@ public class Services {
     private final TaskScheduler taskSchedulerInstance;
     private final GroupChatManager groupChatManagerInstance;
     private final IPlatformAdapter platformAdapter;
-    private final WebEditorStore webEditorStore;
     private final CooldownConfigHandler cooldownConfigHandler;
+    private final WebEditorStore webEditorStore;
 
     public Services(
             Logger logger,
@@ -65,6 +65,8 @@ public class Services {
         this.platformAdapter = platformAdapter;
         this.cooldownConfigHandler = cooldownConfigHandler;
         this.webEditorStore = webEditorStore;
+
+        this.placeholdersInstance.setDebugLogger(debugLogger);
 
         initializeJsonValidators();
     }

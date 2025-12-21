@@ -233,7 +233,7 @@ public class Paradigm {
     }
 
     public static class UpdateChecker {
-        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/1.20.1/version.txt?v=1";
+        private static final String LATEST_VERSION_URL = "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/Forge/main/version.txt?v=1";
         private static final String MODRINTH_PROJECT_ID = "s4i32SJd";
         private static final String CURSEFORGE_SLUG = "paradigm";
         private static final String MODRINTH_PROJECT_PAGE = "https://modrinth.com/mod/" + MODRINTH_PROJECT_ID;
