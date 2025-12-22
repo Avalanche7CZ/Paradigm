@@ -48,8 +48,8 @@ public class AnnouncementsConfigHandler {
                 "The interval in seconds between each global chat announcement."
         );
         public ConfigEntry<String> prefix = new ConfigEntry<>(
-                "<color:cyan><bold>[Announcement]</bold></color>",
-                "A prefix prepended to all announcement messages. Use {Prefix} in messages to apply. Supports TAG formatting."
+                "<bold><color:#00FFFF>[Announcement]</color></bold> ",
+                "A prefix prepended to all announcement messages. Use {Prefix} in messages to apply. Supports: TAG formatting (<color:#RRGGBB>, <bold>, etc.), named colors (<color:cyan>), and legacy codes (&b&l). Examples: '<bold><color:#00FFFF>[Prefix]</color></bold> ' or '&b&l[Prefix] ' (note: no &r at end for proper color inheritance)"
         );
         public ConfigEntry<String> header = new ConfigEntry<>(
                 "<gradient:aqua:cyan>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</gradient>",
@@ -65,12 +65,12 @@ public class AnnouncementsConfigHandler {
         );
         public ConfigEntry<List<String>> globalMessages = new ConfigEntry<>(
                 List.of(
-                        "{Prefix} <color:white>Welcome to our amazing server!</color>",
-                        "{Prefix} <gradient:gold:yellow>Visit us at the community hub</gradient>",
-                        "{Prefix} <bold><color:aqua>Thank you for playing with us!</color></bold>",
-                        "{Prefix} <color:white>Check out our website: <click:open_url:https://example.com><color:blue><underline>click here</underline></color></click></color>"
+                        "{Prefix}<color:#FFFFFF>Welcome to our amazing server!</color>",
+                        "{Prefix}<gradient:#FFD700:#FFFF00>Visit us at the community hub</gradient>",
+                        "{Prefix}<color:#00FFFF>Thank you for playing with us!</color>",
+                        "{Prefix}<color:#AAAAAA>Check out our website: <click:open_url:https://example.com><color:#5555FF><underline>click here</underline></color></click></color>"
                 ),
-                "List of messages to be broadcast in global chat. Supports TAG formatting, placeholders like {Prefix}, {player_name}, and click events."
+                "List of messages to be broadcast in global chat. Supports: RGB hex colors (<color:#RRGGBB>), gradients (<gradient:#FF0000:#00FF00>), named colors (<color:cyan>), legacy codes (&b, &l, etc.), click events (<click:...>), and hover events (<hover:...>). Use {Prefix} placeholder."
         );
         public ConfigEntry<Boolean> actionbarEnable = new ConfigEntry<>(
                 true,
@@ -82,11 +82,11 @@ public class AnnouncementsConfigHandler {
         );
         public ConfigEntry<List<String>> actionbarMessages = new ConfigEntry<>(
                 List.of(
-                        "{Prefix} <rainbow>Enjoy your time on the server</rainbow>",
-                        "{Prefix} <gradient:blue:cyan>Having fun? Share with friends!</gradient>",
-                        "<color:gold>Need help? Type <bold>/help</bold> in chat</color>"
+                        "{Prefix}<rainbow>Enjoy your time on the server</rainbow>",
+                        "{Prefix}<gradient:#0000FF:#00FFFF>Having fun? Share with friends!</gradient>",
+                        "<color:#FFD700>Need help? Type <bold>/help</bold> in chat</color>"
                 ),
-                "List of messages to be broadcast on the action bar. Supports TAG formatting (colors, gradients, formatting). Hover and click events do NOT work in action bar."
+                "List of messages to be broadcast on the action bar. Supports: RGB hex, gradients, named colors, legacy codes (&), rainbow effect, and all text formatting. Hover and click events do NOT work in action bar."
         );
         public ConfigEntry<Boolean> titleEnable = new ConfigEntry<>(
                 true,
@@ -98,11 +98,11 @@ public class AnnouncementsConfigHandler {
         );
         public ConfigEntry<List<String>> titleMessages = new ConfigEntry<>(
                 List.of(
-                        "<gradient:gold:yellow>Welcome!</gradient>\n<color:aqua>Have fun and be respectful</color>",
-                        "<color:cyan><bold>Server Announcement</bold></color>\n<color:gray>Check back regularly for updates</color>",
-                        "<bold><color:lime>News Update!</color></bold>\n<gradient:blue:cyan>Check the website for details</gradient>"
+                        "<gradient:#FFD700:#FFFF00>Welcome!</gradient> || <color:#00FFFF>Have fun and be respectful</color>",
+                        "<bold><color:#00FFFF>Server Announcement</color></bold> || <color:#808080>Check back regularly for updates</color>",
+                        "<bold><color:#00FF00>News Update!</color></bold> || <gradient:#0000FF:#00FFFF>Check the website for details</gradient>"
                 ),
-                "List of messages to be broadcast as a title. Supports TAG formatting (colors, gradients, formatting). Use \\n for a subtitle. Hover and click events do NOT work in titles."
+                "List of messages to be broadcast as a title. Supports: RGB hex, gradients, named colors, legacy codes (&), and all text formatting. Use || to separate title and subtitle. Hover and click events do NOT work in titles."
         );
         public ConfigEntry<Boolean> bossbarEnable = new ConfigEntry<>(
                 true,
@@ -122,11 +122,11 @@ public class AnnouncementsConfigHandler {
         );
         public ConfigEntry<List<String>> bossbarMessages = new ConfigEntry<>(
                 List.of(
-                        "{Prefix} <gradient:purple:pink>Thanks for being awesome</gradient>",
-                        "<bold><color:gold>Server running smoothly</color></bold>",
-                        "<color:cyan>Remember to vote for the server!</color>"
+                        "{Prefix}<gradient:#FF00FF:#FFC0CB>Thanks for being awesome</gradient>",
+                        "<bold><color:#FFD700>Server running smoothly</color></bold>",
+                        "<color:#00FFFF>Remember to vote for the server!</color>"
                 ),
-                "List of messages to be broadcast in a boss bar. Supports TAG formatting (colors, gradients, formatting). Hover and click events do NOT work in boss bars."
+                "List of messages to be broadcast in a boss bar. Supports: RGB hex, gradients, named colors, legacy codes (&), and all text formatting. Hover and click events do NOT work in boss bars."
         );
     }
 

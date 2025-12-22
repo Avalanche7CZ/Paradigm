@@ -32,7 +32,6 @@ public class CenterTag implements Tag {
 
     @Override
     public void process(FormattingContext context, String arguments) {
-        System.out.println("[Paradigm-CenterTag] Processing center tag");
         centeredContent = new MinecraftComponent(Component.literal(""));
         context.pushComponent(centeredContent);
         context.pushStyle(context.getCurrentStyle());
@@ -40,7 +39,6 @@ public class CenterTag implements Tag {
 
     @Override
     public void close(FormattingContext context) {
-        System.out.println("[Paradigm-CenterTag] Closing center tag, content: " + extractPlainText(centeredContent));
         if (centeredContent != null) {
             String text = extractPlainText(centeredContent);
             text = text.trim();

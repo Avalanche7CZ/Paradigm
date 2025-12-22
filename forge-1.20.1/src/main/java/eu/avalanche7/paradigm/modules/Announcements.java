@@ -182,17 +182,19 @@ public class Announcements implements ParadigmModule {
         }
 
         String messageText = getNextMessage(config.globalMessages.get(), config.orderMode.get(), "global");
+        String processedMessage = replacePrefixPlaceholder(messageText);
 
         platform.getOnlinePlayers().forEach(player -> {
             if (config.headerAndFooter.get()) {
                 IComponent header = services.getMessageParser().parseMessage(config.header.get(), player);
-                IComponent message = services.getMessageParser().parseMessage(messageText, player);
+                IComponent message = services.getMessageParser().parseMessage(processedMessage, player);
                 IComponent footer = services.getMessageParser().parseMessage(config.footer.get(), player);
                 platform.sendSystemMessage(player, header);
                 platform.sendSystemMessage(player, message);
                 platform.sendSystemMessage(player, footer);
             } else {
-                platform.sendSystemMessage(player, messageText);
+                IComponent message = services.getMessageParser().parseMessage(processedMessage, player);
+                platform.sendSystemMessage(player, message);
             }
         });
     }
@@ -206,9 +208,10 @@ public class Announcements implements ParadigmModule {
         }
 
         String messageText = getNextMessage(config.actionbarMessages.get(), config.orderMode.get(), "actionbar");
+        String processedMessage = replacePrefixPlaceholder(messageText);
 
         platform.getOnlinePlayers().forEach(player -> {
-            platform.sendActionBar(player, messageText);
+            platform.sendActionBar(player, processedMessage);
         });
     }
 
@@ -221,9 +224,10 @@ public class Announcements implements ParadigmModule {
         }
 
         String messageText = getNextMessage(config.titleMessages.get(), config.orderMode.get(), "title");
+        String processedMessage = replacePrefixPlaceholder(messageText);
 
         platform.getOnlinePlayers().forEach(player -> {
-            String[] parts = messageText.split(" \\|\\| ", 2);
+            String[] parts = processedMessage.split(" \\|\\| ", 2);
             IComponent title = services.getMessageParser().parseMessage(parts[0], player);
             IComponent subtitle = parts.length > 1 ? services.getMessageParser().parseMessage(parts[1], player) : platform.createLiteralComponent("");
             platform.clearTitles(player);
@@ -240,16 +244,28 @@ public class Announcements implements ParadigmModule {
         }
 
         String messageText = getNextMessage(config.bossbarMessages.get(), config.orderMode.get(), "bossbar");
+        String processedMessage = replacePrefixPlaceholder(messageText);
         int duration = config.bossbarTime.get();
         IPlatformAdapter.BossBarColor color = IPlatformAdapter.BossBarColor.valueOf(config.bossbarColor.get().toUpperCase());
 
         platform.getOnlinePlayers().forEach(player -> {
-            platform.sendBossBar(Collections.singletonList(player), messageText, duration, color, 1.0f);
+            platform.sendBossBar(Collections.singletonList(player), processedMessage, duration, color, 1.0f);
         });
     }
 
+    /**
+     * Replaces {Prefix} placeholder with actual prefix
+     */
+    private String replacePrefixPlaceholder(String message) {
+        if (!message.contains("{Prefix}")) {
+            return message;
+        }
+
+        String prefix = services.getAnnouncementsConfig().prefix.get();
+        return message.replace("{Prefix}", prefix);
+    }
+
     private String getNextMessage(List<? extends String> messages, String orderMode, String type) {
-        String prefix = services.getAnnouncementsConfig().prefix.get() + "§r";
         String messageText;
         if ("SEQUENTIAL".equalsIgnoreCase(orderMode)) {
             int index;
@@ -300,7 +316,7 @@ public class Announcements implements ParadigmModule {
             messageText = messages.get(index);
             services.getDebugLogger().debugLog("{}: Picked random message for type '{}' at index {}: \"{}\"", NAME, type, index, messageText);
         }
-        return messageText.replace("{Prefix}", prefix);
+        return messageText;
     }
 
     private int broadcastTitleCmd(CommandContext<net.minecraft.commands.CommandSourceStack> context) throws CommandSyntaxException {

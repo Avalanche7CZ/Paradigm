@@ -1,4 +1,51 @@
-# Paradigm Server Restart Scripts
+# Paradigm Server Scripts
+
+This directory contains various scripts for managing Paradigm mod on Minecraft servers.
+
+---
+
+## 🚀 Deployment Scripts
+
+### Automated Deployment to PufferPanel Servers
+
+Use these scripts to automatically deploy built JAR files to all configured servers.
+
+#### Fish Shell (Recommended for your setup)
+```fish
+# Deploy all versions
+./scripts/deploy-to-servers.fish
+
+# Deploy specific version
+./scripts/deploy-to-servers.fish 1.21.1
+```
+
+#### Bash
+```bash
+# Deploy all versions
+./scripts/deploy-to-servers.sh
+
+# Deploy specific version
+./scripts/deploy-to-servers.sh 1.21.1
+```
+
+**Configured Servers:**
+- **1.18.2** → Server ID: `60accda3`
+- **1.19.2** → Server ID: `da861011`
+- **1.20.1** → Server ID: `aad9b166`
+- **1.21.1** → Server ID: `74da6189`
+
+**Typical Workflow:**
+```fish
+# 1. Build all versions
+./gradlew build
+
+# 2. Deploy to all servers
+./scripts/deploy-to-servers.fish
+
+# 3. Restart servers via PufferPanel web interface
+```
+
+---
 
 ## ⚠️ IMPORTANT: Restart vs. Shutdown
 

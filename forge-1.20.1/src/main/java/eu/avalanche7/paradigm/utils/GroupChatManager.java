@@ -342,7 +342,6 @@ public class GroupChatManager {
         for (UUID uuid : reqs) {
             IPlayer p = platform.getPlayerByUuid(uuid);
             String name = p != null ? platform.getPlayerName(p) : uuid.toString();
-            System.out.println("[Paradigm Debug] Building clickable join request line for: " + name);
             IComponent base = parseMessage("&7- &f" + name + " &8[", owner);
             IComponent accept = parseMessage("&a/groupchat accept " + name, owner)
                 .onClickRunCommand("/groupchat accept " + name)
@@ -353,7 +352,6 @@ public class GroupChatManager {
                 .onHoverText("Click to deny " + name);
             IComponent end = parseMessage("&8]", owner);
             IComponent full = base.append(accept).append(sep).append(deny).append(end);
-            System.out.println("[Paradigm Debug] Sending clickable join request line for: " + name);
             platform.sendSystemMessage(owner, full);
         }
     }

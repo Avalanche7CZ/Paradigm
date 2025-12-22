@@ -2,7 +2,9 @@ package eu.avalanche7.paradigm.modules;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
@@ -11,12 +13,10 @@ import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import net.minecraft.commands.Commands;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
-import com.mojang.brigadier.arguments.IntegerArgumentType;
 
 import java.util.Collections;
 import java.util.List;
@@ -94,24 +94,24 @@ public class Announcements implements ParadigmModule {
                 LiteralArgumentBuilder.<net.minecraft.commands.CommandSourceStack>literal("paradigm")
                         .requires(source -> source.hasPermission(2))
                         .then(LiteralArgumentBuilder.<net.minecraft.commands.CommandSourceStack>literal("broadcast")
-                                .then(Commands.argument("message", StringArgumentType.greedyString())
+                                .then(RequiredArgumentBuilder.<net.minecraft.commands.CommandSourceStack, String>argument("message", StringArgumentType.greedyString())
                                         .executes(this::broadcastMessageCmd)))
                         .then(LiteralArgumentBuilder.<net.minecraft.commands.CommandSourceStack>literal("actionbar")
-                                .then(Commands.argument("message", StringArgumentType.greedyString())
+                                .then(RequiredArgumentBuilder.<net.minecraft.commands.CommandSourceStack, String>argument("message", StringArgumentType.greedyString())
                                         .executes(this::broadcastMessageCmd)))
                         .then(LiteralArgumentBuilder.<net.minecraft.commands.CommandSourceStack>literal("title")
-                                .then(Commands.argument("titleAndSubtitle", StringArgumentType.greedyString())
+                                .then(RequiredArgumentBuilder.<net.minecraft.commands.CommandSourceStack, String>argument("titleAndSubtitle", StringArgumentType.greedyString())
                                         .executes(this::broadcastTitleCmd)))
                         .then(LiteralArgumentBuilder.<net.minecraft.commands.CommandSourceStack>literal("bossbar")
-                                .then(Commands.argument("interval", IntegerArgumentType.integer(1))
-                                        .then(Commands.argument("color", StringArgumentType.word())
+                                .then(RequiredArgumentBuilder.<net.minecraft.commands.CommandSourceStack, Integer>argument("interval", IntegerArgumentType.integer(1))
+                                        .then(RequiredArgumentBuilder.<net.minecraft.commands.CommandSourceStack, String>argument("color", StringArgumentType.word())
                                                 .suggests((ctx, builder) -> {
                                                     for (IPlatformAdapter.BossBarColor color : IPlatformAdapter.BossBarColor.values()) {
                                                         builder.suggest(color.name());
                                                     }
                                                     return builder.buildFuture();
                                                 })
-                                                .then(Commands.argument("message", StringArgumentType.greedyString())
+                                                .then(RequiredArgumentBuilder.<net.minecraft.commands.CommandSourceStack, String>argument("message", StringArgumentType.greedyString())
                                                         .executes(this::broadcastMessageCmd))))));
     }
 
@@ -178,17 +178,22 @@ public class Announcements implements ParadigmModule {
         }
 
         String messageText = getNextMessage(config.globalMessages.get(), config.orderMode.get(), "global");
+        String processedMessage = replacePrefixPlaceholder(messageText);
+
+        services.getDebugLogger().debugLog("{}: Broadcasting global message: {}", NAME, processedMessage);
 
         platform.getOnlinePlayers().forEach(player -> {
             if (config.headerAndFooter.get()) {
                 IComponent header = services.getMessageParser().parseMessage(config.header.get(), player);
-                IComponent message = services.getMessageParser().parseMessage(messageText, player);
+                IComponent message = services.getMessageParser().parseMessage(processedMessage, player);
                 IComponent footer = services.getMessageParser().parseMessage(config.footer.get(), player);
                 platform.sendSystemMessage(player, header);
                 platform.sendSystemMessage(player, message);
                 platform.sendSystemMessage(player, footer);
             } else {
-                platform.sendSystemMessage(player, messageText);
+                IComponent message = services.getMessageParser().parseMessage(processedMessage, player);
+
+                platform.sendSystemMessage(player, message);
             }
         });
     }
@@ -202,9 +207,12 @@ public class Announcements implements ParadigmModule {
         }
 
         String messageText = getNextMessage(config.actionbarMessages.get(), config.orderMode.get(), "actionbar");
+        String processedMessage = replacePrefixPlaceholder(messageText);
+
+        services.getDebugLogger().debugLog("{}: Broadcasting actionbar message: {}", NAME, processedMessage);
 
         platform.getOnlinePlayers().forEach(player -> {
-            platform.sendActionBar(player, messageText);
+            platform.sendActionBar(player, processedMessage);
         });
     }
 
@@ -217,9 +225,10 @@ public class Announcements implements ParadigmModule {
         }
 
         String messageText = getNextMessage(config.titleMessages.get(), config.orderMode.get(), "title");
+        String processedMessage = replacePrefixPlaceholder(messageText);
 
         platform.getOnlinePlayers().forEach(player -> {
-            String[] parts = messageText.split(" \\|\\| ", 2);
+            String[] parts = processedMessage.split(" \\|\\| ", 2);
             IComponent title = services.getMessageParser().parseMessage(parts[0], player);
             IComponent subtitle = parts.length > 1 ? services.getMessageParser().parseMessage(parts[1], player) : platform.createLiteralComponent("");
             platform.clearTitles(player);
@@ -236,16 +245,35 @@ public class Announcements implements ParadigmModule {
         }
 
         String messageText = getNextMessage(config.bossbarMessages.get(), config.orderMode.get(), "bossbar");
+        String processedMessage = replacePrefixPlaceholder(messageText);
+
+        services.getDebugLogger().debugLog("{}: Broadcasting bossbar message: {}", NAME, processedMessage);
+
         int duration = config.bossbarTime.get();
         IPlatformAdapter.BossBarColor color = IPlatformAdapter.BossBarColor.valueOf(config.bossbarColor.get().toUpperCase());
 
         platform.getOnlinePlayers().forEach(player -> {
-            platform.sendBossBar(Collections.singletonList(player), messageText, duration, color, 1.0f);
+            platform.sendBossBar(Collections.singletonList(player), processedMessage, duration, color, 1.0f);
         });
     }
 
+    /**
+     * Replaces {Prefix} placeholder with actual prefix
+     */
+    private String replacePrefixPlaceholder(String message) {
+        if (!message.contains("{Prefix}")) {
+            return message;
+        }
+
+        String prefix = services.getAnnouncementsConfig().prefix.get();
+        String result = message.replace("{Prefix}", prefix);
+
+        services.getDebugLogger().debugLog("{}: Replaced {{Prefix}} -> Result: {}", NAME, result);
+
+        return result;
+    }
+
     private String getNextMessage(List<? extends String> messages, String orderMode, String type) {
-        String prefix = services.getAnnouncementsConfig().prefix.get() + "§r";
         String messageText;
         if ("SEQUENTIAL".equalsIgnoreCase(orderMode)) {
             int index;
@@ -296,7 +324,7 @@ public class Announcements implements ParadigmModule {
             messageText = messages.get(index);
             services.getDebugLogger().debugLog("{}: Picked random message for type '{}' at index {}: \"{}\"", NAME, type, index, messageText);
         }
-        return messageText.replace("{Prefix}", prefix);
+        return messageText;
     }
 
     private int broadcastTitleCmd(CommandContext<net.minecraft.commands.CommandSourceStack> context) throws CommandSyntaxException {

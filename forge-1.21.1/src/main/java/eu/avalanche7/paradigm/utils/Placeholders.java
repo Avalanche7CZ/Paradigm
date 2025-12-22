@@ -121,15 +121,8 @@ public class Placeholders {
             } else {
                 replacedText = replacedText.replace("{player_groups}", "");
             }
-
-            if (debugLogger != null) {
-                debugLogger.debugLog("Final text after LP placeholders: '" + replacedText + "'");
-            }
             return replacedText;
         } catch (Exception e) {
-            if (debugLogger != null) {
-                debugLogger.debugLog("Error replacing LP placeholders: " + e.getMessage());
-            }
             return text;
         }
     }

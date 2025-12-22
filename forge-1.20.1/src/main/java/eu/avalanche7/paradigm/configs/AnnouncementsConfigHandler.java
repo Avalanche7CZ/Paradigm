@@ -43,59 +43,72 @@ public class AnnouncementsConfigHandler {
                 "Enable or disable the header and footer around global chat announcements."
         );
         public ConfigEntry<Integer> globalInterval = new ConfigEntry<>(
-                1800,
+                60,
                 "The interval in seconds between each global chat announcement."
         );
         public ConfigEntry<String> prefix = new ConfigEntry<>(
-                "&9&l[&b&lPREFIX&9&l]",
-                "A prefix prepended to all announcement messages. Use {Prefix} in messages to apply."
+                "<bold><color:#00FFFF>[Announcement]</color></bold> ",
+                "A prefix prepended to all announcement messages. Use {Prefix} in messages to apply. Supports: TAG formatting (<color:#RRGGBB>, <bold>, etc.), named colors (<color:cyan>), and legacy codes (&b&l). Examples: '<bold><color:#00FFFF>[Prefix]</color></bold> ' or '&b&l[Prefix] ' (note: no &r at end for proper color inheritance)"
         );
         public ConfigEntry<String> header = new ConfigEntry<>(
-                "&7*&m---------------------------------------------------&7*",
-                "The header message sent before a global announcement."
+                "<gradient:aqua:cyan>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</gradient>",
+                "The header message sent before a global announcement. Supports TAG formatting."
         );
         public ConfigEntry<String> footer = new ConfigEntry<>(
-                "&7*&m---------------------------------------------------&7*",
-                "The footer message sent after a global announcement."
+                "<gradient:cyan:aqua>━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</gradient>",
+                "The footer message sent after a global announcement. Supports TAG formatting."
         );
         public ConfigEntry<String> sound = new ConfigEntry<>(
                 "",
                 "Sound to play for players when an announcement is made. E.g., 'minecraft:block.note_block.pling'. Leave empty for no sound."
         );
         public ConfigEntry<List<String>> globalMessages = new ConfigEntry<>(
-                List.of("{Prefix} &7This is global message with a link: [link=https://www.google.com]"),
-                "List of messages to be broadcast in global chat."
+                List.of(
+                        "{Prefix}<color:#FFFFFF>Welcome to our amazing server!</color>",
+                        "{Prefix}<gradient:#FFD700:#FFFF00>Visit us at the community hub</gradient>",
+                        "{Prefix}<color:#00FFFF>Thank you for playing with us!</color>",
+                        "{Prefix}<color:#AAAAAA>Check out our website: <click:open_url:https://example.com><color:#5555FF><underline>click here</underline></color></click></color>"
+                ),
+                "List of messages to be broadcast in global chat. Supports: RGB hex colors (<color:#RRGGBB>), gradients (<gradient:#FF0000:#00FF00>), named colors (<color:cyan>), legacy codes (&b, &l, etc.), click events (<click:...>), and hover events (<hover:...>). Use {Prefix} placeholder."
         );
         public ConfigEntry<Boolean> actionbarEnable = new ConfigEntry<>(
                 true,
                 "Enable or disable announcements shown on the action bar."
         );
         public ConfigEntry<Integer> actionbarInterval = new ConfigEntry<>(
-                1800,
+                60,
                 "The interval in seconds between each action bar announcement."
         );
         public ConfigEntry<List<String>> actionbarMessages = new ConfigEntry<>(
-                List.of("{Prefix} &7This is an actionbar message."),
-                "List of messages to be broadcast on the action bar."
+                List.of(
+                        "{Prefix}<rainbow>Enjoy your time on the server</rainbow>",
+                        "{Prefix}<gradient:#0000FF:#00FFFF>Having fun? Share with friends!</gradient>",
+                        "<color:#FFD700>Need help? Type <bold>/help</bold> in chat</color>"
+                ),
+                "List of messages to be broadcast on the action bar. Supports: RGB hex, gradients, named colors, legacy codes (&), rainbow effect, and all text formatting. Hover and click events do NOT work in action bar."
         );
         public ConfigEntry<Boolean> titleEnable = new ConfigEntry<>(
                 true,
                 "Enable or disable announcements shown as a screen title."
         );
         public ConfigEntry<Integer> titleInterval = new ConfigEntry<>(
-                1800,
+                60,
                 "The interval in seconds between each title announcement."
         );
         public ConfigEntry<List<String>> titleMessages = new ConfigEntry<>(
-                List.of("{Prefix} &7This is a title message."),
-                "List of messages to be broadcast as a title. Use '\\n' for a subtitle."
+                List.of(
+                        "<gradient:#FFD700:#FFFF00>Welcome!</gradient> || <color:#00FFFF>Have fun and be respectful</color>",
+                        "<bold><color:#00FFFF>Server Announcement</color></bold> || <color:#808080>Check back regularly for updates</color>",
+                        "<bold><color:#00FF00>News Update!</color></bold> || <gradient:#0000FF:#00FFFF>Check the website for details</gradient>"
+                ),
+                "List of messages to be broadcast as a title. Supports: RGB hex, gradients, named colors, legacy codes (&), and all text formatting. Use || to separate title and subtitle. Hover and click events do NOT work in titles."
         );
         public ConfigEntry<Boolean> bossbarEnable = new ConfigEntry<>(
                 true,
                 "Enable or disable announcements shown as a temporary boss bar."
         );
         public ConfigEntry<Integer> bossbarInterval = new ConfigEntry<>(
-                1800,
+                60,
                 "The interval in seconds between each boss bar announcement."
         );
         public ConfigEntry<String> bossbarColor = new ConfigEntry<>(
@@ -107,8 +120,12 @@ public class AnnouncementsConfigHandler {
                 "How long the boss bar should remain on screen, in seconds."
         );
         public ConfigEntry<List<String>> bossbarMessages = new ConfigEntry<>(
-                List.of("{Prefix} &7This is a bossbar message."),
-                "List of messages to be broadcast in a boss bar."
+                List.of(
+                        "{Prefix}<gradient:#FF00FF:#FFC0CB>Thanks for being awesome</gradient>",
+                        "<bold><color:#FFD700>Server running smoothly</color></bold>",
+                        "<color:#00FFFF>Remember to vote for the server!</color>"
+                ),
+                "List of messages to be broadcast in a boss bar. Supports: RGB hex, gradients, named colors, legacy codes (&), and all text formatting. Hover and click events do NOT work in boss bars."
         );
     }
 
