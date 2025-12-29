@@ -17,9 +17,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(PlayerList.class)
 public abstract class PlayerListMixin {
 
-    static {
-        System.out.println("[Paradigm-Mixin] PlayerListMixin loaded!");
-    }
 
     @Inject(method = "*(Lnet/minecraft/network/chat/Component;Z)V", at = @At("HEAD"), cancellable = true, remap = false)
     private void paradigm$filterJoinLeaveMessages(Component message, boolean overlay, CallbackInfo ci) {
@@ -34,7 +31,6 @@ public abstract class PlayerListMixin {
         boolean joinLeaveEnabled = cfg != null && Boolean.TRUE.equals(cfg.enableJoinLeaveMessages.get());
 
         if (joinLeaveEnabled) {
-            System.out.println("[Paradigm-Mixin] Suppressed vanilla: " + paradigm$safeToString(message));
             ci.cancel();
         }
     }

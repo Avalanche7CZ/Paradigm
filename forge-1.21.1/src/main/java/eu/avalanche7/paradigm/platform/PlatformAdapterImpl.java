@@ -308,7 +308,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
                 server.halt(false);
             } catch (Exception e) {
                 e.printStackTrace();
-                System.out.println("[Paradigm-Debug] PlatformAdapterImpl: Exception during shutdown: " + e.getMessage());
             }
         }
     }
@@ -318,18 +317,12 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         MinecraftServer server = (MinecraftServer) getMinecraftServer();
         if (server != null) {
             try {
-                System.out.println("[Paradigm-Debug] PlatformAdapterImpl: shutdownServer called with message: " + kickMessage);
                 server.getPlayerList().broadcastSystemMessage(Component.literal(kickMessage), false);
                 server.saveEverything(true, true, true);
-                System.out.println("[Paradigm-Debug] PlatformAdapterImpl: Calling server.halt(false)");
                 server.halt(false);
-                System.out.println("[Paradigm-Debug] PlatformAdapterImpl: server.halt(false) called");
             } catch (Exception e) {
                 e.printStackTrace();
-                System.out.println("[Paradigm-Debug] PlatformAdapterImpl: Exception during shutdown: " + e.getMessage());
             }
-        } else {
-            System.out.println("[Paradigm-Debug] PlatformAdapterImpl: shutdownServer called but server is null!");
         }
     }
 

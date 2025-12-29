@@ -31,22 +31,16 @@ public class EmojiTag implements Tag {
     @Override
     public void process(FormattingContext context, String arguments) {
         if (arguments == null || arguments.isEmpty()) {
-            System.out.println("[Paradigm-EmojiTag] Empty arguments!");
             return;
         }
 
         String emojiName = arguments.trim().toLowerCase();
         String emoji = EmojiConfigHandler.CONFIG.getEmoji(emojiName);
 
-        System.out.println("[Paradigm-EmojiTag] Processing emoji: " + emojiName + " -> " + emoji + " (empty=" + emoji.isEmpty() + ")");
-
         if (!emoji.isEmpty()) {
             Component emojiComponent = Component.literal(emoji);
             IComponent emojiWrapper = new MinecraftComponent(emojiComponent);
             context.getCurrentComponent().append(emojiWrapper);
-            System.out.println("[Paradigm-EmojiTag] Successfully added emoji: " + emoji);
-        } else {
-            System.out.println("[Paradigm-EmojiTag] Emoji not found for: " + emojiName);
         }
     }
 

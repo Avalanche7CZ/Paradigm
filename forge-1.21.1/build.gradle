@@ -138,11 +138,5 @@ tasks.named('jar', Jar).configure {
         ])
     }
 
-    finalizedBy 'reobfJar'
 }
 
-tasks.register('reobf') {
-    group = 'build'
-    description = 'Run reobfJar for runtime compatibility.'
-    dependsOn 'reobfJar'
-}

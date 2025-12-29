@@ -22,7 +22,16 @@ base {
 }
 
 java {
-    toolchain.languageVersion = JavaLanguageVersion.of(17)
+    toolchain.languageVersion = JavaLanguageVersion.of(Integer.parseInt(project.ext.java_version.toString()))
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = Integer.parseInt(project.ext.java_version.toString())
+    // Mixin AP options; outRefMap is ignored on this toolchain, so we omit it
+    options.compilerArgs += [
+        "-AdefaultObfuscationEnv=searge"
+    ]
 }
 
 minecraft {
@@ -136,13 +145,4 @@ tasks.register('reobf') {
     group = 'build'
     description = 'Run reobfJar for runtime compatibility.'
     dependsOn 'reobfJar'
-}
-
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8'
-    options.release = Integer.parseInt(project.ext.java_version.toString())
-    options.compilerArgs += [
-        "-AoutRefMap=paradigm.refmap.json",
-        "-AdefaultObfuscationEnv=searge"
-    ]
 }

@@ -61,25 +61,13 @@ public class Paradigm {
         return INSTANCE.modules;
     }
 
-    private static Paradigm instance;
     public Paradigm() {
-        INSTANCE = this;
-    }
-    public static Paradigm getInstance() {
-        return INSTANCE;
-    }
-    public static List<ParadigmModule> getModulesStatic() {
-        return INSTANCE != null ? INSTANCE.modules : java.util.Collections.emptyList();
-    }
-
-    public Paradigm(FMLJavaModLoadingContext ctx) {
         INSTANCE = this;
         if (FMLEnvironment.dist == Dist.CLIENT) {
             LOGGER.info("Paradigm mod is only supported on the server side. Please remove it from the client.");
             return;
         }
-
-        IEventBus modEventBus = ctx.getModEventBus();
+        IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
 
         this.services = this.initialize();
         SERVICES_INSTANCE = this.services;
@@ -90,6 +78,14 @@ public class Paradigm {
 
         modEventBus.addListener(this::commonSetup);
         MinecraftForge.EVENT_BUS.register(this);
+    }
+
+    public static Paradigm getInstance() {
+        return INSTANCE;
+    }
+
+    public static List<ParadigmModule> getModulesStatic() {
+        return INSTANCE != null ? INSTANCE.modules : java.util.Collections.emptyList();
     }
 
     private Services initialize() {
