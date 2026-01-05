@@ -169,6 +169,7 @@ public class Paradigm {
         modules.add(new JoinLeaveMessages());
         modules.add(new eu.avalanche7.paradigm.modules.commands.reload());
         modules.add(new eu.avalanche7.paradigm.modules.commands.help());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.editor());
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
