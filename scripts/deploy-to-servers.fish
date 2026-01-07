@@ -49,16 +49,17 @@ function deploy_version
         return 1
     end
 
-    set -l jar_file "paradigm-$mc_version-2.0.0b.jar"
-    set -l source_path "$PROJECT_ROOT/forge-$mc_version/build/libs/$jar_file"
+    set -l jar_file "paradigm-$mc_version-1.3.0b.jar"
+    # Use reobfuscated JAR from build/reobfJar/output.jar (production-ready)
+    set -l source_path "$PROJECT_ROOT/forge-$mc_version/build/reobfJar/output.jar"
     set -l dest_path "$PUFFERPANEL_BASE/$server_id/mods/$jar_file"
 
     echo "$YELLOW""Deploying $mc_version...$NC"
 
-    # Check if JAR exists
+    # Check if reobfuscated JAR exists
     if not test -f "$source_path"
-        echo "$RED  ✗ JAR file not found: $source_path$NC"
-        echo "$YELLOW  → Run './gradlew build' first$NC"
+        echo "$RED  ✗ Reobfuscated JAR not found: $source_path$NC"
+        echo "$YELLOW  → Run './gradlew :forge-$mc_version:build' first$NC"
         return 1
     end
 
