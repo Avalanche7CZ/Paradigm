@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "paradigm",
+  "version": "${version}",
+  "name": "Paradigm",
+  "description": "Sever side Mod - Announcements, Restarting, and more!",
+  "authors": [
+    "Avalanche7CZ"
+  ],
+  "contact": {
+    "homepage": "",
+    "sources": ""
+  },
+  "license": "CC-BY-NC-ND-4.0",
+  "environment": "server",
+  "entrypoints": {
+    "server": [
+      "eu.avalanche7.paradigm.Paradigm"
+    ]
+  },
+  "mixins": [
+    "paradigm.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.14.21",
+    "fabric-api": "*",
+    "minecraft": ">=1.20 <1.20.2"
+  }
+}

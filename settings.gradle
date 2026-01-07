@@ -6,6 +6,18 @@ pluginManagement {
         }
         gradlePluginPortal()
     }
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == 'fabric-loom') {
+                useModule("net.fabricmc:fabric-loom:${requested.version}")
+            }
+        }
+    }
 }
 
 rootProject.name = 'Paradigm'
+
+include 'Fabric-1.20.1'
+include 'Fabric-1.21.1'
+include 'Fabric-1.21.8'
+
