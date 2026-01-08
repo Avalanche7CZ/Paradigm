@@ -103,9 +103,8 @@ public class Announcements implements ParadigmModule {
                         .requires(source -> source.hasPermissionLevel(PermissionsHandler.BROADCAST_PERMISSION_LEVEL)
                                 || (source.isExecutedByPlayer() && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.BROADCAST_PERMISSION)))
                         .then(CommandManager.literal("broadcast")
-                                .then(CommandManager.argument("header_footer", BoolArgumentType.bool())
-                                        .then(CommandManager.argument("message", StringArgumentType.greedyString())
-                                                .executes(context -> broadcastMessageCmd(context, "broadcast")))))
+                                .then(CommandManager.argument("message", StringArgumentType.greedyString())
+                                        .executes(context -> broadcastMessageCmd(context, "broadcast"))))
                         .then(CommandManager.literal("actionbar")
                                 .then(CommandManager.argument("message", StringArgumentType.greedyString())
                                         .executes(context -> broadcastMessageCmd(context, "actionbar"))))
@@ -323,7 +322,7 @@ public class Announcements implements ParadigmModule {
 
     public int broadcastTitleCmd(CommandContext<ServerCommandSource> context) {
         String titleAndSubtitle = StringArgumentType.getString(context, "titleAndSubtitle");
-        // ICommandSource source = platform.wrapCommandSource(context.getSource()); // Fix this if needed
+        ICommandSource source = platform.wrapCommandSource(context.getSource());
         services.getDebugLogger().debugLog(NAME + ": /paradigm title command executed with message: " + titleAndSubtitle);
         String[] parts = titleAndSubtitle.split(" \\|\\| ", 2);
         platform.getOnlinePlayers().forEach(target -> {
@@ -339,25 +338,14 @@ public class Announcements implements ParadigmModule {
 
     public int broadcastMessageCmd(CommandContext<ServerCommandSource> context, String type) {
         String messageStr = StringArgumentType.getString(context, "message");
-        // ICommandSource source = platform.wrapCommandSource(context.getSource()); // Fix this if needed
+        ICommandSource source = platform.wrapCommandSource(context.getSource());
         services.getDebugLogger().debugLog(NAME + ": /paradigm " + type + " command executed with message: " + messageStr);
         switch (type) {
             case "broadcast" -> {
-                boolean headerFooter = BoolArgumentType.getBool(context, "header_footer");
-                String header = services.getAnnouncementsConfig().header.value;
-                String footer = services.getAnnouncementsConfig().footer.value;
                 platform.getOnlinePlayers().forEach(player -> {
                     IPlayer iPlayer = platform.wrapPlayer(player);
                     IComponent messageComp = services.getMessageParser().parseMessage(messageStr, iPlayer);
-                    if (headerFooter) {
-                        IComponent headerComp = services.getMessageParser().parseMessage(header, iPlayer);
-                        IComponent footerComp = services.getMessageParser().parseMessage(footer, iPlayer);
-                        platform.sendSystemMessage(player, headerComp.getOriginalText());
-                        platform.sendSystemMessage(player, messageComp.getOriginalText());
-                        platform.sendSystemMessage(player, footerComp.getOriginalText());
-                    } else {
-                        platform.sendSystemMessage(player, messageComp.getOriginalText());
-                    }
+                    platform.sendSystemMessage(player, messageComp.getOriginalText());
                 });
             }
             case "actionbar" -> {

@@ -3,19 +3,20 @@ package eu.avalanche7.paradigm.utils;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
+import eu.avalanche7.paradigm.Paradigm;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.server.MinecraftServer;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -31,18 +32,28 @@ public class TelemetryReporter {
     }
 
     public void start() {
-        if (!MainConfigHandler.CONFIG.telemetryEnable.value) return;
-        if (MainConfigHandler.CONFIG.telemetryServerId.value == null || MainConfigHandler.CONFIG.telemetryServerId.value.isBlank()) {
+        if (!MainConfigHandler.CONFIG.telemetryEnable.get()) {
+            services.getDebugLogger().debugLog("TelemetryReporter: disabled in config");
+            return;
+        }
+
+        String serverId = MainConfigHandler.CONFIG.telemetryServerId.get();
+        if (serverId == null || serverId.isBlank()) {
             MainConfigHandler.CONFIG.telemetryServerId.value = UUID.randomUUID().toString();
             MainConfigHandler.save();
+            services.getDebugLogger().debugLog("TelemetryReporter: generated new server ID");
         }
-        int interval = Math.max(60, MainConfigHandler.CONFIG.telemetryIntervalSeconds.value == null ? 900 : MainConfigHandler.CONFIG.telemetryIntervalSeconds.value);
+
+        Integer intervalConfig = MainConfigHandler.CONFIG.telemetryIntervalSeconds.get();
+        int interval = Math.max(60, intervalConfig != null ? intervalConfig : 900);
         active = true;
         services.getTaskScheduler().scheduleAtFixedRate(this::reportOnceSafe, 10, interval, TimeUnit.SECONDS);
+        services.getDebugLogger().debugLog("TelemetryReporter: started with interval " + interval + "s");
     }
 
     public void stop() {
         active = false;
+        services.getDebugLogger().debugLog("TelemetryReporter: stopped");
     }
 
     private void reportOnceSafe() {
@@ -50,47 +61,69 @@ public class TelemetryReporter {
         try {
             reportOnce();
         } catch (Throwable t) {
-            services.getDebugLogger().debugLog("TelemetryReporter: send failed: " + t);
+            services.getDebugLogger().debugLog("TelemetryReporter: send failed: " + t.getMessage());
         }
     }
 
     private void reportOnce() throws Exception {
         IPlatformAdapter platform = services.getPlatformAdapter();
-        List<ServerPlayerEntity> players = platform.getOnlinePlayers();
-        int online = players != null ? players.size() : 0;
+        int online = platform.getOnlinePlayers().size();
         int maxPlayers = 0;
-        Object srvObj = platform.getMinecraftServer();
-        if (srvObj instanceof MinecraftServer ms) {
-            maxPlayers = ms.getPlayerManager().getMaxPlayerCount();
+        MinecraftServer ms = platform.getMinecraftServer();
+        if (ms != null) {
+            maxPlayers = ms.getMaxPlayerCount();
         }
+
         String mcVersion = platform.getMinecraftVersion();
+        if (mcVersion == null || mcVersion.isBlank()) mcVersion = "unknown";
+
         String modVersion = FabricLoader.getInstance().getModContainer("paradigm")
                 .map(c -> c.getMetadata().getVersion().getFriendlyString())
                 .orElse("unknown");
+
         JsonObject payload = new JsonObject();
         payload.addProperty("timestamp", Instant.now().toString());
-        payload.addProperty("serverId", MainConfigHandler.CONFIG.telemetryServerId.value);
+        payload.addProperty("serverId", MainConfigHandler.CONFIG.telemetryServerId.get());
         payload.addProperty("mcVersion", mcVersion);
         payload.addProperty("modVersion", modVersion);
         payload.addProperty("onlinePlayers", online);
         payload.addProperty("maxPlayers", maxPlayers);
+
         String json = GSON.toJson(payload);
-        HttpURLConnection conn = (HttpURLConnection) URI.create(ENDPOINT).toURL().openConnection();
-        conn.setRequestMethod("POST");
-        conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-        conn.setRequestProperty("User-Agent", "Paradigm-Telemetry/1.0");
-        conn.setDoOutput(true);
-        conn.setConnectTimeout(4000);
-        conn.setReadTimeout(6000);
-        try (OutputStream os = conn.getOutputStream()) {
-            os.write(json.getBytes(StandardCharsets.UTF_8));
+
+        HttpURLConnection conn = null;
+        try {
+            conn = (HttpURLConnection) URI.create(ENDPOINT).toURL().openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            conn.setRequestProperty("User-Agent", "Paradigm-Telemetry/1.0");
+            conn.setDoOutput(true);
+            conn.setConnectTimeout(4000);
+            conn.setReadTimeout(6000);
+
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(json.getBytes(StandardCharsets.UTF_8));
+            }
+
+            int code = conn.getResponseCode();
+
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(
+                    code >= 200 && code < 300 ? conn.getInputStream() : conn.getErrorStream(),
+                    StandardCharsets.UTF_8))) {
+                br.lines().forEach(line -> {});
+            } catch (Exception ignored) {
+            }
+
+            if (code < 200 || code >= 300) {
+                services.getDebugLogger().debugLog("TelemetryReporter: non-2xx response: " + code);
+            } else {
+                services.getDebugLogger().debugLog("TelemetryReporter: sent successfully");
+            }
+        } finally {
+            if (conn != null) {
+                conn.disconnect();
+            }
         }
-        int code = conn.getResponseCode();
-        if (code < 200 || code >= 300) {
-            services.getDebugLogger().debugLog("TelemetryReporter: non-2xx response: " + code);
-        } else {
-            services.getDebugLogger().debugLog("TelemetryReporter: sent ok: " + code);
-        }
-        conn.disconnect();
     }
 }
+

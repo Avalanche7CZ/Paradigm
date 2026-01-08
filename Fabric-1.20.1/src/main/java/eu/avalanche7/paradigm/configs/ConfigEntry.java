@@ -9,6 +9,11 @@ public class ConfigEntry<T> {
      */
     private ConfigEntry() {}
 
+    public ConfigEntry(T value) {
+        this.value = value;
+        this.description = "";
+    }
+
     public ConfigEntry(T value, String description) {
         this.value = value;
         this.description = description;

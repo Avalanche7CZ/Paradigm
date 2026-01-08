@@ -27,7 +27,7 @@ public class GroupChatManager {
 
     private Text translate(String key) {
         if (this.services != null && this.services.getLang() != null) {
-            return this.services.getLang().translate(key);
+            return this.services.getLang().translate(key).getOriginalText();
         } else if (this.services != null && this.services.getDebugLogger() != null) {
             this.services.getDebugLogger().debugLog("GroupChatManager: Services or Lang is null for key '{}'. Returning literal text.", key);
         }

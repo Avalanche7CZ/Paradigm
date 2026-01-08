@@ -6,6 +6,7 @@ import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.*;
 import eu.avalanche7.paradigm.modules.chat.GroupChat;
+import eu.avalanche7.paradigm.modules.chat.JoinLeaveMessages;
 import eu.avalanche7.paradigm.modules.chat.MOTD;
 import eu.avalanche7.paradigm.modules.chat.StaffChat;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
@@ -102,6 +103,7 @@ public class Paradigm implements DedicatedServerModInitializer {
             ChatConfigHandler.getConfig();
             MOTDConfigHandler.getConfig();
             CooldownConfigHandler.load();
+            EmojiConfigHandler.CONFIG.loadEmojis();
 
             debugLoggerInstance = new DebugLogger(MainConfigHandler.getConfig());
             MainConfigHandler.setJsonValidator(debugLoggerInstance);
@@ -119,7 +121,7 @@ public class Paradigm implements DedicatedServerModInitializer {
             createUtilityInstances();
 
             if(this.langInstance == null) {
-                this.langInstance = new Lang(LOGGER, MainConfigHandler.getConfig(), this.messageParserInstance);
+                this.langInstance = new Lang(LOGGER, MainConfigHandler.getConfig(), this.messageParserInstance, this.platformAdapterInstance);
             }
             this.langInstance.initializeLanguage();
 
@@ -185,6 +187,7 @@ public class Paradigm implements DedicatedServerModInitializer {
         modules.add(new Restart());
         modules.add(new StaffChat());
         modules.add(new GroupChat(this.groupChatManagerInstance));
+        modules.add(new JoinLeaveMessages());
         modules.add(new CommandManager());
         modules.add(new eu.avalanche7.paradigm.modules.commands.Reload());
         modules.add(new eu.avalanche7.paradigm.modules.commands.editor());
@@ -373,5 +376,13 @@ public class Paradigm implements DedicatedServerModInitializer {
                 return null;
             }
         }
+    }
+
+    public static Services getServicesStatic() {
+        return servicesInstance;
+    }
+
+    public static List<ParadigmModule> getModulesStatic() {
+        return modulesStatic != null ? modulesStatic : java.util.Collections.emptyList();
     }
 }

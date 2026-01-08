@@ -3,14 +3,14 @@ package eu.avalanche7.paradigm.modules.chat;
 import com.mojang.brigadier.CommandDispatcher;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.platform.MinecraftPlayer;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.minecraft.command.CommandRegistryAccess;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
 
 import java.util.List;
 
@@ -27,96 +27,65 @@ public class MOTD implements ParadigmModule {
 
     @Override
     public boolean isEnabled(Services services) {
-        return services.getMainConfig().motdEnable.value;
+        return services.getMainConfig().motdEnable.get();
     }
 
     @Override
     public void onLoad(Object event, Services services, Object modEventBus) {
         this.services = services;
         this.platform = services.getPlatformAdapter();
-        if (services != null && services.getDebugLogger() != null) {
-            services.getDebugLogger().debugLog(NAME + " module loaded.");
-        }
+        services.getDebugLogger().debugLog(NAME + " module loaded.");
     }
 
     @Override
-    public void onServerStarting(Object event, Services services) {
-        if (services != null && services.getDebugLogger() != null) {
-            services.getDebugLogger().debugLog(NAME + " module: Server starting.");
-        }
-    }
+    public void onServerStarting(Object event, Services services) {}
 
     @Override
-    public void onEnable(Services services) {
-        if (services != null && services.getDebugLogger() != null) {
-            services.getDebugLogger().debugLog(NAME + " module enabled.");
-        }
-    }
+    public void onEnable(Services services) {}
 
     @Override
-    public void onDisable(Services services) {
-        if (services != null && services.getDebugLogger() != null) {
-            services.getDebugLogger().debugLog(NAME + " module disabled.");
-        }
-    }
+    public void onDisable(Services services) {}
 
     @Override
-    public void onServerStopping(Object event, Services services) {
-        if (services != null && services.getDebugLogger() != null) {
-            services.getDebugLogger().debugLog(NAME + " module: Server stopping.");
-        }
-    }
+    public void onServerStopping(Object event, Services services) {}
 
     @Override
-    public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {
-    }
+    public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {}
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
-            onPlayerJoin(handler.player, services);
+            onPlayerJoin(handler.player);
         });
     }
 
-    public void onPlayerJoin(ServerPlayerEntity player, Services services) {
-        if (this.services == null || !isEnabled(this.services) || this.services.getMotdConfig() == null) {
-            if (this.services != null && this.services.getDebugLogger() != null) {
-                this.services.getDebugLogger().debugLog("MOTDModule: Services, MOTD module not enabled, or MOTDConfig is null. Skipping MOTD for " + platform.getPlayerName(player));
-            }
+    public void onPlayerJoin(ServerPlayerEntity mcPlayer) {
+        if (this.services == null || !isEnabled(this.services)) {
             return;
         }
-        Text motdMessage = createMOTDMessage(player, this.services);
-        platform.sendSystemMessage(player, motdMessage);
-        this.services.getDebugLogger().debugLog("Sent MOTD to " + platform.getPlayerName(player));
+        IPlayer player = MinecraftPlayer.of(mcPlayer);
+        IComponent motdMessage = createMOTDMessage(player);
+        platform.sendSystemMessage(mcPlayer, motdMessage.getOriginalText());
+        this.services.getDebugLogger().debugLog("Sent MOTD to " + mcPlayer.getName().getString());
     }
 
-    private Text createMOTDMessage(ServerPlayerEntity player, Services services) {
-        if (services == null || services.getMotdConfig() == null) {
-            if(services != null && services.getDebugLogger() != null) {
-                services.getDebugLogger().debugLog("MOTDModule: Services or MOTDConfig is null in createMOTDMessage.");
-            }
-            return Text.empty();
-        }
+    private IComponent createMOTDMessage(IPlayer player) {
         List<String> lines = services.getMotdConfig().motdLines;
         if (lines == null || lines.isEmpty()) {
-            return Text.empty();
+            return platform.createComponentFromLiteral("");
         }
-        MutableText motdMessage = platform.createLiteralComponent("");
-        IPlayer iPlayer = services.getPlatformAdapter().wrapPlayer(player);
+
+        IComponent motdMessage = platform.createComponentFromLiteral("");
         for (int i = 0; i < lines.size(); i++) {
             String line = lines.get(i);
-            if (services.getMessageParser() != null) {
-                motdMessage.append(services.getMessageParser().parseMessage(line, iPlayer).getOriginalText());
-            } else {
-                if(services.getDebugLogger() != null) {
-                    services.getDebugLogger().debugLog("MOTDModule: MessageParser is null in createMOTDMessage loop.");
-                }
-                motdMessage.append(platform.createLiteralComponent(line));
-            }
+            IComponent lineComponent = services.getMessageParser().parseMessage(line, player);
+            motdMessage.append(lineComponent);
             if (i < lines.size() - 1) {
-                motdMessage.append(platform.createLiteralComponent("\n"));
+                motdMessage.append(platform.createComponentFromLiteral("\n"));
             }
         }
+
         return motdMessage;
     }
 }
+

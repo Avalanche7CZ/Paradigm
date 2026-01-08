@@ -159,7 +159,7 @@ public class GroupChat implements ParadigmModule {
                             if (currentGroup != null) {
                                 groupChatManager.groupInfo(ctx.getSource().getPlayer(), currentGroup);
                             } else {
-                                platform.sendSystemMessage(ctx.getSource().getPlayer(), services.getLang().translate("group.no_group_to_info"));
+                                platform.sendSystemMessage(ctx.getSource().getPlayer(), services.getLang().translate("group.no_group_to_info").getOriginalText());
                             }
                             return 1;
                         }))
@@ -210,9 +210,9 @@ public class GroupChat implements ParadigmModule {
                     services.getLogger().info("[GroupChat] [{}] {}: {}", groupName, player.getName().getString(), message.getContent().getString());
                 }
             } else {
-                platform.sendSystemMessage(player, services.getLang().translate("group.no_group_to_send_message"));
+                platform.sendSystemMessage(player, services.getLang().translate("group.no_group_to_send_message").getOriginalText());
                 groupChatManager.setGroupChatToggled(player, false);
-                platform.sendSystemMessage(player, services.getLang().translate("group.chat_disabled"));
+                platform.sendSystemMessage(player, services.getLang().translate("group.chat_disabled").getOriginalText());
             }
             return false;
         }
@@ -222,22 +222,22 @@ public class GroupChat implements ParadigmModule {
 
     private void displayHelp(ServerPlayerEntity player, Services services) {
         String label = "groupchat";
-        platform.sendSystemMessage(player, services.getLang().translate("group.help_title"));
-        sendHelpMessage(player, label, "create <name>", services.getLang().translate("group.help_create").getString(), services);
-        sendHelpMessage(player, label, "delete", services.getLang().translate("group.help_delete").getString(), services);
-        sendHelpMessage(player, label, "invite <player>", services.getLang().translate("group.help_invite").getString(), services);
-        sendHelpMessage(player, label, "join <group_name>", services.getLang().translate("group.help_join").getString(), services);
-        sendHelpMessage(player, label, "leave", services.getLang().translate("group.help_leave").getString(), services);
-        sendHelpMessage(player, label, "list", services.getLang().translate("group.help_list").getString(), services);
-        sendHelpMessage(player, label, "info [group_name]", services.getLang().translate("group.help_info").getString(), services);
-        sendHelpMessage(player, label, "say <message>", services.getLang().translate("group.help_say").getString(), services);
-        sendHelpMessage(player, label, "toggle", services.getLang().translate("group.help_toggle").getString(), services);
-        sendHelpMessage(player, label, "accept <group_name>", services.getLang().translate("group.help_accept").getString(), services);
-        sendHelpMessage(player, label, "deny <group_name>", services.getLang().translate("group.help_deny").getString(), services);
-        sendHelpMessage(player, label, "request <group_name>", services.getLang().translate("group.help_request").getString(), services);
-        sendHelpMessage(player, label, "acceptreq <player_name>", services.getLang().translate("group.help_acceptreq").getString(), services);
-        sendHelpMessage(player, label, "denyreq <player_name>", services.getLang().translate("group.help_denyreq").getString(), services);
-        sendHelpMessage(player, label, "requests", services.getLang().translate("group.help_requests").getString(), services);
+        platform.sendSystemMessage(player, services.getLang().translate("group.help_title").getOriginalText());
+        sendHelpMessage(player, label, "create <name>", services.getLang().translate("group.help_create").getRawText(), services);
+        sendHelpMessage(player, label, "delete", services.getLang().translate("group.help_delete").getRawText(), services);
+        sendHelpMessage(player, label, "invite <player>", services.getLang().translate("group.help_invite").getRawText(), services);
+        sendHelpMessage(player, label, "join <group_name>", services.getLang().translate("group.help_join").getRawText(), services);
+        sendHelpMessage(player, label, "leave", services.getLang().translate("group.help_leave").getRawText(), services);
+        sendHelpMessage(player, label, "list", services.getLang().translate("group.help_list").getRawText(), services);
+        sendHelpMessage(player, label, "info [group_name]", services.getLang().translate("group.help_info").getRawText(), services);
+        sendHelpMessage(player, label, "say <message>", services.getLang().translate("group.help_say").getRawText(), services);
+        sendHelpMessage(player, label, "toggle", services.getLang().translate("group.help_toggle").getRawText(), services);
+        sendHelpMessage(player, label, "accept <group_name>", services.getLang().translate("group.help_accept").getRawText(), services);
+        sendHelpMessage(player, label, "deny <group_name>", services.getLang().translate("group.help_deny").getRawText(), services);
+        sendHelpMessage(player, label, "request <group_name>", services.getLang().translate("group.help_request").getRawText(), services);
+        sendHelpMessage(player, label, "acceptreq <player_name>", services.getLang().translate("group.help_acceptreq").getRawText(), services);
+        sendHelpMessage(player, label, "denyreq <player_name>", services.getLang().translate("group.help_denyreq").getRawText(), services);
+        sendHelpMessage(player, label, "requests", services.getLang().translate("group.help_requests").getRawText(), services);
     }
 
     private void sendHelpMessage(ServerPlayerEntity player, String label, String command, String description, Services services) {

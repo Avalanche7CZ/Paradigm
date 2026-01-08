@@ -78,6 +78,14 @@ public class ChatConfigHandler {
                 "&dWelcome, {player_name}, to the server for the first time!",
                 "The format for the first join message. Same placeholders as regular join."
         );
+        public ConfigEntry<Boolean> enableCustomChatFormat = new ConfigEntry<>(
+                true,
+                "Enables custom chat message formatting. When enabled, all chat messages use the customChatFormat."
+        );
+        public ConfigEntry<String> customChatFormat = new ConfigEntry<>(
+                "<color:aqua>{player_name}</color> <color:dark_gray>»</color> <color:white>{message}</color>",
+                "Custom chat message format. Supports TAG formatting and LuckPerms placeholders: {player_name}, {player_uuid}, {player_level}, {player_prefix}, {player_suffix}, {player_group}, {player_groups}, {player_health}, {max_player_health}. Use {message} for the actual chat message. Example with LuckPerms: '<color:gold>{player_prefix}</color> <color:aqua>{player_name}</color> <color:dark_gray>»</color> <color:white>{message}</color>'"
+        );
     }
 
     public static void load() {

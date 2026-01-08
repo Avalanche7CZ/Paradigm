@@ -116,11 +116,11 @@ public class Mentions implements ParadigmModule {
 
     private boolean handleEveryoneMention(ServerPlayerEntity sender, String rawMessage, MentionConfigHandler.Config mentionConfig, String matchedEveryoneMention) {
         if (!hasPermission(sender, PermissionsHandler.MENTION_EVERYONE_PERMISSION, PermissionsHandler.MENTION_EVERYONE_PERMISSION_LEVEL)) {
-            platform.sendSystemMessage(sender, this.services.getLang().translate("mention.no_permission_everyone"));
+            platform.sendSystemMessage(sender, this.services.getLang().translate("mention.no_permission_everyone").getOriginalText());
             return false;
         }
         if (!canMentionEveryoneNow(sender, mentionConfig)) {
-            platform.sendSystemMessage(sender, this.services.getLang().translate("mention.too_frequent_mention_everyone"));
+            platform.sendSystemMessage(sender, this.services.getLang().translate("mention.too_frequent_mention_everyone").getOriginalText());
             return false;
         }
 
@@ -159,7 +159,7 @@ public class Mentions implements ParadigmModule {
         }
 
         if (!canMentionIndividualNow(sender, mentionConfig)) {
-            platform.sendSystemMessage(sender, this.services.getLang().translate("mention.too_frequent_mention_player"));
+            platform.sendSystemMessage(sender, this.services.getLang().translate("mention.too_frequent_mention_player").getOriginalText());
             return false;
         }
 
@@ -211,11 +211,11 @@ public class Mentions implements ParadigmModule {
         if (everyoneMatcher.find()) {
             if (sender != null) {
                 if (!hasPermission(sender, PermissionsHandler.MENTION_EVERYONE_PERMISSION, PermissionsHandler.MENTION_EVERYONE_PERMISSION_LEVEL)) {
-                    platform.sendSystemMessage(sender, services.getLang().translate("mention.no_permission_everyone"));
+                    platform.sendSystemMessage(sender, services.getLang().translate("mention.no_permission_everyone").getOriginalText());
                     return 0;
                 }
                 if (!canMentionEveryoneNow(sender, mentionConfig)) {
-                    platform.sendSystemMessage(sender, services.getLang().translate("mention.too_frequent_mention_everyone"));
+                    platform.sendSystemMessage(sender, services.getLang().translate("mention.too_frequent_mention_everyone").getOriginalText());
                     return 0;
                 }
             }
@@ -250,7 +250,7 @@ public class Mentions implements ParadigmModule {
                 return 0;
             }
             if (!canMentionIndividualNow(sender, mentionConfig)) {
-                platform.sendFailure(source, platform.createLiteralComponent(services.getLang().translate("mention.too_frequent_mention_player").getString()));
+                platform.sendFailure(source, platform.createLiteralComponent(services.getLang().translate("mention.too_frequent_mention_player").getRawText()));
                 return 0;
             }
         }
