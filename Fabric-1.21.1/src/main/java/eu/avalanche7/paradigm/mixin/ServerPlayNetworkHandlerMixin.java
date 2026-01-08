@@ -1,7 +1,7 @@
 package eu.avalanche7.paradigm.mixin;
 
-import eu.avalanche7.paradigm.platform.MinecraftEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem.ChatEventListener;
+import eu.avalanche7.paradigm.platform.MinecraftEventSystem;
 import net.minecraft.server.network.ServerPlayNetworkHandler;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;

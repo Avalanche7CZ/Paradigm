@@ -34,7 +34,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Paradigm implements DedicatedServerModInitializer {
+public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.ParadigmAccessor {
 
     public static final String MOD_ID = "paradigm";
     private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
@@ -64,6 +64,9 @@ public class Paradigm implements DedicatedServerModInitializer {
         registerModules();
         servicesInstance = services;
         modulesStatic = modules;
+
+        // Initialize ParadigmAPI
+        ParadigmAPI.setInstance((ParadigmAPI.ParadigmAccessor) this);
 
         modules.forEach(module -> module.registerEventListeners(null, services));
         modules.forEach(module -> module.onLoad(null, services, null));
@@ -234,25 +237,6 @@ public class Paradigm implements DedicatedServerModInitializer {
         }
     }
 
-    public static Services getServices() {
-        return servicesInstance;
-    }
-
-    public static List<ParadigmModule> getModules() {
-        return modulesStatic != null ? modulesStatic : List.of();
-    }
-
-    public static String getModVersion() {
-        if (!"unknown".equals(modVersion)) return modVersion;
-        try {
-            return FabricLoader.getInstance().getModContainer(MOD_ID)
-                    .map(c -> c.getMetadata().getVersion().getFriendlyString())
-                    .orElse("unknown");
-        } catch (Throwable t) {
-            return "unknown";
-        }
-    }
-
     private void onServerStopping(MinecraftServer server) {
         modules.forEach(module -> {
             if (module.isEnabled(services)) {
@@ -384,5 +368,21 @@ public class Paradigm implements DedicatedServerModInitializer {
 
     public static List<ParadigmModule> getModulesStatic() {
         return modulesStatic != null ? modulesStatic : java.util.Collections.emptyList();
+    }
+
+    // ParadigmAPI.ParadigmAccessor implementation
+    @Override
+    public List<ParadigmModule> getModules() {
+        return modules;
+    }
+
+    @Override
+    public Services getServices() {
+        return services;
+    }
+
+    @Override
+    public String getModVersion() {
+        return modVersion;
     }
 }

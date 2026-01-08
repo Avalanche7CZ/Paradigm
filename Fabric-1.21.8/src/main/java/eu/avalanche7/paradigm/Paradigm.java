@@ -33,7 +33,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Paradigm implements DedicatedServerModInitializer {
+public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.ParadigmAccessor {
 
     public static final String MOD_ID = "paradigm";
     private static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
@@ -63,6 +63,9 @@ public class Paradigm implements DedicatedServerModInitializer {
         registerModules();
         servicesInstance = services;
         modulesStatic = modules;
+
+        // Initialize ParadigmAPI
+        ParadigmAPI.setInstance(this);
 
         modules.forEach(module -> module.registerEventListeners(null, services));
         modules.forEach(module -> module.onLoad(null, services, null));
@@ -118,10 +121,6 @@ public class Paradigm implements DedicatedServerModInitializer {
 
             createUtilityInstances();
 
-            if(this.langInstance == null) {
-                this.langInstance = new Lang(LOGGER, MainConfigHandler.getConfig(), this.messageParserInstance);
-            }
-            this.langInstance.initializeLanguage();
 
             LOGGER.info("[Paradigm] All configurations loaded successfully.");
         } catch (Exception e) {
@@ -146,6 +145,11 @@ public class Paradigm implements DedicatedServerModInitializer {
 
         this.messageParserInstance = new MessageParser(this.placeholdersInstance, this.platformAdapterInstance);
         this.platformAdapterInstance.provideMessageParser(this.messageParserInstance);
+
+        if(this.langInstance == null) {
+            this.langInstance = new Lang(LOGGER, MainConfigHandler.getConfig(), this.messageParserInstance, this.platformAdapterInstance);
+        }
+        this.langInstance.initializeLanguage();
     }
 
     private void initializeServices() {
@@ -228,25 +232,6 @@ public class Paradigm implements DedicatedServerModInitializer {
             LOGGER.info("[Paradigm] Root /paradigm command node present. Has executes? {}", root.getCommand() != null);
         } else {
             LOGGER.warn("[Paradigm] Root /paradigm command node NOT found after registration!");
-        }
-    }
-
-    public static Services getServices() {
-        return servicesInstance;
-    }
-
-    public static List<ParadigmModule> getModules() {
-        return modulesStatic != null ? modulesStatic : List.of();
-    }
-
-    public static String getModVersion() {
-        if (!"unknown".equals(modVersion)) return modVersion;
-        try {
-            return FabricLoader.getInstance().getModContainer(MOD_ID)
-                    .map(c -> c.getMetadata().getVersion().getFriendlyString())
-                    .orElse("unknown");
-        } catch (Throwable t) {
-            return "unknown";
         }
     }
 
@@ -373,5 +358,21 @@ public class Paradigm implements DedicatedServerModInitializer {
                 return null;
             }
         }
+    }
+
+    // ParadigmAPI.ParadigmAccessor implementation
+    @Override
+    public List<ParadigmModule> getModules() {
+        return modules;
+    }
+
+    @Override
+    public Services getServices() {
+        return services;
+    }
+
+    @Override
+    public String getModVersion() {
+        return modVersion;
     }
 }

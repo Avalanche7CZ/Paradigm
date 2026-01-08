@@ -1,6 +1,6 @@
 package eu.avalanche7.paradigm.mixin;
 
-import eu.avalanche7.paradigm.Paradigm;
+import eu.avalanche7.paradigm.ParadigmAPI;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
@@ -25,7 +25,7 @@ public class PlayerManagerMixin {
 
     @Inject(method = "onPlayerConnect", at = @At("HEAD"))
     private void paradigm$decideJoinSuppression(ClientConnection connection, ServerPlayerEntity player, CallbackInfo ci) {
-        Services services = Paradigm.getServices();
+        Services services = ParadigmAPI.getServices();
         if (services == null) {
             SUPPRESS_JOIN_BROADCAST.set(Boolean.FALSE);
             return;
@@ -58,7 +58,7 @@ public class PlayerManagerMixin {
             return;
         }
         if ("multiplayer.player.left".equals(key)) {
-            Services services = Paradigm.getServices();
+            Services services = ParadigmAPI.getServices();
             if (services == null) return;
             ChatConfigHandler.Config chatConfig = services.getChatConfig();
             if (chatConfig != null && chatConfig.enableJoinLeaveMessages.value) {
@@ -69,7 +69,7 @@ public class PlayerManagerMixin {
 
     @Inject(method = "onPlayerConnect", at = @At("TAIL"))
     private void sendCustomJoinMessage(ClientConnection connection, ServerPlayerEntity player, CallbackInfo ci) {
-        Services services = Paradigm.getServices();
+        Services services = ParadigmAPI.getServices();
         if (services == null) return;
 
         ChatConfigHandler.Config chatConfig = services.getChatConfig();
@@ -98,7 +98,7 @@ public class PlayerManagerMixin {
 
     @Inject(method = "remove", at = @At("HEAD"))
     private void onPlayerRemoveMixin(ServerPlayerEntity player, CallbackInfo ci) {
-        Services services = Paradigm.getServices();
+        Services services = ParadigmAPI.getServices();
         if (services == null) return;
 
         ChatConfigHandler.Config chatConfig = services.getChatConfig();

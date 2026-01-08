@@ -1,7 +1,7 @@
 package eu.avalanche7.paradigm.mixin;
 
 import com.mojang.authlib.GameProfile;
-import eu.avalanche7.paradigm.Paradigm;
+import eu.avalanche7.paradigm.ParadigmAPI;
 import eu.avalanche7.paradigm.configs.MOTDConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.MinecraftComponent;
@@ -46,7 +46,7 @@ public abstract class ServerStatusMixin {
 
     @Inject(method = "onRequest", at = @At("HEAD"), cancellable = true)
     private void paradigm$modifyStatusRequest(QueryRequestC2SPacket packet, CallbackInfo ci) {
-        Services services = Paradigm.getServicesStatic();
+        Services services = ParadigmAPI.getServices();
         if (services == null) {
             return;
         }
@@ -167,12 +167,7 @@ public abstract class ServerStatusMixin {
                         eu.avalanche7.paradigm.platform.Interfaces.IComponent parsed =
                             services.getMessageParser().parseMessage(line, null);
 
-                        Text lineComponent;
-                        if (parsed instanceof MinecraftComponent mc) {
-                            lineComponent = mc.getHandle();
-                        } else {
-                            lineComponent = Text.literal(line);
-                        }
+                        Text lineComponent = parsed.getOriginalText();
 
                         String legacyText = paradigm$componentToLegacyText(lineComponent);
                         sample.add(new GameProfile(UUID.randomUUID(), legacyText));

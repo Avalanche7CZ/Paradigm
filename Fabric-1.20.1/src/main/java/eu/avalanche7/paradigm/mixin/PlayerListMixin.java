@@ -1,12 +1,10 @@
 package eu.avalanche7.paradigm.mixin;
 
-import eu.avalanche7.paradigm.Paradigm;
+import eu.avalanche7.paradigm.ParadigmAPI;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.platform.MinecraftComponent;
-import eu.avalanche7.paradigm.platform.MinecraftPlayer;
 import net.minecraft.network.message.MessageType;
 import net.minecraft.network.message.SignedMessage;
 import net.minecraft.server.PlayerManager;
@@ -35,7 +33,7 @@ public abstract class PlayerListMixin {
         int type = paradigm$getVanillaJoinLeaveType(message);
         if (type == 0) return;
 
-        Services services = Paradigm.getServicesStatic();
+        Services services = ParadigmAPI.getServices();
         if (services == null) return;
 
         ChatConfigHandler.Config cfg = services.getChatConfig();
@@ -49,7 +47,7 @@ public abstract class PlayerListMixin {
     @Inject(method = "broadcast(Lnet/minecraft/network/message/SignedMessage;Lnet/minecraft/server/network/ServerPlayerEntity;Lnet/minecraft/network/message/MessageType$Parameters;)V",
             at = @At("HEAD"), cancellable = true)
     private void paradigm$formatChatMessage(SignedMessage message, ServerPlayerEntity sender, MessageType.Parameters params, CallbackInfo ci) {
-        Services services = Paradigm.getServicesStatic();
+        Services services = ParadigmAPI.getServices();
         if (services == null) return;
 
         ChatConfigHandler.Config cfg = services.getChatConfig();
@@ -67,17 +65,12 @@ public abstract class PlayerListMixin {
 
             String formattedText = customFormat.replace("{message}", messageText);
 
-            IPlayer wrappedSender = new MinecraftPlayer(sender);
+            IPlayer wrappedSender = services.getPlatformAdapter().wrapPlayer(sender);
             formattedText = services.getPlaceholders().replacePlaceholders(formattedText, sender);
 
             IComponent parsedComponent = services.getMessageParser().parseMessage(formattedText, wrappedSender);
 
-            Text finalMessage;
-            if (parsedComponent instanceof MinecraftComponent mc) {
-                finalMessage = mc.getHandle();
-            } else {
-                finalMessage = Text.literal(formattedText);
-            }
+            Text finalMessage = parsedComponent.getOriginalText();
 
             for (ServerPlayerEntity player : getPlayerList()) {
                 player.sendMessage(finalMessage, false);

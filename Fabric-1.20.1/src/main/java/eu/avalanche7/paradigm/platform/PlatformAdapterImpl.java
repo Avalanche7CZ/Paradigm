@@ -1,6 +1,7 @@
 package eu.avalanche7.paradigm.platform;
 
 import eu.avalanche7.paradigm.data.CustomCommand;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
@@ -75,21 +76,21 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public List<ServerPlayerEntity> getOnlinePlayers() {
-        if (server == null) return new ArrayList<>();
+        if (server == null || server.getPlayerManager() == null) return new ArrayList<>();
         return server.getPlayerManager().getPlayerList();
     }
 
     @Override
     @Nullable
     public ServerPlayerEntity getPlayerByName(String name) {
-        if (server == null) return null;
+        if (server == null || server.getPlayerManager() == null) return null;
         return server.getPlayerManager().getPlayer(name);
     }
 
     @Override
     @Nullable
     public ServerPlayerEntity getPlayerByUuid(UUID uuid) {
-        if (server == null) return null;
+        if (server == null || server.getPlayerManager() == null) return null;
         return server.getPlayerManager().getPlayer(uuid);
     }
 
@@ -255,7 +256,11 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public void playSound(ServerPlayerEntity player, String soundId, net.minecraft.sound.SoundCategory category, float volume, float pitch) {
-        SoundEvent soundEvent = Registries.SOUND_EVENT.get(new Identifier("minecraft", soundId));
+        Identifier soundIdentifier = Identifier.tryParse(soundId);
+        if (soundIdentifier == null) {
+            soundIdentifier = new Identifier("minecraft", soundId);
+        }
+        SoundEvent soundEvent = Registries.SOUND_EVENT.get(soundIdentifier);
         if (soundEvent != null) {
             player.networkHandler.sendPacket(new PlaySoundS2CPacket(
                     Registries.SOUND_EVENT.getEntry(soundEvent),
@@ -398,6 +403,11 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public ICommandSource wrapCommandSource(ServerCommandSource source) {
+        return MinecraftCommandSource.of(source);
+    }
+
+    @Override
     public IComponent createEmptyComponent() {
         return new MinecraftComponent(Text.literal(""));
     }
@@ -447,5 +457,26 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public String getMinecraftVersion() {
         return net.minecraft.SharedConstants.getGameVersion().getName();
+    }
+
+    @Override
+    public net.minecraft.text.Style createStyleWithClickEvent(net.minecraft.text.Style baseStyle, String action, String value) {
+        net.minecraft.text.ClickEvent.Action clickAction = switch (action.toUpperCase()) {
+            case "OPEN_URL" -> net.minecraft.text.ClickEvent.Action.OPEN_URL;
+            case "RUN_COMMAND" -> net.minecraft.text.ClickEvent.Action.RUN_COMMAND;
+            case "SUGGEST_COMMAND" -> net.minecraft.text.ClickEvent.Action.SUGGEST_COMMAND;
+            case "CHANGE_PAGE" -> net.minecraft.text.ClickEvent.Action.CHANGE_PAGE;
+            case "COPY_TO_CLIPBOARD" -> net.minecraft.text.ClickEvent.Action.COPY_TO_CLIPBOARD;
+            default -> net.minecraft.text.ClickEvent.Action.SUGGEST_COMMAND;
+        };
+        return baseStyle.withClickEvent(new net.minecraft.text.ClickEvent(clickAction, value));
+    }
+
+    @Override
+    public net.minecraft.text.Style createStyleWithHoverEvent(net.minecraft.text.Style baseStyle, Text hoverText) {
+        return baseStyle.withHoverEvent(new net.minecraft.text.HoverEvent(
+            net.minecraft.text.HoverEvent.Action.SHOW_TEXT,
+            hoverText
+        ));
     }
 }

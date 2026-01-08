@@ -1,0 +1,60 @@
+plugins {
+    id 'java-library'
+    id 'fabric-loom' version '1.9.2'
+}
+
+version = project.findProperty('mod_version') ?: '1.1.0'
+group = 'eu.avalanche7'
+
+repositories {
+    maven { url "https://maven.fabricmc.net/" }
+    maven { url "https://maven.shedaniel.me/" }
+    maven { url "https://maven.terraformersmc.com/releases/" }
+    mavenCentral()
+}
+
+dependencies {
+    // Minecraft and Fabric (compileOnly - provided by version-specific modules at runtime)
+    minecraft "com.mojang:minecraft:1.21.1"
+    mappings "net.fabricmc:yarn:1.21.1+build.3:v2"
+    modCompileOnly "net.fabricmc:fabric-loader:0.16.14"
+    modCompileOnly "net.fabricmc.fabric-api:fabric-api:0.116.1+1.21.1"
+
+    // Gson for JSON handling (provided by Minecraft at runtime)
+    compileOnly 'com.google.code.gson:gson:2.10.1'
+
+    // SLF4J API (provided by Minecraft at runtime)
+    compileOnly 'org.slf4j:slf4j-api:2.0.9'
+
+    // LuckPerms API
+    compileOnly('net.luckperms:api:5.4')
+
+    // Annotations
+    compileOnly 'org.jetbrains:annotations:24.0.1'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+    withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.encoding = "UTF-8"
+    it.options.release.set(17)
+}
+
+jar {
+    from(sourceSets.main.output)
+}
+
+// Disable runtime Loom tasks for common module (but keep build tasks)
+afterEvaluate {
+    tasks.configureEach { task ->
+        if (task.name in ['runClient', 'runServer', 'migrateMappings', 'genSources']) {
+            task.enabled = false
+        }
+    }
+}
+
+
