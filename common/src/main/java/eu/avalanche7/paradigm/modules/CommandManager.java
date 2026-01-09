@@ -12,6 +12,7 @@ import com.mojang.brigadier.suggestion.Suggestions;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.CustomCommand;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import net.minecraft.command.CommandRegistryAccess;
@@ -99,7 +100,7 @@ public class CommandManager implements ParadigmModule {
                         .executes(ctx -> {
                             services.getCmConfig().reloadCommands();
                             services.getPermissionsHandler().refreshCustomCommandPermissions();
-                            Text message = services.getMessageParser().parseMessage("&aReloaded custom commands from config.", null).getOriginalText();
+                            IComponent message = services.getMessageParser().parseMessage("&aReloaded custom commands from config.", null);
                             platform.sendSuccess(ctx.getSource(), message, false);
                             return 1;
                         })
@@ -212,14 +213,14 @@ public class CommandManager implements ParadigmModule {
                 if (value == null && argDef.isRequired()) {
                     ServerPlayerEntity player = source.getEntity() instanceof ServerPlayerEntity sp ? sp : null;
                     IPlayer iPlayer = player != null ? platform.wrapPlayer(player) : null;
-                    platform.sendFailure(source, services.getMessageParser().parseMessage(argDef.getErrorMessage(), iPlayer).getOriginalText());
+                    platform.sendFailure(source, services.getMessageParser().parseMessage(argDef.getErrorMessage(), iPlayer));
                     return 0;
                 }
                 validatedArgs[i] = value != null ? value.toString() : "";
             } catch (Exception e) {
                 ServerPlayerEntity player = source.getEntity() instanceof ServerPlayerEntity sp ? sp : null;
                 IPlayer iPlayer = player != null ? platform.wrapPlayer(player) : null;
-                platform.sendFailure(source, services.getMessageParser().parseMessage(argDef.getErrorMessage(), iPlayer).getOriginalText());
+                platform.sendFailure(source, services.getMessageParser().parseMessage(argDef.getErrorMessage(), iPlayer));
                 return 0;
             }
         }
@@ -254,7 +255,7 @@ public class CommandManager implements ParadigmModule {
         if (command.isRequirePermission()) {
             if (player != null && !services.getPermissionsHandler().hasPermission(player, command.getPermission())) {
                 IPlayer iPlayer = platform.wrapPlayer(player);
-                platform.sendFailure(source, services.getMessageParser().parseMessage(command.getPermissionErrorMessage(), iPlayer).getOriginalText());
+                platform.sendFailure(source, services.getMessageParser().parseMessage(command.getPermissionErrorMessage(), iPlayer));
                 return;
             }
         }
@@ -262,12 +263,12 @@ public class CommandManager implements ParadigmModule {
         CustomCommand.AreaRestriction area = command.getAreaRestriction();
         if (area != null) {
             if (player == null) {
-                platform.sendFailure(source, services.getMessageParser().parseMessage("&cThis command can only be run by a player in a specific area.", null).getOriginalText());
+                platform.sendFailure(source, services.getMessageParser().parseMessage("&cThis command can only be run by a player in a specific area.", null));
                 return;
             }
-            if (!platform.isPlayerInArea(player, area.getWorld(), area.getCorner1(), area.getCorner2())) {
-                IPlayer iPlayer = platform.wrapPlayer(player);
-                platform.sendFailure(source, services.getMessageParser().parseMessage(area.getRestrictionMessage(), iPlayer).getOriginalText());
+            IPlayer iPlayer = platform.wrapPlayer(player);
+            if (!platform.isPlayerInArea(iPlayer, area.getWorld(), area.getCorner1(), area.getCorner2())) {
+                platform.sendFailure(source, services.getMessageParser().parseMessage(area.getRestrictionMessage(), iPlayer));
                 return;
             }
         }
@@ -287,7 +288,7 @@ public class CommandManager implements ParadigmModule {
                 }
                 String formattedMessage = cooldownMessage.replace("{remaining_time}", String.valueOf(remainingSeconds));
                 IPlayer iPlayer = player != null ? platform.wrapPlayer(player) : null;
-                platform.sendFailure(source, services.getMessageParser().parseMessage(formattedMessage, iPlayer).getOriginalText());
+                platform.sendFailure(source, services.getMessageParser().parseMessage(formattedMessage, iPlayer));
                 return;
             }
             services.getCooldownConfigHandler().setLastUsage(player.getUuid(), command.getName(), currentTime);
@@ -312,19 +313,19 @@ public class CommandManager implements ParadigmModule {
                         for (String line : action.getText()) {
                             String expandedLine = expandCommand(line, player, argsTokens, rawArgs);
                             IPlayer iPlayer = player != null ? platform.wrapPlayer(player) : null;
-                            Text formattedMessage = services.getMessageParser().parseMessage(expandedLine, iPlayer).getOriginalText();
+                            IComponent formattedMessage = services.getMessageParser().parseMessage(expandedLine, iPlayer);
                             platform.sendSuccess(source, formattedMessage, false);
                         }
                     }
                     break;
                 case "teleport":
                     if (player != null && action.getX() != null && action.getY() != null && action.getZ() != null) {
-                        platform.teleportPlayer(player, action.getX(), action.getY(), action.getZ());
+                        platform.teleportPlayer(platform.wrapPlayer(player), action.getX(), action.getY(), action.getZ());
                     } else if (player == null) {
-                        platform.sendFailure(source, services.getMessageParser().parseMessage("&cTeleport action can only be performed by a player.", null).getOriginalText());
+                        platform.sendFailure(source, services.getMessageParser().parseMessage("&cTeleport action can only be performed by a player.", null));
                     } else {
                         IPlayer iPlayer = player != null ? platform.wrapPlayer(player) : null;
-                        platform.sendFailure(source, services.getMessageParser().parseMessage("&cInvalid teleport coordinates.", iPlayer).getOriginalText());
+                        platform.sendFailure(source, services.getMessageParser().parseMessage("&cInvalid teleport coordinates.", iPlayer));
                     }
                     break;
                 case "run_command":
@@ -353,13 +354,14 @@ public class CommandManager implements ParadigmModule {
                     break;
                 default:
                     IPlayer iPlayer = player != null ? platform.wrapPlayer(player) : null;
-                    platform.sendFailure(source, services.getMessageParser().parseMessage("&cUnknown action type: " + action.getType(), iPlayer).getOriginalText());
+                    platform.sendFailure(source, services.getMessageParser().parseMessage("&cUnknown action type: " + action.getType(), iPlayer));
             }
         }
     }
 
     private String expandCommand(String cmd, ServerPlayerEntity player, String[] argsTokens, String rawArgs) {
-        String out = platform.replacePlaceholders(cmd, player);
+        IPlayer iPlayer = player != null ? platform.wrapPlayer(player) : null;
+        String out = platform.replacePlaceholders(cmd, iPlayer);
 
         if (out.contains("$*")) {
             out = out.replace("$*", rawArgs == null ? "" : rawArgs);
@@ -408,12 +410,12 @@ public class CommandManager implements ParadigmModule {
         switch (condition.getType()) {
             case "has_permission":
                 if (player != null && condition.getValue() != null) {
-                    result = platform.hasPermission(player, condition.getValue());
+                    result = platform.hasPermission(platform.wrapPlayer(player), condition.getValue());
                 }
                 break;
             case "has_item":
                 if (player != null && condition.getValue() != null) {
-                    result = platform.playerHasItem(player, condition.getValue(), condition.getItemAmount());
+                    result = platform.playerHasItem(platform.wrapPlayer(player), condition.getValue(), condition.getItemAmount());
                 }
                 break;
             case "is_op":
@@ -424,12 +426,12 @@ public class CommandManager implements ParadigmModule {
                             level = Integer.parseInt(condition.getValue());
                         }
                     } catch (NumberFormatException ignored) {}
-                    result = platform.hasPermission(player, "minecraft.command.op", level);
+                    result = platform.hasPermission(platform.wrapPlayer(player), "minecraft.command.op", level);
                 }
                 break;
             default:
                 IPlayer iPlayer = player != null ? platform.wrapPlayer(player) : null;
-                platform.sendFailure(source, services.getMessageParser().parseMessage("&cUnknown condition type: " + condition.getType(), iPlayer).getOriginalText());
+                platform.sendFailure(source, services.getMessageParser().parseMessage("&cUnknown condition type: " + condition.getType(), iPlayer));
                 return false;
         }
         return condition.isNegate() != result;

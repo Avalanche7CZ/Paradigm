@@ -6,7 +6,6 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.Placeholders;
 import eu.avalanche7.paradigm.utils.formatting.tags.Tag;
 import eu.avalanche7.paradigm.utils.formatting.tags.TagRegistry;
-import net.minecraft.text.ClickEvent;
 import net.minecraft.text.Style;
 
 import java.util.List;
@@ -46,7 +45,7 @@ public class FormattingParser {
             return platformAdapter.createComponentFromLiteral("");
         }
 
-        String processedMessage = this.placeholders.replacePlaceholders(rawMessage, player != null ? player.getOriginalPlayer() : null);
+        String processedMessage = this.placeholders.replacePlaceholders(rawMessage, player != null ? (net.minecraft.server.network.ServerPlayerEntity) player.getOriginalPlayer() : null);
 
         Matcher hexMatcher = hexPattern.matcher(processedMessage);
         StringBuilder sb = new StringBuilder();
@@ -152,9 +151,8 @@ public class FormattingParser {
                 String fullUrl = url.startsWith("http://") || url.startsWith("https://") ? url : "https://" + url;
 
                 IComponent urlComponent = platformAdapter.createComponentFromLiteral(url);
-                urlComponent.setStyle(context.getCurrentStyle().withClickEvent(
-                        new ClickEvent(ClickEvent.Action.OPEN_URL, fullUrl)
-                ));
+                Style urlStyle = platformAdapter.createStyleWithClickEvent(context.getCurrentStyle(), "open_url", fullUrl);
+                urlComponent.setStyle(urlStyle);
                 parent.append(urlComponent);
                 currentIndex = urlMatcher.end();
             } else {

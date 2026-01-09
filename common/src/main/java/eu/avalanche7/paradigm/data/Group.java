@@ -2,15 +2,14 @@ package eu.avalanche7.paradigm.data;
 
 import java.util.HashSet;
 import java.util.Set;
-import java.util.UUID;
 
 public class Group {
     private final String name;
-    private UUID owner;
-    private final Set<UUID> members = new HashSet<>();
+    private String owner;
+    private final Set<String> members = new HashSet<>();
     private boolean isPublic;
 
-    public Group(String name, UUID owner) {
+    public Group(String name, String owner) {
         this.name = name;
         this.owner = owner;
         this.members.add(owner);
@@ -21,23 +20,23 @@ public class Group {
         return name;
     }
 
-    public UUID getOwner() {
+    public String getOwner() {
         return owner;
     }
 
-    public void setOwner(UUID owner) {
+    public void setOwner(String owner) {
         this.owner = owner;
     }
 
-    public Set<UUID> getMembers() {
+    public Set<String> getMembers() {
         return members;
     }
 
-    public void addMember(UUID member) {
+    public void addMember(String member) {
         members.add(member);
     }
 
-    public void removeMember(UUID member) {
+    public void removeMember(String member) {
         members.remove(member);
     }
 

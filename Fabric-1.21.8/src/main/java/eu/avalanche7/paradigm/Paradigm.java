@@ -56,7 +56,7 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
 
     @Override
     public void onInitializeServer() {
-        LOGGER.info("Initializing Paradigm Mod for Fabric 1.21.1...");
+        LOGGER.info("Initializing Paradigm Mod for Fabric 1.21.8...");
         loadConfigurations();
 
         initializeServices();
@@ -76,7 +76,7 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
             modVersion = modContainer.getMetadata().getVersion().getFriendlyString();
             String displayName = modContainer.getMetadata().getName();
 
-            LOGGER.info("Paradigm Fabric mod (1.21.1) has been set up.");
+            LOGGER.info("Paradigm Fabric mod (1.21.8) has been set up.");
             LOGGER.info("==================================================");
             LOGGER.info("{} - Version {}", displayName, getModVersion());
             LOGGER.info("Author: Avalanche7CZ");
@@ -353,7 +353,7 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
 
         private static String getMinecraftVersionSafe() {
             try {
-                return net.minecraft.SharedConstants.getGameVersion().getName();
+                return net.minecraft.SharedConstants.getGameVersion().name();
             } catch (Throwable t) {
                 return null;
             }

@@ -121,7 +121,7 @@ public class editor implements ParadigmModule {
                             .onClickOpenUrl(url)
                             .onHoverText("Click to open the Web Editor in your browser");
                         IComponent message = platform.createComponentFromLiteral("Web Editor: ").append(link);
-                        platform.sendSuccess((ServerCommandSource) source.getOriginalSource(), message.getOriginalText(), false);
+                        platform.sendSuccess((ServerCommandSource) source.getOriginalSource(), message, false);
                     });
                 }
             } catch (Exception e) {
@@ -232,7 +232,7 @@ public class editor implements ParadigmModule {
             IComponent line = platform.createComponentFromLiteral(" - " + h)
                 .onClickSuggestCommand("/paradigm editor untrust " + h)
                 .onHoverText("Click to prepare untrust of this key");
-            platform.sendSuccess((ServerCommandSource) source.getOriginalSource(), line.getOriginalText(), false);
+            platform.sendSuccess((ServerCommandSource) source.getOriginalSource(), line, false);
         }
         try { services.getLogger().info("Paradigm WebEditor: {} listed {} trusted key(s)", source.getSourceName(), hashes.size()); } catch (Throwable ignored) {}
         return 1;

@@ -3,8 +3,6 @@ package eu.avalanche7.paradigm.platform;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import net.minecraft.server.network.ServerPlayerEntity;
 
-import java.util.UUID;
-
 public class MinecraftPlayer implements IPlayer {
     private final ServerPlayerEntity player;
 
@@ -22,12 +20,12 @@ public class MinecraftPlayer implements IPlayer {
     }
 
     @Override
-    public UUID getUUID() {
-        return player.getUuid();
+    public String getUUID() {
+        return player.getUuid().toString();
     }
 
     @Override
-    public ServerPlayerEntity getOriginalPlayer() {
+    public Object getOriginalPlayer() {
         return player;
     }
 

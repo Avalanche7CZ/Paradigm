@@ -9,6 +9,7 @@ import net.minecraft.text.Text;
 import net.minecraft.text.TextColor;
 import net.minecraft.util.Formatting;
 
+import java.net.URI;
 import java.util.List;
 import java.util.function.UnaryOperator;
 
@@ -134,37 +135,43 @@ public class MinecraftComponent implements IComponent {
 
     @Override
     public IComponent onClickRunCommand(String command) {
-        ClickEvent ce = new ClickEvent(ClickEvent.Action.RUN_COMMAND, command != null ? command : "");
+        ClickEvent ce = new ClickEvent.RunCommand(command != null ? command : "");
         MutableText styled = deepStyledCopy(component, s -> s.withClickEvent(ce));
         return new MinecraftComponent(styled);
     }
 
     @Override
     public IComponent onClickSuggestCommand(String command) {
-        ClickEvent ce = new ClickEvent(ClickEvent.Action.SUGGEST_COMMAND, command != null ? command : "");
+        ClickEvent ce = new ClickEvent.SuggestCommand(command != null ? command : "");
         MutableText styled = deepStyledCopy(component, s -> s.withClickEvent(ce));
         return new MinecraftComponent(styled);
     }
 
     @Override
     public IComponent onClickOpenUrl(String url) {
-        String u = url == null ? "" : (url.startsWith("http://") || url.startsWith("https://") ? url : "https://" + url);
-        ClickEvent ce = new ClickEvent(ClickEvent.Action.OPEN_URL, u);
+        String u = (url == null || url.isBlank())
+                ? ""
+                : (url.startsWith("http://") || url.startsWith("https://")
+                ? url
+                : "https://" + url);
+
+        ClickEvent ce = new ClickEvent.OpenUrl(URI.create(u));
         MutableText styled = deepStyledCopy(component, s -> s.withClickEvent(ce));
         return new MinecraftComponent(styled);
     }
 
     @Override
     public IComponent onClickCopyToClipboard(String text) {
-        ClickEvent ce = new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, text != null ? text : "");
+        ClickEvent ce = new ClickEvent.CopyToClipboard(text != null ? text : "");
         MutableText styled = deepStyledCopy(component, s -> s.withClickEvent(ce));
         return new MinecraftComponent(styled);
     }
 
     @Override
     public IComponent onHoverText(String text) {
-        Text hover = Text.literal(text != null ? text : "");
-        HoverEvent he = new HoverEvent(HoverEvent.Action.SHOW_TEXT, hover);
+        HoverEvent he = new HoverEvent.ShowText(
+                Text.literal(text != null ? text : "")
+        );
         MutableText styled = deepStyledCopy(component, s -> s.withHoverEvent(he));
         return new MinecraftComponent(styled);
     }
@@ -177,10 +184,12 @@ public class MinecraftComponent implements IComponent {
         } else {
             hover = Text.literal(comp != null ? comp.getRawText() : "");
         }
-        HoverEvent he = new HoverEvent(HoverEvent.Action.SHOW_TEXT, hover);
+
+        HoverEvent he = new HoverEvent.ShowText(hover);
         MutableText styled = deepStyledCopy(component, s -> s.withHoverEvent(he));
         return new MinecraftComponent(styled);
     }
+
 
     @Override
     public Text getOriginalText() {

@@ -354,7 +354,7 @@ public class WebEditorSocket {
                                 try {
                                     Object orig = this.owner.getOriginalSource();
                                     if (orig instanceof net.minecraft.server.command.ServerCommandSource scs) {
-                                        services.getPlatformAdapter().sendSuccess(scs, clickable.getOriginalText(), false);
+                                        services.getPlatformAdapter().sendSuccess(scs, clickable, false);
                                     } else {
                                         services.getLogger().info("Paradigm WebEditor: owner original source is not a ServerCommandSource for owner={}", this.owner.getSourceName());
                                     }
@@ -389,7 +389,7 @@ public class WebEditorSocket {
                             try {
                                 Object orig = this.owner.getOriginalSource();
                                 if (orig instanceof net.minecraft.server.command.ServerCommandSource scs) {
-                                    services.getPlatformAdapter().sendSuccess(scs, comp.getOriginalText(), false);
+                                    services.getPlatformAdapter().sendSuccess(scs, comp, false);
                                 }
                             } catch (Throwable ignored) {}
                         }

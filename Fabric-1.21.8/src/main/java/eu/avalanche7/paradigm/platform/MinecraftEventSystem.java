@@ -3,7 +3,6 @@ package eu.avalanche7.paradigm.platform;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import net.minecraft.server.network.ServerPlayerEntity;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -15,7 +14,7 @@ public class MinecraftEventSystem implements IEventSystem {
     public MinecraftEventSystem() {
         // Chat event registration will be handled via mixin !!!! - By Avalanche7 14.09.2025 - For Now
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
-            ServerPlayerEntity player = handler.getPlayer();
+            var player = handler.getPlayer();
             if (joinListeners.isEmpty()) return;
             MinecraftPlayerJoinEvent joinEvent = new MinecraftPlayerJoinEvent(player);
             for (PlayerJoinEventListener listener : joinListeners) {
@@ -27,7 +26,7 @@ public class MinecraftEventSystem implements IEventSystem {
             }
         });
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
-            ServerPlayerEntity player = handler.getPlayer();
+            var player = handler.getPlayer();
             if (leaveListeners.isEmpty()) return;
             MinecraftPlayerLeaveEvent leaveEvent = new MinecraftPlayerLeaveEvent(player);
             for (PlayerLeaveEventListener listener : leaveListeners) {
@@ -72,8 +71,8 @@ public class MinecraftEventSystem implements IEventSystem {
         private final IPlayer player;
         private IComponent joinMessage;
 
-        public MinecraftPlayerJoinEvent(ServerPlayerEntity player) {
-            this.player = MinecraftPlayer.of(player);
+        public MinecraftPlayerJoinEvent(Object player) {
+            this.player = MinecraftPlayer.of((net.minecraft.server.network.ServerPlayerEntity) player);
         }
 
         @Override
@@ -96,8 +95,8 @@ public class MinecraftEventSystem implements IEventSystem {
         private final IPlayer player;
         private IComponent leaveMessage;
 
-        public MinecraftPlayerLeaveEvent(ServerPlayerEntity player) {
-            this.player = MinecraftPlayer.of(player);
+        public MinecraftPlayerLeaveEvent(Object player) {
+            this.player = MinecraftPlayer.of((net.minecraft.server.network.ServerPlayerEntity) player);
         }
 
         @Override
@@ -121,8 +120,8 @@ public class MinecraftEventSystem implements IEventSystem {
         private String message;
         private boolean cancelled = false;
 
-        public ChatEventImpl(ServerPlayerEntity player, String message) {
-            this.player = MinecraftPlayer.of(player);
+        public ChatEventImpl(Object player, String message) {
+            this.player = MinecraftPlayer.of((net.minecraft.server.network.ServerPlayerEntity) player);
             this.message = message;
         }
 

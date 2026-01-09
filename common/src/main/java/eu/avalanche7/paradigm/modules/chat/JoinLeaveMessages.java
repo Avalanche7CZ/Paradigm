@@ -91,7 +91,7 @@ public class JoinLeaveMessages implements ParadigmModule {
         if (messageFormat != null) {
             IPlayer iPlayer = platform.wrapPlayer(player);
             IComponent formattedMessage = services.getMessageParser().parseMessage(messageFormat, iPlayer);
-            platform.broadcastSystemMessage(formattedMessage.getOriginalText());
+            platform.broadcastSystemMessage(formattedMessage);
             services.getDebugLogger().debugLog(logMessage + player.getName().getString());
         }
     }
@@ -107,7 +107,7 @@ public class JoinLeaveMessages implements ParadigmModule {
             String leaveMessageFormat = chatConfig.leaveMessageFormat.get();
             IPlayer iPlayer = platform.wrapPlayer(player);
             IComponent formattedMessage = services.getMessageParser().parseMessage(leaveMessageFormat, iPlayer);
-            platform.broadcastSystemMessage(formattedMessage.getOriginalText());
+            platform.broadcastSystemMessage(formattedMessage);
             services.getDebugLogger().debugLog("Sent leave message for " + player.getName().getString());
         }
     }

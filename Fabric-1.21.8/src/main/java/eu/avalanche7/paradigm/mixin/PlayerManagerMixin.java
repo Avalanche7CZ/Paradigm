@@ -3,6 +3,7 @@ package eu.avalanche7.paradigm.mixin;
 import eu.avalanche7.paradigm.ParadigmAPI;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import net.minecraft.network.ClientConnection;
@@ -92,7 +93,7 @@ public class PlayerManagerMixin {
 
         if (messageFormat != null && !messageFormat.isEmpty()) {
             IPlayer iPlayer = platform.wrapPlayer(player);
-            Text formattedMessage = services.getMessageParser().parseMessage(messageFormat, iPlayer).getOriginalText();
+            IComponent formattedMessage = services.getMessageParser().parseMessage(messageFormat, iPlayer);
             platform.broadcastSystemMessage(formattedMessage);
         }
     }
@@ -114,7 +115,7 @@ public class PlayerManagerMixin {
 
         if (leaveMessageFormat != null && !leaveMessageFormat.isEmpty()) {
             IPlayer iPlayer = platform.wrapPlayer(player);
-            Text formattedMessage = services.getMessageParser().parseMessage(leaveMessageFormat, iPlayer).getOriginalText();
+            IComponent formattedMessage = services.getMessageParser().parseMessage(leaveMessageFormat, iPlayer);
             platform.broadcastSystemMessage(formattedMessage);
         }
     }

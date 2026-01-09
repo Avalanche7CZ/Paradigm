@@ -3,7 +3,6 @@ package eu.avalanche7.paradigm.platform;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
 
 public class MinecraftCommandSource implements ICommandSource {
     private final ServerCommandSource source;
@@ -11,7 +10,7 @@ public class MinecraftCommandSource implements ICommandSource {
 
     public MinecraftCommandSource(ServerCommandSource source) {
         this.source = source;
-        ServerPlayerEntity sp = source.getPlayer();
+        var sp = source.getPlayer();
         this.player = sp != null ? MinecraftPlayer.of(sp) : null;
     }
 

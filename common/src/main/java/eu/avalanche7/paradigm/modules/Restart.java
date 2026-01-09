@@ -279,13 +279,17 @@ public class Restart implements ParadigmModule {
                     if (!restartInProgress.get()) return;
                     if (isAsEachPlayerDirective(commandText)) {
                         String raw = stripAsEachPlayerDirective(commandText);
-                        List<ServerPlayerEntity> players = platform.getOnlinePlayers();
+                        List<eu.avalanche7.paradigm.platform.Interfaces.IPlayer> players = platform.getOnlinePlayers();
                         services.getDebugLogger().debugLog(NAME + ": Executing pre-restart player-commands (" + secondsBefore + "s before) for " + players.size() + " players: " + raw);
-                        for (ServerPlayerEntity sp : players) {
+                        for (eu.avalanche7.paradigm.platform.Interfaces.IPlayer sp : players) {
                             String perPlayer = platform.replacePlaceholders(raw, sp);
                             try {
-                                ServerCommandSource src = sp.getCommandSource();
-                                platform.executeCommandAs(src, perPlayer);
+                                Object orig = sp.getOriginalPlayer();
+                                if (orig instanceof ServerPlayerEntity spe) {
+                                    platform.executeCommandAs(spe.getCommandSource(), perPlayer);
+                                } else {
+                                    services.getDebugLogger().debugLog(NAME + ": Skipping player-specific pre-restart command for player without server source: " + platform.getPlayerName(sp));
+                                }
                             } catch (Exception ex) {
                                 services.getDebugLogger().debugLog(NAME + ": Failed executing as player " + platform.getPlayerName(sp) + ": " + perPlayer, ex);
                             }
@@ -313,10 +317,9 @@ public class Restart implements ParadigmModule {
         }
         services.getDebugLogger().debugLog(NAME + ": Sending restart warning. Time left: " + timeLeftSeconds + "s.");
 
-        List<ServerPlayerEntity> players = platform.getOnlinePlayers();
+        List<eu.avalanche7.paradigm.platform.Interfaces.IPlayer> players = platform.getOnlinePlayers();
 
-        for (ServerPlayerEntity playerEntity : players) {
-            IPlayer player = platform.wrapPlayer(playerEntity);
+        for (eu.avalanche7.paradigm.platform.Interfaces.IPlayer player : players) {
             final int hours = (int) (timeLeftSeconds / 3600);
             final int minutes = (int) ((timeLeftSeconds % 3600) / 60);
             final int seconds = (int) (timeLeftSeconds % 60);
@@ -325,14 +328,14 @@ public class Restart implements ParadigmModule {
             final String titleMessage = config.titleMessage.value != null ? config.titleMessage.value.replace("{time}", formattedTime).replace("{minutes}", TIME_FORMATTER.format(minutes)).replace("{seconds}", TIME_FORMATTER.format(seconds)) : "";
 
             if (config.timerUseChat.value) {
-                platform.sendSystemMessage(player.getOriginalPlayer(), services.getMessageParser().parseMessage(chatMessage, player).getOriginalText());
+                platform.sendSystemMessage(player, services.getMessageParser().parseMessage(chatMessage, player));
             }
             if (config.titleEnabled.value) {
-                platform.sendTitle(player.getOriginalPlayer(), services.getMessageParser().parseMessage(titleMessage, player).getOriginalText(), Text.empty());
+                platform.sendTitle(player, services.getMessageParser().parseMessage(titleMessage, player), platform.createEmptyComponent());
             }
 
             if (config.playSoundEnabled.value && timeLeftSeconds <= config.playSoundFirstTime.value) {
-                platform.playSound(player.getOriginalPlayer(), "minecraft:block.note_block.pling", net.minecraft.sound.SoundCategory.MASTER, 1.0f, 1.0f);
+                platform.playSound(player, "minecraft:block.note_block.pling", net.minecraft.sound.SoundCategory.MASTER, 1.0f, 1.0f);
             }
         }
 
@@ -343,14 +346,14 @@ public class Restart implements ParadigmModule {
             String formattedTime = String.format("%dh %sm %ss", hours, TIME_FORMATTER.format(minutes), TIME_FORMATTER.format(seconds));
             float progress = Math.max(0.0f, (float) timeLeftSeconds / (float) Math.max(1.0, originalTotalIntervalSeconds));
             String bossBarMessage = config.bossBarMessage.value != null ? config.bossBarMessage.value.replace("{time}", formattedTime).replace("{minutes}", TIME_FORMATTER.format(minutes)).replace("{seconds}", TIME_FORMATTER.format(seconds)) : "";
-            platform.createOrUpdateRestartBossBar(services.getMessageParser().parseMessage(bossBarMessage, null).getOriginalText(), IPlatformAdapter.BossBarColor.RED, progress);
+            platform.createOrUpdateRestartBossBar(services.getMessageParser().parseMessage(bossBarMessage, null), IPlatformAdapter.BossBarColor.RED, progress);
         }
     }
 
     private void performShutdown(Services services, RestartConfigHandler.Config config) {
         if (!restartInProgress.get()) return;
         services.getDebugLogger().debugLog(NAME + ": Initiating final shutdown procedure.");
-        Text kickMessage = services.getMessageParser().parseMessage(config.defaultRestartReason.value, null).getOriginalText();
+        IComponent kickMessage = services.getMessageParser().parseMessage(config.defaultRestartReason.value, null);
         platform.shutdownServer(kickMessage);
     }
 

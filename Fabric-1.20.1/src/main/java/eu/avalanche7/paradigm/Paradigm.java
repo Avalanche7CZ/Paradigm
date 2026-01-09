@@ -57,7 +57,7 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
 
     @Override
     public void onInitializeServer() {
-        LOGGER.info("Initializing Paradigm Mod for Fabric 1.21.1...");
+        LOGGER.info("Initializing Paradigm Mod for Fabric 1.21.0...");
         loadConfigurations();
 
         initializeServices();

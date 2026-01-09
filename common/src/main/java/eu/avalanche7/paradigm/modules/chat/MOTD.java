@@ -64,8 +64,8 @@ public class MOTD implements ParadigmModule {
         }
         IPlayer player = platform.wrapPlayer(mcPlayer);
         IComponent motdMessage = createMOTDMessage(player);
-        platform.sendSystemMessage(mcPlayer, motdMessage.getOriginalText());
-        this.services.getDebugLogger().debugLog("Sent MOTD to " + mcPlayer.getName().getString());
+        platform.sendSystemMessage(player, motdMessage);
+        this.services.getDebugLogger().debugLog("Sent MOTD to " + player.getName());
     }
 
     private IComponent createMOTDMessage(IPlayer player) {

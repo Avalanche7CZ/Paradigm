@@ -249,17 +249,16 @@ public class Announcements implements ParadigmModule {
         String header = config.header.value != null ? config.header.value : "";
         String footer = config.footer.value != null ? config.footer.value : "";
         platform.getOnlinePlayers().forEach(player -> {
-            IPlayer iPlayer = platform.wrapPlayer(player);
             if (headerFooter) {
-                IComponent headerComp = services.getMessageParser().parseMessage(header, iPlayer);
-                IComponent messageComp = services.getMessageParser().parseMessage(messageText, iPlayer);
-                IComponent footerComp = services.getMessageParser().parseMessage(footer, iPlayer);
-                platform.sendSystemMessage(player, headerComp.getOriginalText());
-                platform.sendSystemMessage(player, messageComp.getOriginalText());
-                platform.sendSystemMessage(player, footerComp.getOriginalText());
+                IComponent headerComp = services.getMessageParser().parseMessage(header, player);
+                IComponent messageComp = services.getMessageParser().parseMessage(messageText, player);
+                IComponent footerComp = services.getMessageParser().parseMessage(footer, player);
+                platform.sendSystemMessage(player, headerComp);
+                platform.sendSystemMessage(player, messageComp);
+                platform.sendSystemMessage(player, footerComp);
             } else {
-                IComponent messageComp = services.getMessageParser().parseMessage(messageText, iPlayer);
-                platform.sendSystemMessage(player, messageComp.getOriginalText());
+                IComponent messageComp = services.getMessageParser().parseMessage(messageText, player);
+                platform.sendSystemMessage(player, messageComp);
             }
         });
         services.getDebugLogger().debugLog(NAME + ": Broadcasted global message: " + messageText);
@@ -272,9 +271,8 @@ public class Announcements implements ParadigmModule {
         String orderMode = config.orderMode.value;
         String messageText = getNextMessage(messages, orderMode, "actionbar");
         platform.getOnlinePlayers().forEach(player -> {
-            IPlayer iPlayer = platform.wrapPlayer(player);
-            IComponent messageComp = services.getMessageParser().parseMessage(messageText, iPlayer);
-            platform.sendActionBar(player, messageComp.getOriginalText());
+            IComponent messageComp = services.getMessageParser().parseMessage(messageText, player);
+            platform.sendActionBar(player, messageComp);
         });
         services.getDebugLogger().debugLog(NAME + ": Broadcasted actionbar message: " + messageText);
     }
@@ -286,12 +284,11 @@ public class Announcements implements ParadigmModule {
         String orderMode = config.orderMode.value;
         String messageText = getNextMessage(messages, orderMode, "title");
         platform.getOnlinePlayers().forEach(player -> {
-            IPlayer iPlayer = platform.wrapPlayer(player);
             String[] parts = messageText.split(" \\|\\| ", 2);
-            IComponent titleComp = services.getMessageParser().parseMessage(parts[0], iPlayer);
-            IComponent subtitleComp = parts.length > 1 ? services.getMessageParser().parseMessage(parts[1], iPlayer) : services.getMessageParser().parseMessage("", iPlayer);
+            IComponent titleComp = services.getMessageParser().parseMessage(parts[0], player);
+            IComponent subtitleComp = parts.length > 1 ? services.getMessageParser().parseMessage(parts[1], player) : services.getMessageParser().parseMessage("", player);
             platform.clearTitles(player);
-            platform.sendTitle(player, titleComp.getOriginalText(), subtitleComp.getOriginalText());
+            platform.sendTitle(player, titleComp, subtitleComp);
         });
         services.getDebugLogger().debugLog(NAME + ": Broadcasted title message: " + messageText);
     }
@@ -313,9 +310,8 @@ public class Announcements implements ParadigmModule {
         }
         final IPlatformAdapter.BossBarColor bossbarColor = tempBossbarColor;
         platform.getOnlinePlayers().forEach(player -> {
-            IPlayer iPlayer = platform.wrapPlayer(player);
-            IComponent messageComp = services.getMessageParser().parseMessage(messageText, iPlayer);
-            platform.sendBossBar(Collections.singletonList(player), messageComp.getOriginalText(), bossbarTime, bossbarColor, 1.0f);
+            IComponent messageComp = services.getMessageParser().parseMessage(messageText, player);
+            platform.sendBossBar(Collections.singletonList(player), messageComp, bossbarTime, bossbarColor, 1.0f);
         });
         services.getDebugLogger().debugLog(NAME + ": Broadcasted bossbar message: " + messageText);
     }
@@ -326,11 +322,10 @@ public class Announcements implements ParadigmModule {
         services.getDebugLogger().debugLog(NAME + ": /paradigm title command executed with message: " + titleAndSubtitle);
         String[] parts = titleAndSubtitle.split(" \\|\\| ", 2);
         platform.getOnlinePlayers().forEach(target -> {
-            IPlayer iPlayer = platform.wrapPlayer(target);
-            IComponent titleComp = services.getMessageParser().parseMessage(parts[0], iPlayer);
-            IComponent subtitleComp = parts.length > 1 ? services.getMessageParser().parseMessage(parts[1], iPlayer) : services.getMessageParser().parseMessage("", iPlayer);
+            IComponent titleComp = services.getMessageParser().parseMessage(parts[0], target);
+            IComponent subtitleComp = parts.length > 1 ? services.getMessageParser().parseMessage(parts[1], target) : services.getMessageParser().parseMessage("", target);
             platform.clearTitles(target);
-            platform.sendTitle(target, titleComp.getOriginalText(), subtitleComp.getOriginalText());
+            platform.sendTitle(target, titleComp, subtitleComp);
         });
         platform.sendSuccess(context.getSource(), platform.createLiteralComponent("Title broadcasted."), true);
         return 1;
@@ -343,16 +338,14 @@ public class Announcements implements ParadigmModule {
         switch (type) {
             case "broadcast" -> {
                 platform.getOnlinePlayers().forEach(player -> {
-                    IPlayer iPlayer = platform.wrapPlayer(player);
-                    IComponent messageComp = services.getMessageParser().parseMessage(messageStr, iPlayer);
-                    platform.sendSystemMessage(player, messageComp.getOriginalText());
+                    IComponent messageComp = services.getMessageParser().parseMessage(messageStr, player);
+                    platform.sendSystemMessage(player, messageComp);
                 });
             }
             case "actionbar" -> {
                 platform.getOnlinePlayers().forEach(player -> {
-                    IPlayer iPlayer = platform.wrapPlayer(player);
-                    IComponent messageComp = services.getMessageParser().parseMessage(messageStr, iPlayer);
-                    platform.sendActionBar(player, messageComp.getOriginalText());
+                    IComponent messageComp = services.getMessageParser().parseMessage(messageStr, player);
+                    platform.sendActionBar(player, messageComp);
                 });
             }
             case "bossbar" -> {
@@ -366,9 +359,8 @@ public class Announcements implements ParadigmModule {
                     return 0;
                 }
                 platform.getOnlinePlayers().forEach(player -> {
-                    IPlayer iPlayer = platform.wrapPlayer(player);
-                    IComponent messageComp = services.getMessageParser().parseMessage(messageStr, iPlayer);
-                    platform.sendBossBar(Collections.singletonList(player), messageComp.getOriginalText(), interval, bossBarColor, 1.0f);
+                    IComponent messageComp = services.getMessageParser().parseMessage(messageStr, player);
+                    platform.sendBossBar(Collections.singletonList(player), messageComp, interval, bossBarColor, 1.0f);
                 });
             }
             default -> {

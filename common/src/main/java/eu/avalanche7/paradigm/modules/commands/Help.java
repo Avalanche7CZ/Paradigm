@@ -103,27 +103,27 @@ public class Help implements ParadigmModule {
         MessageParser parser = services.getMessageParser();
         String version = ParadigmAPI.getModVersion();
         IComponent sep = parser.parseMessage("&8&m----------------------------------------", ip);
-        platform.sendSystemMessage(p, sep.getOriginalText());
-        platform.sendSystemMessage(p, parser.parseMessage("&d&l[ Paradigm Mod v" + version + " ]", ip).getOriginalText());
-        platform.sendSystemMessage(p, parser.parseMessage("&6by Avalanche7CZ &d♥", ip).getOriginalText());
-        platform.sendSystemMessage(p, parser.parseMessage("&bDiscord: [hover=Click to join the Paradigm Discord!]https://discord.com/invite/qZDcQdEFqQ[/hover]", ip).getOriginalText());
-        platform.sendSystemMessage(p, sep.getOriginalText());
+        platform.sendSystemMessage(ip, sep);
+        platform.sendSystemMessage(ip, parser.parseMessage("&d&l[ Paradigm Mod v" + version + " ]", ip));
+        platform.sendSystemMessage(ip, parser.parseMessage("&6by Avalanche7CZ &d♥", ip));
+        platform.sendSystemMessage(ip, parser.parseMessage("&bDiscord: [hover=Click to join the Paradigm Discord!]https://discord.com/invite/qZDcQdEFqQ[/hover]", ip));
+        platform.sendSystemMessage(ip, sep);
         sendModuleList(p, platform, services, true);
-        platform.sendSystemMessage(p, sep.getOriginalText());
+        platform.sendSystemMessage(ip, sep);
         IComponent hint = parser.parseMessage("&eType &d/paradigm help <module> &efor details, or click a module above.", ip)
             .onClickSuggestCommand("/paradigm help ")
             .onHoverText("Click to start typing a help command");
-        platform.sendSystemMessage(p, hint.getOriginalText());
-        platform.sendSystemMessage(p, parser.parseMessage("&d&lParadigm - Elevate your server! ✨", ip).getOriginalText());
-        platform.sendSystemMessage(p, sep.getOriginalText());
+        platform.sendSystemMessage(ip, hint);
+        platform.sendSystemMessage(ip, parser.parseMessage("&d&lParadigm - Elevate your server! ✨", ip));
+        platform.sendSystemMessage(ip, sep);
     }
 
 
     private void sendHelpOverview(ServerPlayerEntity p, IPlatformAdapter platform) {
         MessageParser parser = eu.avalanche7.paradigm.ParadigmAPI.getServices().getMessageParser();
         IPlayer ip = platform.wrapPlayer(p);
-        platform.sendSystemMessage(p, parser.parseMessage("&b&l[ Paradigm Help ]", ip).getOriginalText());
-        platform.sendSystemMessage(p, parser.parseMessage("&7Available Modules:", ip).getOriginalText());
+        platform.sendSystemMessage(ip, parser.parseMessage("&b&l[ Paradigm Help ]", ip));
+        platform.sendSystemMessage(ip, parser.parseMessage("&7Available Modules:", ip));
         List<ParadigmModule> mods = new ArrayList<>(ParadigmAPI.getModules());
         mods.sort(Comparator.comparing(ParadigmModule::getName, String.CASE_INSENSITIVE_ORDER));
         for (ParadigmModule mod : mods) {
@@ -131,15 +131,15 @@ public class Help implements ParadigmModule {
             IComponent line = parser.parseMessage("&b- " + modName, ip)
                 .onClickSuggestCommand("/paradigm help " + modName)
                 .onHoverText("Click for help about " + modName);
-            platform.sendSystemMessage(p, line.getOriginalText());
+            platform.sendSystemMessage(ip, line);
         }
-        platform.sendSystemMessage(p, parser.parseMessage("&7Click a module or type &d/paradigm help <module> &7for details.", ip).getOriginalText());
+        platform.sendSystemMessage(ip, parser.parseMessage("&7Click a module or type &d/paradigm help <module> &7for details.", ip));
     }
 
     private void sendModuleList(ServerPlayerEntity p, IPlatformAdapter platform, Services services, boolean interactive) {
         MessageParser parser = services.getMessageParser();
         IPlayer ip = platform.wrapPlayer(p);
-        platform.sendSystemMessage(p, parser.parseMessage("&d&lModules:", ip).getOriginalText());
+        platform.sendSystemMessage(ip, parser.parseMessage("&d&lModules:", ip));
         List<ParadigmModule> mods = new ArrayList<>(ParadigmAPI.getModules());
         mods.sort(Comparator.comparing(ParadigmModule::getName, String.CASE_INSENSITIVE_ORDER));
         for (ParadigmModule mod : mods) {
@@ -154,52 +154,65 @@ public class Help implements ParadigmModule {
                 line = line.onClickSuggestCommand("/paradigm help " + mod.getName())
                         .onHoverText("Click for help about " + mod.getName());
             }
-            platform.sendSystemMessage(p, line.getOriginalText());
+            platform.sendSystemMessage(ip, line);
         }
     }
 
     private void showModuleDetail(ServerPlayerEntity p, IPlatformAdapter platform, Services services, String name, Map<String,String> moduleHelps) {
+        IPlayer ip = platform.wrapPlayer(p);
         String key = moduleHelps.keySet().stream().filter(k -> k.equalsIgnoreCase(name)).findFirst().orElse(null);
-        if (key == null) { platform.sendSystemMessage(p, Text.literal("§cNo help available for " + name + ". Try checking the wiki or ask on Discord.")); suggestClosest(p, platform, moduleHelps, name); return; }
+        if (key == null) {
+            platform.sendSystemMessage(ip, platform.createComponentFromLiteral("§cNo help available for " + name + ". Try checking the wiki or ask on Discord."));
+            suggestClosest(p, platform, moduleHelps, name);
+            return;
+        }
         boolean enabled = ParadigmAPI.getModules().stream()
                 .filter(m -> m.getName().equalsIgnoreCase(key))
                 .findFirst()
                 .map(m -> m.isEnabled(services))
                 .orElse(false); 
         MessageParser parser = services.getMessageParser();
-        IPlayer ip = platform.wrapPlayer(p);
-        platform.sendSystemMessage(p, parser.parseMessage("&b&l[ Paradigm Module Help ]", ip).getOriginalText());
-        platform.sendSystemMessage(p, parser.parseMessage("&b" + key + " Help", ip).getOriginalText());
+        platform.sendSystemMessage(ip, parser.parseMessage("&b&l[ Paradigm Module Help ]", ip));
+        platform.sendSystemMessage(ip, parser.parseMessage("&b" + key + " Help", ip));
         for (String line : wrap(moduleHelps.get(key))) {
-            platform.sendSystemMessage(p, parser.parseMessage("&7" + line, ip).getOriginalText());
+            platform.sendSystemMessage(ip, parser.parseMessage("&7" + line, ip));
         }
         String status = enabled ? "&a✔ &7Module is enabled" : "&7✖ &8Module is disabled";
-        platform.sendSystemMessage(p, parser.parseMessage(status, ip).getOriginalText());
+        platform.sendSystemMessage(ip, parser.parseMessage(status, ip));
     }
 
     private void sendAllModuleDetails(ServerPlayerEntity p, IPlatformAdapter platform, Services services, Map<String,String> moduleHelps) {
+        IPlayer ip = platform.wrapPlayer(p);
         List<String> ordered = new ArrayList<>(moduleHelps.keySet());
         ordered.sort(String.CASE_INSENSITIVE_ORDER);
-        platform.sendSystemMessage(p, Text.literal("§d§lAll Module Details:"));
+        platform.sendSystemMessage(ip, platform.createComponentFromLiteral("§d§lAll Module Details:"));
         for (String k : ordered) showModuleDetail(p, platform, services, k, moduleHelps);
     }
 
     private void sendSearchResults(ServerPlayerEntity p, IPlatformAdapter platform, Services services, String query, Map<String,String> moduleHelps) {
-        if (query.isEmpty()) { platform.sendSystemMessage(p, Text.literal("§cSearch query cannot be empty.")); return; }
+        IPlayer ip = platform.wrapPlayer(p);
+        if (query.isEmpty()) {
+            platform.sendSystemMessage(ip, platform.createComponentFromLiteral("§cSearch query cannot be empty."));
+            return;
+        }
         List<String> matches = moduleHelps.keySet().stream().filter(k -> k.toLowerCase(Locale.ROOT).contains(query.toLowerCase(Locale.ROOT))).sorted(String.CASE_INSENSITIVE_ORDER).toList();
-        if (matches.isEmpty()) { platform.sendSystemMessage(p, Text.literal("§cNo modules matched: §f" + query)); return; }
-        platform.sendSystemMessage(p, Text.literal("§dMatches (§f" + matches.size() + "§d):"));
+        if (matches.isEmpty()) {
+            platform.sendSystemMessage(ip, platform.createComponentFromLiteral("§cNo modules matched: §f" + query));
+            return;
+        }
+        platform.sendSystemMessage(ip, platform.createComponentFromLiteral("§dMatches (§f" + matches.size() + "§d):"));
         for (String m : matches) {
             boolean enabled = ParadigmAPI.getModules().stream().anyMatch(pm -> pm.getName().equalsIgnoreCase(m) && pm.isEnabled(services));
             String text = (enabled ? "§a" : "§7") + m;
             IComponent line = platform.createComponentFromLiteral(text)
                 .onClickSuggestCommand("/paradigm help " + m)
                 .onHoverText("Click for detail");
-            platform.sendSystemMessage(p, line.getOriginalText());
+            platform.sendSystemMessage(ip, line);
         }
     }
 
     private void suggestClosest(ServerPlayerEntity p, IPlatformAdapter platform, Map<String,String> moduleHelps, String input) {
+        IPlayer ip = platform.wrapPlayer(p);
         String lower = input.toLowerCase(Locale.ROOT);
         String best = null; int bestDist = Integer.MAX_VALUE;
         for (String k : moduleHelps.keySet()) {
@@ -211,7 +224,7 @@ public class Help implements ParadigmModule {
             IComponent line = platform.createComponentFromLiteral("§7Did you mean: §d" + suggestion)
                 .onClickSuggestCommand("/paradigm help " + suggestion)
                 .onHoverText("Show " + suggestion + " help");
-            platform.sendSystemMessage(p, line.getOriginalText());
+            platform.sendSystemMessage(ip, line);
         }
     }
 

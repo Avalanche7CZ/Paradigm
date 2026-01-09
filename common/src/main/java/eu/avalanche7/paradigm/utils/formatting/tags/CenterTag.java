@@ -3,7 +3,6 @@ package eu.avalanche7.paradigm.utils.formatting.tags;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.formatting.FormattingContext;
-import net.minecraft.text.Text;
 
 public class CenterTag implements Tag {
     private final IPlatformAdapter platformAdapter;
@@ -31,7 +30,7 @@ public class CenterTag implements Tag {
 
     @Override
     public void process(FormattingContext context, String arguments) {
-        centeredContent = platformAdapter.wrap(Text.literal(""));
+        centeredContent = platformAdapter.createEmptyComponent();
         context.pushComponent(centeredContent);
         context.pushStyle(context.getCurrentStyle());
     }
@@ -56,7 +55,7 @@ public class CenterTag implements Tag {
             IComponent rootComponent = context.getCurrentComponent();
 
             if (!paddingSpaces.isEmpty()) {
-                IComponent paddingComponent = platformAdapter.wrap(Text.literal(paddingSpaces));
+                IComponent paddingComponent = platformAdapter.createComponentFromLiteral(paddingSpaces);
                 rootComponent.append(paddingComponent);
             }
             rootComponent.append(centeredContent);

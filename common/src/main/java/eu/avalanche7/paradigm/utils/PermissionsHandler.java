@@ -143,7 +143,29 @@ public class PermissionsHandler {
         @Override
         public boolean hasPermission(ServerPlayerEntity player, String permission) {
             int requiredLevel = getPermissionLevelForVanilla(permission);
-            return player.hasPermissionLevel(requiredLevel);
+            return hasPermissionLevelSafe(player, requiredLevel);
+        }
+
+        private boolean hasPermissionLevelSafe(ServerPlayerEntity player, int level) {
+            try {
+                // Try direct call first (1.20.1, 1.21.1)
+                return player.hasPermissionLevel(level);
+            } catch (NoSuchMethodError e) {
+                // Fallback for 1.21.8+ - try reflection
+                try {
+                    java.lang.reflect.Method method = player.getClass().getMethod("hasPermissionLevel", int.class);
+                    return (boolean) method.invoke(player, level);
+                } catch (Exception ex) {
+                    // Final fallback - check if player is OP
+                    try {
+                        return player.getServer() != null &&
+                               player.getServer().getPlayerManager() != null &&
+                               player.getServer().getPlayerManager().isOperator(player.getGameProfile());
+                    } catch (Exception finalEx) {
+                        return false;
+                    }
+                }
+            }
         }
 
         private int getPermissionLevelForVanilla(String permission) {

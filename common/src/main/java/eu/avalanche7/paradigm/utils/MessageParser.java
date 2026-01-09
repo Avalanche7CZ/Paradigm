@@ -25,7 +25,7 @@ public class MessageParser {
 
     public IComponent parseMessage(String rawMessage, IPlayer player) {
         if (rawMessage == null) {
-            return platformAdapter.wrap(platformAdapter.createLiteralComponent(""));
+            return platformAdapter.createLiteralComponent("");
         }
 
         final String cacheKey = rawMessage + "_player_" + (player != null ? player.getUUID() : "null");
@@ -39,7 +39,7 @@ public class MessageParser {
     }
 
     private IComponent parseTagBasedMessage(String rawMessage, IPlayer player) {
-        String processedMessage = this.placeholders.replacePlaceholders(rawMessage, player != null ? player.getOriginalPlayer() : null);
+        String processedMessage = this.placeholders.replacePlaceholders(rawMessage, (net.minecraft.server.network.ServerPlayerEntity) (player != null ? player.getOriginalPlayer() : null));
         processedMessage = convertLegacyToNewFormat(processedMessage);
         return formattingParser.parse(processedMessage, player);
     }

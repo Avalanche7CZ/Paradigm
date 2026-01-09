@@ -22,13 +22,13 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.sound.SoundEvent;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
+import net.minecraft.text.*;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
 
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -44,7 +44,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     private final Placeholders placeholders;
     private final TaskScheduler taskScheduler;
     private final DebugLogger debugLogger;
-    private final Map<UUID, ServerBossBar> persistentBossBars = new HashMap<>();
+    private final Map<String, ServerBossBar> persistentBossBars = new HashMap<>();
     private ServerBossBar restartBossBar;
 
     public PlatformAdapterImpl(
@@ -75,43 +75,54 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
-    public List<ServerPlayerEntity> getOnlinePlayers() {
+    public List<IPlayer> getOnlinePlayers() {
         if (server == null || server.getPlayerManager() == null) return new ArrayList<>();
-        return server.getPlayerManager().getPlayerList();
+        return server.getPlayerManager().getPlayerList().stream()
+                .map(this::wrapPlayer)
+                .toList();
     }
 
     @Override
     @Nullable
-    public ServerPlayerEntity getPlayerByName(String name) {
+    public IPlayer getPlayerByName(String name) {
         if (server == null || server.getPlayerManager() == null) return null;
-        return server.getPlayerManager().getPlayer(name);
+        ServerPlayerEntity player = server.getPlayerManager().getPlayer(name);
+        return player != null ? wrapPlayer(player) : null;
     }
 
     @Override
     @Nullable
-    public ServerPlayerEntity getPlayerByUuid(UUID uuid) {
+    public IPlayer getPlayerByUuid(String uuid) {
         if (server == null || server.getPlayerManager() == null) return null;
-        return server.getPlayerManager().getPlayer(uuid);
+        try {
+            ServerPlayerEntity player = server.getPlayerManager().getPlayer(java.util.UUID.fromString(uuid));
+            return player != null ? wrapPlayer(player) : null;
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     @Override
-    public String getPlayerName(ServerPlayerEntity player) {
-        return player.getName().getString();
+    public String getPlayerName(IPlayer player) {
+        return player.getName();
     }
 
     @Override
-    public Text getPlayerDisplayName(ServerPlayerEntity player) {
-        return player.getDisplayName();
+    public IComponent getPlayerDisplayName(IPlayer player) {
+        if (player instanceof MinecraftPlayer mp) {
+            return wrap(mp.getHandle().getDisplayName());
+        }
+        return createLiteralComponent(player.getName());
     }
 
     @Override
-    public MutableText createLiteralComponent(String text) {
-        return Text.literal(text);
+    public IComponent createLiteralComponent(String text) {
+        return new MinecraftComponent(Text.literal(text));
     }
 
     @Override
-    public MutableText createTranslatableComponent(String key, Object... args) {
-        return Text.translatable(key, args);
+    public IComponent createTranslatableComponent(String key, Object... args) {
+        return new MinecraftComponent(Text.translatable(key, args));
     }
 
     @Override
@@ -121,77 +132,94 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
-    public boolean hasPermission(ServerPlayerEntity player, String permissionNode) {
-        return permissionsHandler.hasPermission(player, permissionNode);
+    public boolean hasPermission(IPlayer player, String permissionNode) {
+        if (player instanceof MinecraftPlayer mp) {
+            return permissionsHandler.hasPermission(mp.getHandle(), permissionNode);
+        }
+        return false;
     }
 
     @Override
-    public boolean hasPermission(ServerPlayerEntity player, String permissionNode, int vanillaLevel) {
-        return this.hasPermission(player, permissionNode) || player.hasPermissionLevel(vanillaLevel);
+    public boolean hasPermission(IPlayer player, String permissionNode, int vanillaLevel) {
+        if (player instanceof MinecraftPlayer mp) {
+            return this.hasPermission(player, permissionNode) || mp.getHandle().hasPermissionLevel(vanillaLevel);
+        }
+        return false;
     }
 
     @Override
-    public void sendSystemMessage(ServerPlayerEntity player, Text message) {
-        player.sendMessage(message);
-    }
-
-    @Override
-    public void broadcastSystemMessage(Text message) {
-        if (server != null && server.getPlayerManager() != null) {
-            server.getPlayerManager().broadcast(message, false);
+    public void sendSystemMessage(IPlayer player, IComponent message) {
+        if (player instanceof MinecraftPlayer mp && message instanceof MinecraftComponent mc) {
+            mp.getHandle().sendMessage(mc.getOriginalText());
         }
     }
 
     @Override
-    public void broadcastChatMessage(Text message) {
-        if (server != null && server.getPlayerManager() != null) {
-            server.getPlayerManager().broadcast(message, false);
+    public void broadcastSystemMessage(IComponent message) {
+        if (server != null && server.getPlayerManager() != null && message instanceof MinecraftComponent mc) {
+            server.getPlayerManager().broadcast(mc.getOriginalText(), false);
         }
     }
 
     @Override
-    public void broadcastSystemMessage(Text message, String header, String footer, @Nullable ServerPlayerEntity playerContext) {
+    public void broadcastChatMessage(IComponent message) {
+        if (server != null && server.getPlayerManager() != null && message instanceof MinecraftComponent mc) {
+            server.getPlayerManager().broadcast(mc.getOriginalText(), false);
+        }
+    }
+
+    @Override
+    public void broadcastSystemMessage(IComponent message, String header, String footer, @Nullable IPlayer playerContext) {
         if (messageParser == null || server == null) return;
 
         if (playerContext != null) {
-            IPlayer iPlayerContext = wrapPlayer(playerContext);
-            IComponent headerComp = messageParser.parseMessage(header, iPlayerContext);
-            IComponent footerComp = messageParser.parseMessage(footer, iPlayerContext);
+            IComponent headerComp = messageParser.parseMessage(header, playerContext);
+            IComponent footerComp = messageParser.parseMessage(footer, playerContext);
             getOnlinePlayers().forEach(p -> {
-                sendSystemMessage(p, headerComp.getOriginalText());
+                sendSystemMessage(p, headerComp);
                 sendSystemMessage(p, message);
-                sendSystemMessage(p, footerComp.getOriginalText());
+                sendSystemMessage(p, footerComp);
             });
         } else {
             getOnlinePlayers().forEach(p -> {
-                IPlayer iPlayer = wrapPlayer(p);
-                IComponent headerComp = messageParser.parseMessage(header, iPlayer);
-                IComponent footerComp = messageParser.parseMessage(footer, iPlayer);
-                sendSystemMessage(p, headerComp.getOriginalText());
+                IComponent headerComp = messageParser.parseMessage(header, p);
+                IComponent footerComp = messageParser.parseMessage(footer, p);
+                sendSystemMessage(p, headerComp);
                 sendSystemMessage(p, message);
-                sendSystemMessage(p, footerComp.getOriginalText());
+                sendSystemMessage(p, footerComp);
             });
         }
     }
 
     @Override
-    public void sendTitle(ServerPlayerEntity player, Text title, Text subtitle) {
-        player.networkHandler.sendPacket(new TitleS2CPacket(title));
-        if (subtitle != null && !subtitle.getString().isEmpty()) {
-            player.networkHandler.sendPacket(new SubtitleS2CPacket(subtitle));
+    public void sendTitle(IPlayer player, IComponent title, IComponent subtitle) {
+        if (player instanceof MinecraftPlayer mp) {
+            if (title instanceof MinecraftComponent titleMc) {
+                mp.getHandle().networkHandler.sendPacket(new TitleS2CPacket(titleMc.getOriginalText()));
+            }
+            if (subtitle != null && subtitle instanceof MinecraftComponent subtitleMc) {
+                String subStr = subtitleMc.getRawText();
+                if (!subStr.isEmpty()) {
+                    mp.getHandle().networkHandler.sendPacket(new SubtitleS2CPacket(subtitleMc.getOriginalText()));
+                }
+            }
         }
     }
 
     @Override
-    public void sendSubtitle(ServerPlayerEntity player, Text subtitle) {
-        if (subtitle != null && !subtitle.getString().isEmpty()) {
-            player.networkHandler.sendPacket(new SubtitleS2CPacket(subtitle));
+    public void sendSubtitle(IPlayer player, IComponent subtitle) {
+        if (player instanceof MinecraftPlayer mp && subtitle != null && subtitle instanceof MinecraftComponent mc) {
+            if (!mc.getRawText().isEmpty()) {
+                mp.getHandle().networkHandler.sendPacket(new SubtitleS2CPacket(mc.getOriginalText()));
+            }
         }
     }
 
     @Override
-    public void sendActionBar(ServerPlayerEntity player, Text message) {
-        player.networkHandler.sendPacket(new OverlayMessageS2CPacket(message));
+    public void sendActionBar(IPlayer player, IComponent message) {
+        if (player instanceof MinecraftPlayer mp && message instanceof MinecraftComponent mc) {
+            mp.getHandle().networkHandler.sendPacket(new OverlayMessageS2CPacket(mc.getOriginalText()));
+        }
     }
 
     private BossBar.Color toMinecraftColor(BossBarColor color) {
@@ -203,10 +231,15 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
-    public void sendBossBar(List<ServerPlayerEntity> players, Text message, int durationSeconds, BossBarColor color, float progress) {
-        ServerBossBar bossEvent = new ServerBossBar(message, toMinecraftColor(color), BossBar.Style.PROGRESS);
+    public void sendBossBar(List<IPlayer> players, IComponent message, int durationSeconds, BossBarColor color, float progress) {
+        if (!(message instanceof MinecraftComponent mc)) return;
+        ServerBossBar bossEvent = new ServerBossBar(mc.getOriginalText(), toMinecraftColor(color), BossBar.Style.PROGRESS);
         bossEvent.setPercent(progress);
-        players.forEach(bossEvent::addPlayer);
+        players.forEach(p -> {
+            if (p instanceof MinecraftPlayer mp) {
+                bossEvent.addPlayer(mp.getHandle());
+            }
+        });
         taskScheduler.schedule(() -> {
             bossEvent.clearPlayers();
             bossEvent.setVisible(false);
@@ -214,29 +247,35 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
-    public void showPersistentBossBar(ServerPlayerEntity player, Text message, BossBarColor color, BossBarOverlay overlay) {
+    public void showPersistentBossBar(IPlayer player, IComponent message, BossBarColor color, BossBarOverlay overlay) {
+        if (!(player instanceof MinecraftPlayer mp) || !(message instanceof MinecraftComponent mc)) return;
         removePersistentBossBar(player);
-        ServerBossBar bossEvent = new ServerBossBar(message, toMinecraftColor(color), toMinecraftOverlay(overlay));
-        bossEvent.addPlayer(player);
-        persistentBossBars.put(player.getUuid(), bossEvent);
+        ServerBossBar bossEvent = new ServerBossBar(mc.getOriginalText(), toMinecraftColor(color), toMinecraftOverlay(overlay));
+        bossEvent.addPlayer(mp.getHandle());
+        persistentBossBars.put(player.getUUID(), bossEvent);
     }
 
     @Override
-    public void removePersistentBossBar(ServerPlayerEntity player) {
-        ServerBossBar bossBar = persistentBossBars.remove(player.getUuid());
+    public void removePersistentBossBar(IPlayer player) {
+        ServerBossBar bossBar = persistentBossBars.remove(player.getUUID());
         if (bossBar != null) {
             bossBar.clearPlayers();
         }
     }
 
     @Override
-    public void createOrUpdateRestartBossBar(Text message, BossBarColor color, float progress) {
+    public void createOrUpdateRestartBossBar(IComponent message, BossBarColor color, float progress) {
+        if (!(message instanceof MinecraftComponent mc)) return;
         if (restartBossBar == null) {
-            restartBossBar = new ServerBossBar(message, toMinecraftColor(color), BossBar.Style.PROGRESS);
+            restartBossBar = new ServerBossBar(mc.getOriginalText(), toMinecraftColor(color), BossBar.Style.PROGRESS);
             restartBossBar.setVisible(true);
-            getOnlinePlayers().forEach(restartBossBar::addPlayer);
+            getOnlinePlayers().forEach(p -> {
+                if (p instanceof MinecraftPlayer mp) {
+                    restartBossBar.addPlayer(mp.getHandle());
+                }
+            });
         }
-        restartBossBar.setName(message);
+        restartBossBar.setName(mc.getOriginalText());
         restartBossBar.setPercent(progress);
     }
 
@@ -250,23 +289,27 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
-    public void clearTitles(ServerPlayerEntity player) {
-        player.networkHandler.sendPacket(new ClearTitleS2CPacket(true));
+    public void clearTitles(IPlayer player) {
+        if (player instanceof MinecraftPlayer mp) {
+            mp.getHandle().networkHandler.sendPacket(new ClearTitleS2CPacket(true));
+        }
     }
 
     @Override
-    public void playSound(ServerPlayerEntity player, String soundId, net.minecraft.sound.SoundCategory category, float volume, float pitch) {
+    public void playSound(IPlayer player, String soundId, net.minecraft.sound.SoundCategory category, float volume, float pitch) {
+        if (!(player instanceof MinecraftPlayer mp)) return;
         Identifier soundIdentifier = Identifier.tryParse(soundId);
         if (soundIdentifier == null) {
             soundIdentifier = Identifier.of("minecraft", soundId);
         }
         SoundEvent soundEvent = Registries.SOUND_EVENT.get(soundIdentifier);
         if (soundEvent != null) {
-            player.networkHandler.sendPacket(new PlaySoundS2CPacket(
+            ServerPlayerEntity handle = mp.getHandle();
+            handle.networkHandler.sendPacket(new PlaySoundS2CPacket(
                     Registries.SOUND_EVENT.getEntry(soundEvent),
                     category,
-                    player.getX(), player.getY(), player.getZ(),
-                    volume, pitch, player.getWorld().getRandom().nextLong()
+                    handle.getX(), handle.getY(), handle.getZ(),
+                    volume, pitch, handle.getWorld().getRandom().nextLong()
             ));
         }
     }
@@ -284,8 +327,12 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
-    public String replacePlaceholders(String text, @Nullable ServerPlayerEntity player) {
-        return placeholders.replacePlaceholders(text, player);
+    public String replacePlaceholders(String text, @Nullable IPlayer player) {
+        ServerPlayerEntity serverPlayer = null;
+        if (player instanceof MinecraftPlayer mp) {
+            serverPlayer = mp.getHandle();
+        }
+        return placeholders.replacePlaceholders(text, serverPlayer);
     }
 
     @Override
@@ -301,11 +348,13 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
-    public void shutdownServer(Text kickMessage) {
+    public void shutdownServer(IComponent kickMessage) {
         if (server != null) {
             try {
                 debugLogger.debugLog("PlatformAdapter: Initiating server shutdown sequence.");
-                server.getPlayerManager().broadcast(kickMessage, false);
+                if (kickMessage instanceof MinecraftComponent mc) {
+                    server.getPlayerManager().broadcast(mc.getOriginalText(), false);
+                }
                 server.saveAll(true, true, true);
                 server.stop(false);
                 taskScheduler.scheduleRaw(() -> {
@@ -322,23 +371,32 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
-    public void sendSuccess(ServerCommandSource source, Text message, boolean toOps) {
-        source.sendFeedback(() -> message, toOps);
+    public void sendSuccess(ServerCommandSource source, IComponent message, boolean toOps) {
+        if (message instanceof MinecraftComponent mc) {
+            source.sendFeedback(() -> mc.getOriginalText(), toOps);
+        }
     }
 
     @Override
-    public void sendFailure(ServerCommandSource source, Text message) {
-        source.sendError(message);
+    public void sendFailure(ServerCommandSource source, IComponent message) {
+        if (message instanceof MinecraftComponent mc) {
+            source.sendError(mc.getOriginalText());
+        }
     }
 
     @Override
-    public void teleportPlayer(ServerPlayerEntity player, double x, double y, double z) {
-        player.requestTeleport(x, y, z);
+    public void teleportPlayer(IPlayer player, double x, double y, double z) {
+        if (player instanceof MinecraftPlayer mp) {
+            mp.getHandle().requestTeleport(x, y, z);
+        }
     }
 
     @Override
-    public boolean playerHasItem(ServerPlayerEntity player, String itemId, int amount) {
+    public boolean playerHasItem(IPlayer player, String itemId, int amount) {
         if (player == null || itemId == null) {
+            return false;
+        }
+        if (!(player instanceof MinecraftPlayer mp)) {
             return false;
         }
         Item item = Registries.ITEM.get(Identifier.of(itemId));
@@ -346,23 +404,26 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             debugLogger.debugLog("PlatformAdapter: Could not find item with ID: " + itemId);
             return false;
         }
-        return player.getInventory().count(item) >= amount;
+        return mp.getHandle().getInventory().count(item) >= amount;
     }
 
     @Override
-    public boolean isPlayerInArea(ServerPlayerEntity player, String worldId, List<Integer> corner1, List<Integer> corner2) {
+    public boolean isPlayerInArea(IPlayer player, String worldId, List<Integer> corner1, List<Integer> corner2) {
         if (player == null || worldId == null || corner1 == null || corner2 == null || corner1.size() != 3 || corner2.size() != 3) {
+            return false;
+        }
+        if (!(player instanceof MinecraftPlayer mp)) {
             return false;
         }
 
         Identifier worldIdentifier = Identifier.of(worldId);
         net.minecraft.registry.RegistryKey<World> targetWorldKey = net.minecraft.registry.RegistryKey.of(RegistryKeys.WORLD, worldIdentifier);
 
-        if (!player.getWorld().getRegistryKey().equals(targetWorldKey)) {
+        if (!mp.getHandle().getWorld().getRegistryKey().equals(targetWorldKey)) {
             return false;
         }
 
-        Vec3d pos = player.getPos();
+        Vec3d pos = mp.getHandle().getPos();
         double pX = pos.getX();
         double pY = pos.getY();
         double pZ = pos.getZ();
@@ -453,27 +514,43 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public String getMinecraftVersion() {
-        return net.minecraft.SharedConstants.getGameVersion().getName();
+        return net.minecraft.SharedConstants.getGameVersion().name();
     }
 
     @Override
-    public net.minecraft.text.Style createStyleWithClickEvent(net.minecraft.text.Style baseStyle, String action, String value) {
-        net.minecraft.text.ClickEvent.Action clickAction = switch (action.toUpperCase()) {
-            case "OPEN_URL" -> net.minecraft.text.ClickEvent.Action.OPEN_URL;
-            case "RUN_COMMAND" -> net.minecraft.text.ClickEvent.Action.RUN_COMMAND;
-            case "SUGGEST_COMMAND" -> net.minecraft.text.ClickEvent.Action.SUGGEST_COMMAND;
-            case "CHANGE_PAGE" -> net.minecraft.text.ClickEvent.Action.CHANGE_PAGE;
-            case "COPY_TO_CLIPBOARD" -> net.minecraft.text.ClickEvent.Action.COPY_TO_CLIPBOARD;
-            default -> net.minecraft.text.ClickEvent.Action.SUGGEST_COMMAND;
+    public Style createStyleWithClickEvent(Style baseStyle, String action, String value) {
+        String val = value != null ? value : "";
+
+        ClickEvent clickEvent = switch (action.toUpperCase()) {
+            case "OPEN_URL" -> {
+                String url = val.startsWith("http://") || val.startsWith("https://")
+                        ? val
+                        : "https://" + val;
+                yield new ClickEvent.OpenUrl(URI.create(url));
+            }
+            case "RUN_COMMAND" -> new ClickEvent.RunCommand(val);
+            case "SUGGEST_COMMAND" -> new ClickEvent.SuggestCommand(val);
+            case "CHANGE_PAGE" -> new ClickEvent.ChangePage(parsePage(val));
+            case "COPY_TO_CLIPBOARD" -> new ClickEvent.CopyToClipboard(val);
+            default -> new ClickEvent.SuggestCommand(val);
         };
-        return baseStyle.withClickEvent(new net.minecraft.text.ClickEvent(clickAction, value));
+
+        return baseStyle.withClickEvent(clickEvent);
+    }
+
+    private static int parsePage(String value) {
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException e) {
+            return 1;
+        }
     }
 
     @Override
-    public net.minecraft.text.Style createStyleWithHoverEvent(net.minecraft.text.Style baseStyle, Text hoverText) {
-        return baseStyle.withHoverEvent(new net.minecraft.text.HoverEvent(
-            net.minecraft.text.HoverEvent.Action.SHOW_TEXT,
-            hoverText
-        ));
+    public Style createStyleWithHoverEvent(Style baseStyle, Text hoverText) {
+        HoverEvent hoverEvent = new HoverEvent.ShowText(
+                hoverText != null ? hoverText : Text.empty()
+        );
+        return baseStyle.withHoverEvent(hoverEvent);
     }
 }
