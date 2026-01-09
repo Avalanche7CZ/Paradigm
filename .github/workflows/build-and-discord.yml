@@ -2,7 +2,7 @@ name: Build and Auto-Release
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main" ]
   workflow_dispatch:
 
 jobs:
@@ -80,7 +80,7 @@ jobs:
           ### Built Versions
           ${{ steps.collect-jars.outputs.jar_list }}
           
-          ### ℹBuild Info
+          ### Build Info
           - **Commit:** `${{ github.sha }}`
           - **Author:** ${{ github.actor }}
           - **Branch:** ${{ github.ref_name }}
@@ -90,13 +90,6 @@ jobs:
           This is a development build and may contain bugs. Use at your own risk!
           EOF
 
-      - name: Delete old dev releases
-        uses: dev-drprasad/delete-older-releases@v0.3.2
-        with:
-          keep_latest: 3
-          delete_tag_pattern: dev
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Release
         id: create-release
@@ -112,10 +105,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Send Discord Notification
-        if: ${{ secrets.DISCORD_WEBHOOK_URL != '' }}
+        continue-on-error: true
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
+          # Skip if webhook is not set
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "⚠️ DISCORD_WEBHOOK_URL not set, skipping Discord notification"
+            exit 0
+          fi
+          
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ steps.version-info.outputs.tag }}"
           COMMIT_URL="https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
           
@@ -176,4 +175,5 @@ jobs:
             -H 'Content-type: application/json' \
             --data @discord_payload.json \
             "$DISCORD_WEBHOOK_URL"
+
 
