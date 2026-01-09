@@ -26,24 +26,30 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x ./gradlew
 
+      - name: Patch gradle.properties for CI (remove local org.gradle.java.home)
+        run: |
+          if [ -f gradle.properties ]; then
+            sed -i.bak '/^org\.gradle\.java\.home=/d' gradle.properties
+          fi
+
       - name: Build all versions
-        run: ./gradlew build --parallel
+        run: ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" build --parallel
 
       - name: Collect JAR files
         id: collect-jars
         run: |
           mkdir -p release-jars
-          
-          # Find all JAR files (excluding sources and common)
+
+          # Find all JAR files (excluding sources)
           find Fabric-1.20.1/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \;
           find Fabric-1.21.1/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \;
           find Fabric-1.21.8/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \;
           find forge-1.21.1/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \;
-          
+
           # Count files
           JAR_COUNT=$(ls -1 release-jars/*.jar 2>/dev/null | wc -l)
           echo "jar_count=$JAR_COUNT" >> $GITHUB_OUTPUT
-          
+
           # List JARs for release notes
           echo "jar_list<<EOF" >> $GITHUB_OUTPUT
           ls -1 release-jars/*.jar | xargs -n1 basename >> $GITHUB_OUTPUT
@@ -54,14 +60,14 @@ jobs:
         run: |
           COMMIT_SHORT="${{ github.sha }}"
           COMMIT_SHORT="${COMMIT_SHORT:0:7}"
-          
+
           # Try to get version from version.txt or use default
           if [ -f version.txt ]; then
             VERSION=$(cat version.txt | tr -d '\n')
           else
             VERSION="2.0.0b"
           fi
-          
+
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "commit_short=$COMMIT_SHORT" >> $GITHUB_OUTPUT
           echo "tag=dev-$COMMIT_SHORT" >> $GITHUB_OUTPUT
@@ -71,25 +77,24 @@ jobs:
         run: |
           cat > release_notes.md << 'EOF'
           ## Staging Dev Build ${{ steps.version-info.outputs.commit_short }}
-          
-          This is an automatic **pre-release dev build** of commit `${{ steps.version-info.outputs.commit_short }}`
-          
+
+          This is an automatic pre-release dev build of commit `${{ steps.version-info.outputs.commit_short }}`
+
           With this release you can test ahead of time the next Paradigm release candidate.
-          **This is the most up-to-date build available.**
-          
-          ### Built Versions
+          This is the most up-to-date build available.
+
+          Built files:
           ${{ steps.collect-jars.outputs.jar_list }}
-          
-          ### Build Info
-          - **Commit:** `${{ github.sha }}`
-          - **Author:** ${{ github.actor }}
-          - **Branch:** ${{ github.ref_name }}
-          - **Build Date:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-          
-          ### Note
+
+          Build info:
+          - Commit: `${{ github.sha }}`
+          - Author: ${{ github.actor }}
+          - Branch: ${{ github.ref_name }}
+          - Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+
+          Note:
           This is a development build and may contain bugs. Use at your own risk!
           EOF
-
 
       - name: Create GitHub Release
         id: create-release
@@ -111,27 +116,26 @@ jobs:
         run: |
           # Skip if webhook is not set
           if [ -z "$DISCORD_WEBHOOK_URL" ]; then
-            echo "⚠️ DISCORD_WEBHOOK_URL not set, skipping Discord notification"
+            echo "DISCORD_WEBHOOK_URL not set, skipping Discord notification"
             exit 0
           fi
-          
+
           RELEASE_URL="https://github.com/${{ github.repository }}/releases/tag/${{ steps.version-info.outputs.tag }}"
           COMMIT_URL="https://github.com/${{ github.repository }}/commit/${{ github.sha }}"
-          
+
           # Build JAR list for Discord
           JAR_LIST=""
           for jar in release-jars/*.jar; do
             JAR_NAME=$(basename "$jar")
-            JAR_LIST="$JAR_LIST• $JAR_NAME\n"
+            JAR_LIST="$JAR_LIST- $JAR_NAME\n"
           done
-          
-          # Create Discord payload using printf to avoid escaping issues
+
           cat > discord_payload.json << DISCORD_EOF
           {
             "embeds": [
               {
                 "title": "New Dev Build Released!",
-                "description": "**Paradigm** dev build \`${{ steps.version-info.outputs.commit_short }}\` is now available",
+                "description": "Paradigm dev build \`${{ steps.version-info.outputs.commit_short }}\` is now available",
                 "url": "$RELEASE_URL",
                 "color": 3066993,
                 "fields": [
@@ -170,10 +174,8 @@ jobs:
             "username": "Paradigm Builder Bot"
           }
           DISCORD_EOF
-          
+
           curl -X POST \
             -H 'Content-type: application/json' \
             --data @discord_payload.json \
             "$DISCORD_WEBHOOK_URL"
-
-
