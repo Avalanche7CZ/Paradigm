@@ -61,7 +61,13 @@
     "hover_accept_invite": "Нажмите, чтобы принять приглашение",
     "hover_deny_invite": "Нажмите, чтобы отклонить приглашение",
     "hover_accept_request": "Нажмите, чтобы принять запрос на присоединение",
-    "hover_deny_request": "Нажмите, чтобы отклонить запрос на присоединение"
+    "hover_deny_request": "Нажмите, чтобы отклонить запрос на присоединение",
+    "kick_not_found": "Игрок не найден.",
+    "kick_not_member": "Этот игрок не состоит в вашей группе.",
+    "kick_cannot_self": "Вы не можете кикнуть сами себя. Используйте /groupchat leave.",
+    "kick_success_target": "Вас кикнули из группы {group_name}.",
+    "kick_success_owner": "Игрок {player_name} был кикнут из группы.",
+    "kick_success_notify": "Игрок {player_name} был кикнут из группы."
   },
 
   "mention": {

@@ -3,12 +3,9 @@ package eu.avalanche7.paradigm.utils;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
-import eu.avalanche7.paradigm.ParadigmConstants;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.server.MinecraftServer;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -32,19 +29,34 @@ public class TelemetryReporter {
     }
 
     public void start() {
-        if (!MainConfigHandler.CONFIG.telemetryEnable.get()) {
+        if (!MainConfigHandler.getConfig().telemetryEnable.value) {
             services.getDebugLogger().debugLog("TelemetryReporter: disabled in config");
             return;
         }
 
-        String serverId = MainConfigHandler.CONFIG.telemetryServerId.get();
+        String serverId = MainConfigHandler.getConfig().telemetryServerId.value;
         if (serverId == null || serverId.isBlank()) {
-            MainConfigHandler.CONFIG.telemetryServerId.value = UUID.randomUUID().toString();
-            MainConfigHandler.save();
+            MainConfigHandler.Config config = MainConfigHandler.getConfig();
+            config.telemetryServerId.value = UUID.randomUUID().toString();
+            try {
+                java.nio.file.Path configDir;
+                try {
+                    configDir = services.getPlatformAdapter().getConfig().getConfigDirectory();
+                } catch (Throwable t) {
+                    configDir = java.nio.file.Path.of(System.getProperty("user.dir")).resolve("config");
+                }
+                java.nio.file.Path mainConfigFile = configDir.resolve("paradigm").resolve("main.json");
+                java.nio.file.Files.createDirectories(mainConfigFile.getParent());
+                try (java.io.Writer writer = java.nio.file.Files.newBufferedWriter(mainConfigFile, java.nio.charset.StandardCharsets.UTF_8)) {
+                    new com.google.gson.GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create().toJson(config, writer);
+                }
+            } catch (Exception e) {
+                services.getDebugLogger().debugLog("TelemetryReporter: failed to save server ID: " + e.getMessage());
+            }
             services.getDebugLogger().debugLog("TelemetryReporter: generated new server ID");
         }
 
-        Integer intervalConfig = MainConfigHandler.CONFIG.telemetryIntervalSeconds.get();
+        Integer intervalConfig = MainConfigHandler.getConfig().telemetryIntervalSeconds.value;
         int interval = Math.max(60, intervalConfig != null ? intervalConfig : 900);
         active = true;
         services.getTaskScheduler().scheduleAtFixedRate(this::reportOnceSafe, 10, interval, TimeUnit.SECONDS);
@@ -69,21 +81,26 @@ public class TelemetryReporter {
         IPlatformAdapter platform = services.getPlatformAdapter();
         int online = platform.getOnlinePlayers().size();
         int maxPlayers = 0;
-        MinecraftServer ms = platform.getMinecraftServer();
-        if (ms != null) {
-            maxPlayers = ms.getMaxPlayerCount();
+        try {
+            Object server = platform.getMinecraftServer();
+            if (server != null) {
+                try {
+                    var m = server.getClass().getMethod("getMaxPlayers");
+                    Object v = m.invoke(server);
+                    if (v instanceof Integer i) maxPlayers = i;
+                } catch (Throwable ignored) {}
+            }
+        } catch (Throwable ignored) {
         }
 
         String mcVersion = platform.getMinecraftVersion();
         if (mcVersion == null || mcVersion.isBlank()) mcVersion = "unknown";
 
-        String modVersion = FabricLoader.getInstance().getModContainer("paradigm")
-                .map(c -> c.getMetadata().getVersion().getFriendlyString())
-                .orElse("unknown");
+        String modVersion = readBundledVersionFallback();
 
         JsonObject payload = new JsonObject();
         payload.addProperty("timestamp", Instant.now().toString());
-        payload.addProperty("serverId", MainConfigHandler.CONFIG.telemetryServerId.get());
+        payload.addProperty("serverId", MainConfigHandler.getConfig().telemetryServerId.value);
         payload.addProperty("mcVersion", mcVersion);
         payload.addProperty("modVersion", modVersion);
         payload.addProperty("onlinePlayers", online);
@@ -125,5 +142,22 @@ public class TelemetryReporter {
             }
         }
     }
-}
 
+    private static String readBundledVersionFallback() {
+        try (java.io.InputStream in = TelemetryReporter.class.getResourceAsStream("/version.txt")) {
+            if (in != null) {
+                String v = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
+                if (!v.isBlank()) return v;
+            }
+        } catch (Throwable ignored) {}
+        try {
+            Package p = TelemetryReporter.class.getPackage();
+            if (p != null) {
+                String v = p.getImplementationVersion();
+                if (v != null && !v.isBlank()) return v;
+            }
+        } catch (Throwable ignored) {}
+
+        return "unknown";
+    }
+}

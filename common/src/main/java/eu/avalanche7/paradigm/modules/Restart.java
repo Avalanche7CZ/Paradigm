@@ -1,18 +1,13 @@
 package eu.avalanche7.paradigm.modules;
 
-import com.mojang.brigadier.CommandDispatcher;
 import eu.avalanche7.paradigm.configs.RestartConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
-import net.minecraft.command.CommandRegistryAccess;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.Text;
 
 import java.text.DecimalFormat;
 import java.text.ParseException;
@@ -88,21 +83,18 @@ public class Restart implements ParadigmModule {
             services.getDebugLogger().debugLog(NAME + ": Main restart task future cancelled.");
         }
         mainTaskFuture = null;
-        // cancel queued warning tasks
         for (ScheduledFuture<?> f : warningFutures) {
             if (f != null && !f.isDone()) {
                 f.cancel(false);
             }
         }
         warningFutures.clear();
-        // cancel pre-restart command tasks
         for (ScheduledFuture<?> f : preCommandFutures) {
             if (f != null && !f.isDone()) {
                 f.cancel(false);
             }
         }
         preCommandFutures.clear();
-        // cancel shutdown future
         if (shutdownFuture != null && !shutdownFuture.isDone()) {
             shutdownFuture.cancel(false);
         }
@@ -115,12 +107,14 @@ public class Restart implements ParadigmModule {
     }
 
     @Override
-    public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {
-        dispatcher.register(CommandManager.literal("restart")
-                .requires(source -> source.hasPermissionLevel(2) || (source.isExecutedByPlayer() && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.RESTART_MANAGE_PERMISSION)))
-                .then(CommandManager.literal("now")
+    public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
+        ICommandBuilder cmd = platform.createCommandBuilder()
+                .literal("restart")
+                .requires(source -> source.hasPermissionLevel(2) || (source.getPlayer() != null && platform.hasPermission(source.getPlayer(), PermissionsHandler.RESTART_MANAGE_PERMISSION)))
+                .then(platform.createCommandBuilder()
+                        .literal("now")
                         .executes(context -> {
-                            services.getDebugLogger().debugLog(NAME + ": /restart now command executed by " + context.getSource().getDisplayName().getString());
+                            services.getDebugLogger().debugLog(NAME + ": /restart now command executed");
                             if (restartInProgress.get()) {
                                 services.getDebugLogger().debugLog(NAME + ": /restart now overriding active restart sequence.");
                                 cancelAndCleanup();
@@ -129,9 +123,10 @@ public class Restart implements ParadigmModule {
                             platform.sendSuccess(context.getSource(), platform.createLiteralComponent("Initiating immediate 60-second restart sequence."), true);
                             return 1;
                         }))
-                .then(CommandManager.literal("cancel")
+                .then(platform.createCommandBuilder()
+                        .literal("cancel")
                         .executes(context -> {
-                            services.getDebugLogger().debugLog(NAME + ": /restart cancel command executed by " + context.getSource().getDisplayName().getString());
+                            services.getDebugLogger().debugLog(NAME + ": /restart cancel command executed");
                             if (restartInProgress.get()) {
                                 cancelAndCleanup();
                                 scheduleNextRestart(services);
@@ -140,8 +135,9 @@ public class Restart implements ParadigmModule {
                                 platform.sendFailure(context.getSource(), platform.createLiteralComponent("No restart is currently scheduled to be cancelled."));
                             }
                             return 1;
-                        }))
-        );
+                        }));
+
+        platform.registerCommand(cmd);
     }
 
     @Override
@@ -285,10 +281,11 @@ public class Restart implements ParadigmModule {
                             String perPlayer = platform.replacePlaceholders(raw, sp);
                             try {
                                 Object orig = sp.getOriginalPlayer();
-                                if (orig instanceof ServerPlayerEntity spe) {
-                                    platform.executeCommandAs(spe.getCommandSource(), perPlayer);
+                                if (orig != null) {
+                                    ICommandSource perPlayerSource = platform.wrapCommandSource(orig);
+                                    platform.executeCommandAs(perPlayerSource, perPlayer);
                                 } else {
-                                    services.getDebugLogger().debugLog(NAME + ": Skipping player-specific pre-restart command for player without server source: " + platform.getPlayerName(sp));
+                                    platform.executeCommandAsConsole(perPlayer);
                                 }
                             } catch (Exception ex) {
                                 services.getDebugLogger().debugLog(NAME + ": Failed executing as player " + platform.getPlayerName(sp) + ": " + perPlayer, ex);
@@ -335,7 +332,7 @@ public class Restart implements ParadigmModule {
             }
 
             if (config.playSoundEnabled.value && timeLeftSeconds <= config.playSoundFirstTime.value) {
-                platform.playSound(player, "minecraft:block.note_block.pling", net.minecraft.sound.SoundCategory.MASTER, 1.0f, 1.0f);
+                platform.playSound(player, "minecraft:block.note_block.pling", "master", 1.0f, 1.0f);
             }
         }
 

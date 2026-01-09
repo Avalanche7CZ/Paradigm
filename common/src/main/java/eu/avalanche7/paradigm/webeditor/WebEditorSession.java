@@ -28,7 +28,6 @@ package eu.avalanche7.paradigm.webeditor;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
-import eu.avalanche7.paradigm.ParadigmConstants;
 import eu.avalanche7.paradigm.configs.*;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
@@ -87,7 +86,7 @@ public class WebEditorSession {
 
     private boolean debugEnabled() {
         try {
-            return MainConfigHandler.CONFIG.debugEnable.get();
+            return MainConfigHandler.getConfig().debugEnable.value;
         } catch (Throwable ignored) {
             return false;
         }
@@ -129,7 +128,7 @@ public class WebEditorSession {
 
     private String getEditorBaseUrl() {
         try {
-            boolean useTestUrl = MainConfigHandler.CONFIG.webEditorTestUrl.get();
+            boolean useTestUrl = MainConfigHandler.getConfig().webEditorTestUrl.value;
             if (useTestUrl) {
                 return "http://localhost:8083/editor/";
             }
@@ -251,16 +250,15 @@ public class WebEditorSession {
             }
 
             try { services.getLogger().info("Paradigm WebEditor: Uploaded follow-up payload to Bytebin: key={}, url={}{}", key, BYTEBIN_BASE_URL, key); } catch (Throwable ignored) {}
-            if (MainConfigHandler.CONFIG != null) {
-                boolean dbg = false;
-                try { dbg = MainConfigHandler.CONFIG.debugEnable.get(); } catch (Throwable ignored) {}
+            try {
+                boolean dbg = MainConfigHandler.getConfig().debugEnable.value;
                 if (dbg) {
                     boolean accessible = verifyBytebinObjectAccessible(key);
                     try { services.getLogger().info("Paradigm WebEditor: Verified follow-up key accessibility: {} (key={})", accessible, key); } catch (Throwable ignored) {}
                     boolean contentMatch = verifyBytebinContentMatches(key, json);
                     try { services.getLogger().info("Paradigm WebEditor: Verified follow-up content integrity: {} (key={}, sha1={})", contentMatch, key, sha1Hex(json)); } catch (Throwable ignored) {}
                 }
-            }
+            } catch (Throwable ignored) {}
             return key;
         } catch (Exception e) {
             try { services.getLogger().warn("Paradigm WebEditor: Failed to upload payload: {}", e.toString()); } catch (Throwable ignored) {}
@@ -276,26 +274,32 @@ public class WebEditorSession {
         meta.addProperty("plugin", "Paradigm");
         String version = "unknown";
         try {
-            try {
-                version = net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer(ParadigmConstants.MOD_ID)
-                        .map(c -> c.getMetadata().getVersion().getFriendlyString()).orElse("unknown");
-            } catch (Throwable ignored) {
-                version = "unknown";
+            // Prefer bundled version.txt (works on Fabric + Forge)
+            try (java.io.InputStream in = WebEditorSession.class.getResourceAsStream("/version.txt")) {
+                if (in != null) {
+                    String v = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8).trim();
+                    if (!v.isBlank()) version = v;
+                }
             }
-         } catch (Throwable ignored) {}
-         meta.addProperty("version", version);
-         root.add("metadata", meta);
+        } catch (Throwable ignored) {}
+        meta.addProperty("version", version);
+        root.add("metadata", meta);
 
-         JsonObject files = new JsonObject();
-         files.add("main", new com.google.gson.Gson().toJsonTree(MainConfigHandler.CONFIG));
-         files.add("announcements", new com.google.gson.Gson().toJsonTree(AnnouncementsConfigHandler.CONFIG));
-         files.add("chat", new com.google.gson.Gson().toJsonTree(ChatConfigHandler.CONFIG));
-         files.add("motd", new com.google.gson.Gson().toJsonTree(MOTDConfigHandler.getConfig()));
-         files.add("mentions", new com.google.gson.Gson().toJsonTree(MentionConfigHandler.CONFIG));
-         files.add("restart", new com.google.gson.Gson().toJsonTree(RestartConfigHandler.CONFIG));
+        JsonObject files = new JsonObject();
+        files.add("main", new com.google.gson.Gson().toJsonTree(MainConfigHandler.getConfig()));
+        files.add("announcements", new com.google.gson.Gson().toJsonTree(AnnouncementsConfigHandler.getConfig()));
+        files.add("chat", new com.google.gson.Gson().toJsonTree(ChatConfigHandler.getConfig()));
+        files.add("motd", new com.google.gson.Gson().toJsonTree(MOTDConfigHandler.getConfig()));
+        files.add("mentions", new com.google.gson.Gson().toJsonTree(MentionConfigHandler.getConfig()));
+        files.add("restart", new com.google.gson.Gson().toJsonTree(RestartConfigHandler.getConfig()));
 
          try {
-            java.nio.file.Path cfgDir = net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir().resolve("paradigm");
+            java.nio.file.Path cfgDir;
+            try {
+                cfgDir = services.getPlatformAdapter().getConfig().getConfigDirectory().resolve("paradigm");
+            } catch (Throwable t) {
+                cfgDir = java.nio.file.Path.of(System.getProperty("user.dir")).resolve("config").resolve("paradigm");
+            }
             if (java.nio.file.Files.isDirectory(cfgDir)) {
                 try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.list(cfgDir)) {
                     stream.filter(java.nio.file.Files::isRegularFile)
@@ -320,7 +324,12 @@ public class WebEditorSession {
             }
          } catch (Throwable ignored) {}
          try {
-            java.nio.file.Path commandsDir = net.fabricmc.loader.api.FabricLoader.getInstance().getConfigDir().resolve("paradigm").resolve("commands");
+            java.nio.file.Path commandsDir;
+            try {
+                commandsDir = services.getPlatformAdapter().getConfig().getConfigDirectory().resolve("paradigm").resolve("commands");
+            } catch (Throwable t) {
+                commandsDir = java.nio.file.Path.of(System.getProperty("user.dir")).resolve("config").resolve("paradigm").resolve("commands");
+            }
              JsonObject ccRoot = new JsonObject();
              JsonObject ccFiles = new JsonObject();
              JsonArray ccAll = new JsonArray();
@@ -341,7 +350,6 @@ public class WebEditorSession {
                                              ccAll.add(el);
                                          }
                                      } else if (parsed != null && parsed.isJsonObject()) {
-                                         // tolerate single-object file by wrapping into array
                                          JsonArray arr = new JsonArray();
                                          arr.add(parsed);
                                          ccFiles.add(base, arr);

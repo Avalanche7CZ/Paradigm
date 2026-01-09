@@ -1,24 +1,30 @@
 package eu.avalanche7.paradigm.utils;
 
-import net.minecraft.server.MinecraftServer;
-
+import java.lang.reflect.Method;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 public class TaskScheduler {
 
     private ScheduledExecutorService executorService;
-    private final AtomicReference<MinecraftServer> serverRef = new AtomicReference<>(null);
+    private final AtomicReference<Object> serverRef = new AtomicReference<>(null);
     private final DebugLogger debugLogger;
+
+    /**
+     * Optional hook provided by platform to schedule work onto the main thread.
+     * If null, we fall back to reflection on the server object (execute(Runnable)).
+     */
+    private volatile Consumer<Runnable> mainThreadExecutor;
 
     public TaskScheduler(DebugLogger debugLogger) {
         this.debugLogger = debugLogger;
     }
 
-    public void initialize(MinecraftServer serverInstance) {
+    public void initialize(Object serverInstance) {
         if (this.executorService == null || this.executorService.isShutdown()) {
             this.executorService = Executors.newScheduledThreadPool(2);
             debugLogger.debugLog("TaskScheduler: Executor service created.");
@@ -29,6 +35,11 @@ public class TaskScheduler {
         } else {
             debugLogger.debugLog("TaskScheduler: Initialized with null server instance (server might not be ready).");
         }
+    }
+
+    /** Platform should call this once it has access to main-thread scheduling. */
+    public void setMainThreadExecutor(Consumer<Runnable> executor) {
+        this.mainThreadExecutor = executor;
     }
 
     public ScheduledFuture<?> scheduleAtFixedRate(Runnable task, long initialDelay, long period, TimeUnit unit) {
@@ -56,15 +67,26 @@ public class TaskScheduler {
     }
 
     private void syncExecute(Runnable task) {
-        MinecraftServer currentServer = serverRef.get();
-        if (currentServer != null && !currentServer.isStopped()) {
-            currentServer.execute(task);
-        } else {
-            if (currentServer != null) {
-                debugLogger.debugLog("TaskScheduler: Server instance is stopped, unable to execute task synchronously.");
-            }
+        if (task == null) return;
+
+        Consumer<Runnable> exec = this.mainThreadExecutor;
+        if (exec != null) {
+            exec.accept(task);
+            return;
+        }
+
+        Object currentServer = serverRef.get();
+        if (currentServer == null) return;
+
+        // Last-resort reflection: MinecraftServer#execute(Runnable)
+        try {
+            Method m = currentServer.getClass().getMethod("execute", Runnable.class);
+            m.invoke(currentServer, task);
+        } catch (Throwable t) {
+            debugLogger.debugLog("TaskScheduler: Failed to execute task on main thread: " + t.getMessage());
         }
     }
+
     public void onServerStopping() {
         if (executorService == null) {
             debugLogger.debugLog("TaskScheduler: Executor service was null, nothing to shut down.");
@@ -91,7 +113,6 @@ public class TaskScheduler {
     }
 
     public boolean isServerAvailable() {
-        MinecraftServer currentServer = serverRef.get();
-        return currentServer != null && !currentServer.isStopped();
+        return serverRef.get() != null;
     }
 }

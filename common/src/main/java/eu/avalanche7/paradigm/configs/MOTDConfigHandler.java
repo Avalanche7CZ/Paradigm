@@ -1,134 +1,84 @@
 package eu.avalanche7.paradigm.configs;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
+import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.utils.DebugLogger;
-import eu.avalanche7.paradigm.utils.JsonValidator;
-import net.fabricmc.loader.api.FabricLoader;
-import com.mojang.logging.LogUtils;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.io.Reader;
-import java.io.Writer;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import java.lang.reflect.Field;
 import java.util.List;
 
-public class MOTDConfigHandler {
+public class MOTDConfigHandler extends BaseConfigHandler<MOTDConfigHandler.Config> {
 
-    private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
-    private static final Logger LOGGER = LogUtils.getLogger();
-    private static final Path CONFIG_FILE_PATH = FabricLoader.getInstance().getConfigDir().resolve("paradigm/motd.json");
-    private static volatile Config config = null;
-    private static JsonValidator jsonValidator;
-    private static volatile boolean isLoaded = false;
+    private static final Logger LOGGER = LoggerFactory.getLogger(MOTDConfigHandler.class);
+    private static MOTDConfigHandler INSTANCE;
+    private Config config;
 
-    public static void setJsonValidator(DebugLogger debugLogger) {
-        jsonValidator = new JsonValidator(debugLogger);
+    private MOTDConfigHandler(IConfig platformConfig) {
+        super(LOGGER, platformConfig, "motd.json");
     }
 
-    public static void loadConfig() {
-        Config defaultConfig = new Config();
-        boolean shouldSaveMerged = false;
-
-        if (Files.exists(CONFIG_FILE_PATH)) {
-            try (Reader reader = Files.newBufferedReader(CONFIG_FILE_PATH, StandardCharsets.UTF_8)) {
-                StringBuilder content = new StringBuilder();
-                int c;
-                while ((c = reader.read()) != -1) {
-                    content.append((char) c);
+    public static void init(IConfig platformConfig, DebugLogger debugLogger) {
+        if (INSTANCE == null) {
+            synchronized (MOTDConfigHandler.class) {
+                if (INSTANCE == null) {
+                    INSTANCE = new MOTDConfigHandler(platformConfig);
+                    INSTANCE.setJsonValidator(debugLogger);
+                    INSTANCE.config = INSTANCE.load();
                 }
-
-                if (jsonValidator != null) {
-                    JsonValidator.ValidationResult result = jsonValidator.validateAndFix(content.toString());
-                    if (result.isValid()) {
-                        if (result.hasIssues()) {
-                            LOGGER.info("[Paradigm] Fixed JSON syntax issues in motd.json: " + result.getIssuesSummary());
-                            LOGGER.info("[Paradigm] Saving corrected version to preserve user values");
-                            try (Writer writer = Files.newBufferedWriter(CONFIG_FILE_PATH, StandardCharsets.UTF_8)) {
-                                writer.write(result.getFixedJson());
-                                LOGGER.info("[Paradigm] Saved corrected motd.json with preserved user values");
-                            } catch (IOException saveError) {
-                                LOGGER.warn("[Paradigm] Failed to save corrected file: " + saveError.getMessage());
-                            }
-                        }
-
-                        Config loadedConfig = GSON.fromJson(result.getFixedJson(), Config.class);
-                        if (loadedConfig != null) {
-                            if (loadedConfig.motdLines != null) {
-                                defaultConfig.motdLines = loadedConfig.motdLines;
-                            }
-                            config = defaultConfig;
-                            shouldSaveMerged = true;
-                            LOGGER.info("[Paradigm] Successfully loaded motd.json configuration");
-                        } else {
-                            LOGGER.warn("[Paradigm] MOTD configuration is null or invalid. Using defaults for this session.");
-                            LOGGER.warn("[Paradigm] Your file has NOT been modified. Please check the file manually.");
-                            config = defaultConfig;
-                        }
-                    } else {
-                        LOGGER.warn("[Paradigm] Critical JSON syntax errors in motd.json: " + result.getMessage());
-                        LOGGER.warn("[Paradigm] Please fix the JSON syntax manually. Using default values for this session.");
-                        LOGGER.warn("[Paradigm] Your file has NOT been modified - fix the syntax and restart the server.");
-                        config = defaultConfig;
-                    }
-                } else {
-                    Config loadedConfig = GSON.fromJson(content.toString(), Config.class);
-                    if (loadedConfig != null) {
-                        if (loadedConfig.motdLines != null) {
-                            defaultConfig.motdLines = loadedConfig.motdLines;
-                        }
-                        config = defaultConfig;
-                        shouldSaveMerged = true;
-                    } else {
-                        config = defaultConfig;
-                    }
-                }
-            } catch (Exception e) {
-                LOGGER.error("[Paradigm] Failed to load MOTD configuration. Using default values for this session.", e);
-                LOGGER.warn("[Paradigm] Your file has NOT been modified. Please check the file manually.");
-                config = defaultConfig;
             }
-        } else {
-            LOGGER.info("[Paradigm] motd.json not found, generating with default values.");
-            config = defaultConfig;
-            saveConfig();
-        }
-
-        if (shouldSaveMerged) {
-            saveConfig();
-            LOGGER.info("[Paradigm] Synchronized motd.json with new defaults while preserving user values.");
-        }
-        isLoaded = true;
-    }
-
-    public static void saveConfig() {
-        if (config == null) {
-            LOGGER.warn("Config object is null. Initializing with default values before saving.");
-            config = new Config();
-        }
-        try {
-            Files.createDirectories(CONFIG_FILE_PATH.getParent());
-            try (Writer writer = Files.newBufferedWriter(CONFIG_FILE_PATH, StandardCharsets.UTF_8)) {
-                GSON.toJson(config, writer);
-                LOGGER.info("MOTD configuration saved successfully.");
-            }
-        } catch (IOException e) {
-            LOGGER.error("Failed to save MOTD configuration.", e);
         }
     }
 
     public static Config getConfig() {
-        if (!isLoaded || config == null) {
-            synchronized (MOTDConfigHandler.class) {
-                if (!isLoaded || config == null) {
-                    loadConfig();
+        if (INSTANCE == null) {
+            throw new IllegalStateException("MOTDConfigHandler not initialized! Call init() first.");
+        }
+        return INSTANCE.config;
+    }
+
+    public static void reload() {
+        if (INSTANCE != null) {
+            INSTANCE.config = INSTANCE.load();
+        }
+    }
+
+    @Override
+    protected Config createDefaultConfig() {
+        return new Config();
+    }
+
+    @Override
+    protected Class<Config> getConfigClass() {
+        return Config.class;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    protected void mergeConfigs(Config defaults, Config loaded) {
+        try {
+            if (loaded.motdLines != null) {
+                defaults.motdLines = loaded.motdLines;
+                logger.debug("[Paradigm] Preserved user motdLines");
+            }
+            Field[] fields = Config.class.getDeclaredFields();
+            for (Field field : fields) {
+                if (field.getType() == ConfigEntry.class) {
+                    field.setAccessible(true);
+                    ConfigEntry<?> loadedEntry = (ConfigEntry<?>) field.get(loaded);
+                    ConfigEntry<Object> defaultEntry = (ConfigEntry<Object>) field.get(defaults);
+
+                    if (loadedEntry != null && loadedEntry.value != null) {
+                        defaultEntry.value = loadedEntry.value;
+                        logger.debug("[Paradigm] Preserved user setting for: " + field.getName());
+                    } else {
+                        logger.debug("[Paradigm] Using default value for new/missing config: " + field.getName());
+                    }
                 }
             }
+        } catch (Exception e) {
+            logger.error("[Paradigm] Error merging MOTD configs", e);
         }
-        return config;
     }
 
     public static class Config {
@@ -245,4 +195,3 @@ public class MOTDConfigHandler {
         }
     }
 }
-

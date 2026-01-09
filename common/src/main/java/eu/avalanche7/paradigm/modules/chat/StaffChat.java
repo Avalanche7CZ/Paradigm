@@ -1,22 +1,14 @@
 package eu.avalanche7.paradigm.modules.chat;
 
-import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.StringArgumentType;
-import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
-import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
-import net.minecraft.command.CommandRegistryAccess;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.network.message.MessageType;
-import net.minecraft.network.message.SignedMessage;
 
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -68,86 +60,93 @@ public class StaffChat implements ParadigmModule {
     }
 
     @Override
-    public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {
-        dispatcher.register(CommandManager.literal("sc")
-                .requires(source -> source.isExecutedByPlayer() &&
-                        this.services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.STAFF_CHAT_PERMISSION))
-                .then(CommandManager.literal("toggle")
-                        .executes(context -> toggleStaffChatCmd(context.getSource())))
-                .then(CommandManager.argument("message", StringArgumentType.greedyString())
-                        .executes(context -> sendStaffChatMessageCmd(context.getSource(), StringArgumentType.getString(context, "message"))))
-                .executes(context -> toggleStaffChatCmd(context.getSource()))
-        );
+    public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
+        ICommandBuilder cmd = platform.createCommandBuilder()
+                .literal("sc")
+                .requires(source -> source.getPlayer() != null &&
+                        platform.hasPermission(source.getPlayer(), PermissionsHandler.STAFF_CHAT_PERMISSION))
+                .executes(ctx -> {
+                    IPlayer player = ctx.getSource().requirePlayer();
+                    toggleStaffChat(player);
+                    return 1;
+                })
+                .then(platform.createCommandBuilder()
+                        .literal("toggle")
+                        .executes(ctx -> {
+                            IPlayer player = ctx.getSource().requirePlayer();
+                            toggleStaffChat(player);
+                            return 1;
+                        }))
+                .then(platform.createCommandBuilder()
+                        .argument("message", ICommandBuilder.ArgumentType.GREEDY_STRING)
+                        .executes(ctx -> {
+                            IPlayer player = ctx.getSource().requirePlayer();
+                            String message = ctx.getStringArgument("message");
+                            sendStaffChatMessage(player, message);
+                            return 1;
+                        }));
+
+        platform.registerCommand(cmd);
     }
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
-        ServerMessageEvents.ALLOW_CHAT_MESSAGE.register(this::onAllowChatMessage);
+        IEventSystem events = services.getPlatformAdapter().getEventSystem();
+        if (events != null) {
+            events.onPlayerChat(event -> {
+                IPlayer player = event.getPlayer();
+                if (player == null) return;
+                if (!isEnabled(this.services)) return;
+
+                if (staffChatEnabledMap.getOrDefault(player.getUUID(), false)) {
+                    sendStaffChatMessage(player, event.getMessage());
+                    event.setCancelled(true);
+                }
+            });
+        }
     }
 
-    private void toggleStaffChat(ServerPlayerEntity player) {
-        IPlayer wrappedPlayer = platform.wrapPlayer(player);
-        boolean isCurrentlyEnabled = staffChatEnabledMap.getOrDefault(wrappedPlayer.getUUID(), false);
+    private void toggleStaffChat(IPlayer player) {
+        if (player == null) return;
+
+        boolean isCurrentlyEnabled = staffChatEnabledMap.getOrDefault(player.getUUID(), false);
         boolean newState = !isCurrentlyEnabled;
-        staffChatEnabledMap.put(wrappedPlayer.getUUID(), newState);
+        staffChatEnabledMap.put(player.getUUID(), newState);
+
         IComponent feedbackMessage = platform.createLiteralComponent("Staff chat ")
-                .append(newState ? platform.createLiteralComponent("enabled").withColor("#55FF55") : platform.createLiteralComponent("disabled").withColor("#FF5555"));
-        platform.sendSystemMessage(wrappedPlayer, feedbackMessage);
+                .append(newState
+                        ? platform.createLiteralComponent("enabled").withColor("#55FF55")
+                        : platform.createLiteralComponent("disabled").withColor("#FF5555"));
+        platform.sendSystemMessage(player, feedbackMessage);
 
         if (newState) {
             showBossBar(player);
         } else {
-            platform.removePersistentBossBar(wrappedPlayer);
+            platform.removePersistentBossBar(player);
         }
     }
 
-    private void sendStaffChatMessage(ServerPlayerEntity sender, String message) {
+    private void sendStaffChatMessage(IPlayer sender, String message) {
+        if (sender == null) return;
+        if (message == null) message = "";
+
         ChatConfigHandler.Config chatConfig = services.getChatConfig();
-        IPlayer wrappedSender = platform.wrapPlayer(sender);
-        String formattedMessage = String.format(chatConfig.staffChatFormat.value, wrappedSender.getName(), message);
-        IComponent chatComponent = services.getMessageParser().parseMessage(formattedMessage, wrappedSender);
+        String formattedMessage = String.format(chatConfig.staffChatFormat.value, sender.getName(), message);
+        IComponent chatComponent = services.getMessageParser().parseMessage(formattedMessage, sender);
 
         platform.getOnlinePlayers().stream()
                 .filter(onlinePlayer -> platform.hasPermission(onlinePlayer, PermissionsHandler.STAFF_CHAT_PERMISSION))
                 .forEach(staffMember -> platform.sendSystemMessage(staffMember, chatComponent));
 
-        services.getLogger().info("(StaffChat) {}: {}", wrappedSender.getName(), message);
+        services.getLogger().info("(StaffChat) {}: {}", sender.getName(), message);
     }
 
-    private boolean onAllowChatMessage(SignedMessage message, ServerPlayerEntity player, MessageType.Parameters params) {
-        if (player == null) {
-            return true;
-        }
-        if (!isEnabled(this.services)) {
-            return true;
-        }
-
-        IPlayer wrappedPlayer = platform.wrapPlayer(player);
-        if (staffChatEnabledMap.getOrDefault(wrappedPlayer.getUUID(), false)) {
-            sendStaffChatMessage(player, message.getContent().getString());
-            return false;
-        }
-
-        return true;
-    }
-
-    private void showBossBar(ServerPlayerEntity player) {
+    private void showBossBar(IPlayer player) {
+        if (player == null) return;
         if (services.getChatConfig().enableStaffBossBar.value) {
-            IPlayer iPlayer = services.getPlatformAdapter().wrapPlayer(player);
-            IComponent title = services.getMessageParser().parseMessage("§cStaff Chat Mode §aEnabled", iPlayer);
-            platform.showPersistentBossBar(iPlayer, title, IPlatformAdapter.BossBarColor.RED, IPlatformAdapter.BossBarOverlay.PROGRESS);
+            IComponent title = services.getMessageParser().parseMessage("§cStaff Chat Mode §aEnabled", player);
+            platform.showPersistentBossBar(player, title, IPlatformAdapter.BossBarColor.RED, IPlatformAdapter.BossBarOverlay.PROGRESS);
         }
-    }
-
-    private int toggleStaffChatCmd(ServerCommandSource source) throws CommandSyntaxException {
-        ServerPlayerEntity player = source.getPlayerOrThrow();
-        toggleStaffChat(player);
-        return 1;
-    }
-
-    private int sendStaffChatMessageCmd(ServerCommandSource source, String message) throws CommandSyntaxException {
-        ServerPlayerEntity player = source.getPlayerOrThrow();
-        sendStaffChatMessage(player, message);
-        return 1;
     }
 }
+

@@ -4,7 +4,6 @@ import eu.avalanche7.paradigm.configs.EmojiConfigHandler;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.formatting.FormattingContext;
-import net.minecraft.text.Text;
 
 public class EmojiTag implements Tag {
     private final IPlatformAdapter platformAdapter;
@@ -40,12 +39,11 @@ public class EmojiTag implements Tag {
         }
 
         String emojiName = arguments.trim().toLowerCase();
-        String emoji = EmojiConfigHandler.CONFIG.getEmoji(emojiName);
+        String emoji = EmojiConfigHandler.getEmoji(emojiName);
 
-        if (!emoji.isEmpty()) {
-            Text emojiComponent = Text.literal(emoji);
-            IComponent emojiWrapper = platformAdapter.wrap(emojiComponent);
-            context.getCurrentComponent().append(emojiWrapper);
+        if (emoji != null && !emoji.isEmpty()) {
+            IComponent emojiComponent = platformAdapter.createComponentFromLiteral(emoji);
+            context.getCurrentComponent().append(emojiComponent);
         }
     }
 
@@ -58,4 +56,3 @@ public class EmojiTag implements Tag {
         return name.equalsIgnoreCase("emoji") || name.equalsIgnoreCase("e");
     }
 }
-

@@ -2,7 +2,6 @@ package eu.avalanche7.paradigm.utils.formatting.tags;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.formatting.FormattingContext;
-import net.minecraft.text.Style;
 
 public class ClickTag implements Tag {
     private final IPlatformAdapter platformAdapter;
@@ -93,13 +92,15 @@ public class ClickTag implements Tag {
             value = "/" + value;
         }
 
-        Style newStyle = platformAdapter.createStyleWithClickEvent(context.getCurrentStyle(), action.getActionName(), value);
+        Object newStyle = platformAdapter.createStyleWithClickEvent(context.getCurrentStyle(), action.getActionName(), value);
         context.pushStyle(newStyle);
+        context.getCurrentComponent().setStyle(newStyle);
     }
 
     @Override
     public void close(FormattingContext context) {
         context.popStyle();
+        context.getCurrentComponent().setStyle(context.getCurrentStyle());
     }
 
     @Override
@@ -113,4 +114,3 @@ public class ClickTag implements Tag {
                name.equalsIgnoreCase("page") || name.equalsIgnoreCase("run_command");
     }
 }
-

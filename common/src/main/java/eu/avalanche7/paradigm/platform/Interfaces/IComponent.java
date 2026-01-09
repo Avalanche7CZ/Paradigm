@@ -1,24 +1,21 @@
 package eu.avalanche7.paradigm.platform.Interfaces;
 
-import net.minecraft.text.Style;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
 import java.util.List;
 import java.util.function.UnaryOperator;
 
 public interface IComponent {
     String getRawText();
-    IComponent setStyle(Style style);
-    Style getStyle();
+    IComponent setStyle(Object style);
+    Object getStyle();
     IComponent append(IComponent sibling);
     List<IComponent> getSiblings();
     IComponent copy();
-    IComponent withStyle(Formatting formatting);
-    IComponent withStyle(Style style);
-    IComponent withStyle(UnaryOperator<Style> styleUpdater);
+    IComponent withStyle(String formattingCode);
+    IComponent withStyle(Object style);
+    IComponent withStyle(UnaryOperator<Object> styleUpdater);
     IComponent withColor(int rgb);
     IComponent withColorHex(String hex);
-    IComponent withFormatting(Formatting formatting);
+    IComponent withFormatting(String formattingCode);
     IComponent withColor(String hexOrFormatCode);
     IComponent resetStyle();
     IComponent onClickRunCommand(String command);
@@ -27,5 +24,5 @@ public interface IComponent {
     IComponent onClickCopyToClipboard(String text);
     IComponent onHoverText(String text);
     IComponent onHoverComponent(IComponent component);
-    Text getOriginalText();
+    Object getOriginalText();
 }

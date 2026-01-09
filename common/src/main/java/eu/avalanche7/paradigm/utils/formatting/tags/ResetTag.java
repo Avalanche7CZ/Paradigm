@@ -1,7 +1,6 @@
 package eu.avalanche7.paradigm.utils.formatting.tags;
 
 import eu.avalanche7.paradigm.utils.formatting.FormattingContext;
-import net.minecraft.text.Style;
 
 public class ResetTag implements Tag {
     @Override
@@ -38,4 +37,3 @@ public class ResetTag implements Tag {
         return name.equalsIgnoreCase("reset") || name.equalsIgnoreCase("r");
     }
 }
-

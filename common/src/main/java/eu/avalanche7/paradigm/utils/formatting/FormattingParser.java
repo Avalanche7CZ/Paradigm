@@ -6,7 +6,6 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.Placeholders;
 import eu.avalanche7.paradigm.utils.formatting.tags.Tag;
 import eu.avalanche7.paradigm.utils.formatting.tags.TagRegistry;
-import net.minecraft.text.Style;
 
 import java.util.List;
 import java.util.Stack;
@@ -45,7 +44,7 @@ public class FormattingParser {
             return platformAdapter.createComponentFromLiteral("");
         }
 
-        String processedMessage = this.placeholders.replacePlaceholders(rawMessage, player != null ? (net.minecraft.server.network.ServerPlayerEntity) player.getOriginalPlayer() : null);
+        String processedMessage = rawMessage;
 
         Matcher hexMatcher = hexPattern.matcher(processedMessage);
         StringBuilder sb = new StringBuilder();
@@ -60,28 +59,22 @@ public class FormattingParser {
         List<Token> tokens = tokenizer.tokenize();
 
         IComponent rootComponent = platformAdapter.createComponentFromLiteral("");
-        FormattingContext context = new FormattingContext(rootComponent, player, Style.EMPTY);
+        FormattingContext context = new FormattingContext(rootComponent, player, null);
         context.setParser(this);
         Stack<TagState> tagStack = new Stack<>();
 
         for (Token token : tokens) {
-
             switch (token.getType()) {
-                case TEXT:
+                case TEXT -> {
                     IComponent targetComponent = context.getCurrentComponent();
                     appendText(targetComponent, token.getValue(), context);
-                    break;
-
-                case ESCAPE:
-                    appendText(context.getCurrentComponent(), token.getValue(), context);
-                    break;
-
-                case TAG_OPEN:
+                }
+                case ESCAPE -> appendText(context.getCurrentComponent(), token.getValue(), context);
+                case TAG_OPEN -> {
                     String tagContent = token.getValue();
                     int colonIndex = findFirstColonOutsideQuotes(tagContent);
                     String tagName = colonIndex >= 0 ? tagContent.substring(0, colonIndex) : tagContent;
                     String arguments = colonIndex >= 0 ? tagContent.substring(colonIndex + 1) : "";
-
 
                     Tag tag = tagRegistry.getTag(tagName);
                     if (tag != null && tag.canOpen()) {
@@ -90,16 +83,14 @@ public class FormattingParser {
                     } else {
                         appendText(context.getCurrentComponent(), "<" + tagContent + ">", context);
                     }
-                    break;
-
-                case TAG_CLOSE:
+                }
+                case TAG_CLOSE -> {
                     if (!tagStack.isEmpty()) {
                         TagState state = tagStack.pop();
                         state.tag.close(context);
                     }
-                    break;
-
-                case TAG_SELF_CLOSE:
+                }
+                case TAG_SELF_CLOSE -> {
                     String selfCloseTagName = token.getValue();
                     int selfCloseColonIdx = findFirstColonOutsideQuotes(selfCloseTagName);
                     String selfCloseTagBase = selfCloseColonIdx >= 0 ? selfCloseTagName.substring(0, selfCloseColonIdx) : selfCloseTagName;
@@ -109,10 +100,9 @@ public class FormattingParser {
                     if (selfCloseTag != null && selfCloseTag.isSelfClosing()) {
                         selfCloseTag.process(context, selfCloseArgs);
                     }
-                    break;
-
-                case EOF:
-                    break;
+                }
+                case EOF -> {
+                }
             }
         }
 
@@ -142,7 +132,10 @@ public class FormattingParser {
             if (nextUrlStart > currentIndex) {
                 String plainText = text.substring(currentIndex, nextUrlStart);
                 IComponent textComponent = platformAdapter.createComponentFromLiteral(plainText);
-                textComponent.setStyle(context.getCurrentStyle());
+                Object style = context.getCurrentStyle();
+                if (style != null) {
+                    textComponent.setStyle(style);
+                }
                 parent.append(textComponent);
             }
 
@@ -151,7 +144,7 @@ public class FormattingParser {
                 String fullUrl = url.startsWith("http://") || url.startsWith("https://") ? url : "https://" + url;
 
                 IComponent urlComponent = platformAdapter.createComponentFromLiteral(url);
-                Style urlStyle = platformAdapter.createStyleWithClickEvent(context.getCurrentStyle(), "open_url", fullUrl);
+                Object urlStyle = platformAdapter.createStyleWithClickEvent(context.getCurrentStyle(), "open_url", fullUrl);
                 urlComponent.setStyle(urlStyle);
                 parent.append(urlComponent);
                 currentIndex = urlMatcher.end();
@@ -189,4 +182,3 @@ public class FormattingParser {
         return -1;
     }
 }
-

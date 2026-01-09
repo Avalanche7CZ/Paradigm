@@ -1,21 +1,15 @@
 package eu.avalanche7.paradigm.modules;
 
-import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.BoolArgumentType;
-import com.mojang.brigadier.arguments.IntegerArgumentType;
-import com.mojang.brigadier.arguments.StringArgumentType;
-import com.mojang.brigadier.context.CommandContext;
 import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandContext;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
-import net.minecraft.command.CommandRegistryAccess;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -97,32 +91,43 @@ public class Announcements implements ParadigmModule {
     }
 
     @Override
-    public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {
-        dispatcher.register(
-                CommandManager.literal("paradigm")
-                        .requires(source -> source.hasPermissionLevel(PermissionsHandler.BROADCAST_PERMISSION_LEVEL)
-                                || (source.isExecutedByPlayer() && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.BROADCAST_PERMISSION)))
-                        .then(CommandManager.literal("broadcast")
-                                .then(CommandManager.argument("message", StringArgumentType.greedyString())
-                                        .executes(context -> broadcastMessageCmd(context, "broadcast"))))
-                        .then(CommandManager.literal("actionbar")
-                                .then(CommandManager.argument("message", StringArgumentType.greedyString())
-                                        .executes(context -> broadcastMessageCmd(context, "actionbar"))))
-                        .then(CommandManager.literal("title")
-                                .then(CommandManager.argument("titleAndSubtitle", StringArgumentType.greedyString())
-                                        .executes(context -> broadcastTitleCmd(context))))
-                        .then(CommandManager.literal("bossbar")
-                                .then(CommandManager.argument("interval", IntegerArgumentType.integer(1))
-                                        .then(CommandManager.argument("color", StringArgumentType.word())
-                                                .suggests((ctx, builder) -> {
-                                                    for (IPlatformAdapter.BossBarColor color : IPlatformAdapter.BossBarColor.values()) {
-                                                        builder.suggest(color.name().toLowerCase());
-                                                    }
-                                                    return builder.buildFuture();
-                                                })
-                                                .then(CommandManager.argument("message", StringArgumentType.greedyString())
-                                                        .executes(context -> broadcastMessageCmd(context, "bossbar"))))))
-        );
+    public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
+        List<String> bossBarColors = new ArrayList<>();
+        for (IPlatformAdapter.BossBarColor c : IPlatformAdapter.BossBarColor.values()) {
+            bossBarColors.add(c.name().toLowerCase());
+        }
+
+        ICommandBuilder cmd = platform.createCommandBuilder()
+                .literal("paradigm")
+                .requires(source -> source.hasPermissionLevel(PermissionsHandler.BROADCAST_PERMISSION_LEVEL)
+                        || (source.getPlayer() != null && platform.hasPermission(source.getPlayer(), PermissionsHandler.BROADCAST_PERMISSION)))
+                .then(platform.createCommandBuilder()
+                        .literal("broadcast")
+                        .then(platform.createCommandBuilder()
+                                .argument("message", ICommandBuilder.ArgumentType.GREEDY_STRING)
+                                .executes(ctx -> broadcastMessageCmd(ctx, "broadcast"))))
+                .then(platform.createCommandBuilder()
+                        .literal("actionbar")
+                        .then(platform.createCommandBuilder()
+                                .argument("message", ICommandBuilder.ArgumentType.GREEDY_STRING)
+                                .executes(ctx -> broadcastMessageCmd(ctx, "actionbar"))))
+                .then(platform.createCommandBuilder()
+                        .literal("title")
+                        .then(platform.createCommandBuilder()
+                                .argument("titleAndSubtitle", ICommandBuilder.ArgumentType.GREEDY_STRING)
+                                .executes(this::broadcastTitleCmd)))
+                .then(platform.createCommandBuilder()
+                        .literal("bossbar")
+                        .then(platform.createCommandBuilder()
+                                .argument("interval", ICommandBuilder.ArgumentType.INTEGER)
+                                .then(platform.createCommandBuilder()
+                                        .argument("color", ICommandBuilder.ArgumentType.WORD)
+                                        .suggests(bossBarColors)
+                                        .then(platform.createCommandBuilder()
+                                                .argument("message", ICommandBuilder.ArgumentType.GREEDY_STRING)
+                                                .executes(ctx -> broadcastMessageCmd(ctx, "bossbar"))))));
+
+        platform.registerCommand(cmd);
     }
 
     @Override
@@ -236,7 +241,9 @@ public class Announcements implements ParadigmModule {
             }
             messageText = messages.get(index);
         }
-        return messageText.replace("{Prefix}", prefix);
+        return messageText
+                .replace("{Prefix}", prefix)
+                .replace("{prefix}", prefix);
     }
 
     private void broadcastGlobalMessages() {
@@ -316,59 +323,66 @@ public class Announcements implements ParadigmModule {
         services.getDebugLogger().debugLog(NAME + ": Broadcasted bossbar message: " + messageText);
     }
 
-    public int broadcastTitleCmd(CommandContext<ServerCommandSource> context) {
-        String titleAndSubtitle = StringArgumentType.getString(context, "titleAndSubtitle");
-        ICommandSource source = platform.wrapCommandSource(context.getSource());
+    public int broadcastTitleCmd(ICommandContext context) {
+        String titleAndSubtitle = context.getStringArgument("titleAndSubtitle");
+        if (titleAndSubtitle == null) titleAndSubtitle = "";
+
+        ICommandSource source = context.getSource();
         services.getDebugLogger().debugLog(NAME + ": /paradigm title command executed with message: " + titleAndSubtitle);
-        String[] parts = titleAndSubtitle.split(" \\|\\| ", 2);
+
+        String[] parts = titleAndSubtitle.split(" \\\\|\\\\| ", 2);
         platform.getOnlinePlayers().forEach(target -> {
-            IComponent titleComp = services.getMessageParser().parseMessage(parts[0], target);
+            IComponent titleComp = services.getMessageParser().parseMessage(parts.length > 0 ? parts[0] : "", target);
             IComponent subtitleComp = parts.length > 1 ? services.getMessageParser().parseMessage(parts[1], target) : services.getMessageParser().parseMessage("", target);
             platform.clearTitles(target);
             platform.sendTitle(target, titleComp, subtitleComp);
         });
-        platform.sendSuccess(context.getSource(), platform.createLiteralComponent("Title broadcasted."), true);
+
+        platform.sendSuccess(source, platform.createLiteralComponent("Title broadcasted."), true);
         return 1;
     }
 
-    public int broadcastMessageCmd(CommandContext<ServerCommandSource> context, String type) {
-        String messageStr = StringArgumentType.getString(context, "message");
-        ICommandSource source = platform.wrapCommandSource(context.getSource());
-        services.getDebugLogger().debugLog(NAME + ": /paradigm " + type + " command executed with message: " + messageStr);
+    public int broadcastMessageCmd(ICommandContext context, String type) {
+        String messageStr = context.getStringArgument("message");
+        final String msg = messageStr == null ? "" : messageStr;
+
+        ICommandSource source = context.getSource();
+        services.getDebugLogger().debugLog(NAME + ": /paradigm " + type + " command executed with message: " + msg);
+
         switch (type) {
-            case "broadcast" -> {
-                platform.getOnlinePlayers().forEach(player -> {
-                    IComponent messageComp = services.getMessageParser().parseMessage(messageStr, player);
-                    platform.sendSystemMessage(player, messageComp);
-                });
-            }
-            case "actionbar" -> {
-                platform.getOnlinePlayers().forEach(player -> {
-                    IComponent messageComp = services.getMessageParser().parseMessage(messageStr, player);
-                    platform.sendActionBar(player, messageComp);
-                });
-            }
+            case "broadcast" -> platform.getOnlinePlayers().forEach(player -> {
+                IComponent messageComp = services.getMessageParser().parseMessage(msg, player);
+                platform.sendSystemMessage(player, messageComp);
+            });
+            case "actionbar" -> platform.getOnlinePlayers().forEach(player -> {
+                IComponent messageComp = services.getMessageParser().parseMessage(msg, player);
+                platform.sendActionBar(player, messageComp);
+            });
             case "bossbar" -> {
-                String colorStr = StringArgumentType.getString(context, "color");
-                int interval = IntegerArgumentType.getInteger(context, "interval");
+                String colorStr = context.getStringArgument("color");
+                int interval = context.getIntArgument("interval");
+
+                if (colorStr == null) colorStr = "";
                 IPlatformAdapter.BossBarColor bossBarColor;
                 try {
                     bossBarColor = IPlatformAdapter.BossBarColor.valueOf(colorStr.toUpperCase());
                 } catch (IllegalArgumentException e) {
-                    platform.sendFailure(context.getSource(), platform.createLiteralComponent("Invalid bossbar color: " + colorStr));
+                    platform.sendFailure(source, platform.createLiteralComponent("Invalid bossbar color: " + colorStr));
                     return 0;
                 }
+
                 platform.getOnlinePlayers().forEach(player -> {
-                    IComponent messageComp = services.getMessageParser().parseMessage(messageStr, player);
+                    IComponent messageComp = services.getMessageParser().parseMessage(msg, player);
                     platform.sendBossBar(Collections.singletonList(player), messageComp, interval, bossBarColor, 1.0f);
                 });
             }
             default -> {
-                platform.sendFailure(context.getSource(), platform.createLiteralComponent("Invalid message type for command: " + type));
+                platform.sendFailure(source, platform.createLiteralComponent("Invalid message type for command: " + type));
                 return 0;
             }
         }
-        platform.sendSuccess(context.getSource(), platform.createLiteralComponent(type + " broadcasted."), true);
+
+        platform.sendSuccess(source, platform.createLiteralComponent(type + " broadcasted."), true);
         return 1;
     }
 

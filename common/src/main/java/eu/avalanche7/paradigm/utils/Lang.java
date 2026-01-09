@@ -5,7 +5,6 @@ import com.google.gson.reflect.TypeToken;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.Logger;
 
 import java.io.*;
@@ -19,18 +18,29 @@ import java.util.Map;
 public class Lang {
 
     private final Logger logger;
-    private final Path langFolder = FabricLoader.getInstance().getConfigDir().resolve("paradigm/lang");
     private final Map<String, String> translations = new HashMap<>();
     private String currentLanguage;
     private final MainConfigHandler.Config mainConfig;
     private final MessageParser messageParser;
     private final IPlatformAdapter platformAdapter;
+    private final Path langFolder;
 
     public Lang(Logger logger, MainConfigHandler.Config mainConfig, MessageParser messageParser, IPlatformAdapter platformAdapter) {
         this.logger = logger;
         this.mainConfig = mainConfig;
         this.messageParser = messageParser;
         this.platformAdapter = platformAdapter;
+
+        Path configDir;
+        try {
+            configDir = platformAdapter != null && platformAdapter.getConfig() != null
+                    ? platformAdapter.getConfig().getConfigDirectory()
+                    : java.nio.file.Path.of(System.getProperty("user.dir")).resolve("config");
+        } catch (Throwable t) {
+            configDir = java.nio.file.Path.of(System.getProperty("user.dir")).resolve("config");
+        }
+        this.langFolder = configDir.resolve("paradigm").resolve("lang");
+
         try {
             ensureDefaultLangFiles();
         } catch (Exception e) {
@@ -157,4 +167,3 @@ public class Lang {
         return currentLanguage;
     }
 }
-

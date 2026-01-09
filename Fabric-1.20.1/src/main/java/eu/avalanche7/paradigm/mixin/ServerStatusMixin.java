@@ -53,7 +53,7 @@ public abstract class ServerStatusMixin {
 
         services.getDebugLogger().debugLog("ServerStatusMixin: onRequest called");
 
-        MinecraftServer server = services.getPlatformAdapter().getMinecraftServer();
+        MinecraftServer server = (MinecraftServer) services.getPlatformAdapter().getMinecraftServer();
         if (server == null) {
             services.getDebugLogger().debugLog("ServerStatusMixin: Server is NULL");
             return;
@@ -167,7 +167,8 @@ public abstract class ServerStatusMixin {
                         eu.avalanche7.paradigm.platform.Interfaces.IComponent parsed =
                             services.getMessageParser().parseMessage(line, null);
 
-                        Text lineComponent = parsed.getOriginalText();
+                        Object nativeObj = parsed.getOriginalText();
+                        Text lineComponent = nativeObj instanceof Text t ? t : Text.literal(String.valueOf(nativeObj));
 
                         String legacyText = paradigm$componentToLegacyText(lineComponent);
                         sample.add(new GameProfile(UUID.randomUUID(), legacyText));
@@ -275,12 +276,17 @@ public abstract class ServerStatusMixin {
         component.visit((style, text) -> {
             net.minecraft.text.TextColor color = style.getColor();
             if (color != null) {
-                net.minecraft.util.Formatting formatting = paradigm$getFormattingForColor(color.getRgb());
+                int rgb = color.getRgb();
+                net.minecraft.util.Formatting formatting = paradigm$getFormattingForColor(rgb);
                 if (formatting != null) {
                     builder.append('§').append(formatting.getCode());
                 } else {
-                    // Custom hex color - convert to nearest formatting
-                    builder.append('§').append(paradigm$getNearestFormattingCode(color.getRgb()));
+                    // Preserve full RGB (incl. gradients): use modern §x§R§R§G§G§B§B format.
+                    String hex = String.format("%06X", rgb);
+                    builder.append("§x");
+                    for (int i = 0; i < 6; i++) {
+                        builder.append('§').append(hex.charAt(i));
+                    }
                 }
             }
 
@@ -324,4 +330,3 @@ public abstract class ServerStatusMixin {
         return '7'; // Gray
     }
 }
-

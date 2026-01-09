@@ -4,8 +4,6 @@ import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.formatting.FormattingContext;
 import eu.avalanche7.paradigm.utils.formatting.FormattingParser;
-import net.minecraft.text.Text;
-import net.minecraft.text.Style;
 
 public class HoverTag implements Tag {
     private final IPlatformAdapter platformAdapter;
@@ -43,22 +41,24 @@ public class HoverTag implements Tag {
         }
 
         FormattingParser parser = context.getParser();
-        Text hoverComponent;
+        Object hoverComponent;
 
         if (parser != null) {
             IComponent parsed = parser.parse(hoverText, context.getPlayer());
             hoverComponent = parsed.getOriginalText();
         } else {
-            hoverComponent = Text.literal(hoverText);
+            hoverComponent = hoverText;
         }
 
-        Style newStyle = platformAdapter.createStyleWithHoverEvent(context.getCurrentStyle(), hoverComponent);
+        Object newStyle = platformAdapter.createStyleWithHoverEvent(context.getCurrentStyle(), hoverComponent);
         context.pushStyle(newStyle);
+        context.getCurrentComponent().setStyle(newStyle);
     }
 
     @Override
     public void close(FormattingContext context) {
         context.popStyle();
+        context.getCurrentComponent().setStyle(context.getCurrentStyle());
     }
 
     @Override
@@ -66,4 +66,3 @@ public class HoverTag implements Tag {
         return name.equalsIgnoreCase("hover") || name.equalsIgnoreCase("show_text");
     }
 }
-

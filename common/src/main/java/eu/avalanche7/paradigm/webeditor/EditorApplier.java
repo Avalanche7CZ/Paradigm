@@ -125,113 +125,92 @@ public final class EditorApplier {
 
         ApplyOneResult result;
 
+        // Main config
         result = applyOne(files, () -> {
             JsonElement el = find(files, "main", "main.json");
             if (el == null) return ApplyStatus.MISSING;
             MainConfigHandler.Config newConfig = GSON.fromJson(el, MainConfigHandler.Config.class);
-            if (configsEqual(MainConfigHandler.CONFIG, newConfig)) return ApplyStatus.UNCHANGED;
-            MainConfigHandler.CONFIG = newConfig;
-            MainConfigHandler.save();
+            if (configsEqual(MainConfigHandler.getConfig(), newConfig)) return ApplyStatus.UNCHANGED;
+            writeConfigToFile(newConfig, "main.json");
+            MainConfigHandler.reload();
             return ApplyStatus.APPLIED;
         }, "main");
         updateCounters(result, "main", appliedFiles, unchangedFiles, skipped);
         if (result.status == ApplyStatus.APPLIED) applied++;
         if (result.status == ApplyStatus.UNCHANGED) unchanged++;
 
+        // Announcements config
         result = applyOne(files, () -> {
             JsonElement el = find(files, "announcements", "announcements.json");
             if (el == null) return ApplyStatus.MISSING;
             AnnouncementsConfigHandler.Config newConfig = GSON.fromJson(el, AnnouncementsConfigHandler.Config.class);
-            if (configsEqual(AnnouncementsConfigHandler.CONFIG, newConfig)) return ApplyStatus.UNCHANGED;
-            AnnouncementsConfigHandler.CONFIG = newConfig;
-            AnnouncementsConfigHandler.save();
+            if (configsEqual(AnnouncementsConfigHandler.getConfig(), newConfig)) return ApplyStatus.UNCHANGED;
+            writeConfigToFile(newConfig, "announcements.json");
+            AnnouncementsConfigHandler.reload();
             return ApplyStatus.APPLIED;
         }, "announcements");
         updateCounters(result, "announcements", appliedFiles, unchangedFiles, skipped);
         if (result.status == ApplyStatus.APPLIED) applied++;
         if (result.status == ApplyStatus.UNCHANGED) unchanged++;
 
+        // Chat config
         result = applyOne(files, () -> {
             JsonElement el = find(files, "chat", "chat.json");
             if (el == null) return ApplyStatus.MISSING;
             ChatConfigHandler.Config newConfig = GSON.fromJson(el, ChatConfigHandler.Config.class);
-            if (configsEqual(ChatConfigHandler.CONFIG, newConfig)) return ApplyStatus.UNCHANGED;
-            ChatConfigHandler.CONFIG = newConfig;
-            ChatConfigHandler.save();
+            if (configsEqual(ChatConfigHandler.getConfig(), newConfig)) return ApplyStatus.UNCHANGED;
+            writeConfigToFile(newConfig, "chat.json");
+            ChatConfigHandler.reload();
             return ApplyStatus.APPLIED;
         }, "chat");
         updateCounters(result, "chat", appliedFiles, unchangedFiles, skipped);
         if (result.status == ApplyStatus.APPLIED) applied++;
         if (result.status == ApplyStatus.UNCHANGED) unchanged++;
 
+        // MOTD config
         result = applyOne(files, () -> {
             JsonElement el = find(files, "motd", "motd.json");
             if (el == null) return ApplyStatus.MISSING;
             MOTDConfigHandler.Config newConfig = GSON.fromJson(el, MOTDConfigHandler.Config.class);
             if (configsEqual(MOTDConfigHandler.getConfig(), newConfig)) return ApplyStatus.UNCHANGED;
-            // replace / persist via handler
-            MOTDConfigHandler.Config _prev = MOTDConfigHandler.getConfig();
-            // apply by saving new config
-            try {
-                // directly write using handler's saveConfig mechanism
-                // set config by saving newConfig
-                // MOTDConfigHandler exposes saveConfig(), so set via temporary replace
-                // We'll write newConfig to file by calling saveConfig after setting a private field isn't available; instead, use GSON write here
-                java.nio.file.Path path = java.nio.file.Path.of(java.lang.System.getProperty("user.dir")).resolve("config").resolve("paradigm").resolve("motd.json");
-                try { java.nio.file.Files.createDirectories(path.getParent()); } catch (Throwable ignored) {}
-                try (java.io.Writer w = java.nio.file.Files.newBufferedWriter(path, java.nio.charset.StandardCharsets.UTF_8)) {
-                    GSON.toJson(newConfig, w);
-                }
-                // reload handler to pick up changes
-                MOTDConfigHandler.loadConfig();
-            } catch (Throwable ex) {
-                throw new RuntimeException("Failed to apply MOTD config: " + ex.getMessage(), ex);
-            }
+            writeConfigToFile(newConfig, "motd.json");
+            MOTDConfigHandler.reload();
             return ApplyStatus.APPLIED;
         }, "motd");
         updateCounters(result, "motd", appliedFiles, unchangedFiles, skipped);
         if (result.status == ApplyStatus.APPLIED) applied++;
         if (result.status == ApplyStatus.UNCHANGED) unchanged++;
 
+        // Mention config
         result = applyOne(files, () -> {
             JsonElement el = find(files, "mention", "mentions", "mention.json", "mentions.json");
             if (el == null) return ApplyStatus.MISSING;
             MentionConfigHandler.Config newConfig = GSON.fromJson(el, MentionConfigHandler.Config.class);
-            if (configsEqual(MentionConfigHandler.CONFIG, newConfig)) return ApplyStatus.UNCHANGED;
-            MentionConfigHandler.CONFIG = newConfig;
-            MentionConfigHandler.save();
+            if (configsEqual(MentionConfigHandler.getConfig(), newConfig)) return ApplyStatus.UNCHANGED;
+            writeConfigToFile(newConfig, "mentions.json");
+            MentionConfigHandler.reload();
             return ApplyStatus.APPLIED;
         }, "mention");
         updateCounters(result, "mention", appliedFiles, unchangedFiles, skipped);
         if (result.status == ApplyStatus.APPLIED) applied++;
         if (result.status == ApplyStatus.UNCHANGED) unchanged++;
 
+        // Restart config
         result = applyOne(files, () -> {
-            JsonElement el = find(files, "restart", "restart.json");
+            JsonElement el = find(files, "restart", "restarts", "restart.json", "restarts.json");
             if (el == null) return ApplyStatus.MISSING;
             RestartConfigHandler.Config newConfig = GSON.fromJson(el, RestartConfigHandler.Config.class);
-            if (configsEqual(RestartConfigHandler.CONFIG, newConfig)) return ApplyStatus.UNCHANGED;
-            RestartConfigHandler.CONFIG = newConfig;
-            RestartConfigHandler.save();
+            if (configsEqual(RestartConfigHandler.getConfig(), newConfig)) return ApplyStatus.UNCHANGED;
+            writeConfigToFile(newConfig, "restarts.json");
+            RestartConfigHandler.reload();
             return ApplyStatus.APPLIED;
         }, "restart");
         updateCounters(result, "restart", appliedFiles, unchangedFiles, skipped);
         if (result.status == ApplyStatus.APPLIED) applied++;
         if (result.status == ApplyStatus.UNCHANGED) unchanged++;
 
-        // apply custom commands
-        // result = applyOne(files, () -> applyCustomCommands(services, files), "customCommands");
-        // updateCounters(result, "customCommands", appliedFiles, unchangedFiles, skipped);
-        // if (result.status == ApplyStatus.APPLIED) applied++;
-        // if (result.status == ApplyStatus.UNCHANGED) unchanged++;
 
         if (applied > 0) {
-            try { MainConfigHandler.load(); } catch (Throwable ignored) {}
-            try { AnnouncementsConfigHandler.load(); } catch (Throwable ignored) {}
-            try { ChatConfigHandler.load(); } catch (Throwable ignored) {}
-            try { MOTDConfigHandler.loadConfig(); } catch (Throwable ignored) {}
-            try { MentionConfigHandler.load(); } catch (Throwable ignored) {}
-            try { RestartConfigHandler.load(); } catch (Throwable ignored) {}
 
             ParadigmAPI.getModules().stream()
                     .filter(m -> m instanceof eu.avalanche7.paradigm.modules.Restart)
@@ -456,9 +435,14 @@ public final class EditorApplier {
 
             if (server != null) {
                 try {
-                    server.execute(task);
+                    try {
+                        var m = server.getClass().getMethod("execute", Runnable.class);
+                        m.invoke(server, task);
+                    } catch (Throwable t) {
+                        try { services.getLogger().warn("Paradigm WebEditor: server.execute failed, running reload synchronously", t); } catch (Throwable ignored) {}
+                        task.run();
+                    }
                 } catch (Throwable t) {
-                    try { services.getLogger().warn("Paradigm WebEditor: server.execute failed, running reload synchronously", t); } catch (Throwable ignored) {}
                     task.run();
                 }
             } else {
@@ -475,6 +459,28 @@ public final class EditorApplier {
         String currentJson = GSON.toJson(current);
         String newJson = GSON.toJson(newConfig);
         return currentJson.equals(newJson);
+    }
+
+    private static void writeConfigToFile(Object config, String fileName) throws Exception {
+        try {
+            java.nio.file.Path configDir;
+            try {
+                configDir = java.nio.file.Path.of(System.getProperty("user.dir")).resolve("config");
+            } catch (Throwable t) {
+                configDir = java.nio.file.Path.of("config");
+            }
+
+            java.nio.file.Path paradigmDir = configDir.resolve("paradigm");
+            java.nio.file.Path targetFile = paradigmDir.resolve(fileName);
+
+            java.nio.file.Files.createDirectories(paradigmDir);
+
+            try (java.io.Writer writer = java.nio.file.Files.newBufferedWriter(targetFile, java.nio.charset.StandardCharsets.UTF_8)) {
+                GSON.toJson(config, writer);
+            }
+        } catch (Exception e) {
+            throw new Exception("Failed to write config file '" + fileName + "': " + e.getMessage(), e);
+        }
     }
 
     private static JsonElement find(JsonObject files, String... keys) {

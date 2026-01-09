@@ -1,10 +1,8 @@
 package eu.avalanche7.paradigm.utils.formatting.tags;
 
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.formatting.FormattingContext;
-import net.minecraft.util.Formatting;
-import net.minecraft.text.Style;
-import net.minecraft.text.TextColor;
 
 public class ColorTag implements Tag {
     private final IPlatformAdapter platformAdapter;
@@ -30,54 +28,32 @@ public class ColorTag implements Tag {
 
     @Override
     public void process(FormattingContext context, String arguments) {
-        Integer colorRgb = parseColorToRgb(arguments);
-        if (colorRgb != null) {
-            Style newStyle = context.getCurrentStyle().withColor(TextColor.fromRgb(colorRgb));
-            context.pushStyle(newStyle);
+        if (arguments == null || arguments.isEmpty()) return;
+        String arg = arguments.trim();
+        Object base = context.getCurrentStyle();
+        IComponent tmp = platformAdapter.createEmptyComponent();
+        if (base != null) tmp.setStyle(base);
+
+        if (arg.startsWith("#")) {
+            tmp = tmp.withColor(arg);
+        } else {
+            // named color / legacy token
+            tmp = tmp.withFormatting(arg);
         }
+
+        Object newStyle = tmp.getStyle();
+        context.pushStyle(newStyle);
+        context.getCurrentComponent().setStyle(newStyle);
     }
 
     @Override
     public void close(FormattingContext context) {
         context.popStyle();
+        context.getCurrentComponent().setStyle(context.getCurrentStyle());
     }
 
     @Override
     public boolean matchesTagName(String name) {
-        if (name.equalsIgnoreCase("color") || name.equalsIgnoreCase("c")) {
-            return true;
-        }
-        for (Formatting format : Formatting.values()) {
-            if (format.isColor() && name.equalsIgnoreCase(format.getName())) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private Integer parseColorToRgb(String color) {
-        if (color == null || color.isEmpty()) {
-            return null;
-        }
-
-        // Hex color
-        if (color.startsWith("#")) {
-            try {
-                return Integer.parseInt(color.substring(1), 16);
-            } catch (NumberFormatException e) {
-                return null;
-            }
-        }
-
-        // Named color
-        for (Formatting format : Formatting.values()) {
-            if (format.isColor() && color.equalsIgnoreCase(format.getName())) {
-                Integer rgb = format.getColorValue();
-                return rgb != null ? rgb : 0xFFFFFF;
-            }
-        }
-
-        return null;
+        return name.equalsIgnoreCase("color") || name.equalsIgnoreCase("c");
     }
 }
-

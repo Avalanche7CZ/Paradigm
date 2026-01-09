@@ -1,3 +1,108 @@
 allprojects {
     group = 'eu.avalanche7'
 }
+
+// Task to find all JAR files in build directories (excluding sources and common)
+task findJars {
+    doLast {
+        println("\n=== Paradigm JAR Files ===")
+        project.subprojects.each { subproject ->
+            // Skip common module
+            if (subproject.name == 'common') return
+            def libsDir = file("${subproject.projectDir}/build/libs")
+            if (libsDir.exists()) {
+                libsDir.listFiles({ dir, name -> name.endsWith('.jar') && !name.contains('sources') } as FilenameFilter).each { jar ->
+                    println("✓ ${subproject.name}: ${jar.absolutePath}")
+                }
+            }
+        }
+        println("==============================\n")
+    }
+}
+
+// Task to send JAR files to Discord
+task sendToDiscord {
+    doLast {
+        def webhookUrl = System.getenv('DISCORD_WEBHOOK_URL') ?:
+                        (project.findProperty('discord.webhook') ?: null)
+
+        if (!webhookUrl) {
+            println("❌ Error: DISCORD_WEBHOOK_URL not set!")
+            println("Set it via: export DISCORD_WEBHOOK_URL='your_webhook_url'")
+            println("Or add: discord.webhook=<url> to gradle.properties")
+            return
+        }
+
+        def jars = []
+        project.subprojects.each { subproject ->
+            // Skip common module
+            if (subproject.name == 'common') return
+            def libsDir = file("${subproject.projectDir}/build/libs")
+            if (libsDir.exists()) {
+                libsDir.listFiles({ dir, name -> name.endsWith('.jar') && !name.contains('sources') } as FilenameFilter).each { jar ->
+                    jars.add("${subproject.name}: ${jar.name}")
+                }
+            }
+        }
+
+        if (jars.isEmpty()) {
+            println("❌ No JAR files found! Run 'gradle build' first.")
+            return
+        }
+
+        def jarList = jars.collect { "• $it" }.join("\n")
+        def commit = (System.getenv('GIT_COMMIT') ?: 'unknown').take(7)
+        def branch = System.getenv('GIT_BRANCH') ?: 'local'
+        def timestamp = new Date().format("yyyy-MM-dd HH:mm:ss")
+
+        // Create JSON payload with proper escaping
+        def payload = groovy.json.JsonOutput.toJson([
+            embeds: [[
+                title: "Paradigm Build Complete",
+                description: "JAR files ready for deployment",
+                color: 3066993,
+                fields: [
+                    [name: "Built JARs", value: jarList, inline: false],
+                    [name: "Commit", value: commit, inline: true],
+                    [name: "Branch", value: branch, inline: true],
+                    [name: "Built At", value: timestamp, inline: false]
+                ],
+                footer: [text: "Paradigm Builder Bot"]
+            ]],
+            username: "Paradigm Builder Bot"
+        ])
+
+        println("\n📨 Sending to Discord...")
+        println("Webhook: ${webhookUrl.take(50)}...")
+        println("JAR Files: ${jars.size()}")
+
+        // Write payload to temp file to avoid escaping issues
+        def tempFile = File.createTempFile('discord_', '.json')
+        tempFile.text = payload
+
+        def curlCmd = ["curl", "-X", "POST", "-H", "Content-type: application/json", "--data", "@${tempFile.absolutePath}", webhookUrl]
+        def process = curlCmd.execute()
+        def output = process.text
+        def exitCode = process.waitFor()
+
+        tempFile.delete()
+
+        if (exitCode == 0 && !output.contains('"code"')) {
+            println("✅ Successfully sent to Discord!")
+            println("JAR count: ${jars.size()}")
+        } else {
+            println("❌ Failed to send to Discord!")
+            if (output) println("Discord API response: $output")
+        }
+    }
+}
+
+// Task to build all and notify Discord
+task buildAllAndNotify {
+    dependsOn 'build'
+    finalizedBy 'sendToDiscord'
+
+    doLast {
+        println("\n🎉 Build and Discord notification complete!")
+    }
+}

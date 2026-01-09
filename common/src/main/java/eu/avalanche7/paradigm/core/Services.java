@@ -3,13 +3,12 @@ package eu.avalanche7.paradigm.core;
 import eu.avalanche7.paradigm.configs.*;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.*;
-import net.minecraft.server.MinecraftServer;
 import org.slf4j.Logger;
 import eu.avalanche7.paradigm.webeditor.store.WebEditorStore;
 
 public class Services {
 
-    private MinecraftServer server;
+    private Object server;
     private final Logger logger;
 
     private final MainConfigHandler.Config mainConfig;
@@ -19,7 +18,6 @@ public class Services {
     private final RestartConfigHandler.Config restartConfig;
     private final ChatConfigHandler.Config chatConfig;
     private final CMConfig cmConfigInstance;
-    private final CooldownConfigHandler cooldownConfigHandler;
 
     private final DebugLogger debugLoggerInstance;
     private final Lang langInstance;
@@ -50,7 +48,7 @@ public class Services {
             Placeholders placeholders,
             TaskScheduler taskScheduler,
             IPlatformAdapter platformAdapter,
-            CooldownConfigHandler cooldownConfigHandler
+            WebEditorStore webEditorStore
     ) {
         this.logger = logger;
         this.mainConfig = mainConfig;
@@ -68,10 +66,9 @@ public class Services {
         this.placeholdersInstance = placeholders;
         this.taskSchedulerInstance = taskScheduler;
         this.platformAdapter = platformAdapter;
-        this.cooldownConfigHandler = cooldownConfigHandler;
     }
 
-    public void setServer(MinecraftServer server) {
+    public void setServer(Object server) {
         this.server = server;
         if (this.server != null && this.taskSchedulerInstance != null) {
             this.taskSchedulerInstance.initialize(this.server);
@@ -85,16 +82,13 @@ public class Services {
         }
     }
 
-    public MinecraftServer getMinecraftServer() {
+    public Object getMinecraftServer() {
         if (this.server == null && logger != null) {
             logger.warn("Paradigm Services: MinecraftServer instance requested before it was set!");
         }
         return server;
     }
 
-    public CooldownConfigHandler getCooldownConfigHandler() {
-        return cooldownConfigHandler;
-    }
 
     public IPlatformAdapter getPlatformAdapter() {
         return platformAdapter;
@@ -158,6 +152,10 @@ public class Services {
 
     public GroupChatManager getGroupChatManager() {
         return groupChatManagerInstance;
+    }
+
+    public CooldownConfigHandler.Config getCooldownConfig() {
+        return CooldownConfigHandler.getConfig();
     }
 
     public WebEditorStore getWebEditorStore() {

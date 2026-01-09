@@ -3,21 +3,21 @@ package eu.avalanche7.paradigm.utils.formatting;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.formatting.tags.CenterTag;
-import net.minecraft.text.Style;
+
 import java.util.Stack;
 
 public class FormattingContext {
     private final IComponent rootComponent;
     private final IPlayer player;
-    private final Style baseStyle;
-    private Style currentStyle;
+    private final Object baseStyle;
+    private Object currentStyle;
     private int nestingLevel;
     private FormattingParser parser;
-    private Stack<IComponent> componentStack = new Stack<>();
-    private Stack<CenterTag> centerStack = new Stack<>();
-    private Stack<Style> styleStack = new Stack<>();
+    private final Stack<IComponent> componentStack = new Stack<>();
+    private final Stack<CenterTag> centerStack = new Stack<>();
+    private final Stack<Object> styleStack = new Stack<>();
 
-    public FormattingContext(IComponent rootComponent, IPlayer player, Style baseStyle) {
+    public FormattingContext(IComponent rootComponent, IPlayer player, Object baseStyle) {
         this.rootComponent = rootComponent;
         this.player = player;
         this.baseStyle = baseStyle;
@@ -47,19 +47,19 @@ public class FormattingContext {
         return player;
     }
 
-    public Style getBaseStyle() {
+    public Object getBaseStyle() {
         return baseStyle;
     }
 
-    public Style getCurrentStyle() {
+    public Object getCurrentStyle() {
         return currentStyle;
     }
 
-    public void setCurrentStyle(Style style) {
+    public void setCurrentStyle(Object style) {
         this.currentStyle = style;
     }
 
-    public void pushStyle(Style style) {
+    public void pushStyle(Object style) {
         styleStack.push(style);
         this.currentStyle = style;
         this.nestingLevel++;
@@ -80,6 +80,8 @@ public class FormattingContext {
     public void resetStyle() {
         this.currentStyle = baseStyle;
         this.nestingLevel = 0;
+        this.styleStack.clear();
+        this.styleStack.push(baseStyle);
     }
 
     public void setParser(FormattingParser parser) {
@@ -106,4 +108,3 @@ public class FormattingContext {
         return !centerStack.isEmpty();
     }
 }
-

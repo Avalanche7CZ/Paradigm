@@ -4,6 +4,10 @@ pluginManagement {
             name = 'Fabric'
             url = 'https://maven.fabricmc.net/'
         }
+        maven {
+            name = 'MinecraftForge'
+            url = 'https://maven.minecraftforge.net/'
+        }
         gradlePluginPortal()
     }
     resolutionStrategy {
@@ -21,4 +25,4 @@ include 'common'
 include 'Fabric-1.20.1'
 include 'Fabric-1.21.1'
 include 'Fabric-1.21.8'
-
+include 'forge-1.21.1'

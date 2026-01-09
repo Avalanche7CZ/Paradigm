@@ -3,10 +3,6 @@ package eu.avalanche7.paradigm.utils.formatting.tags;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.formatting.FormattingContext;
-import net.minecraft.text.Text;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Style;
-import net.minecraft.text.TextColor;
 
 public class RainbowTag implements Tag {
     private final IPlatformAdapter platformAdapter;
@@ -37,7 +33,7 @@ public class RainbowTag implements Tag {
     @Override
     public void process(FormattingContext context, String arguments) {
         parseArguments(arguments);
-        rainbowContent = platformAdapter.wrap(Text.literal(""));
+        rainbowContent = platformAdapter.createComponentFromLiteral("");
         context.pushComponent(rainbowContent);
         context.pushStyle(context.getCurrentStyle());
     }
@@ -49,20 +45,19 @@ public class RainbowTag implements Tag {
         if (rainbowContent != null) {
             String text = rainbowContent.getRawText();
             if (text != null && !text.isEmpty()) {
-                MutableText result = Text.literal("");
+                IComponent result = platformAdapter.createComponentFromLiteral("");
 
                 for (int i = 0; i < text.length(); i++) {
                     char c = text.charAt(i);
                     float hue = (i * frequency + offset) % 1.0f;
                     int color = hsvToRgb(hue, saturation, 1.0f);
 
-                    Style charStyle = Style.EMPTY.withColor(TextColor.fromRgb(color));
-                    result.append(Text.literal(String.valueOf(c)).setStyle(charStyle));
+                    IComponent part = platformAdapter.createComponentFromLiteral(String.valueOf(c)).withColor(color);
+                    result.append(part);
                 }
 
                 context.popComponent();
-                IComponent parent = context.getCurrentComponent();
-                parent.append(platformAdapter.wrap(result));
+                context.getCurrentComponent().append(result);
             } else {
                 context.popComponent();
             }
@@ -105,27 +100,6 @@ public class RainbowTag implements Tag {
         this.offset = Math.max(0.0f, Math.min(1.0f, offset));
     }
 
-    public IComponent applyRainbow(IComponent component) {
-        String text = component.getRawText();
-        if (text == null || text.isEmpty()) {
-            return component;
-        }
-
-        MutableText result = Text.literal("");
-        int charCount = text.length();
-
-        for (int i = 0; i < charCount; i++) {
-            char c = text.charAt(i);
-            float hue = (i * frequency + offset) % 1.0f;
-            int color = hsvToRgb(hue, saturation, 1.0f);
-
-            Style charStyle = component.getStyle().withColor(TextColor.fromRgb(color));
-            result.append(Text.literal(String.valueOf(c)).setStyle(charStyle));
-        }
-
-        return platformAdapter.wrap(result);
-    }
-
     private int hsvToRgb(float hue, float saturation, float value) {
         float h = hue * 6.0f;
         int i = (int) Math.floor(h);
@@ -136,38 +110,13 @@ public class RainbowTag implements Tag {
 
         float r, g, b;
         switch (i % 6) {
-            case 0:
-                r = value;
-                g = t;
-                b = p;
-                break;
-            case 1:
-                r = q;
-                g = value;
-                b = p;
-                break;
-            case 2:
-                r = p;
-                g = value;
-                b = t;
-                break;
-            case 3:
-                r = p;
-                g = q;
-                b = value;
-                break;
-            case 4:
-                r = t;
-                g = p;
-                b = value;
-                break;
-            case 5:
-                r = value;
-                g = p;
-                b = q;
-                break;
-            default:
-                r = g = b = 0;
+            case 0 -> { r = value; g = t; b = p; }
+            case 1 -> { r = q; g = value; b = p; }
+            case 2 -> { r = p; g = value; b = t; }
+            case 3 -> { r = p; g = q; b = value; }
+            case 4 -> { r = t; g = p; b = value; }
+            case 5 -> { r = value; g = p; b = q; }
+            default -> { r = g = b = 0; }
         }
 
         int ri = (int) (r * 255);
@@ -177,4 +126,3 @@ public class RainbowTag implements Tag {
         return (ri << 16) | (gi << 8) | bi;
     }
 }
-

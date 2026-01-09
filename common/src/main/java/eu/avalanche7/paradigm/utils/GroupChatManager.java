@@ -6,7 +6,6 @@ import eu.avalanche7.paradigm.data.PlayerGroupData;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
-import net.minecraft.server.MinecraftServer;
 
 import java.util.*;
 
@@ -40,13 +39,9 @@ public class GroupChatManager {
         return platform().createLiteralComponent(message);
     }
 
-    private MinecraftServer getServer() { return this.services != null ? this.services.getMinecraftServer() : null; }
-
     private void debugLog(String message) { if (this.services != null) this.services.getDebugLogger().debugLog(message); }
 
     public void broadcastToGroup(Group group, IComponent message, String playerToExclude) {
-        MinecraftServer server = getServer();
-        if (server == null) return;
         group.getMembers().forEach(memberUUID -> {
             if (playerToExclude != null && playerToExclude.equals(memberUUID)) return;
             IPlayer member = platform().getPlayerByUuid(memberUUID);
@@ -83,16 +78,13 @@ public class GroupChatManager {
             platform().sendSystemMessage(player, translate("group.not_owner"));
             return false;
         }
-        MinecraftServer server = getServer();
         String deletedMessageRaw = translate("group.group_deleted_by_owner").getRawText().replace("{group_name}", groupName);
         IComponent deletedMessage = parseMessage(deletedMessageRaw, null);
         group.getMembers().forEach(memberUUID -> {
             PlayerGroupData memberData = playerData.get(memberUUID);
             if (memberData != null) memberData.setCurrentGroup(null);
-            if (server != null) {
-                IPlayer memberPlayer = platform().getPlayerByUuid(memberUUID);
-                if (memberPlayer != null && !memberPlayer.getUUID().equals(player.getUUID())) platform().sendSystemMessage(memberPlayer, deletedMessage);
-            }
+            IPlayer memberPlayer = platform().getPlayerByUuid(memberUUID);
+            if (memberPlayer != null && !memberPlayer.getUUID().equals(player.getUUID())) platform().sendSystemMessage(memberPlayer, deletedMessage);
         });
         groups.remove(groupName);
         platform().sendSystemMessage(player, translate("group.deleted_successfully"));
@@ -103,15 +95,12 @@ public class GroupChatManager {
     public void listGroups(IPlayer player) {
         if (groups.isEmpty()) { platform().sendSystemMessage(player, translate("group.no_groups_available")); return; }
         platform().sendSystemMessage(player, translate("group.available_groups"));
-        MinecraftServer server = getServer();
         for (Map.Entry<String, Group> entry : groups.entrySet()) {
             String groupName = entry.getKey();
             Group group = entry.getValue();
             String ownerName = "Unknown";
-            if (server != null) {
-                IPlayer owner = platform().getPlayerByUuid(group.getOwner());
-                if (owner != null) ownerName = owner.getName();
-            }
+            IPlayer owner = platform().getPlayerByUuid(group.getOwner());
+            if (owner != null) ownerName = owner.getName();
             int memberCount = group.getMembers().size();
             IComponent joinBtn = platform().createComponentFromLiteral("[Join]")
                     .onClickSuggestCommand("/groupchat join " + groupName)
@@ -127,24 +116,25 @@ public class GroupChatManager {
         if (group == null) { platform().sendSystemMessage(player, translate("group.group_not_found")); return; }
         platform().sendSystemMessage(player, parseMessage("&6Group Information: &e" + groupName, player));
         String ownerName = "Offline";
-        MinecraftServer server = getServer();
-        if (server != null) {
-            IPlayer owner = platform().getPlayerByUuid(group.getOwner());
-            if (owner != null) ownerName = owner.getName();
-        }
+        IPlayer owner = platform().getPlayerByUuid(group.getOwner());
+        if (owner != null) ownerName = owner.getName();
         platform().sendSystemMessage(player, parseMessage("&7Owner: &f" + ownerName, player));
         platform().sendSystemMessage(player, parseMessage("&7Members (" + group.getMembers().size() + "):", player));
         group.getMembers().forEach(memberUUID -> {
             String memberName = "Offline";
-            if (server != null) {
-                IPlayer member = platform().getPlayerByUuid(memberUUID);
-                if (member != null) memberName = member.getName();
-            }
+            IPlayer member = platform().getPlayerByUuid(memberUUID);
+            if (member != null) memberName = member.getName();
             platform().sendSystemMessage(player, parseMessage("- " + memberName, player));
         });
     }
 
     public boolean invitePlayer(IPlayer inviter, IPlayer target) {
+        if (inviter == null) return false;
+        if (target == null) {
+            platform().sendSystemMessage(inviter, translate("group.request_player_offline"));
+            return false;
+        }
+
         long now = System.currentTimeMillis();
         Long last = inviteCooldowns.get(inviter.getUUID());
         if (last != null && (now - last) < INVITE_COOLDOWN_MS) {
@@ -153,18 +143,30 @@ public class GroupChatManager {
             return false;
         }
         inviteCooldowns.put(inviter.getUUID(), now);
+
         String groupName = getPlayerData(inviter).getCurrentGroup();
         if (groupName == null) { platform().sendSystemMessage(inviter, translate("group.no_group_to_invite_from")); return false; }
         Group group = groups.get(groupName);
         if (!group.getOwner().equals(inviter.getUUID())) { platform().sendSystemMessage(inviter, translate("group.not_owner_invite")); return false; }
+
+        String targetName;
+        try {
+            targetName = platform().getPlayerName(target);
+        } catch (Throwable t) {
+            targetName = (target.getName() != null && !target.getName().isBlank()) ? target.getName() : target.getUUID();
+        }
+
         if (group.getMembers().contains(target.getUUID())) {
-            String alreadyRaw = translate("group.player_already_in_group").getRawText().replace("{player_name}", target.getName());
+            String alreadyRaw = translate("group.player_already_in_group").getRawText().replace("{player_name}", targetName);
             platform().sendSystemMessage(inviter, parseMessage(alreadyRaw, inviter));
             return false;
         }
+
         getPlayerData(target).addInvitation(groupName);
-        String inviteSentRaw = translate("group.invite_sent").getRawText().replace("{player_name}", target.getName());
+
+        String inviteSentRaw = translate("invite_sent").getRawText().replace("{player_name}", targetName);
         platform().sendSystemMessage(inviter, parseMessage(inviteSentRaw, inviter));
+
         IComponent base = platform().createComponentFromLiteral("§eYou have been invited to join group §b" + groupName + "§e by §a" + inviter.getName() + " §8[");
         IComponent accept = platform().createComponentFromLiteral("§aACCEPT")
                 .onClickRunCommand("/groupchat accept " + groupName)
@@ -174,8 +176,28 @@ public class GroupChatManager {
                 .onHoverText("Click to deny");
         IComponent message = base.append(accept).append(platform().createComponentFromLiteral("§8 | ")).append(deny).append(platform().createComponentFromLiteral("§8]"));
         platform().sendSystemMessage(target, message);
-        debugLog("Player " + inviter.getName() + " invited " + target.getName() + " to group: " + groupName);
+
+        debugLog("Player " + inviter.getName() + " invited " + targetName + " to group: " + groupName);
         return true;
+    }
+
+    /**
+     * Name-based variant used when platform can't resolve offline targets to IPlayer.
+     * This keeps common fully platform-agnostic while showing correct feedback.
+     */
+    public boolean invitePlayer(IPlayer inviter, String targetName) {
+        if (inviter == null) return false;
+        if (targetName == null || targetName.isBlank()) {
+            platform().sendSystemMessage(inviter, translate("group.request_player_offline"));
+            return false;
+        }
+        IPlayer target = platform().getPlayerByName(targetName);
+        if (target == null) {
+            String inviteSentRaw = translate("invite_sent").getRawText().replace("{player_name}", targetName);
+            platform().sendSystemMessage(inviter, parseMessage(inviteSentRaw, inviter));
+            return false;
+        }
+        return invitePlayer(inviter, target);
     }
 
     public boolean joinGroup(IPlayer player, String groupName) {
@@ -217,7 +239,7 @@ public class GroupChatManager {
         } else if (group.getOwner().equals(player.getUUID())) {
             String newOwnerUUID = group.getMembers().stream().findFirst().orElse(null);
             group.setOwner(newOwnerUUID);
-            IPlayer newOwnerPlayer = (newOwnerUUID != null && getServer() != null) ? platform().getPlayerByUuid(newOwnerUUID) : null;
+            IPlayer newOwnerPlayer = (newOwnerUUID != null) ? platform().getPlayerByUuid(newOwnerUUID) : null;
             if (newOwnerPlayer != null) {
                 platform().sendSystemMessage(newOwnerPlayer, translate("group.new_owner_notification"));
                 debugLog("Ownership of group " + groupName + " transferred to " + newOwnerPlayer.getName());
@@ -249,8 +271,6 @@ public class GroupChatManager {
         if (groupName == null) { platform().sendSystemMessage(owner, translate("group.no_group_to_manage_requests")); return false; }
         Group group = groups.get(groupName);
         if (!group.getOwner().equals(owner.getUUID())) { platform().sendSystemMessage(owner, translate("group.not_owner")); return false; }
-        MinecraftServer server = getServer();
-        if (server == null) { platform().sendSystemMessage(owner, parseMessage("Server not available.", owner)); return false; }
         IPlayer target = platform().getPlayerByName(targetName);
         if (target == null) { platform().sendSystemMessage(owner, translate("group.kick_not_found")); return false; }
         if (!group.getMembers().contains(target.getUUID())) { platform().sendSystemMessage(owner, translate("group.kick_not_member")); return false; }
@@ -301,20 +321,17 @@ public class GroupChatManager {
                 .onHoverText("Click to cancel request");
         IComponent reqMessage = reqMsg.append(cancel).append(platform().createComponentFromLiteral("§8]"));
         platform().sendSystemMessage(player, reqMessage);
-        MinecraftServer server = getServer();
-        if (server != null) {
-            IPlayer owner = platform().getPlayerByUuid(group.getOwner());
-            if (owner != null) {
-                IComponent ownerMsg = platform().createComponentFromLiteral("§e" + player.getName() + " wants to join §b" + groupName + " §8[");
-                IComponent acc = platform().createComponentFromLiteral("§aACCEPT")
-                        .onClickRunCommand("/groupchat acceptreq " + player.getName())
-                        .onHoverText("Click to accept");
-                IComponent dny = platform().createComponentFromLiteral("§cDENY")
-                        .onClickRunCommand("/groupchat denyreq " + player.getName())
-                        .onHoverText("Click to deny");
-                IComponent ownerMessage = ownerMsg.append(acc).append(platform().createComponentFromLiteral("§8 | ")).append(dny).append(platform().createComponentFromLiteral("§8]"));
-                platform().sendSystemMessage(owner, ownerMessage);
-            }
+        IPlayer owner = platform().getPlayerByUuid(group.getOwner());
+        if (owner != null) {
+            IComponent ownerMsg = platform().createComponentFromLiteral("§e" + player.getName() + " wants to join §b" + groupName + " §8[");
+            IComponent acc = platform().createComponentFromLiteral("§aACCEPT")
+                    .onClickRunCommand("/groupchat acceptreq " + player.getName())
+                    .onHoverText("Click to accept");
+            IComponent dny = platform().createComponentFromLiteral("§cDENY")
+                    .onClickRunCommand("/groupchat denyreq " + player.getName())
+                    .onHoverText("Click to deny");
+            IComponent ownerMessage = ownerMsg.append(acc).append(platform().createComponentFromLiteral("§8 | ")).append(dny).append(platform().createComponentFromLiteral("§8]"));
+            platform().sendSystemMessage(owner, ownerMessage);
         }
     }
 
@@ -323,8 +340,6 @@ public class GroupChatManager {
         if (groupName == null) { platform().sendSystemMessage(owner, translate("group.no_group_to_manage_requests")); return false; }
         Group group = groups.get(groupName);
         if (!group.getOwner().equals(owner.getUUID())) { platform().sendSystemMessage(owner, translate("group.not_owner")); return false; }
-        MinecraftServer server = getServer();
-        if (server == null) { platform().sendSystemMessage(owner, translate("group.request_player_offline")); return false; }
         IPlayer target = platform().getPlayerByName(playerName);
         if (target == null) { platform().sendSystemMessage(owner, translate("group.request_player_offline")); return false; }
         Set<String> reqs = pendingJoinRequests.getOrDefault(groupName, Collections.emptySet());
@@ -343,8 +358,6 @@ public class GroupChatManager {
         if (groupName == null) { platform().sendSystemMessage(owner, translate("group.no_group_to_manage_requests")); return false; }
         Group group = groups.get(groupName);
         if (!group.getOwner().equals(owner.getUUID())) { platform().sendSystemMessage(owner, translate("group.not_owner")); return false; }
-        MinecraftServer server = getServer();
-        if (server == null) { platform().sendSystemMessage(owner, translate("group.request_player_offline")); return false; }
         IPlayer target = platform().getPlayerByName(playerName);
         if (target == null) { platform().sendSystemMessage(owner, translate("group.request_player_offline")); return false; }
         Set<String> reqs = pendingJoinRequests.getOrDefault(groupName, Collections.emptySet());
@@ -362,13 +375,10 @@ public class GroupChatManager {
         Set<String> reqs = pendingJoinRequests.getOrDefault(groupName, Collections.emptySet());
         if (reqs.isEmpty()) { platform().sendSystemMessage(owner, translate("group.no_pending_request")); return; }
         platform().sendSystemMessage(owner, parseMessage("&6Pending join requests:", owner));
-        MinecraftServer server = getServer();
         for (String uuid : reqs) {
             String name = uuid;
-            if (server != null) {
-                IPlayer p = platform().getPlayerByUuid(uuid);
-                if (p != null) name = p.getName();
-            }
+            IPlayer p = platform().getPlayerByUuid(uuid);
+            if (p != null) name = p.getName();
             final String pName = name;
             IComponent line = platform().createComponentFromLiteral("§7- §f" + pName + " §8[");
             IComponent acc = platform().createComponentFromLiteral("§aACCEPT")

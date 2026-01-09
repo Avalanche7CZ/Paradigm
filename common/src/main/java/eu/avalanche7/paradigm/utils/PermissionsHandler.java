@@ -2,8 +2,8 @@ package eu.avalanche7.paradigm.utils;
 
 import eu.avalanche7.paradigm.configs.CMConfig;
 import eu.avalanche7.paradigm.data.CustomCommand;
-import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.server.network.ServerPlayerEntity;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import org.slf4j.Logger;
 
 import java.util.LinkedHashMap;
@@ -13,6 +13,7 @@ public class PermissionsHandler {
     private final Logger logger;
     private final CMConfig cmConfig;
     private final DebugLogger debugLogger;
+    private final IPlatformAdapter platform;
 
     public static final String MENTION_EVERYONE_PERMISSION = "paradigm.mention.everyone";
     public static final String MENTION_PLAYER_PERMISSION = "paradigm.mention.player";
@@ -27,40 +28,35 @@ public class PermissionsHandler {
     public static final int BROADCAST_PERMISSION_LEVEL = 2;
     public static final int RESTART_MANAGE_PERMISSION_LEVEL = 2;
 
-    private PermissionChecker checker;
-
-    public PermissionsHandler(Logger logger, CMConfig cmConfig, DebugLogger debugLogger) {
+    public PermissionsHandler(Logger logger, CMConfig cmConfig, DebugLogger debugLogger, IPlatformAdapter platform) {
         this.logger = logger;
         this.cmConfig = cmConfig;
         this.debugLogger = debugLogger;
+        this.platform = platform;
     }
 
     public void initialize() {
-        initializeChecker();
+        // no-op: platform decides how permissions work
     }
 
     public void registerLuckPermsPermissions() {
         registerPermissionsWithLuckPerms();
     }
 
-    private void initializeChecker() {
-        if (checker == null) {
-            if (FabricLoader.getInstance().isModLoaded("luckperms")) {
-                this.checker = new LuckPermsCheckerImpl();
-                logger.info("Paradigm: Using LuckPerms for permission checks.");
-            } else {
-                this.checker = new VanillaPermissionCheckerImpl();
-                logger.info("Paradigm: LuckPerms not found. Using vanilla operator permissions for checks.");
-            }
-        }
-    }
-
     private void registerPermissionsWithLuckPerms() {
-        if (!FabricLoader.getInstance().isModLoaded("luckperms")) {
+        if (!isLuckPermsAvailable()) {
             return;
         }
-
         registerPermissionsWithLuckPermsRetry(0);
+    }
+
+    private static boolean isLuckPermsAvailable() {
+        try {
+            Class.forName("net.luckperms.api.LuckPermsProvider", false, PermissionsHandler.class.getClassLoader());
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     private void registerPermissionsWithLuckPermsRetry(int attemptCount) {
@@ -81,17 +77,17 @@ public class PermissionsHandler {
                     dummyUser.getCachedData().getPermissionData().checkPermission(permission);
                     debugLogger.debugLog("Registered permission with LuckPerms: " + permission);
                 }
-                logger.info("Paradigm: Made " + allPermissions.size() + " permissions visible to LuckPerms.");
+                logger.info("Paradigm: Made {} permissions visible to LuckPerms.", allPermissions.size());
             }
         } catch (IllegalStateException e) {
             if (e.getMessage() != null && e.getMessage().contains("API isn't loaded")) {
                 debugLogger.debugLog("LuckPerms not ready yet, retrying in " + (attemptCount + 1) + " seconds... (attempt " + (attemptCount + 1) + "/5)");
                 scheduleRetry(attemptCount);
             } else {
-                logger.warn("Paradigm: Failed to register permissions with LuckPerms: " + e.getMessage());
+                logger.warn("Paradigm: Failed to register permissions with LuckPerms: {}", e.getMessage());
             }
         } catch (Exception e) {
-            logger.warn("Paradigm: Failed to register permissions with LuckPerms: " + e.getMessage());
+            logger.warn("Paradigm: Failed to register permissions with LuckPerms: {}", e.getMessage());
         }
     }
 
@@ -110,74 +106,69 @@ public class PermissionsHandler {
         registerPermissionsWithLuckPerms();
     }
 
-    public boolean hasPermission(ServerPlayerEntity player, String permission) {
-        if (player == null) return false;
-        if (checker == null) {
-            initialize();
-        }
-        return checker.hasPermission(player, permission);
-    }
-
-    public interface PermissionChecker {
-        boolean hasPermission(ServerPlayerEntity player, String permission);
-    }
-
-    public static class LuckPermsCheckerImpl implements PermissionChecker {
-        @Override
-        public boolean hasPermission(ServerPlayerEntity player, String permission) {
-            try {
-                net.luckperms.api.LuckPerms api = net.luckperms.api.LuckPermsProvider.get();
-                net.luckperms.api.model.user.User user = api.getUserManager().getUser(player.getUuid());
-                if (user != null) {
-                    net.luckperms.api.util.Tristate result = user.getCachedData().getPermissionData().checkPermission(permission);
-                    return result.asBoolean();
-                }
-            } catch (Exception e) {
-                return false;
-            }
+    public boolean hasPermission(IPlayer player, String permission) {
+        if (player == null) {
+            debugLogger.debugLog("[PermissionsHandler] hasPermission called with null player for: " + permission);
             return false;
         }
-    }
-
-    private static class VanillaPermissionCheckerImpl implements PermissionChecker {
-        @Override
-        public boolean hasPermission(ServerPlayerEntity player, String permission) {
-            int requiredLevel = getPermissionLevelForVanilla(permission);
-            return hasPermissionLevelSafe(player, requiredLevel);
+        if (permission == null || permission.isBlank()) {
+            debugLogger.debugLog("[PermissionsHandler] hasPermission called with blank permission for player: " + player.getName());
+            return true;
         }
 
-        private boolean hasPermissionLevelSafe(ServerPlayerEntity player, int level) {
+        debugLogger.debugLog("[PermissionsHandler] Checking permission '" + permission + "' for player: " + player.getName());
+
+        if (isLuckPermsAvailable()) {
             try {
-                // Try direct call first (1.20.1, 1.21.1)
-                return player.hasPermissionLevel(level);
-            } catch (NoSuchMethodError e) {
-                // Fallback for 1.21.8+ - try reflection
-                try {
-                    java.lang.reflect.Method method = player.getClass().getMethod("hasPermissionLevel", int.class);
-                    return (boolean) method.invoke(player, level);
-                } catch (Exception ex) {
-                    // Final fallback - check if player is OP
-                    try {
-                        return player.getServer() != null &&
-                               player.getServer().getPlayerManager() != null &&
-                               player.getServer().getPlayerManager().isOperator(player.getGameProfile());
-                    } catch (Exception finalEx) {
-                        return false;
-                    }
+                net.luckperms.api.LuckPerms api = net.luckperms.api.LuckPermsProvider.get();
+                java.util.UUID uuid = java.util.UUID.fromString(player.getUUID());
+
+                net.luckperms.api.model.user.User user = api.getUserManager().getUser(uuid);
+                if (user != null) {
+                    boolean lpResult = user.getCachedData().getPermissionData().checkPermission(permission).asBoolean();
+                    debugLogger.debugLog("[PermissionsHandler] LuckPerms check for '" + permission + "' -> " + lpResult);
+                    return lpResult;
                 }
+
+                user = api.getUserManager().loadUser(uuid).join();
+                if (user != null) {
+                    boolean lpResult = user.getCachedData().getPermissionData().checkPermission(permission).asBoolean();
+                    debugLogger.debugLog("[PermissionsHandler] LuckPerms (loaded) check for '" + permission + "' -> " + lpResult);
+                    return lpResult;
+                }
+            } catch (Throwable t) {
+                debugLogger.debugLog("[PermissionsHandler] LuckPerms check failed: " + t.toString());
             }
         }
 
-        private int getPermissionLevelForVanilla(String permission) {
-            if (permission == null) return 4;
-
-            return switch (permission) {
-                case STAFF_CHAT_PERMISSION, MENTION_EVERYONE_PERMISSION,
-                        RESTART_MANAGE_PERMISSION, BROADCAST_PERMISSION, RELOAD_PERMISSION -> 2;
-                case MENTION_PLAYER_PERMISSION, GROUPCHAT_PERMISSION -> 0;
-                default -> permission.startsWith("paradigm.") ? 0 : 4;
-            };
+        if (platform != null) {
+            int level = vanillaLevelFor(permission);
+            debugLogger.debugLog("[PermissionsHandler] Using vanilla fallback for '" + permission + "' with level=" + level);
+            try {
+                boolean vanillaResult = platform.hasPermission(player, permission, level);
+                debugLogger.debugLog("[PermissionsHandler] Vanilla check result: " + vanillaResult);
+                return vanillaResult;
+            } catch (Throwable t) {
+                debugLogger.debugLog("[PermissionsHandler] Vanilla check failed: " + t.toString());
+            }
         }
+
+        debugLogger.debugLog("[PermissionsHandler] All checks failed for '" + permission + "', returning false");
+        return false;
+    }
+
+    private static int vanillaLevelFor(String permission) {
+        if (permission == null) return 0;
+        if (permission.equals(MENTION_EVERYONE_PERMISSION)) return MENTION_EVERYONE_PERMISSION_LEVEL;
+        if (permission.equals(MENTION_PLAYER_PERMISSION)) return MENTION_PLAYER_PERMISSION_LEVEL;
+        if (permission.equals(BROADCAST_PERMISSION)) return BROADCAST_PERMISSION_LEVEL;
+        if (permission.equals(RESTART_MANAGE_PERMISSION)) return RESTART_MANAGE_PERMISSION_LEVEL;
+
+        if (permission.equals(STAFF_CHAT_PERMISSION)) return 2;
+        if (permission.equals(GROUPCHAT_PERMISSION)) return 2;
+        if (permission.equals(RELOAD_PERMISSION)) return 2;
+
+        return 0;
     }
 
     public Map<String, String> knownPermissionNodes() {

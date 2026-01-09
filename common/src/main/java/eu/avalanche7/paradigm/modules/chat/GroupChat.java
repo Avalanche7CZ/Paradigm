@@ -1,24 +1,11 @@
 package eu.avalanche7.paradigm.modules.chat;
 
-import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.StringArgumentType;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.PlayerGroupData;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.*;
 import eu.avalanche7.paradigm.utils.GroupChatManager;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
-import net.fabricmc.fabric.api.message.v1.ServerMessageEvents;
-import net.minecraft.command.CommandRegistryAccess;
-import net.minecraft.command.argument.EntityArgumentType;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
 import org.jetbrains.annotations.Nullable;
 
 public class GroupChat implements ParadigmModule {
@@ -77,144 +64,224 @@ public class GroupChat implements ParadigmModule {
     }
 
     @Override
-    public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {
-        dispatcher.register(CommandManager.literal("groupchat")
-                .requires(source -> source.isExecutedByPlayer() &&
-                        services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.GROUPCHAT_PERMISSION))
+    public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
+        ICommandBuilder cmd = platform.createCommandBuilder()
+                .literal("groupchat")
+                .requires(source -> source.getPlayer() != null &&
+                        platform.hasPermission(source.getPlayer(), PermissionsHandler.GROUPCHAT_PERMISSION))
                 .executes(ctx -> {
-                    displayHelp(ctx.getSource().getPlayer(), services);
+                    IPlayer player = ctx.getSource().requirePlayer();
+                    displayHelp(player, services);
                     return 1;
                 })
-                .then(CommandManager.literal("create")
-                        .then(CommandManager.argument("name", StringArgumentType.string())
+                .then(platform.createCommandBuilder()
+                        .literal("create")
+                        .then(platform.createCommandBuilder()
+                                .argument("name", ICommandBuilder.ArgumentType.STRING)
                                 .executes(ctx -> {
-                                    String groupName = StringArgumentType.getString(ctx, "name");
-                                    return groupChatManager.createGroup(platform.wrapPlayer(ctx.getSource().getPlayer()), groupName) ? 1 : 0;
+                                    IPlayer player = ctx.getSource().requirePlayer();
+                                    String groupName = ctx.getStringArgument("name");
+                                    return groupChatManager.createGroup(player, groupName) ? 1 : 0;
                                 })))
-                .then(CommandManager.literal("delete")
-                        .executes(ctx -> groupChatManager.deleteGroup(platform.wrapPlayer(ctx.getSource().getPlayer())) ? 1 : 0))
-                .then(CommandManager.literal("invite")
-                        .then(CommandManager.argument("player", EntityArgumentType.player())
+                .then(platform.createCommandBuilder()
+                        .literal("delete")
+                        .executes(ctx -> {
+                            IPlayer player = ctx.getSource().requirePlayer();
+                            return groupChatManager.deleteGroup(player) ? 1 : 0;
+                        }))
+                .then(platform.createCommandBuilder()
+                        .literal("invite")
+                        .then(platform.createCommandBuilder()
+                                .argument("player", ICommandBuilder.ArgumentType.PLAYER)
                                 .executes(ctx -> {
-                                    ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "player");
-                                    return groupChatManager.invitePlayer(platform.wrapPlayer(ctx.getSource().getPlayer()), platform.wrapPlayer(target)) ? 1 : 0;
+                                    IPlayer player = ctx.getSource().requirePlayer();
+                                    IPlayer target = ctx.getPlayerArgument("player");
+                                    if (target == null) {
+                                        // Some platforms/versions may not resolve here; fall back to raw string if present.
+                                        try {
+                                            String raw = ctx.getStringArgument("player");
+                                            return groupChatManager.invitePlayer(player, raw) ? 1 : 0;
+                                        } catch (Throwable t) {
+                                            return groupChatManager.invitePlayer(player, (IPlayer) null) ? 1 : 0;
+                                        }
+                                    }
+                                    return groupChatManager.invitePlayer(player, target) ? 1 : 0;
                                 })))
-                .then(CommandManager.literal("join")
-                        .then(CommandManager.argument("name", StringArgumentType.string())
+                .then(platform.createCommandBuilder()
+                        .literal("join")
+                        .then(platform.createCommandBuilder()
+                                .argument("name", ICommandBuilder.ArgumentType.STRING)
                                 .executes(ctx -> {
-                                    String groupName = StringArgumentType.getString(ctx, "name");
-                                    return groupChatManager.joinGroup(platform.wrapPlayer(ctx.getSource().getPlayer()), groupName) ? 1 : 0;
+                                    IPlayer player = ctx.getSource().requirePlayer();
+                                    String groupName = ctx.getStringArgument("name");
+                                    return groupChatManager.joinGroup(player, groupName) ? 1 : 0;
                                 })))
-                .then(CommandManager.literal("accept")
-                        .then(CommandManager.argument("groupname", StringArgumentType.string())
+                .then(platform.createCommandBuilder()
+                        .literal("accept")
+                        .then(platform.createCommandBuilder()
+                                .argument("groupname", ICommandBuilder.ArgumentType.STRING)
                                 .executes(ctx -> {
-                                    String groupName = StringArgumentType.getString(ctx, "groupname");
-                                    return groupChatManager.acceptInvite(platform.wrapPlayer(ctx.getSource().getPlayer()), groupName) ? 1 : 0;
+                                    IPlayer player = ctx.getSource().requirePlayer();
+                                    String groupName = ctx.getStringArgument("groupname");
+                                    return groupChatManager.acceptInvite(player, groupName) ? 1 : 0;
                                 })))
-                .then(CommandManager.literal("deny")
-                        .then(CommandManager.argument("groupname", StringArgumentType.string())
+                .then(platform.createCommandBuilder()
+                        .literal("deny")
+                        .then(platform.createCommandBuilder()
+                                .argument("groupname", ICommandBuilder.ArgumentType.STRING)
                                 .executes(ctx -> {
-                                    String groupName = StringArgumentType.getString(ctx, "groupname");
-                                    return groupChatManager.denyInvite(platform.wrapPlayer(ctx.getSource().getPlayer()), groupName) ? 1 : 0;
+                                    IPlayer player = ctx.getSource().requirePlayer();
+                                    String groupName = ctx.getStringArgument("groupname");
+                                    return groupChatManager.denyInvite(player, groupName) ? 1 : 0;
                                 })))
-                .then(CommandManager.literal("request")
-                        .then(CommandManager.argument("groupname", StringArgumentType.string())
+                .then(platform.createCommandBuilder()
+                        .literal("request")
+                        .then(platform.createCommandBuilder()
+                                .argument("groupname", ICommandBuilder.ArgumentType.STRING)
                                 .executes(ctx -> {
-                                    String groupName = StringArgumentType.getString(ctx, "groupname");
-                                    groupChatManager.requestJoinGroup(platform.wrapPlayer(ctx.getSource().getPlayer()), groupName);
+                                    IPlayer player = ctx.getSource().requirePlayer();
+                                    String groupName = ctx.getStringArgument("groupname");
+                                    groupChatManager.requestJoinGroup(player, groupName);
                                     return 1;
                                 })))
-                .then(CommandManager.literal("acceptreq")
-                        .then(CommandManager.argument("playername", StringArgumentType.string())
+                .then(platform.createCommandBuilder()
+                        .literal("acceptreq")
+                        .then(platform.createCommandBuilder()
+                                .argument("playername", ICommandBuilder.ArgumentType.STRING)
                                 .executes(ctx -> {
-                                    String playerName = StringArgumentType.getString(ctx, "playername");
-                                    return groupChatManager.acceptJoinRequest(platform.wrapPlayer(ctx.getSource().getPlayer()), playerName) ? 1 : 0;
+                                    IPlayer player = ctx.getSource().requirePlayer();
+                                    String playerName = ctx.getStringArgument("playername");
+                                    return groupChatManager.acceptJoinRequest(player, playerName) ? 1 : 0;
                                 })))
-                .then(CommandManager.literal("denyreq")
-                        .then(CommandManager.argument("playername", StringArgumentType.string())
+                .then(platform.createCommandBuilder()
+                        .literal("denyreq")
+                        .then(platform.createCommandBuilder()
+                                .argument("playername", ICommandBuilder.ArgumentType.STRING)
                                 .executes(ctx -> {
-                                    String playerName = StringArgumentType.getString(ctx, "playername");
-                                    return groupChatManager.denyJoinRequest(platform.wrapPlayer(ctx.getSource().getPlayer()), playerName) ? 1 : 0;
+                                    IPlayer player = ctx.getSource().requirePlayer();
+                                    String playerName = ctx.getStringArgument("playername");
+                                    return groupChatManager.denyJoinRequest(player, playerName) ? 1 : 0;
                                 })))
-                .then(CommandManager.literal("requests")
+                .then(platform.createCommandBuilder()
+                        .literal("requests")
                         .executes(ctx -> {
-                            groupChatManager.listJoinRequests(platform.wrapPlayer(ctx.getSource().getPlayer()));
+                            IPlayer player = ctx.getSource().requirePlayer();
+                            groupChatManager.listJoinRequests(player);
                             return 1;
                         }))
-                .then(CommandManager.literal("list")
+                .then(platform.createCommandBuilder()
+                        .literal("list")
                         .executes(ctx -> {
-                            groupChatManager.listGroups(platform.wrapPlayer(ctx.getSource().getPlayer()));
+                            IPlayer player = ctx.getSource().requirePlayer();
+                            groupChatManager.listGroups(player);
                             return 1;
                         }))
-                .then(CommandManager.literal("info")
-                        .then(CommandManager.argument("name", StringArgumentType.string())
+                .then(platform.createCommandBuilder()
+                        .literal("info")
+                        .then(platform.createCommandBuilder()
+                                .argument("name", ICommandBuilder.ArgumentType.STRING)
                                 .executes(ctx -> {
-                                    String groupName = StringArgumentType.getString(ctx, "name");
-                                    groupChatManager.groupInfo(platform.wrapPlayer(ctx.getSource().getPlayer()), groupName);
+                                    IPlayer player = ctx.getSource().requirePlayer();
+                                    String groupName = ctx.getStringArgument("name");
+                                    groupChatManager.groupInfo(player, groupName);
                                     return 1;
                                 }))
                         .executes(ctx -> {
-                            IPlayer wrappedPlayer = platform.wrapPlayer(ctx.getSource().getPlayer());
-                            PlayerGroupData data = groupChatManager.getPlayerData(wrappedPlayer);
+                            IPlayer player = ctx.getSource().requirePlayer();
+                            PlayerGroupData data = groupChatManager.getPlayerData(player);
                             String currentGroup = data.getCurrentGroup();
                             if (currentGroup != null) {
-                                groupChatManager.groupInfo(wrappedPlayer, currentGroup);
+                                groupChatManager.groupInfo(player, currentGroup);
                             } else {
-                                platform.sendSystemMessage(wrappedPlayer, services.getLang().translate("group.no_group_to_info"));
+                                platform.sendSystemMessage(player, services.getLang().translate("group.no_group_to_info"));
                             }
                             return 1;
                         }))
-                .then(CommandManager.literal("say")
-                        .then(CommandManager.argument("message", StringArgumentType.greedyString())
+                .then(platform.createCommandBuilder()
+                        .literal("say")
+                        .then(platform.createCommandBuilder()
+                                .argument("message", ICommandBuilder.ArgumentType.GREEDY_STRING)
                                 .executes(ctx -> {
-                                    String message = StringArgumentType.getString(ctx, "message");
-                                    groupChatManager.sendMessageFromCommand(platform.wrapPlayer(ctx.getSource().getPlayer()), message);
+                                    IPlayer player = ctx.getSource().requirePlayer();
+                                    String message = ctx.getStringArgument("message");
+                                    groupChatManager.sendMessageFromCommand(player, message);
                                     return 1;
                                 })))
-                .then(CommandManager.literal("toggle")
+                .then(platform.createCommandBuilder()
+                        .literal("toggle")
                         .executes(ctx -> {
-                            groupChatManager.toggleGroupChat(platform.wrapPlayer(ctx.getSource().getPlayer()));
+                            IPlayer player = ctx.getSource().requirePlayer();
+                            groupChatManager.toggleGroupChat(player);
                             return 1;
                         }))
-                .then(CommandManager.literal("help")
+                .then(platform.createCommandBuilder()
+                        .literal("help")
                         .executes(ctx -> {
-                            displayHelp(ctx.getSource().getPlayer(), services);
+                            IPlayer player = ctx.getSource().requirePlayer();
+                            displayHelp(player, services);
                             return 1;
                         }))
-        );
+                .then(platform.createCommandBuilder()
+                        .literal("leave")
+                        .executes(ctx -> {
+                            IPlayer player = ctx.getSource().requirePlayer();
+                            return groupChatManager.leaveGroup(player) ? 1 : 0;
+                        }))
+                .then(platform.createCommandBuilder()
+                        .literal("kick")
+                        .then(platform.createCommandBuilder()
+                                .argument("playername", ICommandBuilder.ArgumentType.STRING)
+                                .executes(ctx -> {
+                                    IPlayer player = ctx.getSource().requirePlayer();
+                                    String targetName = ctx.getStringArgument("playername");
+                                    return groupChatManager.kickMember(player, targetName) ? 1 : 0;
+                                })));
+
+        platform.registerCommand(cmd);
     }
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
-        if (!isEnabled(services)) {
-            services.getDebugLogger().debugLog(NAME + " module is disabled by config; skipping event registration.");
-            return;
+        if (services == null) return;
+        this.services = services;
+        this.platform = services.getPlatformAdapter();
+
+        IEventSystem events = services.getPlatformAdapter().getEventSystem();
+        if (events != null) {
+            events.onPlayerChat(event -> {
+                IPlayer player = event.getPlayer();
+                if (player == null) return;
+                if (!isEnabled(this.services)) return;
+
+                boolean allow = handleGroupChatMessage(player, event.getMessage());
+                if (!allow) {
+                    event.setCancelled(true);
+                }
+            });
         }
-        ServerMessageEvents.ALLOW_CHAT_MESSAGE.register(this::handleGroupChatMessage);
     }
 
-    private boolean handleGroupChatMessage(net.minecraft.network.message.SignedMessage message, ServerPlayerEntity player, net.minecraft.network.message.MessageType.Parameters params) {
-        if (player == null || message == null) {
+    public boolean handleGroupChatMessage(IPlayer player, String messageContent) {
+        if (player == null || messageContent == null) {
             return true;
         }
         if (this.services == null || !isEnabled(this.services) || this.groupChatManager == null) {
             return true;
         }
 
-        IPlayer wrappedPlayer = platform.wrapPlayer(player);
-        if (groupChatManager.isGroupChatToggled(wrappedPlayer)) {
-            PlayerGroupData data = groupChatManager.getPlayerData(wrappedPlayer);
+        if (groupChatManager.isGroupChatToggled(player)) {
+            PlayerGroupData data = groupChatManager.getPlayerData(player);
             String groupName = data.getCurrentGroup();
 
             if (groupName != null) {
-                boolean sentToGroup = groupChatManager.sendMessageToGroup(wrappedPlayer, groupName, message.getContent().getString());
+                boolean sentToGroup = groupChatManager.sendMessageToGroup(player, groupName, messageContent);
                 if (sentToGroup) {
-                    services.getLogger().info("[GroupChat] [{}] {}: {}", groupName, player.getName().getString(), message.getContent().getString());
+                    services.getLogger().info("[GroupChat] [{}] {}: {}", groupName, platform.getPlayerName(player), messageContent);
                 }
             } else {
-                platform.sendSystemMessage(wrappedPlayer, services.getLang().translate("group.no_group_to_send_message"));
-                groupChatManager.setGroupChatToggled(wrappedPlayer, false);
-                platform.sendSystemMessage(wrappedPlayer, services.getLang().translate("group.chat_disabled"));
+                platform.sendSystemMessage(player, services.getLang().translate("group.no_group_to_send_message"));
+                groupChatManager.setGroupChatToggled(player, false);
+                platform.sendSystemMessage(player, services.getLang().translate("group.chat_disabled"));
             }
             return false;
         }
@@ -222,25 +289,26 @@ public class GroupChat implements ParadigmModule {
         return true;
     }
 
-    private void displayHelp(ServerPlayerEntity player, Services services) {
+    private void displayHelp(@Nullable IPlayer player, Services services) {
+        if (player == null) return;
         String label = "groupchat";
-        IPlayer wrappedPlayer = platform.wrapPlayer(player);
-        platform.sendSystemMessage(wrappedPlayer, services.getLang().translate("group.help_title"));
-        sendHelpMessage(wrappedPlayer, label, "create <name>", services.getLang().translate("group.help_create").getRawText(), services);
-        sendHelpMessage(wrappedPlayer, label, "delete", services.getLang().translate("group.help_delete").getRawText(), services);
-        sendHelpMessage(wrappedPlayer, label, "invite <player>", services.getLang().translate("group.help_invite").getRawText(), services);
-        sendHelpMessage(wrappedPlayer, label, "join <group_name>", services.getLang().translate("group.help_join").getRawText(), services);
-        sendHelpMessage(wrappedPlayer, label, "leave", services.getLang().translate("group.help_leave").getRawText(), services);
-        sendHelpMessage(wrappedPlayer, label, "list", services.getLang().translate("group.help_list").getRawText(), services);
-        sendHelpMessage(wrappedPlayer, label, "info [group_name]", services.getLang().translate("group.help_info").getRawText(), services);
-        sendHelpMessage(wrappedPlayer, label, "say <message>", services.getLang().translate("group.help_say").getRawText(), services);
-        sendHelpMessage(wrappedPlayer, label, "toggle", services.getLang().translate("group.help_toggle").getRawText(), services);
-        sendHelpMessage(wrappedPlayer, label, "accept <group_name>", services.getLang().translate("group.help_accept").getRawText(), services);
-        sendHelpMessage(wrappedPlayer, label, "deny <group_name>", services.getLang().translate("group.help_deny").getRawText(), services);
-        sendHelpMessage(wrappedPlayer, label, "request <group_name>", services.getLang().translate("group.help_request").getRawText(), services);
-        sendHelpMessage(wrappedPlayer, label, "acceptreq <player_name>", services.getLang().translate("group.help_acceptreq").getRawText(), services);
-        sendHelpMessage(wrappedPlayer, label, "denyreq <player_name>", services.getLang().translate("group.help_denyreq").getRawText(), services);
-        sendHelpMessage(wrappedPlayer, label, "requests", services.getLang().translate("group.help_requests").getRawText(), services);
+        platform.sendSystemMessage(player, services.getLang().translate("group.help_title"));
+        sendHelpMessage(player, label, "create <name>", services.getLang().translate("group.help_create").getRawText(), services);
+        sendHelpMessage(player, label, "delete", services.getLang().translate("group.help_delete").getRawText(), services);
+        sendHelpMessage(player, label, "invite <player>", services.getLang().translate("group.help_invite").getRawText(), services);
+        sendHelpMessage(player, label, "join <group_name>", services.getLang().translate("group.help_join").getRawText(), services);
+        sendHelpMessage(player, label, "leave", services.getLang().translate("group.help_leave").getRawText(), services);
+        sendHelpMessage(player, label, "list", services.getLang().translate("group.help_list").getRawText(), services);
+        sendHelpMessage(player, label, "info [group_name]", services.getLang().translate("group.help_info").getRawText(), services);
+        sendHelpMessage(player, label, "say <message>", services.getLang().translate("group.help_say").getRawText(), services);
+        sendHelpMessage(player, label, "toggle", services.getLang().translate("group.help_toggle").getRawText(), services);
+        sendHelpMessage(player, label, "accept <group_name>", services.getLang().translate("group.help_accept").getRawText(), services);
+        sendHelpMessage(player, label, "deny <group_name>", services.getLang().translate("group.help_deny").getRawText(), services);
+        sendHelpMessage(player, label, "request <group_name>", services.getLang().translate("group.help_request").getRawText(), services);
+        sendHelpMessage(player, label, "acceptreq <player_name>", services.getLang().translate("group.help_acceptreq").getRawText(), services);
+        sendHelpMessage(player, label, "denyreq <player_name>", services.getLang().translate("group.help_denyreq").getRawText(), services);
+        sendHelpMessage(player, label, "requests", services.getLang().translate("group.help_requests").getRawText(), services);
+        sendHelpMessage(player, label, "kick <player_name>", "Kick a member from your group (owner only).", services);
     }
 
     private void sendHelpMessage(IPlayer player, String label, String command, String description, Services services) {

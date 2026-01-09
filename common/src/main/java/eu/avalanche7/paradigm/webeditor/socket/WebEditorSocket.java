@@ -62,8 +62,6 @@ public class WebEditorSocket {
     private volatile long lastPing = System.currentTimeMillis();
     private final CompletableFuture<Void> connectFuture = new CompletableFuture<>();
     private ScheduledFuture<?> keepaliveTask;
-
-    // Track untrusted connection attempts: nonce -> public key
     private final Map<String, PublicKey> attemptedConnections = new ConcurrentHashMap<>();
 
     public WebEditorSocket(Services services, ICommandSource owner) {
@@ -73,7 +71,7 @@ public class WebEditorSocket {
     }
 
     private boolean debugEnabled() {
-        try { return eu.avalanche7.paradigm.configs.MainConfigHandler.CONFIG.debugEnable.get(); } catch (Throwable t) { return false; }
+        try { return eu.avalanche7.paradigm.configs.MainConfigHandler.getConfig().debugEnable.value; } catch (Throwable t) { return false; }
     }
 
     public void initialize(BytesocksClient client) throws Exception {
@@ -352,12 +350,7 @@ public class WebEditorSocket {
                                 String cmd = "/paradigm editor trust " + (nonce == null ? "nonce" : nonce);
                                 IComponent clickable = services.getPlatformAdapter().createComponentFromLiteral("Click to trust this editor (" + (browser == null ? "unknown" : browser) + ")").onClickRunCommand(cmd).onHoverText("Run " + cmd);
                                 try {
-                                    Object orig = this.owner.getOriginalSource();
-                                    if (orig instanceof net.minecraft.server.command.ServerCommandSource scs) {
-                                        services.getPlatformAdapter().sendSuccess(scs, clickable, false);
-                                    } else {
-                                        services.getLogger().info("Paradigm WebEditor: owner original source is not a ServerCommandSource for owner={}", this.owner.getSourceName());
-                                    }
+                                    services.getPlatformAdapter().sendSuccess(this.owner, clickable, false);
                                 } catch (Throwable ignored) {}
                             }
                         } catch (Throwable ignored) {}
@@ -387,10 +380,7 @@ public class WebEditorSocket {
                             String msgTxt = "Web Editor socket connected.";
                             IComponent comp = services.getPlatformAdapter().createComponentFromLiteral(msgTxt);
                             try {
-                                Object orig = this.owner.getOriginalSource();
-                                if (orig instanceof net.minecraft.server.command.ServerCommandSource scs) {
-                                    services.getPlatformAdapter().sendSuccess(scs, comp, false);
-                                }
+                                services.getPlatformAdapter().sendSuccess(this.owner, comp, false);
                             } catch (Throwable ignored) {}
                         }
                     } catch (Throwable ignored) {}

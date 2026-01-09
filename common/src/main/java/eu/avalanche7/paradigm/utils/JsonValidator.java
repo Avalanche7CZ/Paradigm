@@ -105,11 +105,11 @@ public class JsonValidator {
                     continue;
                 }
                 if (c == '/' && next == '*') {
-                    i += 2; // Skip /*
+                    i += 2;
                     while (i + 1 < json.length() && !(json.charAt(i) == '*' && json.charAt(i + 1) == '/')) {
                         i++;
                     }
-                    if (i + 1 < json.length()) i += 2; // Skip */
+                    if (i + 1 < json.length()) i += 2;
                     issues.add("Removed multi-line comments");
                     continue;
                 }

@@ -21,7 +21,7 @@ dependencies {
     compileOnly('net.luckperms:api:5.4')
 
     // Common module dependency
-    implementation project(path: ':common', configuration: 'namedElements')
+    implementation project(':common')
     include project(':common')
 }
 

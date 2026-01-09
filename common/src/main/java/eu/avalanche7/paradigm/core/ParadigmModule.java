@@ -1,9 +1,5 @@
 package eu.avalanche7.paradigm.core;
 
-import com.mojang.brigadier.CommandDispatcher;
-import net.minecraft.command.CommandRegistryAccess;
-import net.minecraft.server.command.ServerCommandSource;
-
 public interface ParadigmModule {
     String getName();
 
@@ -19,7 +15,8 @@ public interface ParadigmModule {
 
     void onServerStopping(Object event, Services services);
 
-    void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services);
+    void registerCommands(Object dispatcher, Object registryAccess, Services services);
 
     void registerEventListeners(Object eventBus, Services services);
 }
+

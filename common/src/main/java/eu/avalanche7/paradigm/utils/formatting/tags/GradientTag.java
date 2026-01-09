@@ -3,10 +3,6 @@ package eu.avalanche7.paradigm.utils.formatting.tags;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.formatting.FormattingContext;
-import net.minecraft.text.Text;
-import net.minecraft.text.MutableText;
-import net.minecraft.text.Style;
-import net.minecraft.text.TextColor;
 
 public class GradientTag implements Tag {
     private final IPlatformAdapter platformAdapter;
@@ -37,19 +33,20 @@ public class GradientTag implements Tag {
     public void process(FormattingContext context, String arguments) {
         this.hardGradient = getName().equalsIgnoreCase("hard_gradient");
         this.colors = parseColors(arguments);
-        gradientContent = platformAdapter.wrap(Text.literal(""));
+        gradientContent = platformAdapter.createComponentFromLiteral("");
         context.pushComponent(gradientContent);
         context.pushStyle(context.getCurrentStyle());
     }
 
     @Override
     public void close(FormattingContext context) {
+        Object gradientBaseStyle = context.getCurrentStyle();
         context.popStyle();
 
         if (gradientContent != null && colors != null && colors.length >= 2) {
             String text = gradientContent.getRawText();
             if (text != null && !text.isEmpty()) {
-                MutableText result = Text.literal("");
+                IComponent result = platformAdapter.createComponentFromLiteral("");
                 int charCount = text.length();
 
                 for (int i = 0; i < charCount; i++) {
@@ -73,13 +70,16 @@ public class GradientTag implements Tag {
                         }
                     }
 
-                    Style charStyle = Style.EMPTY.withColor(TextColor.fromRgb(color));
-                    result.append(Text.literal(String.valueOf(c)).setStyle(charStyle));
+                    IComponent part = platformAdapter.createComponentFromLiteral(String.valueOf(c));
+                    if (gradientBaseStyle != null) {
+                        part.setStyle(gradientBaseStyle);
+                    }
+                    part = part.withColor(color);
+                    result.append(part);
                 }
 
                 context.popComponent();
-                IComponent parent = context.getCurrentComponent();
-                parent.append(platformAdapter.wrap(result));
+                context.getCurrentComponent().append(result);
             } else {
                 context.popComponent();
             }
@@ -114,28 +114,59 @@ public class GradientTag implements Tag {
             return null;
         }
 
-        // Hex color
-        if (color.startsWith("#")) {
+        String c = color.trim();
+
+        if (c.startsWith("#")) {
             try {
-                return Integer.parseInt(color.substring(1), 16);
+                return Integer.parseInt(c.substring(1), 16);
             } catch (NumberFormatException e) {
                 return null;
             }
         }
 
-        // Named color
-        try {
-            net.minecraft.util.Formatting formatting = net.minecraft.util.Formatting.byName(color.toUpperCase());
-            if (formatting != null && formatting.getColorValue() != null) {
-                return formatting.getColorValue();
+        if (c.length() == 6) {
+            try {
+                return Integer.parseInt(c, 16);
+            } catch (NumberFormatException ignored) {
             }
-        } catch (Exception e) {
-            // Ignore
         }
 
-        return null;
-    }
+        String n = c.toLowerCase(java.util.Locale.ROOT)
+                .replace("-", "_")
+                .replace(" ", "_");
 
+        n = switch (n) {
+            case "darkblue" -> "dark_blue";
+            case "darkgreen" -> "dark_green";
+            case "darkaqua" -> "dark_aqua";
+            case "darkred" -> "dark_red";
+            case "darkpurple" -> "dark_purple";
+            case "lightpurple" -> "light_purple";
+            case "darkgray" -> "dark_gray";
+            case "lightgray" -> "gray";
+            default -> n;
+        };
+
+        return switch (n) {
+            case "black" -> 0x000000;
+            case "dark_blue" -> 0x0000AA;
+            case "dark_green" -> 0x00AA00;
+            case "dark_aqua", "dark_cyan" -> 0x00AAAA;
+            case "dark_red" -> 0xAA0000;
+            case "dark_purple" -> 0xAA00AA;
+            case "gold", "orange" -> 0xFFAA00;
+            case "gray", "grey" -> 0xAAAAAA;
+            case "dark_gray", "dark_grey" -> 0x555555;
+            case "blue" -> 0x5555FF;
+            case "green" -> 0x55FF55;
+            case "aqua", "cyan" -> 0x55FFFF;
+            case "red" -> 0xFF5555;
+            case "light_purple", "pink", "magenta" -> 0xFF55FF;
+            case "yellow" -> 0xFFFF55;
+            case "white" -> 0xFFFFFF;
+            default -> null;
+        };
+    }
 
     private int interpolateColor(int color1, int color2, float progress) {
         int r1 = (color1 >> 16) & 0xFF;
@@ -153,4 +184,3 @@ public class GradientTag implements Tag {
         return (r << 16) | (g << 8) | b;
     }
 }
-

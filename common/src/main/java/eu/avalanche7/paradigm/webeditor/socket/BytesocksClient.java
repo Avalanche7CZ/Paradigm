@@ -20,7 +20,7 @@ public class BytesocksClient {
         this.wsUrl = "wss://" + h + "/";
         this.userAgent = userAgent == null ? "paradigm/editor" : userAgent;
         try {
-            this.debugEnabled = eu.avalanche7.paradigm.configs.MainConfigHandler.CONFIG.debugEnable.get();
+            this.debugEnabled = eu.avalanche7.paradigm.configs.MainConfigHandler.getConfig().debugEnable.value;
         } catch (Throwable ignored) {}
     }
 
@@ -30,7 +30,7 @@ public class BytesocksClient {
             String createUrl = this.httpUrl + "create";
             if (debugEnabled) {
                 System.out.println("[BytesocksClient] Creating channel at: " + createUrl);
-            }
+            }//
 
             conn = (HttpURLConnection) URI.create(createUrl).toURL().openConnection();
             conn.setRequestMethod("GET");

@@ -51,7 +51,6 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
     private GroupChatManager groupChatManagerInstance;
     private CMConfig cmConfigInstance;
     private IPlatformAdapter platformAdapterInstance;
-    private CooldownConfigHandler cooldownConfigHandlerInstance;
     private TelemetryReporter telemetryReporter;
 
     @Override
@@ -64,7 +63,6 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
         servicesInstance = services;
         modulesStatic = modules;
 
-        // Initialize ParadigmAPI
         ParadigmAPI.setInstance(this);
 
         modules.forEach(module -> module.registerEventListeners(null, services));
@@ -78,6 +76,13 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
 
             LOGGER.info("Paradigm Fabric mod (1.21.8) has been set up.");
             LOGGER.info("==================================================");
+            LOGGER.info("  ____                     _ _");
+            LOGGER.info(" |  _ \\ __ _ _ __ __ _  __| (_) __ _ _ __ ___");
+            LOGGER.info(" | |_) / _` | '__/ _` |/ _` | |/ _` | '_ ` _ \\");
+            LOGGER.info(" |  __/ (_| | | | (_| | (_| | | (_| | | | | | |");
+            LOGGER.info(" |_|   \\__,_|_|  \\__,_|\\__,_|_|\\__, |_| |_| |_|");
+            LOGGER.info("                                |___/");
+            LOGGER.info("");
             LOGGER.info("{} - Version {}", displayName, getModVersion());
             LOGGER.info("Author: Avalanche7CZ");
             LOGGER.info("Discord: https://discord.com/invite/qZDcQdEFqQ");
@@ -90,29 +95,21 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
         try {
             LOGGER.info("[Paradigm] Loading configurations...");
 
+            eu.avalanche7.paradigm.platform.Interfaces.IConfig platformConfig = new eu.avalanche7.paradigm.platform.FabricConfig();
             DebugLogger bootstrapDebugLogger = new DebugLogger(null);
-            MainConfigHandler.setJsonValidator(bootstrapDebugLogger);
-            AnnouncementsConfigHandler.setJsonValidator(bootstrapDebugLogger);
-            ChatConfigHandler.setJsonValidator(bootstrapDebugLogger);
-            MentionConfigHandler.setJsonValidator(bootstrapDebugLogger);
-            RestartConfigHandler.setJsonValidator(bootstrapDebugLogger);
-            MOTDConfigHandler.setJsonValidator(bootstrapDebugLogger);
 
-            MainConfigHandler.getConfig();
-            AnnouncementsConfigHandler.getConfig();
-            MentionConfigHandler.getConfig();
-            RestartConfigHandler.getConfig();
-            ChatConfigHandler.getConfig();
-            MOTDConfigHandler.getConfig();
-            CooldownConfigHandler.load();
+            MainConfigHandler.init(platformConfig, bootstrapDebugLogger);
+            bootstrapDebugLogger = new DebugLogger(MainConfigHandler.getConfig());
+
+            AnnouncementsConfigHandler.init(platformConfig, bootstrapDebugLogger);
+            MOTDConfigHandler.init(platformConfig, bootstrapDebugLogger);
+            MentionConfigHandler.init(platformConfig, bootstrapDebugLogger);
+            RestartConfigHandler.init(platformConfig, bootstrapDebugLogger);
+            ChatConfigHandler.init(platformConfig, bootstrapDebugLogger);
+            CooldownConfigHandler.init(platformConfig, bootstrapDebugLogger);
+            EmojiConfigHandler.init(platformConfig);
 
             debugLoggerInstance = new DebugLogger(MainConfigHandler.getConfig());
-            MainConfigHandler.setJsonValidator(debugLoggerInstance);
-            AnnouncementsConfigHandler.setJsonValidator(debugLoggerInstance);
-            ChatConfigHandler.setJsonValidator(debugLoggerInstance);
-            MentionConfigHandler.setJsonValidator(debugLoggerInstance);
-            RestartConfigHandler.setJsonValidator(debugLoggerInstance);
-            MOTDConfigHandler.setJsonValidator(debugLoggerInstance);
 
             if (this.cmConfigInstance == null) {
                 this.cmConfigInstance = new CMConfig(debugLoggerInstance);
@@ -121,6 +118,10 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
 
             createUtilityInstances();
 
+            if(this.langInstance == null) {
+                this.langInstance = new Lang(LOGGER, MainConfigHandler.getConfig(), this.messageParserInstance, this.platformAdapterInstance);
+            }
+            this.langInstance.initializeLanguage();
 
             LOGGER.info("[Paradigm] All configurations loaded successfully.");
         } catch (Exception e) {
@@ -133,23 +134,23 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
         this.placeholdersInstance = new Placeholders();
         this.debugLoggerInstance = new DebugLogger(MainConfigHandler.getConfig());
         this.taskSchedulerInstance = new TaskScheduler(this.debugLoggerInstance);
-        this.permissionsHandlerInstance = new PermissionsHandler(LOGGER, this.cmConfigInstance, this.debugLoggerInstance);
-        this.groupChatManagerInstance = new GroupChatManager();
-        this.cooldownConfigHandlerInstance = new CooldownConfigHandler();
+
         this.platformAdapterInstance = new PlatformAdapterImpl(
-                this.permissionsHandlerInstance,
+                null,
                 this.placeholdersInstance,
                 this.taskSchedulerInstance,
                 this.debugLoggerInstance
         );
 
+        this.permissionsHandlerInstance = new PermissionsHandler(LOGGER, this.cmConfigInstance, this.debugLoggerInstance, this.platformAdapterInstance);
+        this.groupChatManagerInstance = new GroupChatManager();
+
+        if (this.platformAdapterInstance instanceof eu.avalanche7.paradigm.platform.PlatformAdapterImpl pai) {
+            pai.setPermissionsHandler(this.permissionsHandlerInstance);
+        }
+
         this.messageParserInstance = new MessageParser(this.placeholdersInstance, this.platformAdapterInstance);
         this.platformAdapterInstance.provideMessageParser(this.messageParserInstance);
-
-        if(this.langInstance == null) {
-            this.langInstance = new Lang(LOGGER, MainConfigHandler.getConfig(), this.messageParserInstance, this.platformAdapterInstance);
-        }
-        this.langInstance.initializeLanguage();
     }
 
     private void initializeServices() {
@@ -175,7 +176,7 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
                 this.placeholdersInstance,
                 this.taskSchedulerInstance,
                 this.platformAdapterInstance,
-                this.cooldownConfigHandlerInstance
+                new eu.avalanche7.paradigm.webeditor.store.WebEditorStore()
         );
         this.groupChatManagerInstance.setServices(this.services);
         LOGGER.info("[Paradigm] Services initialized successfully");
@@ -222,6 +223,10 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
     }
 
     private void onRegisterCommands(CommandDispatcher<ServerCommandSource> dispatcher, net.minecraft.command.CommandRegistryAccess registryAccess, net.minecraft.server.command.CommandManager.RegistrationEnvironment environment) {
+        if (this.platformAdapterInstance instanceof eu.avalanche7.paradigm.platform.PlatformAdapterImpl pai) {
+            pai.setCommandDispatcher(dispatcher);
+        }
+
         modules.forEach(module -> {
             if (module.isEnabled(services)) {
                 module.registerCommands(dispatcher, registryAccess, services);
@@ -360,7 +365,6 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
         }
     }
 
-    // ParadigmAPI.ParadigmAccessor implementation
     @Override
     public List<ParadigmModule> getModules() {
         return modules;

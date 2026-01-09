@@ -1,63 +1,81 @@
 package eu.avalanche7.paradigm.configs;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import java.io.Reader;
-import java.io.Writer;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
+import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.HashMap;
 import java.util.Map;
 
-public class EmojiConfigHandler {
-    public static final EmojiConfigHandler CONFIG = new EmojiConfigHandler();
-    private final Gson gson = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
-    private final Path configFilePath = Path.of("config", "paradigm", "emojis.json");
-    private Map<String, String> emojis = new HashMap<>();
+public class EmojiConfigHandler extends BaseConfigHandler<EmojiConfigHandler.Config> {
 
-    public void loadEmojis() {
-        try {
-            Files.createDirectories(configFilePath.getParent());
+    private static final Logger LOGGER = LoggerFactory.getLogger("paradigm");
+    private static EmojiConfigHandler INSTANCE;
+    private Config config;
 
-            if (Files.exists(configFilePath)) {
-                try (Reader reader = Files.newBufferedReader(configFilePath, StandardCharsets.UTF_8)) {
-                    Config config = gson.fromJson(reader, Config.class);
-                    if (config != null && config.emojis != null) {
-                        emojis = config.emojis;
-                        System.out.println("[Paradigm] Loaded " + emojis.size() + " emojis from config");
-                    }
+    private EmojiConfigHandler(IConfig platformConfig) {
+        super(LOGGER, platformConfig, "emojis.json");
+    }
+
+    public static void init(IConfig platformConfig) {
+        if (INSTANCE == null) {
+            synchronized (EmojiConfigHandler.class) {
+                if (INSTANCE == null) {
+                    INSTANCE = new EmojiConfigHandler(platformConfig);
+                    INSTANCE.config = INSTANCE.load();
+                    LOGGER.info("[Paradigm] Loaded {} emojis from config", INSTANCE.config.emojis.size());
                 }
-            } else {
-                generateDefaultConfig();
             }
-        } catch (IOException e) {
-            System.err.println("[Paradigm] Error loading emojis config: " + e.getMessage());
-            e.printStackTrace();
-            generateDefaultEmojis();
         }
     }
 
-    private void generateDefaultConfig() {
-        try {
-            Config defaultConfig = new Config();
-            defaultConfig.emojis = getDefaultEmojis();
-
-            try (Writer writer = Files.newBufferedWriter(configFilePath, StandardCharsets.UTF_8)) {
-                gson.toJson(defaultConfig, writer);
-            }
-
-            emojis = defaultConfig.emojis;
-            System.out.println("[Paradigm] Generated default emojis config with " + emojis.size() + " emojis");
-        } catch (IOException e) {
-            System.err.println("[Paradigm] Error creating emojis config: " + e.getMessage());
-            generateDefaultEmojis();
+    public static String getEmoji(String name) {
+        if (INSTANCE == null) {
+            throw new IllegalStateException("EmojiConfigHandler not initialized! Call init() first.");
         }
+        return INSTANCE.config.emojis.getOrDefault(name.toLowerCase(), "");
     }
 
-    private void generateDefaultEmojis() {
-        emojis = getDefaultEmojis();
+    public static Map<String, String> getAllEmojis() {
+        if (INSTANCE == null) {
+            throw new IllegalStateException("EmojiConfigHandler not initialized! Call init() first.");
+        }
+        return new HashMap<>(INSTANCE.config.emojis);
+    }
+
+    public static void addEmoji(String name, String emoji) {
+        if (INSTANCE == null) {
+            throw new IllegalStateException("EmojiConfigHandler not initialized! Call init() first.");
+        }
+        INSTANCE.config.emojis.put(name.toLowerCase(), emoji);
+        INSTANCE.save(INSTANCE.config);
+    }
+
+    public static void removeEmoji(String name) {
+        if (INSTANCE == null) {
+            throw new IllegalStateException("EmojiConfigHandler not initialized! Call init() first.");
+        }
+        INSTANCE.config.emojis.remove(name.toLowerCase());
+        INSTANCE.save(INSTANCE.config);
+    }
+
+    @Override
+    protected Config createDefaultConfig() {
+        Config config = new Config();
+        config.emojis = getDefaultEmojis();
+        return config;
+    }
+
+    @Override
+    protected Class<Config> getConfigClass() {
+        return Config.class;
+    }
+
+    @Override
+    protected void mergeConfigs(Config defaults, Config loaded) {
+        if (loaded.emojis != null) {
+            defaults.emojis = new HashMap<>(loaded.emojis);
+        }
     }
 
     private Map<String, String> getDefaultEmojis() {
@@ -117,24 +135,7 @@ public class EmojiConfigHandler {
         return defaults;
     }
 
-    public String getEmoji(String name) {
-        return emojis.getOrDefault(name.toLowerCase(), "");
-    }
-
-    public Map<String, String> getAllEmojis() {
-        return new HashMap<>(emojis);
-    }
-
-    public void addEmoji(String name, String emoji) {
-        emojis.put(name.toLowerCase(), emoji);
-    }
-
-    public void removeEmoji(String name) {
-        emojis.remove(name.toLowerCase());
-    }
-
     public static class Config {
         public Map<String, String> emojis = new HashMap<>();
     }
 }
-

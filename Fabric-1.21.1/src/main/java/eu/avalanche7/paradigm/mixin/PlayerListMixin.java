@@ -63,14 +63,23 @@ public abstract class PlayerListMixin {
                 return;
             }
 
-            String formattedText = customFormat.replace("{message}", messageText);
-
             IPlayer wrappedSender = services.getPlatformAdapter().wrapPlayer(sender);
-            formattedText = services.getPlaceholders().replacePlaceholders(formattedText, sender);
+            if (wrappedSender == null) {
+                return;
+            }
+
+            String formattedText = customFormat
+                    .replace("{message}", messageText)
+                    .replace("{player}", wrappedSender.getName())
+                    .replace("{player_name}", wrappedSender.getName())
+                    .replace("{player_uuid}", wrappedSender.getUUID());
+
+            formattedText = services.getPlatformAdapter().replacePlaceholders(formattedText, wrappedSender);
 
             IComponent parsedComponent = services.getMessageParser().parseMessage(formattedText, wrappedSender);
 
-            Text finalMessage = parsedComponent.getOriginalText();
+            Object nativeObj = parsedComponent.getOriginalText();
+            Text finalMessage = nativeObj instanceof Text t ? t : Text.literal(String.valueOf(nativeObj));
 
             for (ServerPlayerEntity player : getPlayerList()) {
                 player.sendMessage(finalMessage, false);

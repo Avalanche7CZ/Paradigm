@@ -34,13 +34,15 @@ public class MinecraftComponent implements IComponent {
     }
 
     @Override
-    public IComponent setStyle(Style style) {
-        component.setStyle(style);
+    public IComponent setStyle(Object style) {
+        if (style instanceof Style s) {
+            component.setStyle(s);
+        }
         return this;
     }
 
     @Override
-    public Style getStyle() {
+    public Object getStyle() {
         return component.getStyle();
     }
 
@@ -67,18 +69,32 @@ public class MinecraftComponent implements IComponent {
     }
 
     @Override
-    public IComponent withStyle(Formatting formatting) {
-        return new MinecraftComponent(component.copy().styled(s -> s.withFormatting(formatting)));
+    public IComponent withStyle(String formattingCode) {
+        if (formattingCode == null || formattingCode.isEmpty()) return copy();
+        return platformApplyToken(this, formattingCode);
     }
 
     @Override
-    public IComponent withStyle(Style style) {
-        return new MinecraftComponent(component.copy().styled(s -> style));
+    public IComponent withStyle(Object style) {
+        if (style instanceof Style s) {
+            return new MinecraftComponent(component.copy().styled(ignored -> s));
+        }
+        return copy();
     }
 
     @Override
-    public IComponent withStyle(UnaryOperator<Style> styleUpdater) {
-        return new MinecraftComponent(component.copy().styled(styleUpdater));
+    public IComponent withStyle(UnaryOperator<Object> styleUpdater) {
+        if (styleUpdater == null) return copy();
+        return new MinecraftComponent(component.copy().styled(s -> {
+            Object out = styleUpdater.apply(s);
+            return out instanceof Style st ? st : s;
+        }));
+    }
+
+    @Override
+    public IComponent withFormatting(String formattingCode) {
+        if (formattingCode == null || formattingCode.isEmpty()) return copy();
+        return withStyle(formattingCode);
     }
 
     @Override
@@ -99,18 +115,6 @@ public class MinecraftComponent implements IComponent {
     }
 
     @Override
-    public IComponent withFormatting(Formatting formatting) {
-        if (formatting == null) return copy();
-        if (formatting.isColor()) {
-            TextColor color = TextColor.fromFormatting(formatting);
-            if (color != null) {
-                return new MinecraftComponent(component.copy().styled(s -> s.withColor(color)));
-            }
-        }
-        return new MinecraftComponent(component.copy().styled(s -> s.withFormatting(formatting)));
-    }
-
-    @Override
     public IComponent withColor(String hexOrFormatCode) {
         if (hexOrFormatCode == null || hexOrFormatCode.isEmpty()) return copy();
         if (hexOrFormatCode.startsWith("#")) {
@@ -122,7 +126,7 @@ public class MinecraftComponent implements IComponent {
         } catch (NumberFormatException e) {
             Formatting format = Formatting.byName(hexOrFormatCode);
             if (format != null && format.isColor()) {
-                return withFormatting(format);
+                return withFormatting(hexOrFormatCode);
             }
             return copy();
         }
@@ -192,12 +196,11 @@ public class MinecraftComponent implements IComponent {
 
 
     @Override
-    public Text getOriginalText() {
+    public Object getOriginalText() {
         if (component.getString().isEmpty()) {
             List<Text> siblings = component.getSiblings();
             if (siblings.size() == 1) {
-                Text only = siblings.get(0);
-                return only;
+                return siblings.get(0);
             }
         }
         return component;
@@ -216,5 +219,24 @@ public class MinecraftComponent implements IComponent {
             }
         }
         return rootCopy;
+    }
+
+    private static IComponent platformApplyToken(MinecraftComponent mc, String token) {
+        String t = token.trim();
+        Formatting fmt = Formatting.byName(t);
+        if (fmt == null && t.length() == 1) {
+            fmt = Formatting.byCode(t.charAt(0));
+        }
+        if (fmt != null) {
+            if (fmt.isColor()) {
+                return mc.withColor(fmt.getColorValue() != null ? fmt.getColorValue() : 0xFFFFFF);
+            }
+            final Formatting f = fmt;
+            return new MinecraftComponent(mc.component.copy().styled(s -> s.withFormatting(f)));
+        }
+        if (t.startsWith("#")) {
+            return mc.withColor(t.substring(1));
+        }
+        return mc.copy();
     }
 }

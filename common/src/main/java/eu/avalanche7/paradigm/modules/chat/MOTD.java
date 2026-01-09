@@ -1,15 +1,11 @@
 package eu.avalanche7.paradigm.modules.chat;
 
-import com.mojang.brigadier.CommandDispatcher;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
-import net.minecraft.command.CommandRegistryAccess;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
 
 import java.util.List;
 
@@ -49,20 +45,20 @@ public class MOTD implements ParadigmModule {
     public void onServerStopping(Object event, Services services) {}
 
     @Override
-    public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {}
+    public void registerCommands(Object dispatcher, Object registryAccess, Services services) {}
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
-        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
-            onPlayerJoin(handler.player);
-        });
+        IEventSystem events = services.getPlatformAdapter().getEventSystem();
+        events.onPlayerJoin(evt -> onPlayerJoin(evt.getPlayer()));
     }
 
-    public void onPlayerJoin(ServerPlayerEntity mcPlayer) {
+    public void onPlayerJoin(IPlayer player) {
         if (this.services == null || !isEnabled(this.services)) {
             return;
         }
-        IPlayer player = platform.wrapPlayer(mcPlayer);
+        if (player == null) return;
+
         IComponent motdMessage = createMOTDMessage(player);
         platform.sendSystemMessage(player, motdMessage);
         this.services.getDebugLogger().debugLog("Sent MOTD to " + player.getName());
@@ -87,4 +83,3 @@ public class MOTD implements ParadigmModule {
         return motdMessage;
     }
 }
-

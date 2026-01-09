@@ -151,4 +151,19 @@ public class MinecraftEventSystem implements IEventSystem {
             this.cancelled = cancelled;
         }
     }
+
+    @Override
+    public void onPlayerChat(ChatEventListener listener) {
+        registerChatListener(listener);
+    }
+
+    @Override
+    public void onPlayerJoin(PlayerJoinEventListener listener) {
+        registerJoinListener(listener);
+    }
+
+    @Override
+    public void onPlayerLeave(PlayerLeaveEventListener listener) {
+        registerLeaveListener(listener);
+    }
 }

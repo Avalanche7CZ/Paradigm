@@ -61,7 +61,13 @@
     "hover_accept_invite": "Klikněte pro přijetí pozvánky",
     "hover_deny_invite": "Klikněte pro odmítnutí pozvánky",
     "hover_accept_request": "Klikněte pro přijetí žádosti o připojení",
-    "hover_deny_request": "Klikněte pro odmítnutí žádosti o připojení"
+    "hover_deny_request": "Klikněte pro odmítnutí žádosti o připojení",
+    "kick_not_found": "Hráč nebyl nalezen.",
+    "kick_not_member": "Tento hráč není ve vaší skupině.",
+    "kick_cannot_self": "Nemůžeš vyhodit sám sebe. Použij /groupchat leave.",
+    "kick_success_target": "Byl jsi vyhozen ze skupiny {group_name}.",
+    "kick_success_owner": "Hráč {player_name} byl vyhozen ze skupiny.",
+    "kick_success_notify": "Hráč {player_name} byl vyhozen ze skupiny."
   },
 
   "mention": {

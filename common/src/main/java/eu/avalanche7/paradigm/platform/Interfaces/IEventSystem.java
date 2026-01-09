@@ -27,4 +27,13 @@ public interface IEventSystem {
     interface PlayerLeaveEventListener {
         void onPlayerLeave(PlayerLeaveEvent event);
     }
+
+    /** Register chat listener (called for every player chat message). */
+    void onPlayerChat(ChatEventListener listener);
+
+    /** Register player join listener. */
+    void onPlayerJoin(PlayerJoinEventListener listener);
+
+    /** Register player leave listener. */
+    void onPlayerLeave(PlayerLeaveEventListener listener);
 }

@@ -15,11 +15,11 @@ public class TagRegistry {
 
     private void registerDefaultTags() {
         registerTag(new ColorTag(platformAdapter));
-        registerTag(new DecorationTag(DecorationTag.Decoration.BOLD));
-        registerTag(new DecorationTag(DecorationTag.Decoration.ITALIC));
-        registerTag(new DecorationTag(DecorationTag.Decoration.UNDERLINE));
-        registerTag(new DecorationTag(DecorationTag.Decoration.STRIKETHROUGH));
-        registerTag(new DecorationTag(DecorationTag.Decoration.OBFUSCATED));
+        registerTag(new DecorationTag(platformAdapter, DecorationTag.Decoration.BOLD));
+        registerTag(new DecorationTag(platformAdapter, DecorationTag.Decoration.ITALIC));
+        registerTag(new DecorationTag(platformAdapter, DecorationTag.Decoration.UNDERLINE));
+        registerTag(new DecorationTag(platformAdapter, DecorationTag.Decoration.STRIKETHROUGH));
+        registerTag(new DecorationTag(platformAdapter, DecorationTag.Decoration.OBFUSCATED));
         registerTag(new ClickTag(platformAdapter));
         registerTag(new HoverTag(platformAdapter));
         registerTag(new ResetTag());
@@ -50,4 +50,3 @@ public class TagRegistry {
         return getTag(tagName) != null;
     }
 }
-

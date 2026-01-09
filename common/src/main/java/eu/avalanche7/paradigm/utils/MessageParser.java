@@ -4,7 +4,6 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.formatting.FormattingParser;
-import net.minecraft.util.Formatting;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
@@ -28,18 +27,21 @@ public class MessageParser {
             return platformAdapter.createLiteralComponent("");
         }
 
+        final boolean cacheable = !rawMessage.contains("{");
         final String cacheKey = rawMessage + "_player_" + (player != null ? player.getUUID() : "null");
-        if (messageCache.containsKey(cacheKey)) {
+        if (cacheable && messageCache.containsKey(cacheKey)) {
             return messageCache.get(cacheKey).copy();
         }
 
         IComponent parsed = parseTagBasedMessage(rawMessage, player);
-        messageCache.put(cacheKey, parsed);
+        if (cacheable) {
+            messageCache.put(cacheKey, parsed);
+        }
         return parsed.copy();
     }
 
     private IComponent parseTagBasedMessage(String rawMessage, IPlayer player) {
-        String processedMessage = this.placeholders.replacePlaceholders(rawMessage, (net.minecraft.server.network.ServerPlayerEntity) (player != null ? player.getOriginalPlayer() : null));
+        String processedMessage = platformAdapter.replacePlaceholders(rawMessage, player);
         processedMessage = convertLegacyToNewFormat(processedMessage);
         return formattingParser.parse(processedMessage, player);
     }
@@ -70,40 +72,38 @@ public class MessageParser {
 
         while (matcher.find()) {
             String code = matcher.group(1);
-            Formatting format = Formatting.byCode(code.charAt(0));
+            char c = Character.toLowerCase(code.charAt(0));
 
-            if (format != null) {
-                if (format == Formatting.RESET) {
-                    StringBuilder closeTags = new StringBuilder();
-                    if (hasObfuscated) closeTags.append("</obfuscated>");
-                    if (hasStrikethrough) closeTags.append("</strikethrough>");
-                    if (hasUnderline) closeTags.append("</underline>");
-                    if (hasItalic) closeTags.append("</italic>");
-                    if (hasBold) closeTags.append("</bold>");
-                    if (hasColor) closeTags.append("</color>");
+            if (c == 'r') {
+                StringBuilder closeTags = new StringBuilder();
+                if (hasObfuscated) closeTags.append("</obfuscated>");
+                if (hasStrikethrough) closeTags.append("</strikethrough>");
+                if (hasUnderline) closeTags.append("</underline>");
+                if (hasItalic) closeTags.append("</italic>");
+                if (hasBold) closeTags.append("</bold>");
+                if (hasColor) closeTags.append("</color>");
 
-                    matcher.appendReplacement(result, closeTags + "<reset>");
-                    hasBold = hasItalic = hasUnderline = hasStrikethrough = hasObfuscated = hasColor = false;
-                } else if (format.isColor()) {
-                    int rgb = getColorRgb(format);
-                    String replacement = (hasColor ? "</color>" : "") + String.format("<color:#%06X>", rgb);
-                    matcher.appendReplacement(result, replacement);
-                    hasColor = true;
-                } else if (format == Formatting.BOLD) {
-                    matcher.appendReplacement(result, "<bold>");
-                    hasBold = true;
-                } else if (format == Formatting.ITALIC) {
-                    matcher.appendReplacement(result, "<italic>");
-                    hasItalic = true;
-                } else if (format == Formatting.UNDERLINE) {
-                    matcher.appendReplacement(result, "<underline>");
-                    hasUnderline = true;
-                } else if (format == Formatting.STRIKETHROUGH) {
-                    matcher.appendReplacement(result, "<strikethrough>");
-                    hasStrikethrough = true;
-                } else if (format == Formatting.OBFUSCATED) {
-                    matcher.appendReplacement(result, "<obfuscated>");
-                    hasObfuscated = true;
+                matcher.appendReplacement(result, closeTags + "<reset>");
+                hasBold = hasItalic = hasUnderline = hasStrikethrough = hasObfuscated = hasColor = false;
+                continue;
+            }
+
+            Integer rgb = legacyColorRgb(c);
+            if (rgb != null) {
+                String replacement = (hasColor ? "</color>" : "") + String.format("<color:#%06X>", rgb);
+                matcher.appendReplacement(result, replacement);
+                hasColor = true;
+                continue;
+            }
+
+            switch (c) {
+                case 'l' -> { matcher.appendReplacement(result, "<bold>"); hasBold = true; }
+                case 'o' -> { matcher.appendReplacement(result, "<italic>"); hasItalic = true; }
+                case 'n' -> { matcher.appendReplacement(result, "<underline>"); hasUnderline = true; }
+                case 'm' -> { matcher.appendReplacement(result, "<strikethrough>"); hasStrikethrough = true; }
+                case 'k' -> { matcher.appendReplacement(result, "<obfuscated>"); hasObfuscated = true; }
+                default -> {
+                    // unknown code, ignore
                 }
             }
         }
@@ -121,25 +121,25 @@ public class MessageParser {
         return result.toString();
     }
 
-    private int getColorRgb(Formatting format) {
-        return switch (format) {
-            case BLACK -> 0x000000;
-            case DARK_BLUE -> 0x0000AA;
-            case DARK_GREEN -> 0x00AA00;
-            case DARK_AQUA -> 0x00AAAA;
-            case DARK_RED -> 0xAA0000;
-            case DARK_PURPLE -> 0xAA00AA;
-            case GOLD -> 0xFFAA00;
-            case GRAY -> 0xAAAAAA;
-            case DARK_GRAY -> 0x555555;
-            case BLUE -> 0x5555FF;
-            case GREEN -> 0x55FF55;
-            case AQUA -> 0x55FFFF;
-            case RED -> 0xFF5555;
-            case LIGHT_PURPLE -> 0xFF55FF;
-            case YELLOW -> 0xFFFF55;
-            case WHITE -> 0xFFFFFF;
-            default -> 0xFFFFFF;
+    private static Integer legacyColorRgb(char c) {
+        return switch (c) {
+            case '0' -> 0x000000;
+            case '1' -> 0x0000AA;
+            case '2' -> 0x00AA00;
+            case '3' -> 0x00AAAA;
+            case '4' -> 0xAA0000;
+            case '5' -> 0xAA00AA;
+            case '6' -> 0xFFAA00;
+            case '7' -> 0xAAAAAA;
+            case '8' -> 0x555555;
+            case '9' -> 0x5555FF;
+            case 'a' -> 0x55FF55;
+            case 'b' -> 0x55FFFF;
+            case 'c' -> 0xFF5555;
+            case 'd' -> 0xFF55FF;
+            case 'e' -> 0xFFFF55;
+            case 'f' -> 0xFFFFFF;
+            default -> null;
         };
     }
 
@@ -151,4 +151,3 @@ public class MessageParser {
         messageCache.clear();
     }
 }
-

@@ -1,39 +1,39 @@
 package eu.avalanche7.paradigm.utils.formatting.tags;
 
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.formatting.FormattingContext;
-import net.minecraft.util.Formatting;
-import net.minecraft.text.Style;
 
 public class DecorationTag implements Tag {
     public enum Decoration {
-        BOLD("bold", "b", Formatting.BOLD),
-        ITALIC("italic", "i", Formatting.ITALIC),
-        UNDERLINE("underline", "underlined", Formatting.UNDERLINE),
-        STRIKETHROUGH("strikethrough", "st", Formatting.STRIKETHROUGH),
-        OBFUSCATED("obfuscated", "obf", Formatting.OBFUSCATED);
+        BOLD("bold", "b"),
+        ITALIC("italic", "i"),
+        UNDERLINE("underline", "underlined"),
+        STRIKETHROUGH("strikethrough", "st"),
+        OBFUSCATED("obfuscated", "obf");
 
         private final String primaryName;
         private final String alias;
-        private final Formatting format;
 
-        Decoration(String primaryName, String alias, Formatting format) {
+        Decoration(String primaryName, String alias) {
             this.primaryName = primaryName;
             this.alias = alias;
-            this.format = format;
         }
 
         public boolean matches(String name) {
             return primaryName.equalsIgnoreCase(name) || alias.equalsIgnoreCase(name);
         }
 
-        public Formatting getFormat() {
-            return format;
+        public String getToken() {
+            return primaryName;
         }
     }
 
     private final Decoration decoration;
+    private final IPlatformAdapter platformAdapter;
 
-    public DecorationTag(Decoration decoration) {
+    public DecorationTag(IPlatformAdapter platformAdapter, Decoration decoration) {
+        this.platformAdapter = platformAdapter;
         this.decoration = decoration;
     }
 
@@ -54,13 +54,21 @@ public class DecorationTag implements Tag {
 
     @Override
     public void process(FormattingContext context, String arguments) {
-        Style newStyle = context.getCurrentStyle().withFormatting(decoration.format);
+        Object base = context.getCurrentStyle();
+        IComponent tmp = platformAdapter.createEmptyComponent();
+        if (base != null) tmp.setStyle(base);
+
+        tmp = tmp.withFormatting(decoration.getToken());
+
+        Object newStyle = tmp.getStyle();
         context.pushStyle(newStyle);
+        context.getCurrentComponent().setStyle(newStyle);
     }
 
     @Override
     public void close(FormattingContext context) {
         context.popStyle();
+        context.getCurrentComponent().setStyle(context.getCurrentStyle());
     }
 
     @Override
@@ -68,4 +76,3 @@ public class DecorationTag implements Tag {
         return decoration.matches(name);
     }
 }
-

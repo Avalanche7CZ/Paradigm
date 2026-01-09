@@ -67,6 +67,21 @@ public class MinecraftEventSystem implements IEventSystem {
         chatListeners.remove(listener);
     }
 
+    @Override
+    public void onPlayerChat(ChatEventListener listener) {
+        registerChatListener(listener);
+    }
+
+    @Override
+    public void onPlayerJoin(PlayerJoinEventListener listener) {
+        registerJoinListener(listener);
+    }
+
+    @Override
+    public void onPlayerLeave(PlayerLeaveEventListener listener) {
+        registerLeaveListener(listener);
+    }
+
     private static class MinecraftPlayerJoinEvent implements PlayerJoinEvent {
         private final IPlayer player;
         private IComponent joinMessage;

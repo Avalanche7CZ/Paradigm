@@ -1,17 +1,12 @@
 package eu.avalanche7.paradigm.modules.chat;
 
-import com.mojang.brigadier.CommandDispatcher;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
-import net.minecraft.command.CommandRegistryAccess;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.stat.Stats;
 
 public class JoinLeaveMessages implements ParadigmModule {
 
@@ -57,25 +52,28 @@ public class JoinLeaveMessages implements ParadigmModule {
     }
 
     @Override
-    public void registerCommands(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, Services services) {
+    public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
     }
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
-        // Register Fabric events
-        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> onPlayerJoin(handler.player));
-        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> onPlayerLeave(handler.player));
+        IEventSystem events = services.getPlatformAdapter().getEventSystem();
+        events.onPlayerJoin(evt -> onPlayerJoin(evt));
+        events.onPlayerLeave(evt -> onPlayerLeave(evt));
     }
 
-    private void onPlayerJoin(ServerPlayerEntity player) {
-        if (this.services == null || !isEnabled(this.services)) {
-            return;
-        }
+    private void onPlayerJoin(IEventSystem.PlayerJoinEvent event) {
+        if (this.services == null || event == null) return;
+        IPlayer player = event.getPlayer();
+        if (player == null || !isEnabled(this.services)) return;
 
         ChatConfigHandler.Config chatConfig = services.getChatConfig();
 
-        // Check if this is the first join
-        boolean isFirstJoin = player.getStatHandler().getStat(Stats.CUSTOM.getOrCreateStat(Stats.LEAVE_GAME)) == 0;
+        boolean isFirstJoin = false;
+        try {
+            isFirstJoin = platform.isFirstJoin(player);
+        } catch (Throwable ignored) {
+        }
 
         String messageFormat = null;
         String logMessage = null;
@@ -89,27 +87,32 @@ public class JoinLeaveMessages implements ParadigmModule {
         }
 
         if (messageFormat != null) {
-            IPlayer iPlayer = platform.wrapPlayer(player);
-            IComponent formattedMessage = services.getMessageParser().parseMessage(messageFormat, iPlayer);
-            platform.broadcastSystemMessage(formattedMessage);
-            services.getDebugLogger().debugLog(logMessage + player.getName().getString());
+            IComponent formattedMessage = services.getMessageParser().parseMessage(messageFormat, player);
+            try {
+                event.setJoinMessage(formattedMessage);
+            } catch (Throwable t) {
+                platform.broadcastSystemMessage(formattedMessage);
+            }
+            services.getDebugLogger().debugLog(logMessage + player.getName());
         }
     }
 
-    private void onPlayerLeave(ServerPlayerEntity player) {
-        if (this.services == null || !isEnabled(this.services)) {
-            return;
-        }
+    private void onPlayerLeave(IEventSystem.PlayerLeaveEvent event) {
+        if (this.services == null || event == null) return;
+        IPlayer player = event.getPlayer();
+        if (player == null || !isEnabled(this.services)) return;
 
         ChatConfigHandler.Config chatConfig = services.getChatConfig();
 
         if (chatConfig.enableJoinLeaveMessages.get()) {
             String leaveMessageFormat = chatConfig.leaveMessageFormat.get();
-            IPlayer iPlayer = platform.wrapPlayer(player);
-            IComponent formattedMessage = services.getMessageParser().parseMessage(leaveMessageFormat, iPlayer);
-            platform.broadcastSystemMessage(formattedMessage);
-            services.getDebugLogger().debugLog("Sent leave message for " + player.getName().getString());
+            IComponent formattedMessage = services.getMessageParser().parseMessage(leaveMessageFormat, player);
+            try {
+                event.setLeaveMessage(formattedMessage);
+            } catch (Throwable t) {
+                platform.broadcastSystemMessage(formattedMessage);
+            }
+            services.getDebugLogger().debugLog("Sent leave message for " + player.getName());
         }
     }
 }
-
