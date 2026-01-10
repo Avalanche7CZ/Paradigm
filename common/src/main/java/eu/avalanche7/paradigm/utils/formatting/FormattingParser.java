@@ -44,7 +44,9 @@ public class FormattingParser {
             return platformAdapter.createComponentFromLiteral("");
         }
 
-        String processedMessage = rawMessage;
+        String processedMessage = placeholders != null
+                ? placeholders.replacePlaceholders(rawMessage, player)
+                : rawMessage;
 
         Matcher hexMatcher = hexPattern.matcher(processedMessage);
         StringBuilder sb = new StringBuilder();

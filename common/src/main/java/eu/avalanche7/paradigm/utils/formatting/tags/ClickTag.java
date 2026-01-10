@@ -94,13 +94,11 @@ public class ClickTag implements Tag {
 
         Object newStyle = platformAdapter.createStyleWithClickEvent(context.getCurrentStyle(), action.getActionName(), value);
         context.pushStyle(newStyle);
-        context.getCurrentComponent().setStyle(newStyle);
     }
 
     @Override
     public void close(FormattingContext context) {
         context.popStyle();
-        context.getCurrentComponent().setStyle(context.getCurrentStyle());
     }
 
     @Override

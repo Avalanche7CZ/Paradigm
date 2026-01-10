@@ -1,0 +1,163 @@
+plugins {
+    id 'eclipse'
+    id 'idea'
+    id 'net.minecraftforge.gradle' version '6.0.+'
+}
+
+// Ensure properties are available with defaults
+if (!project.hasProperty('mod_group_id')) { project.ext.mod_group_id = 'eu.avalanche7' }
+if (!project.hasProperty('mod_version')) { project.ext.mod_version = '2.0.0' }
+if (!project.hasProperty('mod_id')) { project.ext.mod_id = 'paradigm' }
+if (!project.hasProperty('mod_name')) { project.ext.mod_name = 'Paradigm' }
+if (!project.hasProperty('mod_authors')) { project.ext.mod_authors = 'Avalanche7' }
+if (!project.hasProperty('mod_description')) { project.ext.mod_description = 'A powerful server-side utility mod for Minecraft' }
+if (!project.hasProperty('mod_license')) { project.ext.mod_license = 'All Rights Reserved' }
+if (!project.hasProperty('minecraft_version')) { project.ext.minecraft_version = '1.18.2' }
+if (!project.hasProperty('forge_version')) { project.ext.forge_version = '40.2.21' }
+if (!project.hasProperty('mapping_channel')) { project.ext.mapping_channel = 'official' }
+if (!project.hasProperty('mapping_version')) { project.ext.mapping_version = '1.18.2' }
+if (!project.hasProperty('java_version')) { project.ext.java_version = '17' }
+if (!project.hasProperty('minecraft_version_range')) { project.ext.minecraft_version_range = '[1.18.2,1.19)' }
+if (!project.hasProperty('forge_version_range')) { project.ext.forge_version_range = '[40.2.0,)' }
+if (!project.hasProperty('loader_version_range')) { project.ext.loader_version_range = '[40.2.0,)' }
+
+// If root defines a global mod_version, use it everywhere in this subproject
+// (jar name, mods.toml expansion, etc.)
+def globalModVersion = rootProject.findProperty('mod_version')
+if (globalModVersion != null && !globalModVersion.toString().isBlank()) {
+    project.ext.mod_version = globalModVersion.toString()
+}
+
+group = project.ext.mod_group_id
+version = project.ext.mod_version
+
+base {
+    archivesName = project.ext.mod_id
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(Integer.parseInt(project.ext.java_version.toString()))
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = Integer.parseInt(project.ext.java_version.toString())
+    options.compilerArgs += [
+        "-AoutRefMap=paradigm.refmap.json",
+        "-AdefaultObfuscationEnv=searge"
+    ]
+}
+
+minecraft {
+    mappings channel: project.ext.mapping_channel, version: project.ext.mapping_version
+
+    runs {
+        configureEach {
+            workingDirectory project.file('run')
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+
+            mods {
+                "${project.ext.mod_id}" {
+                    source sourceSets.main
+                }
+            }
+        }
+
+        server {
+            property 'forge.enabledGameTestNamespaces', project.ext.mod_id
+            args '--nogui'
+        }
+
+        data {
+            workingDirectory project.file('run-data')
+            args '--mod', project.ext.mod_id, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+        }
+    }
+}
+
+sourceSets.main.resources {
+    srcDir 'src/generated/resources'
+}
+
+repositories {
+    mavenCentral()
+    maven { url "https://maven.minecraftforge.net/" }
+    maven { url "https://repo.lucko.me/" }
+}
+
+processResources {
+    expand(project.properties)
+
+    filesMatching('META-INF/mods.toml') {
+        expand([
+            mod_id: project.ext.mod_id,
+            mod_name: project.ext.mod_name,
+            mod_version: project.ext.mod_version,
+            mod_group_id: project.ext.mod_group_id ?: '',
+            mod_authors: project.ext.mod_authors ?: '',
+            mod_license: project.ext.mod_license ?: '',
+            loader_version_range: project.ext.loader_version_range ?: '',
+            minecraft_version: project.ext.minecraft_version ?: '',
+            forge_version: project.ext.forge_version ?: '',
+            mapping_channel: project.ext.mapping_channel ?: '',
+            mapping_version: project.ext.mapping_version ?: ''
+        ])
+    }
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${project.ext.minecraft_version}-${project.ext.forge_version}"
+    compileOnly('net.luckperms:api:5.4')
+    implementation 'com.google.code.gson:gson:2.10.1'
+    compileOnly 'org.spongepowered:mixin:0.8.5'
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+}
+
+tasks.named('processResources', ProcessResources).configure {
+    var replaceProperties = [
+        minecraft_version: project.ext.minecraft_version,
+        minecraft_version_range: project.ext.minecraft_version_range,
+        forge_version: project.ext.forge_version,
+        forge_version_range: project.ext.forge_version_range,
+        loader_version_range: project.ext.loader_version_range,
+        mod_id: project.ext.mod_id,
+        mod_name: project.ext.mod_name,
+        mod_license: project.ext.mod_license,
+        mod_version: project.ext.mod_version,
+        mod_authors: project.ext.mod_authors,
+        mod_description: project.ext.mod_description ?: '',
+    ]
+
+    inputs.properties replaceProperties
+
+    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+        expand replaceProperties + [project: project]
+    }
+}
+
+tasks.named('jar', Jar).configure {
+    // Example: Paradigm-forge-1.18.2-2.0.0b.jar
+    archiveFileName.set("Paradigm-forge-${project.ext.minecraft_version}-${project.ext.mod_version}.jar")
+
+    manifest {
+        attributes([
+            "Specification-Title": project.ext.mod_id,
+            "Specification-Vendor": project.ext.mod_authors,
+            "Specification-Version": "1",
+            "Implementation-Title": project.name,
+            "Implementation-Version": project.jar.archiveVersion,
+            "Implementation-Vendor": project.ext.mod_authors,
+            "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+            "MixinConfigs": "paradigm.mixins.json"
+        ])
+    }
+
+    finalizedBy 'reobfJar'
+}
+
+tasks.register('reobf') {
+    group = 'build'
+    description = 'Run reobfJar for runtime compatibility.'
+    dependsOn 'reobfJar'
+}

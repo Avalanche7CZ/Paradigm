@@ -52,13 +52,11 @@ public class HoverTag implements Tag {
 
         Object newStyle = platformAdapter.createStyleWithHoverEvent(context.getCurrentStyle(), hoverComponent);
         context.pushStyle(newStyle);
-        context.getCurrentComponent().setStyle(newStyle);
     }
 
     @Override
     public void close(FormattingContext context) {
         context.popStyle();
-        context.getCurrentComponent().setStyle(context.getCurrentStyle());
     }
 
     @Override

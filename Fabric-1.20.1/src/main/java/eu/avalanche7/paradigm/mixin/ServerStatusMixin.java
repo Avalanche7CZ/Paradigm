@@ -281,12 +281,8 @@ public abstract class ServerStatusMixin {
                 if (formatting != null) {
                     builder.append('§').append(formatting.getCode());
                 } else {
-                    // Preserve full RGB (incl. gradients): use modern §x§R§R§G§G§B§B format.
-                    String hex = String.format("%06X", rgb);
-                    builder.append("§x");
-                    for (int i = 0; i < 6; i++) {
-                        builder.append('§').append(hex.charAt(i));
-                    }
+                    // Avoid §x hex in player-sample hover; map to nearest legacy formatting code.
+                    builder.append('§').append(paradigm$getNearestFormattingCode(rgb));
                 }
             }
 

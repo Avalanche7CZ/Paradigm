@@ -281,7 +281,7 @@ public abstract class ServerStatusMixin {
                 if (formatting != null) {
                     builder.append('§').append(formatting.getCode());
                 } else {
-                    // Custom hex color - convert to nearest formatting
+                    // Avoid §x hex in player-sample hover; map to nearest legacy formatting code.
                     builder.append('§').append(paradigm$getNearestFormattingCode(color.getRgb()));
                 }
             }

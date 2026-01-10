@@ -40,11 +40,16 @@ jobs:
         run: |
           mkdir -p release-jars
 
-          # Find all JAR files (excluding sources)
+          # Fabric
           find Fabric-1.20.1/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \;
           find Fabric-1.21.1/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \;
           find Fabric-1.21.8/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \;
-          find forge-1.21.1/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \;
+
+          # Forge
+          find Forge-1.21.1/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \; 2>/dev/null || true
+          find Forge-1.20.1/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \; 2>/dev/null || true
+          find Forge-1.19.2/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \; 2>/dev/null || true
+          find Forge-1.18.2/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \; 2>/dev/null || true
 
           # Count files
           JAR_COUNT=$(ls -1 release-jars/*.jar 2>/dev/null | wc -l)
@@ -75,10 +80,12 @@ jobs:
       - name: Create Release Notes
         id: release-notes
         run: |
-          cat > release_notes.md << 'EOF'
-          ## Staging Dev Build ${{ steps.version-info.outputs.commit_short }}
+          BUILD_DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
 
-          This is an automatic pre-release dev build of commit `${{ steps.version-info.outputs.commit_short }}`
+          cat > release_notes.md << EOF
+          Staging Dev Build ${{ steps.version-info.outputs.commit_short }}
+
+          This is an automatic pre-release dev build of commit ${{ steps.version-info.outputs.commit_short }}
 
           With this release you can test ahead of time the next Paradigm release candidate.
           This is the most up-to-date build available.
@@ -87,10 +94,10 @@ jobs:
           ${{ steps.collect-jars.outputs.jar_list }}
 
           Build info:
-          - Commit: `${{ github.sha }}`
+          - Commit: ${{ github.sha }}
           - Author: ${{ github.actor }}
           - Branch: ${{ github.ref_name }}
-          - Build Date: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          - Build Date: ${BUILD_DATE}
 
           Note:
           This is a development build and may contain bugs. Use at your own risk!

@@ -37,19 +37,16 @@ public class ColorTag implements Tag {
         if (arg.startsWith("#")) {
             tmp = tmp.withColor(arg);
         } else {
-            // named color / legacy token
             tmp = tmp.withFormatting(arg);
         }
 
         Object newStyle = tmp.getStyle();
         context.pushStyle(newStyle);
-        context.getCurrentComponent().setStyle(newStyle);
     }
 
     @Override
     public void close(FormattingContext context) {
         context.popStyle();
-        context.getCurrentComponent().setStyle(context.getCurrentStyle());
     }
 
     @Override

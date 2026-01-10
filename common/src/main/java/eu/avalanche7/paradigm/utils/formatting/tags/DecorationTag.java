@@ -62,13 +62,11 @@ public class DecorationTag implements Tag {
 
         Object newStyle = tmp.getStyle();
         context.pushStyle(newStyle);
-        context.getCurrentComponent().setStyle(newStyle);
     }
 
     @Override
     public void close(FormattingContext context) {
         context.popStyle();
-        context.getCurrentComponent().setStyle(context.getCurrentStyle());
     }
 
     @Override
