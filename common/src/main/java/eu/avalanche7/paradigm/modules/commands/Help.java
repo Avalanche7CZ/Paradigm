@@ -115,36 +115,67 @@ public class Help implements ParadigmModule {
     private void sendMainHelp(IPlayer p, IPlatformAdapter platform, Services services) {
         MessageParser parser = services.getMessageParser();
         String version = ParadigmAPI.getModVersion();
-        IComponent sep = parser.parseMessage("&8&m----------------------------------------", p);
+
+        IComponent sep = parser.parseMessage("<gradient:#334155:#64748B>&m----------------------------------------</gradient>", p);
         platform.sendSystemMessage(p, sep);
-        platform.sendSystemMessage(p, parser.parseMessage("&d&l[ Paradigm Mod v" + version + " ]", p));
-        platform.sendSystemMessage(p, parser.parseMessage("&6by Avalanche7CZ &d♥", p));
-        platform.sendSystemMessage(p, parser.parseMessage("&bDiscord: [hover=Click to join the Paradigm Discord!]https://discord.com/invite/qZDcQdEFqQ[/hover]", p));
+
+        platform.sendSystemMessage(p, parser.parseMessage(
+                "<center><bold><gradient:#22D3EE:#A78BFA>Paradigm</gradient></bold> <color:#94A3B8>v" + version + "</color></center>",
+                p
+        ));
+
+        platform.sendSystemMessage(p, parser.parseMessage(
+                "<center><color:#F472B6>by</color> <color:#F8FAFC>Avalanche7CZ</color> <color:#F472B6>♥</color></center>",
+                p
+        ));
+
+        platform.sendSystemMessage(p, parser.parseMessage(
+                "<center><color:#94A3B8>Discord:</color> " +
+                        "<hover:'<color:#F8FAFC>Click to join the Paradigm Discord</color>'>" +
+                        "<click:open_url:'https://discord.com/invite/qZDcQdEFqQ'>" +
+                        "<underline><color:#38BDF8>discord.gg/qZDcQdEFqQ</color></underline>" +
+                        "</click></hover></center>",
+                p
+        ));
+
         platform.sendSystemMessage(p, sep);
         sendModuleList(p, platform, services, true);
         platform.sendSystemMessage(p, sep);
-        IComponent hint = parser.parseMessage("&eType &d/paradigm help <module> &efor details, or click a module above.", p)
+
+        IComponent hint = parser.parseMessage(
+                        "<color:#FBBF24>Tip:</color> <color:#F8FAFC>Type</color> <color:#FBBF24><bold>/paradigm help &lt;module&gt;</bold></color> <color:#F8FAFC>for details, or click a module above.</color>",
+                        p)
                 .onClickSuggestCommand("/paradigm help ")
                 .onHoverText("Click to start typing a help command");
         platform.sendSystemMessage(p, hint);
-        platform.sendSystemMessage(p, parser.parseMessage("&d&lParadigm - Elevate your server! ✨", p));
+
+        platform.sendSystemMessage(p, parser.parseMessage(
+                "<center><gradient:#F472B6:#A78BFA><bold>Paradigm</bold></gradient> <color:#94A3B8>— elevate your server</color></center>",
+                p
+        ));
         platform.sendSystemMessage(p, sep);
     }
 
     private void sendModuleList(IPlayer p, IPlatformAdapter platform, Services services, boolean interactive) {
         MessageParser parser = services.getMessageParser();
-        platform.sendSystemMessage(p, parser.parseMessage("&d&lModules:", p));
+        platform.sendSystemMessage(p, parser.parseMessage("<bold><gradient:#F472B6:#A78BFA>Modules</gradient></bold><color:#94A3B8>:</color>", p));
+
         List<ParadigmModule> mods = new ArrayList<>(ParadigmAPI.getModules());
         mods.sort(Comparator.comparing(ParadigmModule::getName, String.CASE_INSENSITIVE_ORDER));
+
         for (ParadigmModule mod : mods) {
             boolean enabled = mod.isEnabled(services);
+
             String symbol = enabled ? "✔" : "✖";
-            String symbolColor = enabled ? "&a" : "&7";
-            String nameColor = enabled ? "&f" : "&8";
-            String status = enabled ? "&7(enabled)" : "&8(disabled)";
-            String raw = symbolColor + symbol + " " + nameColor + mod.getName() + " " + status;
+            String symbolColor = enabled ? "<color:#22C55E>" : "<color:#94A3B8>";
+            String nameColor = enabled ? "<color:#F8FAFC>" : "<color:#64748B>";
+            String status = enabled ? "<color:#94A3B8>(enabled)</color>" : "<color:#475569>(disabled)</color>";
+
+            String raw = symbolColor + symbol + "</color> " + nameColor + mod.getName() + "</color> " + status;
             IComponent line = parser.parseMessage(raw, p);
+
             if (interactive) {
+                // Suggest command is nicer than run-command here.
                 line = line.onClickSuggestCommand("/paradigm help " + mod.getName())
                         .onHoverText("Click for help about " + mod.getName());
             }

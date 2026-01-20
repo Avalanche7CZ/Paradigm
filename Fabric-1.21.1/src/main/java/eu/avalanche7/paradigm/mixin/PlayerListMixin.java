@@ -74,8 +74,6 @@ public abstract class PlayerListMixin {
                     .replace("{player_name}", wrappedSender.getName())
                     .replace("{player_uuid}", wrappedSender.getUUID());
 
-            formattedText = services.getPlatformAdapter().replacePlaceholders(formattedText, wrappedSender);
-
             IComponent parsedComponent = services.getMessageParser().parseMessage(formattedText, wrappedSender);
 
             Object nativeObj = parsedComponent.getOriginalText();

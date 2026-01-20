@@ -75,24 +75,29 @@ public class AnnouncementsConfigHandler extends BaseConfigHandler<AnnouncementsC
                 "The interval in seconds between each global chat announcement."
         );
         public ConfigEntry<String> prefix = new ConfigEntry<>(
-                "<color:#55FFFF><bold>[Paradigm]</bold></color>",
+                "<bold><gradient:#22D3EE:#A78BFA>[Paradigm]</gradient></bold>",
                 "Prefix prepended to all announcement messages. Use {prefix} placeholder in messages to apply."
         );
         public ConfigEntry<String> header = new ConfigEntry<>(
-                "&7*&m---------------------------------------------------&7*",
-                "The header message sent before a global announcement."
+                "<bold><gradient:#FF006E:#8338EC>&m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</gradient></bold>",
+                "The header message sent before a global announcement. Supports colors, gradients, bold, etc."
         );
         public ConfigEntry<String> footer = new ConfigEntry<>(
-                "&7*&m---------------------------------------------------&7*",
-                "The footer message sent after a global announcement."
+                "<bold><gradient:#667EEA:#764BA2>&m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</gradient></bold>",
+                "The footer message sent after a global announcement. Supports colors, gradients, bold, etc."
         );
         public ConfigEntry<String> sound = new ConfigEntry<>(
                 "",
                 "Sound to play for players when an announcement is made. E.g., 'minecraft:block.note_block.pling'. Leave empty for no sound."
         );
         public ConfigEntry<List<String>> globalMessages = new ConfigEntry<>(
-                List.of("{prefix} <color:gray>This is a global message with a link: <link:https://www.google.com>google.com</link></color>"),
-                "List of messages to be broadcast in global chat."
+                List.of(
+                        "<bold><gradient:#22D3EE:#A78BFA>[Paradigm]</gradient></bold> <color:#F8FAFC>Welcome!</color> <color:#94A3B8>Type </color><gradient:#38BDF8:#3A86FF><bold>/paradigm</bold></gradient><color:#94A3B8> to see available commands.</color>",
+                        "<bold><gradient:#FF006E:#8338EC>[Paradigm]</gradient></bold> <color:#F8FAFC>Links in chat are clickable:</color> <gradient:#C4B5FD:#A78BFA><underline>https://example.com</underline></gradient>",
+                        "<bold><gradient:#3A86FF:#FB5607>[Paradigm]</gradient></bold> <color:#F8FAFC>Tip:</color> <gradient:#F472B6:#FF006E>Use a group chat</gradient><color:#94A3B8> with </color><gradient:#22D3EE:#3A86FF><bold>/group</bold></gradient><color:#94A3B8> to keep things organized.</color>",
+                        "<bold><gradient:#FFD700:#FB5607>[Paradigm]</gradient></bold> <gradient:#06D6A0:#1ABC9C>Server is running smoothly!</gradient>"
+                ),
+                "List of messages to be broadcast in global chat. Supports colors, gradients, bold, italic, underline, etc."
         );
         public ConfigEntry<Boolean> actionbarEnable = new ConfigEntry<>(
                 true,
@@ -103,8 +108,12 @@ public class AnnouncementsConfigHandler extends BaseConfigHandler<AnnouncementsC
                 "The interval in seconds between each action bar announcement."
         );
         public ConfigEntry<List<String>> actionbarMessages = new ConfigEntry<>(
-                List.of("{prefix} <color:gray>This is an actionbar message.</color>"),
-                "List of messages to be broadcast on the action bar."
+                List.of(
+                        "<bold><gradient:#22D3EE:#A78BFA>[Paradigm]</gradient></bold> <gradient:#F8FAFC:#FBBF24>Need help?</gradient> <gradient:#3A86FF:#FB5607><bold>/paradigm</bold></gradient>",
+                        "<bold><gradient:#FF006E:#8338EC>[Paradigm]</gradient></bold> <gradient:#06D6A0:#1ABC9C>Enjoy your stay.</gradient>",
+                        "<bold><gradient:#FFD700:#FB5607>[Paradigm]</gradient></bold> <gradient:#667EEA:#764BA2>Stay awesome!</gradient>"
+                ),
+                "List of messages to be broadcast on the action bar. Supports colors, gradients, bold, italic, etc."
         );
         public ConfigEntry<Boolean> titleEnable = new ConfigEntry<>(
                 true,
@@ -115,8 +124,12 @@ public class AnnouncementsConfigHandler extends BaseConfigHandler<AnnouncementsC
                 "The interval in seconds between each title announcement."
         );
         public ConfigEntry<List<String>> titleMessages = new ConfigEntry<>(
-                List.of("{prefix} <color:gray>This is a title message.</color>"),
-                "List of messages to be broadcast as a title. Use '\\n' for a subtitle."
+                List.of(
+                        "<bold><gradient:#FF006E:#8338EC>Welcome</gradient></bold> || <color:#F8FAFC>Have fun!</color>",
+                        "<bold><gradient:#22D3EE:#A78BFA>Paradigm</gradient></bold> || <color:#F8FAFC>Type </color><gradient:#3A86FF:#FB5607><bold>/paradigm</bold></gradient><color:#F8FAFC> for help</color>",
+                        "<bold><gradient:#06D6A0:#1ABC9C>Server Online</gradient></bold> || <gradient:#667EEA:#764BA2>Enjoy your adventure!</gradient>"
+                ),
+                "List of messages to be broadcast as a title. Separate title and subtitle with ' || '. Supports colors, gradients, bold, italic, etc."
         );
         public ConfigEntry<Boolean> bossbarEnable = new ConfigEntry<>(
                 true,
@@ -135,8 +148,12 @@ public class AnnouncementsConfigHandler extends BaseConfigHandler<AnnouncementsC
                 "How long the boss bar should remain on screen, in seconds."
         );
         public ConfigEntry<List<String>> bossbarMessages = new ConfigEntry<>(
-                List.of("{prefix} <color:gray>This is a bossbar message.</color>"),
-                "List of messages to be broadcast in a boss bar."
+                List.of(
+                        "<bold><gradient:#FF006E:#8338EC>[Paradigm]</gradient></bold> <gradient:#E2E8F0:#A78BFA>Server announcement</gradient>",
+                        "<bold><gradient:#3A86FF:#FB5607>[Paradigm]</gradient></bold> <gradient:#06D6A0:#1ABC9C>Check chat for details</gradient>",
+                        "<bold><gradient:#FFD700:#FB5607>[Paradigm]</gradient></bold> <gradient:#667EEA:#764BA2>Important update incoming!</gradient>"
+                ),
+                "List of messages to be broadcast in a boss bar. Note: bossbars do not support click/hover actions. Supports colors, gradients, bold, italic, etc."
         );
     }
 }

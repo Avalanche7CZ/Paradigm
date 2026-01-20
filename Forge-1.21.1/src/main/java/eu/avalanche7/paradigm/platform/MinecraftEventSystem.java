@@ -3,10 +3,12 @@ package eu.avalanche7.paradigm.platform;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.event.ServerChatEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.server.ServerLifecycleHooks;
 
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -67,6 +69,17 @@ public class MinecraftEventSystem implements IEventSystem {
                 System.err.println("Error in chat event listener: " + e.getMessage());
             }
         }
+
+        if (!chatEvent.isCancelled() && chatEvent.isModified()) {
+            event.setCanceled(true);
+            try {
+                MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+                if (server != null) {
+                    server.getPlayerList().broadcastSystemMessage(net.minecraft.network.chat.Component.literal(chatEvent.getMessage()), false);
+                }
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     @SubscribeEvent
@@ -80,6 +93,17 @@ public class MinecraftEventSystem implements IEventSystem {
             } catch (Exception e) {
                 System.err.println("Error in player join event listener: " + e.getMessage());
             }
+        }
+
+        try {
+            IComponent custom = joinEvent.getJoinMessage();
+            if (custom != null) {
+                MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+                if (server != null) {
+                    server.getPlayerList().broadcastSystemMessage(((MinecraftComponent) custom).getHandle(), false);
+                }
+            }
+        } catch (Throwable ignored) {
         }
     }
 
@@ -95,15 +119,40 @@ public class MinecraftEventSystem implements IEventSystem {
                 System.err.println("Error in player leave event listener: " + e.getMessage());
             }
         }
+
+        try {
+            IComponent custom = leaveEvent.getLeaveMessage();
+            if (custom != null) {
+                MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+                if (server != null) {
+                    server.getPlayerList().broadcastSystemMessage(((MinecraftComponent) custom).getHandle(), false);
+                }
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     private static class MinecraftChatEvent implements ChatEvent {
         private final ServerChatEvent forgeEvent;
         private final IPlayer player;
+        private final String original;
+        private String msg;
 
         public MinecraftChatEvent(ServerChatEvent forgeEvent) {
             this.forgeEvent = forgeEvent;
             this.player = MinecraftPlayer.of((ServerPlayer) forgeEvent.getPlayer());
+            String initial;
+            try {
+                initial = forgeEvent.getMessage().getString();
+            } catch (Throwable t) {
+                initial = "";
+            }
+            this.original = initial;
+            this.msg = initial;
+        }
+
+        boolean isModified() {
+            return msg != null && !msg.equals(original);
         }
 
         @Override
@@ -113,7 +162,7 @@ public class MinecraftEventSystem implements IEventSystem {
 
         @Override
         public String getMessage() {
-            return forgeEvent.getMessage().getString();
+            return msg;
         }
 
         @Override
@@ -121,7 +170,7 @@ public class MinecraftEventSystem implements IEventSystem {
             if (message == null || message.equals(getMessage())) {
                 return;
             }
-            forgeEvent.setCanceled(true);
+            this.msg = message;
         }
 
         @Override
@@ -136,11 +185,10 @@ public class MinecraftEventSystem implements IEventSystem {
     }
 
     private static class MinecraftPlayerJoinEvent implements PlayerJoinEvent {
-        private final PlayerEvent.PlayerLoggedInEvent forgeEvent;
         private final IPlayer player;
+        private IComponent joinMessage;
 
         public MinecraftPlayerJoinEvent(PlayerEvent.PlayerLoggedInEvent forgeEvent) {
-            this.forgeEvent = forgeEvent;
             this.player = MinecraftPlayer.of((ServerPlayer) forgeEvent.getEntity());
         }
 
@@ -151,20 +199,20 @@ public class MinecraftEventSystem implements IEventSystem {
 
         @Override
         public IComponent getJoinMessage() {
-            return null;
+            return joinMessage;
         }
 
         @Override
         public void setJoinMessage(IComponent message) {
+            this.joinMessage = message;
         }
     }
 
     private static class MinecraftPlayerLeaveEvent implements PlayerLeaveEvent {
-        private final PlayerEvent.PlayerLoggedOutEvent forgeEvent;
         private final IPlayer player;
+        private IComponent leaveMessage;
 
         public MinecraftPlayerLeaveEvent(PlayerEvent.PlayerLoggedOutEvent forgeEvent) {
-            this.forgeEvent = forgeEvent;
             this.player = MinecraftPlayer.of((ServerPlayer) forgeEvent.getEntity());
         }
 
@@ -175,11 +223,12 @@ public class MinecraftEventSystem implements IEventSystem {
 
         @Override
         public IComponent getLeaveMessage() {
-            return null;
+            return leaveMessage;
         }
 
         @Override
         public void setLeaveMessage(IComponent message) {
+            this.leaveMessage = message;
         }
     }
 }

@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "eu.avalanche7.paradigm.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "PlayerListMixin",
+    "ServerStatusMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -5,21 +5,17 @@ import eu.avalanche7.paradigm.configs.CooldownConfigHandler;
 import eu.avalanche7.paradigm.core.CommonRuntime;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.platform.ForgeConfig;
 import eu.avalanche7.paradigm.platform.PlatformAdapterImpl;
 import eu.avalanche7.paradigm.utils.TelemetryReporter;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.RegisterCommandsEvent;
-import net.minecraftforge.event.server.ServerStartingEvent;
-import net.minecraftforge.event.server.ServerStoppingEvent;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.ModList;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import net.minecraftforge.fml.loading.FMLEnvironment;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.ModList;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.loading.FMLEnvironment;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.RegisterCommandsEvent;
+import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
@@ -47,17 +43,15 @@ public class Paradigm {
     }
 
     public Paradigm() {
-        this(FMLJavaModLoadingContext.get());
-    }
-
-    public Paradigm(FMLJavaModLoadingContext ctx) {
         INSTANCE = this;
 
         if (FMLEnvironment.dist == Dist.CLIENT) {
             LOGGER.info("Paradigm mod is only supported on the server side. Please remove it from the client.");
             return;
         }
-        var platformConfig = new ForgeConfig();
+
+        var platformConfig = new eu.avalanche7.paradigm.platform.NeoForgeConfig();
+
         var placeholders = new eu.avalanche7.paradigm.utils.Placeholders();
         var debugLogger = new eu.avalanche7.paradigm.utils.DebugLogger(null);
         var taskScheduler = new eu.avalanche7.paradigm.utils.TaskScheduler(debugLogger);
@@ -88,20 +82,8 @@ public class Paradigm {
         }
         CommonRuntime.attachToApi(runtime, modVersion);
 
-        IEventBus modEventBus = ctx.getModEventBus();
-        modules.forEach(m -> m.onLoad(null, services, modEventBus));
-        modules.forEach(m -> m.registerEventListeners(MinecraftForge.EVENT_BUS, services));
-
-        modEventBus.addListener(this::commonSetup);
-        MinecraftForge.EVENT_BUS.register(this);
-    }
-
-    private void commonSetup(final FMLCommonSetupEvent event) {
-        event.enqueueWork(() -> modules.forEach(module -> {
-            if (module.isEnabled(services)) {
-                module.onEnable(services);
-            }
-        }));
+        modules.forEach(m -> m.onLoad(null, services, NeoForge.EVENT_BUS));
+        modules.forEach(m -> m.registerEventListeners(NeoForge.EVENT_BUS, services));
 
         ModList.get().getModContainerById(MOD_ID).ifPresent(modContainer -> {
             String version = modContainer.getModInfo().getVersion().toString();
@@ -114,7 +96,7 @@ public class Paradigm {
             LOGGER.info(" |_|   \\__,_|_|  \\__,_|\\__,_|_|\\__, |_| |_| |_|");
             LOGGER.info("                                |___/");
             LOGGER.info("");
-            LOGGER.info("{} - Version {} - FORGE", displayName, version);
+            LOGGER.info("{} - Version {} - NEOFORGE", displayName, version);
             LOGGER.info("Author: Avalanche7CZ");
             LOGGER.info("Discord: https://discord.com/invite/qZDcQdEFqQ");
             LOGGER.info("==================================================");
@@ -129,14 +111,16 @@ public class Paradigm {
                     new eu.avalanche7.paradigm.utils.UpdateChecker.UpdateConfig(
                             "s4i32SJd",
                             "paradigm",
-                            "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/Forge/main/version.txt?v=1"
+                            "https://raw.githubusercontent.com/Avalanche7CZ/Paradigm/NeoForge/1.21.1/version.txt?v=1"
                     ),
                     version,
                     mcVersion,
-                    "forge",
+                    "neoforge",
                     LOGGER
             );
         });
+
+        NeoForge.EVENT_BUS.register(this);
     }
 
     @SubscribeEvent
@@ -169,7 +153,13 @@ public class Paradigm {
 
         modules.forEach(module -> {
             if (module.isEnabled(services)) {
-                module.registerCommands(event.getDispatcher(), event.getBuildContext(), services);
+                Object registryAccess;
+                try {
+                    registryAccess = event.getBuildContext();
+                } catch (Throwable t) {
+                    registryAccess = null;
+                }
+                module.registerCommands(event.getDispatcher(), registryAccess, services);
             }
         });
     }

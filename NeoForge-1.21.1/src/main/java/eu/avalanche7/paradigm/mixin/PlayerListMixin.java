@@ -7,6 +7,7 @@ import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.MinecraftComponent;
 import eu.avalanche7.paradigm.platform.MinecraftPlayer;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.PlayerChatMessage;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.PlayerList;
 import org.spongepowered.asm.mixin.Mixin;
@@ -17,27 +18,30 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(PlayerList.class)
 public abstract class PlayerListMixin {
 
-
-    @Inject(method = "*(Lnet/minecraft/network/chat/Component;Z)V", at = @At("HEAD"), cancellable = true, remap = false)
+    @Inject(method = "broadcastSystemMessage(Lnet/minecraft/network/chat/Component;Z)V", at = @At("HEAD"), cancellable = true)
     private void paradigm$filterJoinLeaveMessages(Component message, boolean overlay, CallbackInfo ci) {
         if (message == null) return;
 
+        // Only suppress vanilla join/leave messages (translatable multiplayer.player.*)
         int type = paradigm$getVanillaJoinLeaveType(message);
         if (type == 0) return;
 
         Services services = Paradigm.getServices();
         if (services == null) return;
         ChatConfigHandler.Config cfg = services.getChatConfig();
-        boolean joinLeaveEnabled = cfg != null && Boolean.TRUE.equals(cfg.enableJoinLeaveMessages.get());
+        if (cfg == null) return;
 
-        if (joinLeaveEnabled) {
+        boolean suppressJoin = Boolean.TRUE.equals(cfg.enableJoinLeaveMessages.get()) || Boolean.TRUE.equals(cfg.enableFirstJoinMessage.get());
+        boolean suppressLeave = Boolean.TRUE.equals(cfg.enableJoinLeaveMessages.get());
+
+        if ((type == 1 && suppressJoin) || (type == 2 && suppressLeave)) {
             ci.cancel();
         }
     }
 
-    @Inject(method = "*(Lnet/minecraft/network/chat/PlayerChatMessage;Lnet/minecraft/server/level/ServerPlayer;Lnet/minecraft/network/chat/ChatType$Bound;)V",
-            at = @At("HEAD"), cancellable = true, remap = false)
-    private void paradigm$formatChatMessage(net.minecraft.network.chat.PlayerChatMessage playerChatMessage, ServerPlayer sender, net.minecraft.network.chat.ChatType.Bound boundChatType, CallbackInfo ci) {
+    @Inject(method = "broadcastChatMessage(Lnet/minecraft/network/chat/PlayerChatMessage;Lnet/minecraft/server/level/ServerPlayer;Lnet/minecraft/network/chat/ChatType$Bound;)V",
+            at = @At("HEAD"), cancellable = true)
+    private void paradigm$formatChatMessage(PlayerChatMessage playerChatMessage, ServerPlayer sender, net.minecraft.network.chat.ChatType.Bound boundChatType, CallbackInfo ci) {
         Services services = Paradigm.getServices();
         if (services == null) return;
 
@@ -56,7 +60,6 @@ public abstract class PlayerListMixin {
 
             String formattedText = customFormat.replace("{message}", messageText);
 
-
             IComponent parsedComponent = services.getMessageParser().parseMessage(formattedText, new MinecraftPlayer(sender));
 
             Component finalMessage;
@@ -73,7 +76,7 @@ public abstract class PlayerListMixin {
 
             ci.cancel();
         } catch (Exception e) {
-            System.err.println("[Paradigm-Mixin] Error formatting chat message: " + e.getMessage());
+            System.err.println("[Paradigm-NeoForge] Error formatting chat message: " + e.getMessage());
             e.printStackTrace();
         }
     }

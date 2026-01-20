@@ -88,11 +88,31 @@ public class JoinLeaveMessages implements ParadigmModule {
 
         if (messageFormat != null) {
             IComponent formattedMessage = services.getMessageParser().parseMessage(messageFormat, player);
+
+            boolean applied = false;
             try {
+                IComponent before = null;
+                try {
+                    before = event.getJoinMessage();
+                } catch (Throwable ignored) {
+                }
+
                 event.setJoinMessage(formattedMessage);
-            } catch (Throwable t) {
+
+                try {
+                    IComponent after = event.getJoinMessage();
+                    applied = after != null && after != before;
+                } catch (Throwable ignored) {
+                    applied = true;
+                }
+            } catch (Throwable ignored) {
+                applied = false;
+            }
+
+            if (!applied) {
                 platform.broadcastSystemMessage(formattedMessage);
             }
+
             services.getDebugLogger().debugLog(logMessage + player.getName());
         }
     }
@@ -107,11 +127,31 @@ public class JoinLeaveMessages implements ParadigmModule {
         if (chatConfig.enableJoinLeaveMessages.get()) {
             String leaveMessageFormat = chatConfig.leaveMessageFormat.get();
             IComponent formattedMessage = services.getMessageParser().parseMessage(leaveMessageFormat, player);
+
+            boolean applied = false;
             try {
+                IComponent before = null;
+                try {
+                    before = event.getLeaveMessage();
+                } catch (Throwable ignored) {
+                }
+
                 event.setLeaveMessage(formattedMessage);
-            } catch (Throwable t) {
+
+                try {
+                    IComponent after = event.getLeaveMessage();
+                    applied = after != null && after != before;
+                } catch (Throwable ignored) {
+                    applied = true;
+                }
+            } catch (Throwable ignored) {
+                applied = false;
+            }
+
+            if (!applied) {
                 platform.broadcastSystemMessage(formattedMessage);
             }
+
             services.getDebugLogger().debugLog("Sent leave message for " + player.getName());
         }
     }

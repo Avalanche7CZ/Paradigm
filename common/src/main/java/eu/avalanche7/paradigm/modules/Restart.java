@@ -279,6 +279,7 @@ public class Restart implements ParadigmModule {
                         services.getDebugLogger().debugLog(NAME + ": Executing pre-restart player-commands (" + secondsBefore + "s before) for " + players.size() + " players: " + raw);
                         for (eu.avalanche7.paradigm.platform.Interfaces.IPlayer sp : players) {
                             String perPlayer = platform.replacePlaceholders(raw, sp);
+                            perPlayer = replaceTimePlaceholders(perPlayer, secondsBefore);
                             try {
                                 Object orig = sp.getOriginalPlayer();
                                 if (orig != null) {
@@ -293,6 +294,7 @@ public class Restart implements ParadigmModule {
                         }
                     } else {
                         String replaced = platform.replacePlaceholders(commandText, null);
+                        replaced = replaceTimePlaceholders(replaced, secondsBefore);
                         services.getDebugLogger().debugLog(NAME + ": Executing pre-restart console command (" + secondsBefore + "s before): " + replaced);
                         platform.executeCommandAsConsole(replaced);
                     }
@@ -350,8 +352,24 @@ public class Restart implements ParadigmModule {
     private void performShutdown(Services services, RestartConfigHandler.Config config) {
         if (!restartInProgress.get()) return;
         services.getDebugLogger().debugLog(NAME + ": Initiating final shutdown procedure.");
+        platform.removeRestartBossBar();
         IComponent kickMessage = services.getMessageParser().parseMessage(config.defaultRestartReason.value, null);
         platform.shutdownServer(kickMessage);
+    }
+
+    private String replaceTimePlaceholders(String text, long timeLeftSeconds) {
+        if (text == null) return "";
+        final int hours = (int) (timeLeftSeconds / 3600);
+        final int minutes = (int) ((timeLeftSeconds % 3600) / 60);
+        final int seconds = (int) (timeLeftSeconds % 60);
+        final String formattedTime = String.format("%dh %dm %ds", hours, minutes, seconds);
+
+        String result = text;
+        result = result.replace("{time}", formattedTime);
+        result = result.replace("{hours}", String.valueOf(hours));
+        result = result.replace("{minutes}", TIME_FORMATTER.format(minutes));
+        result = result.replace("{seconds}", TIME_FORMATTER.format(seconds));
+        return result;
     }
 
     public void rescheduleNextRestart(Services services) {

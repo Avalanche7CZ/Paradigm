@@ -57,8 +57,6 @@ public abstract class PlayerListMixin {
 
             String formattedText = customFormat.replace("{message}", messageText);
 
-            formattedText = services.getPlaceholders().replacePlaceholders(formattedText, new MinecraftPlayer(sender));
-
             IComponent parsedComponent = services.getMessageParser().parseMessage(formattedText, new MinecraftPlayer(sender));
 
             Component finalMessage;

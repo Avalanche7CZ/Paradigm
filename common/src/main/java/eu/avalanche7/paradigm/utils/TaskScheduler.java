@@ -13,22 +13,25 @@ public class TaskScheduler {
     private ScheduledExecutorService executorService;
     private final AtomicReference<Object> serverRef = new AtomicReference<>(null);
     private final DebugLogger debugLogger;
-
-    /**
-     * Optional hook provided by platform to schedule work onto the main thread.
-     * If null, we fall back to reflection on the server object (execute(Runnable)).
-     */
     private volatile Consumer<Runnable> mainThreadExecutor;
 
     public TaskScheduler(DebugLogger debugLogger) {
         this.debugLogger = debugLogger;
+        ensureExecutor();
+    }
+
+    private void ensureExecutor() {
+        if (this.executorService == null || this.executorService.isShutdown()) {
+            this.executorService = Executors.newScheduledThreadPool(2);
+            try {
+                debugLogger.debugLog("TaskScheduler: Executor service created.");
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     public void initialize(Object serverInstance) {
-        if (this.executorService == null || this.executorService.isShutdown()) {
-            this.executorService = Executors.newScheduledThreadPool(2);
-            debugLogger.debugLog("TaskScheduler: Executor service created.");
-        }
+        ensureExecutor();
         this.serverRef.set(serverInstance);
         if (serverInstance != null) {
             debugLogger.debugLog("TaskScheduler: Initialized with server instance.");
@@ -37,32 +40,22 @@ public class TaskScheduler {
         }
     }
 
-    /** Platform should call this once it has access to main-thread scheduling. */
     public void setMainThreadExecutor(Consumer<Runnable> executor) {
         this.mainThreadExecutor = executor;
     }
 
     public ScheduledFuture<?> scheduleAtFixedRate(Runnable task, long initialDelay, long period, TimeUnit unit) {
-        if (executorService == null || executorService.isShutdown()) {
-            debugLogger.debugLog("TaskScheduler: Cannot schedule task, executor service is not running.");
-            return null;
-        }
+        ensureExecutor();
         return executorService.scheduleAtFixedRate(() -> syncExecute(task), initialDelay, period, unit);
     }
 
     public ScheduledFuture<?> schedule(Runnable task, long delay, TimeUnit unit) {
-        if (executorService == null || executorService.isShutdown()) {
-            debugLogger.debugLog("TaskScheduler: Cannot schedule task, executor service is not running.");
-            return null;
-        }
+        ensureExecutor();
         return executorService.schedule(() -> syncExecute(task), delay, unit);
     }
 
     public ScheduledFuture<?> scheduleRaw(Runnable task, long delay, TimeUnit unit) {
-        if (executorService == null || executorService.isShutdown()) {
-            debugLogger.debugLog("TaskScheduler: Cannot schedule raw task, executor service is not running.");
-            return null;
-        }
+        ensureExecutor();
         return executorService.schedule(task, delay, unit);
     }
 
@@ -76,7 +69,14 @@ public class TaskScheduler {
         }
 
         Object currentServer = serverRef.get();
-        if (currentServer == null) return;
+        if (currentServer == null) {
+            try {
+                task.run();
+            } catch (Throwable t) {
+                debugLogger.debugLog("TaskScheduler: Task failed (async fallback): " + t.getMessage());
+            }
+            return;
+        }
 
         // Last-resort reflection: MinecraftServer#execute(Runnable)
         try {

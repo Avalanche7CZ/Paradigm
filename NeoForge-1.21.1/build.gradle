@@ -1,0 +1,150 @@
+plugins {
+    id 'java-library'
+    id 'idea'
+    id 'net.neoforged.moddev' version '2.0.116'
+}
+
+// Use global version if present
+version = (rootProject.findProperty('mod_version') ?: project.mod_version)
+
+group = project.maven_group
+
+def archivesBaseName = project.hasProperty('archives_base_name') ? project.archives_base_name : (project.hasProperty('mod_id') ? project.mod_id : project.name)
+def modId = project.hasProperty('mod_id') ? project.mod_id : archivesBaseName
+
+def modName = project.hasProperty('mod_name') ? project.mod_name : archivesBaseName
+
+base {
+    archivesName = archivesBaseName
+}
+
+repositories {
+    mavenLocal()
+    maven { url "https://maven.neoforged.net/releases/" }
+    maven { url "https://maven.neoforged.net/" }
+    maven { url "https://maven.shedaniel.me/" }
+    maven { url "https://maven.terraformersmc.com/releases/" }
+    mavenCentral()
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+neoForge {
+    version = project.neo_version
+
+    parchment {
+        mappingsVersion = project.hasProperty('yarn_mappings') ? project.yarn_mappings : project.parchment_mappings_version
+        minecraftVersion = project.minecraft_version
+    }
+
+    runs {
+        client {
+            client()
+            systemProperty 'neoforge.enabledGameTestNamespaces', archivesBaseName
+        }
+
+        server {
+            server()
+            programArgument '--nogui'
+            systemProperty 'neoforge.enabledGameTestNamespaces', archivesBaseName
+        }
+
+        gameTestServer {
+            type = "gameTestServer"
+            systemProperty 'neoforge.enabledGameTestNamespaces', archivesBaseName
+        }
+
+        data {
+            data()
+            programArguments.addAll '--mod', archivesBaseName, '--all', '--output', file('src/generated/resources/').getAbsolutePath(), '--existing', file('src/main/resources/').getAbsolutePath()
+        }
+
+        configureEach {
+            systemProperty 'forge.logging.markers', 'REGISTRIES'
+            logLevel = org.slf4j.event.Level.DEBUG
+        }
+    }
+
+    mods {
+        "${archivesBaseName}" {
+            // include platform sources
+            sourceSet(sourceSets.main)
+            // IMPORTANT: include common sources in dev runs so runtime classpath contains them
+            sourceSet(project(":common").sourceSets.main)
+        }
+    }
+}
+
+sourceSets {
+    main {
+        resources {
+            srcDir 'src/generated/resources'
+            // Do NOT add build/generated/sources/modMetadata here, it's wired via generateModMetadata task below
+            exclude 'fabric.mod.json'
+        }
+    }
+}
+
+tasks.withType(ProcessResources).configureEach {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+dependencies {
+    implementation project(":common")
+    compileOnly 'net.luckperms:api:5.4'
+}
+
+jar {
+    // Include common classes/resources directly into platform jar (fat-jar style)
+    from(project(":common").sourceSets.main.output) {
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    }
+
+    // Also protect the jar task itself from accidental duplicates
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    manifest {
+        attributes([
+            "Specification-Title": "Paradigm",
+            "Specification-Vendor": "Avalanche7CZ",
+            "Specification-Version": project.version,
+            "Implementation-Title": project.name,
+            "Implementation-Version": "${project.mod_version}",
+            "Implementation-Vendor": "Avalanche7CZ",
+            "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+        ])
+    }
+}
+
+var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
+    var replaceProperties = [
+            minecraft_version      : project.minecraft_version,
+            minecraft_version_range: project.hasProperty('minecraft_version_range') ? project.minecraft_version_range : project.minecraft_version,
+            neo_version            : project.hasProperty('neo_version') ? project.neo_version : project.minecraft_version,
+            neo_version_range      : project.hasProperty('neo_version_range') ? project.neo_version_range : project.minecraft_version,
+            loader_version_range   : project.hasProperty('loader_version_range') ? project.loader_version_range : "",
+            mod_id                 : modId,
+            mod_name               : modName,
+            mod_license            : project.hasProperty('mod_license') ? project.mod_license : "MIT",
+            mod_version            : project.mod_version,
+            mod_authors            : project.hasProperty('mod_authors') ? project.mod_authors : "",
+            mod_description        : project.hasProperty('mod_description') ? project.mod_description : ""
+    ]
+    inputs.properties replaceProperties
+    expand replaceProperties
+    from "src/main/templates"
+    into "build/generated/sources/modMetadata"
+}
+
+// Keep this wiring (it adds the generated directory as a resource source)
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata
+
+idea {
+    module {
+        downloadSources = true
+        downloadJavadoc = true
+    }
+}
