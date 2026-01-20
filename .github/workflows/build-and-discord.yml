@@ -51,6 +51,9 @@ jobs:
           find Forge-1.19.2/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \; 2>/dev/null || true
           find Forge-1.18.2/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \; 2>/dev/null || true
 
+          # NeoForge
+          find NeoForge-1.21.1/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \; 2>/dev/null || true
+
           # Count files
           JAR_COUNT=$(ls -1 release-jars/*.jar 2>/dev/null | wc -l)
           echo "jar_count=$JAR_COUNT" >> $GITHUB_OUTPUT
