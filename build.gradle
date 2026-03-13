@@ -58,12 +58,11 @@ task collectOutputs {
             if (!libsDir.exists()) return
 
             libsDir.listFiles({ dir, name ->
-                name.endsWith('.jar') && !name.contains('sources')
+                name.endsWith('.jar') && !name.contains('sources') && name.startsWith('Paradigm')
             } as FilenameFilter).each { jar ->
                 copy {
                     from jar
                     into targetDir
-                    rename { originalName -> "${subproject.name}-${originalName}" }
                 }
             }
         }

@@ -96,13 +96,14 @@ public class TelemetryReporter {
         String mcVersion = platform.getMinecraftVersion();
         if (mcVersion == null || mcVersion.isBlank()) mcVersion = "unknown";
 
-        String modVersion = readBundledVersionFallback();
+        String modVersion = resolveModVersion();
 
         JsonObject payload = new JsonObject();
         payload.addProperty("timestamp", Instant.now().toString());
         payload.addProperty("serverId", MainConfigHandler.getConfig().telemetryServerId.value);
         payload.addProperty("mcVersion", mcVersion);
         payload.addProperty("modVersion", modVersion);
+        payload.addProperty("loader", detectLoader());
         payload.addProperty("onlinePlayers", online);
         payload.addProperty("maxPlayers", maxPlayers);
 
@@ -140,6 +141,38 @@ public class TelemetryReporter {
             if (conn != null) {
                 conn.disconnect();
             }
+        }
+    }
+
+    private static String resolveModVersion() {
+        try {
+            String v = eu.avalanche7.paradigm.ParadigmAPI.getModVersion();
+            if (v != null && !v.isBlank() && !v.equals("unknown")) return v;
+        } catch (Throwable ignored) {}
+        return readBundledVersionFallback();
+    }
+
+    private static String detectLoader() {
+        // NeoForge
+        if (classExists("net.neoforged.neoforge.common.NeoForge")) return "neoforge";
+        if (classExists("net.neoforged.fml.loading.FMLEnvironment"))  return "neoforge";
+        // Forge (classic)
+        if (classExists("net.minecraftforge.common.MinecraftForge"))   return "forge";
+        if (classExists("net.minecraftforge.fml.loading.FMLEnvironment")) return "forge";
+        // Fabric / Quilt
+        if (classExists("net.fabricmc.loader.api.FabricLoader")) {
+            if (classExists("org.quiltmc.loader.api.QuiltLoader")) return "quilt";
+            return "fabric";
+        }
+        return "unknown";
+    }
+
+    private static boolean classExists(String name) {
+        try {
+            Class.forName(name, false, TelemetryReporter.class.getClassLoader());
+            return true;
+        } catch (ClassNotFoundException | LinkageError ignored) {
+            return false;
         }
     }
 

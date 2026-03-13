@@ -38,29 +38,9 @@ jobs:
       - name: Collect JAR files
         id: collect-jars
         run: |
-          mkdir -p release-jars
-
-          # Fabric
-          find Fabric-1.20.1/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \;
-          find Fabric-1.21.1/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \;
-          find Fabric-1.21.8/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \;
-          find Fabric-1.21.11/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \;
-
-          # Forge
-          find Forge-1.21.11/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \; 2>/dev/null || true
-          find Forge-1.21.1/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \; 2>/dev/null || true
-          find Forge-1.20.1/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \; 2>/dev/null || true
-          find Forge-1.19.2/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \; 2>/dev/null || true
-          find Forge-1.18.2/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \; 2>/dev/null || true
-
-          # NeoForge
-          find NeoForge-1.21.1/build/libs -name "*.jar" -type f ! -name "*sources*" -exec cp {} release-jars/ \; 2>/dev/null || true
-
-          # Count files
           JAR_COUNT=$(ls -1 release-jars/*.jar 2>/dev/null | wc -l)
           echo "jar_count=$JAR_COUNT" >> $GITHUB_OUTPUT
 
-          # List JARs for release notes
           echo "jar_list<<EOF" >> $GITHUB_OUTPUT
           ls -1 release-jars/*.jar | xargs -n1 basename >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
