@@ -50,5 +50,14 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Patch gradle.properties for CI (remove local org.gradle.java.home)
+        run: |
+          if [ -f gradle.properties ]; then
+            sed -i.bak '/^org\.gradle\.java\.home=/d' gradle.properties
+          fi
+
       - name: Generate and submit dependency graph
         uses: gradle/actions/dependency-submission@dbbdc275be76ac10734476cc723d82dfe7ec6eda
