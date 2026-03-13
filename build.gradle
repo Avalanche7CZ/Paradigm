@@ -2,6 +2,9 @@ allprojects {
     group = 'eu.avalanche7'
 }
 
+def consolidatedJarsDir = layout.buildDirectory.dir("outputs/all-jars")
+
+
 // Task to find all JAR files in build directories (excluding sources and common)
 task findJars {
     doLast {
@@ -18,6 +21,51 @@ task findJars {
         }
         println("==============================\n")
     }
+}
+
+// Collect all distributable JARs from subprojects into one folder.
+task collectOutputs {
+    group = 'build'
+    description = 'Collects all non-sources JAR outputs into build/outputs/all-jars.'
+
+    doLast {
+        def targetDir = consolidatedJarsDir.get().asFile
+        if (targetDir.exists()) {
+            targetDir.deleteDir()
+        }
+        targetDir.mkdirs()
+
+        project.subprojects.each { subproject ->
+            if (subproject.name == 'common') return
+
+            def libsDir = file("${subproject.projectDir}/build/libs")
+            if (!libsDir.exists()) return
+
+            libsDir.listFiles({ dir, name ->
+                name.endsWith('.jar') && !name.contains('sources')
+            } as FilenameFilter).each { jar ->
+                copy {
+                    from jar
+                    into targetDir
+                    rename { originalName -> "${subproject.name}-${originalName}" }
+                }
+            }
+        }
+
+        println("\nCollected outputs: ${targetDir.absolutePath}")
+    }
+}
+
+if (tasks.findByName('build') == null) {
+    tasks.register('build') {
+        group = 'build'
+        description = 'Builds all subprojects from the root project.'
+        dependsOn subprojects.collect { "${it.path}:build" }
+    }
+}
+
+tasks.named('build').configure {
+    finalizedBy tasks.named('collectOutputs')
 }
 
 // Task to send JAR files to Discord

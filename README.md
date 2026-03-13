@@ -56,17 +56,18 @@
 
 | Version        | Mod Loader         | Required Version | LuckPerms | Status             |
 |:---------------|:-------------------|:-----------------|:---------:|:-------------------|
-| **1.21.1**     | NeoForge           | `52.1.0+`        | ✅        | ACTIVE             |
-| **1.21.1**     | Forge              | `52.1.0+`        | ✅        | Active             |
-| **1.20.1**     | Forge              | `47.4.2+`        | ✅        | Active             |
-| **1.19.2**     | Forge              | `41.1.0+`        | ✅        | Active             |
-| **1.18.2**     | Forge              | `40.2.21+`       | ✅        | Active             |
-| **1.21.1**     | Fabric             | `0.16.14+`       | ✅        | Active             |
-| **1.21.8**     | Fabric             | `0.16.14+`       | ✅        | Active             |
-| **1.21.6**     | Fabric             | `0.16.14+`       | ✅        | Active             |
-| **ANY FABRIC** | NeoForge + Sinytra | `21.0.8-beta+`   | ✅        | **EXPERIMENTAL**   |
-| **1.20.1**     | Fabric             | `0.14.21+`       | ✅        | Active             |
+| **1.21.11**    | Forge              | `61.1.3+`        | ✅        | Active             |
+| **1.21.1**     | Forge              | `52.0.26+`       | ✅        | Active             |
+| **1.20.1**     | Forge              | `47.1.0+`        | ✅        | Active             |
+| **1.19.2**     | Forge              | `43.3.0+`        | ✅        | Active             |
+| **1.18.2**     | Forge              | `40.2.0+`        | ✅        | Active             |
 | **1.12.2**     | Forge              | `14.23.5+`       | ✅        | **BUG FIXES ONLY** |
+| **1.21.11**    | Fabric             | `0.18.4+`        | ✅        | Active             |
+| **1.21.8**     | Fabric             | `0.16.14+`       | ✅        | Active             |
+| **1.21.1**     | Fabric             | `0.16.14+`       | ✅        | Active             |
+| **1.20.1**     | Fabric             | `0.15.11+`       | ✅        | Active             |
+| **1.21.1**     | NeoForge           | `21.1.21+`       | ✅        | Active             |
+
 
 ---
 ## Installation

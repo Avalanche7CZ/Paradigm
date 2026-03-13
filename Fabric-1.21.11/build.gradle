@@ -1,0 +1,40 @@
+plugins {
+    id 'fabric-loom' version '1.13.3'
+    id 'maven-publish'
+}
+
+version = "${rootProject.findProperty('mod_version') ?: project.mod_version}"
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+apply from: '../buildscripts/fabric-common.gradle'
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+    compileOnly('net.luckperms:api:5.4')
+
+    // Common module dependency
+    implementation project(':common')
+    include project(':common')
+}
+
+def targetJavaVersion = 21
+tasks.withType(JavaCompile).configureEach {
+    if (targetJavaVersion >= 10 || JavaVersion.current().isJava10Compatible()) {
+        it.options.release.set(targetJavaVersion)
+    }
+}
+
+java {
+    def javaVersion = JavaVersion.toVersion(targetJavaVersion)
+    if (JavaVersion.current() < javaVersion) {
+        toolchain.languageVersion = JavaLanguageVersion.of(targetJavaVersion)
+    }
+}

@@ -26,6 +26,8 @@ if (globalModVersion != null && !globalModVersion.toString().isBlank()) {
     project.ext.mod_version = globalModVersion.toString()
 }
 
+def devPlayerName = (project.findProperty('devPlayerName') ?: 'Developer').toString()
+
 group = project.ext.mod_group_id
 version = rootProject.findProperty('mod_version') ?: project.ext.mod_version
 
@@ -38,12 +40,16 @@ java {
     toolchain.languageVersion = JavaLanguageVersion.of(Integer.parseInt(project.ext.java_version.toString()))
 }
 
+configurations.configureEach {
+    resolutionStrategy.force 'net.sf.jopt-simple:jopt-simple:5.0.4'
+}
+
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.release = Integer.parseInt(project.ext.java_version.toString())
     options.compilerArgs += [
-        "-AoutRefMap=paradigm.refmap.json",
-        "-AdefaultObfuscationEnv=searge"
+            "-AoutRefMap=paradigm.refmap.json",
+            "-AdefaultObfuscationEnv=searge"
     ]
 }
 
@@ -55,12 +61,20 @@ minecraft {
             workingDirectory project.file('run')
             property 'forge.logging.markers', 'REGISTRIES'
             property 'forge.logging.console.level', 'debug'
+            property 'mixin.env.remapRefMap', 'true'
+            property 'mixin.env.refMapRemappingFile', "${project.buildDir}/createSrgToMcp/output.srg"
+            args '-mixin.config=paradigm.mixins.json'
 
             mods {
                 "${project.ext.mod_id}" {
                     source sourceSets.main
                 }
             }
+        }
+
+        client {
+            property 'forge.enabledGameTestNamespaces', project.ext.mod_id
+            args '--username', devPlayerName
         }
 
         server {
@@ -79,6 +93,26 @@ sourceSets.main.resources {
     srcDir 'src/generated/resources'
 }
 
+// Forge/FML dev run expects mods.toml and @Mod classes in the same output container.
+sourceSets.main.output.resourcesDir = layout.buildDirectory.dir("classes/java/main").get().asFile
+
+tasks.register('mergeCommonForDevRun', Copy) {
+    description = 'Merges common module classes/resources into Forge output for dev runs'
+    dependsOn ':common:classes'
+    from(project(':common').sourceSets.main.output.classesDirs)
+    from(project(':common').sourceSets.main.output.resourcesDir)
+    into(layout.buildDirectory.dir("classes/java/main"))
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+tasks.named('classes').configure {
+    finalizedBy tasks.named('mergeCommonForDevRun')
+}
+
+tasks.matching { it.name == 'runServer' || it.name == 'runClient' }.configureEach {
+    dependsOn tasks.named('mergeCommonForDevRun')
+}
+
 repositories {
     mavenCentral()
     maven { url "https://maven.minecraftforge.net/" }
@@ -90,17 +124,17 @@ processResources {
 
     filesMatching('META-INF/mods.toml') {
         expand([
-            mod_id: project.ext.mod_id,
-            mod_name: project.ext.mod_name,
-            mod_version: project.ext.mod_version,
-            mod_group_id: project.ext.mod_group_id ?: '',
-            mod_authors: project.ext.mod_authors ?: '',
-            mod_license: project.ext.mod_license ?: '',
-            loader_version_range: project.ext.loader_version_range ?: '',
-            minecraft_version: project.ext.minecraft_version ?: '',
-            forge_version: project.ext.forge_version ?: '',
-            mapping_channel: project.ext.mapping_channel ?: '',
-            mapping_version: project.ext.mapping_version ?: ''
+                mod_id: project.ext.mod_id,
+                mod_name: project.ext.mod_name,
+                mod_version: project.ext.mod_version,
+                mod_group_id: project.ext.mod_group_id ?: '',
+                mod_authors: project.ext.mod_authors ?: '',
+                mod_license: project.ext.mod_license ?: '',
+                loader_version_range: project.ext.loader_version_range ?: '',
+                minecraft_version: project.ext.minecraft_version ?: '',
+                forge_version: project.ext.forge_version ?: '',
+                mapping_channel: project.ext.mapping_channel ?: '',
+                mapping_version: project.ext.mapping_version ?: ''
         ])
     }
 }
@@ -109,27 +143,28 @@ dependencies {
     minecraft "net.minecraftforge:forge:${project.ext.minecraft_version}-${project.ext.forge_version}"
 
     // Common module dependency
-    implementation project(":common")
+    compileOnly project(":common")
 
     compileOnly('net.luckperms:api:5.4')
     implementation 'com.google.code.gson:gson:2.10.1'
+    runtimeOnly 'net.sf.jopt-simple:jopt-simple:5.0.4'
     compileOnly 'org.spongepowered:mixin:0.8.5'
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
 
 tasks.named('processResources', ProcessResources).configure {
     var replaceProperties = [
-        minecraft_version: project.ext.minecraft_version,
-        minecraft_version_range: project.ext.minecraft_version_range,
-        forge_version: project.ext.forge_version,
-        forge_version_range: project.ext.forge_version_range,
-        loader_version_range: project.ext.loader_version_range,
-        mod_id: project.ext.mod_id,
-        mod_name: project.ext.mod_name,
-        mod_license: project.ext.mod_license,
-        mod_version: project.ext.mod_version,
-        mod_authors: project.ext.mod_authors,
-        mod_description: project.ext.mod_description ?: '',
+            minecraft_version: project.ext.minecraft_version,
+            minecraft_version_range: project.ext.minecraft_version_range,
+            forge_version: project.ext.forge_version,
+            forge_version_range: project.ext.forge_version_range,
+            loader_version_range: project.ext.loader_version_range,
+            mod_id: project.ext.mod_id,
+            mod_name: project.ext.mod_name,
+            mod_license: project.ext.mod_license,
+            mod_version: project.ext.mod_version,
+            mod_authors: project.ext.mod_authors,
+            mod_description: project.ext.mod_description ?: '',
     ]
 
     inputs.properties replaceProperties
@@ -146,6 +181,7 @@ tasks.named('jar', Jar).configure {
 
     // Include common module classes/resources directly in the Forge jar (single-jar distribution).
     dependsOn(project(":common").tasks.named("jar"))
+    dependsOn(tasks.named('mergeCommonForDevRun'))
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from({ zipTree(project(":common").tasks.named("jar").get().archiveFile.get().asFile) }) {
         // avoid duplicate metadata
@@ -156,14 +192,14 @@ tasks.named('jar', Jar).configure {
 
     manifest {
         attributes([
-            "Specification-Title": project.ext.mod_id,
-            "Specification-Vendor": project.ext.mod_authors,
-            "Specification-Version": "1",
-            "Implementation-Title": project.name,
-            "Implementation-Version": project.jar.archiveVersion,
-            "Implementation-Vendor": project.ext.mod_authors,
-            "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
-            "MixinConfigs": "paradigm.mixins.json"
+                "Specification-Title": project.ext.mod_id,
+                "Specification-Vendor": project.ext.mod_authors,
+                "Specification-Version": "1",
+                "Implementation-Title": project.name,
+                "Implementation-Version": project.jar.archiveVersion,
+                "Implementation-Vendor": project.ext.mod_authors,
+                "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+                "MixinConfigs": "paradigm.mixins.json"
         ])
     }
 

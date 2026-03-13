@@ -1,27 +1,26 @@
 plugins {
     id 'eclipse'
     id 'idea'
-    id 'net.minecraftforge.gradle' version '6.0.+'
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
 }
 
 // Ensure properties are available with defaults
-if (!project.hasProperty('mod_group_id')) { project.ext.mod_group_id = 'eu.avalanche7' }
-if (!project.hasProperty('mod_version')) { project.ext.mod_version = '2.0.0' }
+if (!project.hasProperty('mod_group_id')) { project.ext.mod_group_id = project.hasProperty('maven_group') ? project.maven_group : 'eu.avalanche7' }
+if (!project.hasProperty('mod_version')) { project.ext.mod_version = '1.1.0' }
 if (!project.hasProperty('mod_id')) { project.ext.mod_id = 'paradigm' }
 if (!project.hasProperty('mod_name')) { project.ext.mod_name = 'Paradigm' }
 if (!project.hasProperty('mod_authors')) { project.ext.mod_authors = 'Avalanche7' }
-if (!project.hasProperty('mod_description')) { project.ext.mod_description = 'A powerful server-side utility mod for Minecraft' }
-if (!project.hasProperty('mod_license')) { project.ext.mod_license = 'All Rights Reserved' }
-if (!project.hasProperty('minecraft_version')) { project.ext.minecraft_version = '1.19.2' }
-if (!project.hasProperty('forge_version')) { project.ext.forge_version = '43.3.0' }
-if (!project.hasProperty('minecraft_version_range')) { project.ext.minecraft_version_range = '[1.19.2,1.20)' }
-if (!project.hasProperty('forge_version_range')) { project.ext.forge_version_range = '[43.3.0,)' }
-if (!project.hasProperty('loader_version_range')) { project.ext.loader_version_range = '[43,)' }
+if (!project.hasProperty('mod_description')) { project.ext.mod_description = 'A powerful server-side utility mod' }
+if (!project.hasProperty('mod_license')) { project.ext.mod_license = 'CC-BY-NC-ND-4.0' }
+if (!project.hasProperty('minecraft_version')) { project.ext.minecraft_version = '1.21.11' }
+if (!project.hasProperty('forge_version')) { project.ext.forge_version = '61.1.3' }
+if (!project.hasProperty('minecraft_version_range')) { project.ext.minecraft_version_range = '[1.21.11,1.22)' }
+if (!project.hasProperty('forge_version_range')) { project.ext.forge_version_range = '[61,)' }
+if (!project.hasProperty('loader_version_range')) { project.ext.loader_version_range = '[61,)' }
 if (!project.hasProperty('mapping_channel')) { project.ext.mapping_channel = 'official' }
-if (!project.hasProperty('mapping_version')) { project.ext.mapping_version = '1.19.2' }
-if (!project.hasProperty('java_version')) { project.ext.java_version = '17' }
+if (!project.hasProperty('mapping_version')) { project.ext.mapping_version = '1.21.11' }
+if (!project.hasProperty('java_version')) { project.ext.java_version = '21' }
 
-// If root defines a global mod_version, use it everywhere in this subproject
 def globalModVersion = rootProject.findProperty('mod_version')
 if (globalModVersion != null && !globalModVersion.toString().isBlank()) {
     project.ext.mod_version = globalModVersion.toString()
@@ -30,10 +29,11 @@ if (globalModVersion != null && !globalModVersion.toString().isBlank()) {
 def devPlayerName = (project.findProperty('devPlayerName') ?: 'Developer').toString()
 
 group = project.ext.mod_group_id
-version = project.ext.mod_version
+version = rootProject.findProperty('mod_version') ?: project.ext.mod_version
 
 base {
-    archivesName = project.ext.mod_id
+    def baseName = project.hasProperty('archives_base_name') ? project.property('archives_base_name').toString() : project.ext.mod_id
+    archivesName = baseName.substring(0, 1).toUpperCase() + baseName.substring(1)
 }
 
 java {
@@ -68,6 +68,10 @@ minecraft {
             mods {
                 "${project.ext.mod_id}" {
                     source sourceSets.main
+                    // Note: common classes are merged into build/classes/java/main
+                    // by mergeCommonForDevRun — do NOT add them here as a separate
+                    // source, that would create a second "main" module with overlapping
+                    // packages and cause ResolutionException on FML 61.x.
                 }
             }
         }
@@ -153,6 +157,39 @@ tasks.register('prepareOfflineDevServer') {
     }
 }
 
+// ── FML 61.x dev-run fix ────────────────────────────────────────────────────
+// FML 61.x (javafml provider) scans ONLY the mod container (the directory
+// containing mods.toml) for @Mod classes, and enforces Java module system split-
+// package rules.  The default Gradle layout has three separate outputs:
+//   • build/resources/main    ← mods.toml lives here (no classes)
+//   • build/classes/java/main ← Forge module classes
+//   • common/build/classes/java/main ← common module classes
+// FML creates one named module per output dir, so the same eu.avalanche7.paradigm.*
+// packages appear in multiple modules → ResolutionException.
+//
+// Fix A: redirect processResources output into the classes dir so mods.toml and
+//        Paradigm.class share a single container → FML names it "paradigm".
+// Fix B: merge common's classes/resources into that same container so there is
+//        NO separate "main" module at all.
+// ────────────────────────────────────────────────────────────────────────────
+sourceSets.main.output.resourcesDir = layout.buildDirectory.dir("classes/java/main").get().asFile
+
+// Merge common module's compiled output into the Forge module's combined dir.
+// This runs after both compileJava tasks so the combined dir is always up-to-date.
+tasks.register('mergeCommonForDevRun', Copy) {
+    description = 'Merges common module classes+resources into Forge output for FML 61.x dev runs'
+    dependsOn ':common:classes'
+    from(project(':common').sourceSets.main.output.classesDirs)
+    from(project(':common').sourceSets.main.output.resourcesDir)
+    into(layout.buildDirectory.dir("classes/java/main"))
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+// Run after every build so IntelliJ-launched run configs also see merged output.
+tasks.named('classes').configure {
+    finalizedBy tasks.named('mergeCommonForDevRun')
+}
+
 tasks.matching { it.name == 'runServer' }.configureEach {
     dependsOn tasks.named('prepareOfflineDevServer')
     dependsOn tasks.named('mergeCommonForDevRun')
@@ -165,22 +202,6 @@ tasks.matching { it.name == 'runClient' }.configureEach {
 
 sourceSets.main.resources {
     srcDir 'src/generated/resources'
-}
-
-// Keep mods.toml and classes in one dev-run container and merge common output.
-sourceSets.main.output.resourcesDir = layout.buildDirectory.dir("classes/java/main").get().asFile
-
-tasks.register('mergeCommonForDevRun', Copy) {
-    description = 'Merges common module classes/resources into Forge output for dev runs'
-    dependsOn ':common:classes'
-    from(project(':common').sourceSets.main.output.classesDirs)
-    from(project(':common').sourceSets.main.output.resourcesDir)
-    into(layout.buildDirectory.dir("classes/java/main"))
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-}
-
-tasks.named('classes').configure {
-    finalizedBy tasks.named('mergeCommonForDevRun')
 }
 
 repositories {
@@ -212,7 +233,7 @@ processResources {
 dependencies {
     minecraft "net.minecraftforge:forge:${project.ext.minecraft_version}-${project.ext.forge_version}"
 
-    // Common module dependency - use compileOnly to avoid module conflicts
+    // Common module dependency
     compileOnly project(":common")
 
     compileOnly('net.luckperms:api:5.4')
@@ -220,7 +241,6 @@ dependencies {
     compileOnly 'org.spongepowered:mixin:0.8.5'
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
 }
-
 
 tasks.named('processResources', ProcessResources).configure {
     var replaceProperties = [
@@ -238,9 +258,6 @@ tasks.named('processResources', ProcessResources).configure {
     ]
 
     inputs.properties replaceProperties
-    
-    // Handle duplicates from common module resources
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
     filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
         expand replaceProperties + [project: project]
@@ -248,6 +265,8 @@ tasks.named('processResources', ProcessResources).configure {
 }
 
 tasks.named('jar', Jar).configure {
+    // Keep naming consistent with other distributions
+    // Example: Paradigm-forge-1.21.11-2.0.0-b.jar
     archiveFileName.set("Paradigm-forge-${project.ext.minecraft_version}-${project.ext.mod_version}.jar")
 
     // Include common module classes/resources directly in the Forge jar (single-jar distribution).
@@ -256,7 +275,9 @@ tasks.named('jar', Jar).configure {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from(layout.buildDirectory.file("classes/java/main/paradigm.refmap.json"))
     from({ zipTree(project(":common").tasks.named("jar").get().archiveFile.get().asFile) }) {
+        // avoid duplicate metadata
         exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+        // prefer Forge module resources if both exist
         exclude 'lang/*.json', 'assets/**/lang/*.json'
     }
 
@@ -273,11 +294,5 @@ tasks.named('jar', Jar).configure {
         ])
     }
 
-    finalizedBy 'reobfJar'
 }
 
-tasks.register('reobf') {
-    group = 'build'
-    description = 'Run reobfJar for runtime compatibility.'
-    dependsOn 'reobfJar'
-}
