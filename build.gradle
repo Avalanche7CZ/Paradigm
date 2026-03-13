@@ -2,7 +2,19 @@ allprojects {
     group = 'eu.avalanche7'
 }
 
-def consolidatedJarsDir = layout.buildDirectory.dir("outputs/all-jars")
+def consolidatedJarsDir = layout.projectDirectory.dir("release-jars")
+def releaseProjectNames = [
+    'Fabric-1.20.1',
+    'Fabric-1.21.1',
+    'Fabric-1.21.8',
+    'Fabric-1.21.11',
+    'Forge-1.18.2',
+    'Forge-1.19.2',
+    'Forge-1.20.1',
+    'Forge-1.21.1',
+    'Forge-1.21.11',
+    'NeoForge-1.21.1'
+]
 
 
 // Task to find all JAR files in build directories (excluding sources and common)
@@ -26,17 +38,21 @@ task findJars {
 // Collect all distributable JARs from subprojects into one folder.
 task collectOutputs {
     group = 'build'
-    description = 'Collects all non-sources JAR outputs into build/outputs/all-jars.'
+    description = 'Collects all non-sources JAR outputs into release-jars.'
 
     doLast {
-        def targetDir = consolidatedJarsDir.get().asFile
+        def targetDir = consolidatedJarsDir.asFile
         if (targetDir.exists()) {
             targetDir.deleteDir()
         }
         targetDir.mkdirs()
 
-        project.subprojects.each { subproject ->
-            if (subproject.name == 'common') return
+        releaseProjectNames.each { projectName ->
+            def subproject = findProject(":${projectName}")
+            if (subproject == null) {
+                logger.warn("Skipping missing release project: ${projectName}")
+                return
+            }
 
             def libsDir = file("${subproject.projectDir}/build/libs")
             if (!libsDir.exists()) return
@@ -53,6 +69,21 @@ task collectOutputs {
         }
 
         println("\nCollected outputs: ${targetDir.absolutePath}")
+    }
+}
+
+if (tasks.findByName('clean') == null) {
+    tasks.register('clean') {
+        group = 'build'
+        description = 'Cleans all subprojects and removes root release-jars output.'
+        dependsOn subprojects.collect { "${it.path}:clean" }
+
+        doLast {
+            def targetDir = consolidatedJarsDir.asFile
+            if (targetDir.exists()) {
+                targetDir.deleteDir()
+            }
+        }
     }
 }
 
@@ -81,15 +112,11 @@ task sendToDiscord {
             return
         }
 
+        def targetDir = consolidatedJarsDir.asFile
         def jars = []
-        project.subprojects.each { subproject ->
-            // Skip common module
-            if (subproject.name == 'common') return
-            def libsDir = file("${subproject.projectDir}/build/libs")
-            if (libsDir.exists()) {
-                libsDir.listFiles({ dir, name -> name.endsWith('.jar') && !name.contains('sources') } as FilenameFilter).each { jar ->
-                    jars.add("${subproject.name}: ${jar.name}")
-                }
+        if (targetDir.exists()) {
+            targetDir.listFiles({ dir, name -> name.endsWith('.jar') && !name.contains('sources') } as FilenameFilter)?.each { jar ->
+                jars.add(jar.name)
             }
         }
 
