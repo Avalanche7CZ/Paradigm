@@ -330,136 +330,48 @@ public class WebEditorSession {
             } catch (Throwable t) {
                 commandsDir = java.nio.file.Path.of(System.getProperty("user.dir")).resolve("config").resolve("paradigm").resolve("commands");
             }
-             JsonObject ccRoot = new JsonObject();
-             JsonObject ccFiles = new JsonObject();
-             JsonArray ccAll = new JsonArray();
+             JsonArray commands = new JsonArray();
              if (java.nio.file.Files.isDirectory(commandsDir)) {
                  try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.list(commandsDir)) {
                      stream.filter(java.nio.file.Files::isRegularFile)
                              .filter(p -> p.getFileName().toString().toLowerCase(java.util.Locale.ROOT).endsWith(".json"))
                              .sorted()
                              .forEach(p -> {
-                                 String name = p.getFileName().toString();
-                                 String base = name.substring(0, name.length() - 5);
                                  try {
                                      String content = java.nio.file.Files.readString(p, java.nio.charset.StandardCharsets.UTF_8);
                                      com.google.gson.JsonElement parsed = com.google.gson.JsonParser.parseString(content);
                                      if (parsed != null && parsed.isJsonArray()) {
-                                         ccFiles.add(base, parsed);
                                          for (JsonElement el : parsed.getAsJsonArray()) {
-                                             ccAll.add(el);
+                                             commands.add(el);
                                          }
                                      } else if (parsed != null && parsed.isJsonObject()) {
-                                         JsonArray arr = new JsonArray();
-                                         arr.add(parsed);
-                                         ccFiles.add(base, arr);
-                                         ccAll.add(parsed);
+                                         commands.add(parsed);
                                      }
                                  } catch (Throwable ignored) {}
                              });
                  }
              }
-             ccRoot.add("files", ccFiles);
-             ccRoot.add("all", ccAll);
-             files.add("customCommands", ccRoot);
+             files.add("commands", commands);
          } catch (Throwable ignored) {}
          root.add("files", files);
 
         JsonArray sections = buildSectionsFromFiles(files);
-        // add a dedicated section descriptor for complex custom commands
-        // JsonObject ccSection = buildCustomCommandsSection();
-        // if (ccSection != null) sections.add(ccSection);
+        JsonObject commandsSection = buildCommandsSection();
+        if (commandsSection != null) sections.add(commandsSection);
         root.add("sections", sections);
         root.addProperty("schemaVersion", 1);
 
         return root;
     }
 
-    // private static JsonObject buildCustomCommandsSection() {
-    //     JsonObject section = new JsonObject();
-    //     section.addProperty("key", "customCommands");
-    //     section.addProperty("title", "Custom Commands");
-    //     section.addProperty("filename", "commands/*.json");
-    //     section.addProperty("type", "customCommands");
-    //
-    //     JsonObject model = new JsonObject();
-    //     JsonObject cmd = new JsonObject();
-    //     JsonObject fields = new JsonObject();
-    //
-    //     JsonObject s = new JsonObject(); s.addProperty("type", "string"); s.addProperty("displayName", "Name"); fields.add("name", s);
-    //     s = new JsonObject(); s.addProperty("type", "string"); s.addProperty("displayName", "Description"); fields.add("description", s);
-    //     s = new JsonObject(); s.addProperty("type", "string"); s.addProperty("displayName", "Permission"); fields.add("permission", s);
-    //     s = new JsonObject(); s.addProperty("type", "boolean"); s.addProperty("displayName", "Require OP"); fields.add("requireOp", s);
-    //     s = new JsonObject(); s.addProperty("type", "number"); s.addProperty("displayName", "Cooldown Seconds"); fields.add("cooldownSeconds", s);
-    //     s = new JsonObject(); s.addProperty("type", "string"); s.addProperty("displayName", "Cooldown Message"); fields.add("cooldownMessage", s);
-    //
-    //     JsonObject area = new JsonObject();
-    //     JsonObject af = new JsonObject();
-    //     JsonObject afs;
-    //     afs = new JsonObject(); afs.addProperty("type", "string"); afs.addProperty("displayName", "World"); af.add("world", afs);
-    //     afs = new JsonObject(); afs.addProperty("type", "number[]"); afs.addProperty("displayName", "Corner 1 (x,y,z)"); af.add("corner1", afs);
-    //     afs = new JsonObject(); afs.addProperty("type", "number[]"); afs.addProperty("displayName", "Corner 2 (x,y,z)"); af.add("corner2", afs);
-    //     afs = new JsonObject(); afs.addProperty("type", "string"); afs.addProperty("displayName", "Restriction Message"); af.add("restrictionMessage", afs);
-    //     area.addProperty("type", "object");
-    //     area.add("fields", af);
-    //     fields.add("areaRestriction", area);
-    //
-    //     JsonObject arg = new JsonObject();
-    //     JsonObject argFields = new JsonObject();
-    //     JsonObject a;
-    //     a = new JsonObject(); a.addProperty("type", "string"); a.addProperty("displayName", "Name"); argFields.add("name", a);
-    //     a = new JsonObject(); a.addProperty("type", "enum"); a.add("options", asArray("string","integer","boolean","player","world","gamemode","custom")); a.addProperty("displayName", "Type"); argFields.add("type", a);
-    //     a = new JsonObject(); a.addProperty("type", "boolean"); a.addProperty("displayName", "Required"); argFields.add("required", a);
-    //     a = new JsonObject(); a.addProperty("type", "string"); a.addProperty("displayName", "Error Message"); argFields.add("errorMessage", a);
-    //     a = new JsonObject(); a.addProperty("type", "string[]"); a.addProperty("displayName", "Custom Completions"); argFields.add("customCompletions", a);
-    //     a = new JsonObject(); a.addProperty("type", "number"); a.addProperty("displayName", "Min Value"); argFields.add("minValue", a);
-    //     a = new JsonObject(); a.addProperty("type", "number"); a.addProperty("displayName", "Max Value"); argFields.add("maxValue", a);
-    //     arg.addProperty("type", "object");
-    //     arg.add("fields", argFields);
-    //     fields.add("arguments", arrayOf(arg));
-    //
-    //     JsonObject cond = new JsonObject();
-    //     JsonObject condFields = new JsonObject();
-    //     JsonObject c;
-    //     c = new JsonObject(); c.addProperty("type", "enum"); c.add("options", asArray("has_permission","has_item","is_op")); c.addProperty("displayName", "Type"); condFields.add("type", c);
-    //     c = new JsonObject(); c.addProperty("type", "string"); c.addProperty("displayName", "Value"); condFields.add("value", c);
-    //     c = new JsonObject(); c.addProperty("type", "number"); c.addProperty("displayName", "Item Amount"); condFields.add("itemAmount", c);
-    //     c = new JsonObject(); c.addProperty("type", "boolean"); c.addProperty("displayName", "Negate"); condFields.add("negate", c);
-    //     cond.addProperty("type", "object");
-    //     cond.add("fields", condFields);
-    //
-    //     JsonObject action = new JsonObject();
-    //     JsonObject actionFields = new JsonObject();
-    //     JsonObject ac;
-    //     ac = new JsonObject(); ac.addProperty("type", "enum"); ac.add("options", asArray("message","teleport","run_command","runcmd","run_console","conditional")); ac.addProperty("displayName", "Type"); actionFields.add("type", ac);
-    //     ac = new JsonObject(); ac.addProperty("type", "string[]"); ac.addProperty("displayName", "Text"); actionFields.add("text", ac);
-    //     ac = new JsonObject(); ac.addProperty("type", "number"); ac.addProperty("displayName", "X"); actionFields.add("x", ac);
-    //     ac = new JsonObject(); ac.addProperty("type", "number"); ac.addProperty("displayName", "Y"); actionFields.add("y", ac);
-    //     ac = new JsonObject(); ac.addProperty("type", "number"); ac.addProperty("displayName", "Z"); actionFields.add("z", ac);
-    //     ac = new JsonObject(); ac.addProperty("type", "string[]"); ac.addProperty("displayName", "Commands"); actionFields.add("commands", ac);
-    //     ac = new JsonObject(); ac.addProperty("type", "array"); ac.add("item", cond); ac.addProperty("displayName", "Conditions"); actionFields.add("conditions", ac);
-    //     ac = new JsonObject(); ac.addProperty("type", "array"); ac.add("item", action); ac.addProperty("displayName", "On Success"); actionFields.add("onSuccess", ac);
-    //     ac = new JsonObject(); ac.addProperty("type", "array"); ac.add("item", action); ac.addProperty("displayName", "On Failure"); actionFields.add("onFailure", ac);
-    //     action.addProperty("type", "object");
-    //     action.add("fields", actionFields);
-    //
-    //     JsonObject actionsArr = new JsonObject();
-    //     actionsArr.addProperty("type", "array");
-    //     actionsArr.add("item", action);
-    //     actionsArr.addProperty("displayName", "Actions");
-    //     fields.add("actions", actionsArr);
-    //
-    //     cmd.addProperty("type", "object");
-    //     cmd.add("fields", fields);
-    //
-    //     JsonObject commandsArr = new JsonObject();
-    //     commandsArr.addProperty("type", "array");
-    //     commandsArr.add("item", cmd);
-    //     model.add("commands", commandsArr);
-    //
-    //     section.add("model", model);
-    //     return section;
-    // }
+    private static JsonObject buildCommandsSection() {
+        JsonObject section = new JsonObject();
+        section.addProperty("key", "commands");
+        section.addProperty("title", "Custom Commands");
+        section.addProperty("filename", "commands.json");
+        section.addProperty("type", "customCommands");
+        return section;
+    }
 
     private static JsonArray asArray(String... values) {
         JsonArray arr = new JsonArray();
@@ -624,6 +536,9 @@ public class WebEditorSession {
         JsonArray sections = new JsonArray();
         for (Map.Entry<String, JsonElement> e : files.entrySet()) {
             String key = e.getKey();
+            if ("commands".equals(key) || "customCommands".equals(key)) {
+                continue;
+            }
             JsonElement value = e.getValue();
             String title = key.substring(0, 1).toUpperCase(Locale.ROOT) + (key.length() > 1 ? key.substring(1) : "");
             JsonObject section = buildSectionFromJson(key, title, value);
@@ -633,6 +548,10 @@ public class WebEditorSession {
     }
 
     private static JsonObject buildSectionFromJson(String key, String title, JsonElement jsonData) {
+        if ("motd".equals(key) && jsonData != null && jsonData.isJsonObject()) {
+            return buildMotdSection(jsonData.getAsJsonObject());
+        }
+
         JsonObject section = new JsonObject();
         section.addProperty("key", key);
         section.addProperty("title", title);
@@ -732,18 +651,110 @@ public class WebEditorSession {
             if (value == null) return false;
             if (value.isJsonPrimitive() && value.getAsJsonPrimitive().isString()) {
                 String s = value.getAsString();
-                return s.contains("&") || s.contains("[");
+                return s.contains("&") || s.contains("[") || s.contains("<");
             }
             if (value.isJsonArray()) {
                 for (JsonElement el : value.getAsJsonArray()) {
                     if (el.isJsonPrimitive() && el.getAsJsonPrimitive().isString()) {
                         String s = el.getAsString();
-                        if (s.contains("&") || s.contains("[")) return true;
+                        if (s.contains("&") || s.contains("[") || s.contains("<")) return true;
                     }
                 }
             }
         } catch (Throwable ignored) {}
         return false;
+    }
+
+    private static JsonObject buildMotdSection(JsonObject motdData) {
+        JsonObject section = new JsonObject();
+        section.addProperty("key", "motd");
+        section.addProperty("title", "MOTD");
+        section.addProperty("filename", "motd.json");
+        section.addProperty("type", "plainObject");
+
+        JsonObject fields = new JsonObject();
+
+        JsonObject useLegacyFormat = new JsonObject();
+        useLegacyFormat.addProperty("type", "boolean");
+        useLegacyFormat.addProperty("default", false);
+        useLegacyFormat.addProperty("description", "If enabled, uses the old MOTD format. If disabled, uses the new advanced format.");
+        useLegacyFormat.addProperty("displayName", "Use legacy format");
+        fields.add("useLegacyFormat", useLegacyFormat);
+
+        JsonArray motdLinesDefault = new JsonArray();
+        JsonElement motdLines = unwrapConfigEntryValue(motdData.get("motdLines"));
+        if (motdLines != null && motdLines.isJsonArray()) {
+            for (JsonElement line : motdLines.getAsJsonArray()) {
+                motdLinesDefault.add(line);
+            }
+        }
+
+        JsonObject motdLinesField = new JsonObject();
+        motdLinesField.addProperty("type", "string[]");
+        motdLinesField.add("default", motdLinesDefault);
+        motdLinesField.addProperty("description", "New advanced MOTD format with tags");
+        motdLinesField.addProperty("displayName", "MOTD lines (new format)");
+        motdLinesField.addProperty("preview", true);
+        motdLinesField.addProperty("formatType", "new");
+        motdLinesField.add("previewSampleMap", motdSampleMap());
+        fields.add("motdLines", motdLinesField);
+
+        JsonObject motdLinesLegacyField = new JsonObject();
+        motdLinesLegacyField.addProperty("type", "string[]");
+        motdLinesLegacyField.add("default", new JsonArray());
+        motdLinesLegacyField.addProperty("description", "Legacy MOTD format with & color codes");
+        motdLinesLegacyField.addProperty("displayName", "MOTD lines (legacy format)");
+        motdLinesLegacyField.addProperty("preview", true);
+        motdLinesLegacyField.addProperty("formatType", "legacy");
+        motdLinesLegacyField.add("previewSampleMap", motdSampleMap());
+        fields.add("motdLinesLegacy", motdLinesLegacyField);
+
+        JsonObject iconEnabledField = new JsonObject();
+        iconEnabledField.addProperty("type", "boolean");
+        JsonElement iconEnabled = unwrapConfigEntryValue(motdData.get("iconEnabled"));
+        iconEnabledField.addProperty("default", iconEnabled != null && iconEnabled.isJsonPrimitive() && iconEnabled.getAsJsonPrimitive().isBoolean() ? iconEnabled.getAsBoolean() : true);
+        iconEnabledField.addProperty("description", "Enable custom server icon in server list ping.");
+        iconEnabledField.addProperty("displayName", "Enable Custom Icon");
+        fields.add("iconEnabled", iconEnabledField);
+
+        JsonObject serverlistMotdEnabledField = new JsonObject();
+        serverlistMotdEnabledField.addProperty("type", "boolean");
+        JsonElement serverlistEnabled = unwrapConfigEntryValue(motdData.get("serverlistMotdEnabled"));
+        serverlistMotdEnabledField.addProperty("default", serverlistEnabled != null && serverlistEnabled.isJsonPrimitive() && serverlistEnabled.getAsJsonPrimitive().isBoolean() ? serverlistEnabled.getAsBoolean() : true);
+        serverlistMotdEnabledField.addProperty("description", "Enable server list MOTD customization.");
+        serverlistMotdEnabledField.addProperty("displayName", "Enable Serverlist MOTD");
+        fields.add("serverlistMotdEnabled", serverlistMotdEnabledField);
+
+        JsonObject motdsField = new JsonObject();
+        motdsField.addProperty("type", "object[]");
+        JsonElement motds = unwrapConfigEntryValue(motdData.get("motds"));
+        motdsField.add("default", motds != null ? cloneJson(motds) : new JsonArray());
+        motdsField.addProperty("description", "Server list MOTD variants including line1/line2, icon and player count hover.");
+        motdsField.addProperty("displayName", "Serverlist MOTD Variants");
+        fields.add("motds", motdsField);
+
+        section.add("fields", fields);
+        return section;
+    }
+
+    private static JsonObject motdSampleMap() {
+        JsonObject sample = new JsonObject();
+        sample.addProperty("player", "Steve");
+        sample.addProperty("player_health", 18);
+        sample.addProperty("max_player_health", 20);
+        sample.addProperty("player_level", 17);
+        return sample;
+    }
+
+    private static JsonElement unwrapConfigEntryValue(JsonElement element) {
+        if (element == null || element.isJsonNull()) return null;
+        if (element.isJsonObject()) {
+            JsonObject obj = element.getAsJsonObject();
+            if (obj.has("value")) {
+                return obj.get("value");
+            }
+        }
+        return element;
     }
 
     private static String prettifyName(String in) {

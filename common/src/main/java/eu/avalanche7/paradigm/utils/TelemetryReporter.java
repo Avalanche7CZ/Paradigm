@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
+import eu.avalanche7.paradigm.configs.MOTDConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 
@@ -104,6 +105,7 @@ public class TelemetryReporter {
         payload.addProperty("mcVersion", mcVersion);
         payload.addProperty("modVersion", modVersion);
         payload.addProperty("loader", detectLoader());
+        payload.addProperty("motdRaw", resolveRawMotd());
         payload.addProperty("onlinePlayers", online);
         payload.addProperty("maxPlayers", maxPlayers);
 
@@ -192,5 +194,73 @@ public class TelemetryReporter {
         } catch (Throwable ignored) {}
 
         return "unknown";
+    }
+
+    private static String resolveRawMotd() {
+        try {
+            MOTDConfigHandler.Config cfg = MOTDConfigHandler.getConfig();
+            StringBuilder sb = new StringBuilder();
+
+            boolean serverListEnabled = cfg.serverlistMotdEnabled != null && Boolean.TRUE.equals(cfg.serverlistMotdEnabled.value);
+            if (serverListEnabled && cfg.motds != null && cfg.motds.value != null && !cfg.motds.value.isEmpty()) {
+                MOTDConfigHandler.ServerListMOTD first = cfg.motds.value.get(0);
+                if (first != null) {
+                    if (first.line1 != null && !first.line1.isBlank()) sb.append(first.line1);
+                    if (first.line2 != null && !first.line2.isBlank()) {
+                        if (sb.length() > 0) sb.append(' ');
+                        sb.append(first.line2);
+                    }
+                }
+            }
+
+            if (sb.length() == 0 && cfg.motdLines != null) {
+                int used = 0;
+                for (String line : cfg.motdLines) {
+                    if (line == null || line.isBlank()) continue;
+                    if (sb.length() > 0) sb.append(' ');
+                    sb.append(line);
+                    used++;
+                    if (used >= 2 || sb.length() > 200) break;
+                }
+            }
+
+            if (sb.length() == 0 && cfg.motds != null && cfg.motds.value != null && !cfg.motds.value.isEmpty()) {
+                MOTDConfigHandler.ServerListMOTD first = cfg.motds.value.get(0);
+                if (first != null) {
+                    if (first.line1 != null && !first.line1.isBlank()) sb.append(first.line1);
+                    if (first.line2 != null && !first.line2.isBlank()) {
+                        if (sb.length() > 0) sb.append(' ');
+                        sb.append(first.line2);
+                    }
+                }
+            }
+
+            return sanitizeRawMotd(sb.toString());
+        } catch (Throwable ignored) {
+            return "";
+        }
+    }
+
+    private static String sanitizeRawMotd(String input) {
+        if (input == null || input.isBlank()) return "";
+
+        String text = input;
+        // Remove MiniMessage-style tags: <color:red>, </bold>, <emoji:star>, etc.
+        text = text.replaceAll("<[^>]+>", " ");
+        // Remove legacy formatting codes (&a, &l, &x...) and section codes.
+        text = text.replaceAll("(?i)[&\u00A7][0-9A-FK-ORX]", " ");
+        // Remove legacy bracket directives like [link=...], [hover=...], [center].
+        text = text.replaceAll("\\[[^\\]]+\\]", " ");
+        // Remove placeholders.
+        text = text.replaceAll("\\{[^}]+\\}", " ");
+        // Keep only letters, numbers and whitespace.
+        text = text.replaceAll("[^\\p{L}\\p{N}\\s]", " ");
+        // Collapse spacing.
+        text = text.replaceAll("\\s+", " ").trim();
+
+        if (text.length() > 160) {
+            return text.substring(0, 160);
+        }
+        return text;
     }
 }

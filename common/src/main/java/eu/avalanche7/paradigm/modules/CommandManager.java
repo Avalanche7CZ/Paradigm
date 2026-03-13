@@ -271,7 +271,7 @@ public class CommandManager implements ParadigmModule {
                         platform.sendFailure(source, services.getMessageParser().parseMessage("&cInvalid teleport coordinates.", player));
                     }
                 }
-                case "run_command", "runcmd" -> {
+                case "run_command", "runcmd", "command" -> {
                     if (action.getCommands() != null) {
                         for (String cmd : action.getCommands()) {
                             String processed = expandCommand(cmd, player, argsTokens, rawArgs);
@@ -351,6 +351,36 @@ public class CommandManager implements ParadigmModule {
                     && platform.hasPermission(player, condition.getValue());
             case "has_item" -> result = (player != null && condition.getValue() != null)
                     && platform.playerHasItem(player, condition.getValue(), condition.getItemAmount());
+            case "health_above" -> {
+                if (player == null || player.getHealth() == null || condition.getValue() == null) {
+                    result = false;
+                } else {
+                    double limit;
+                    try {
+                        limit = Double.parseDouble(condition.getValue());
+                    } catch (NumberFormatException e) {
+                        platform.sendFailure(source,
+                                services.getMessageParser().parseMessage("&cInvalid health value for condition: " + condition.getValue(), player));
+                        return false;
+                    }
+                    result = player.getHealth() > limit;
+                }
+            }
+            case "health_below" -> {
+                if (player == null || player.getHealth() == null || condition.getValue() == null) {
+                    result = false;
+                } else {
+                    double limit;
+                    try {
+                        limit = Double.parseDouble(condition.getValue());
+                    } catch (NumberFormatException e) {
+                        platform.sendFailure(source,
+                                services.getMessageParser().parseMessage("&cInvalid health value for condition: " + condition.getValue(), player));
+                        return false;
+                    }
+                    result = player.getHealth() < limit;
+                }
+            }
             case "is_op" -> {
                 int level = 2;
                 try {

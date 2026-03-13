@@ -15,8 +15,13 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public final class EditorApplier {
@@ -209,6 +214,12 @@ public final class EditorApplier {
         if (result.status == ApplyStatus.APPLIED) applied++;
         if (result.status == ApplyStatus.UNCHANGED) unchanged++;
 
+        // Custom commands
+        result = applyOne(files, () -> applyCustomCommands(services, files), "commands");
+        updateCounters(result, "commands", appliedFiles, unchangedFiles, skipped);
+        if (result.status == ApplyStatus.APPLIED) applied++;
+        if (result.status == ApplyStatus.UNCHANGED) unchanged++;
+
 
         if (applied > 0) {
 
@@ -248,55 +259,262 @@ public final class EditorApplier {
         return new ApplyResult(applied, unchanged, finalMsg);
     }
 
-    // private static ApplyStatus applyCustomCommands(Services services, JsonObject files) throws Exception {
-    //     if (!files.has("customCommands") || !files.get("customCommands").isJsonObject()) {
-    //         return ApplyStatus.MISSING;
-    //     }
-    //     JsonObject cc = files.getAsJsonObject("customCommands");
-    //     JsonObject ccFiles = cc.has("files") && cc.get("files").isJsonObject() ? cc.getAsJsonObject("files") : null;
-    //     if (ccFiles == null || ccFiles.entrySet().isEmpty()) {
-    //         return ApplyStatus.MISSING;
-    //     }
-    //     java.nio.file.Path commandsDir = net.minecraftforge.fml.loading.FMLPaths.GAMEDIR.get()
-    //             .resolve("config").resolve("paradigm").resolve("commands");
-    //     try {
-    //         java.nio.file.Files.createDirectories(commandsDir);
-    //     } catch (Exception e) {
-    //         throw new Exception("Failed to create commands directory: " + commandsDir + ", " + e.getMessage());
-    //     }
-    //     boolean anyApplied = false;
-    //     for (Map.Entry<String, JsonElement> e : ccFiles.entrySet()) {
-    //         String baseName = e.getKey();
-    //         JsonElement value = e.getValue();
-    //         if (value == null || !value.isJsonArray()) continue;
-    //         java.nio.file.Path target = commandsDir.resolve(baseName + ".json");
-    //         String newContent = GSON.toJson(value.getAsJsonArray());
-    //         String oldContent = null;
-    //         try {
-    //             if (java.nio.file.Files.exists(target)) {
-    //                 oldContent = java.nio.file.Files.readString(target, java.nio.charset.StandardCharsets.UTF_8);
-    //             }
-    //         } catch (Exception ignored) {}
-    //         boolean changed = (oldContent == null) || !jsonEquals(oldContent, newContent);
-    //         if (changed) {
-    //             try {
-    //                 java.nio.file.Files.writeString(target, newContent, java.nio.charset.StandardCharsets.UTF_8, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.TRUNCATE_EXISTING);
-    //                 anyApplied = true;
-    //             } catch (Exception ex) {
-    //                 throw new Exception("Failed to write custom command file '" + target.getFileName() + "': " + ex.getMessage());
-    //             }
-    //         }
-    //     }
-    //     if (anyApplied) {
-    //         try {
-    //             services.getCmConfig().reloadCommands();
-    //         } catch (Throwable t) {
-    //             services.getLogger().warn("Failed to reload custom commands after apply", t);
-    //         }
-    //         return ApplyStatus.APPLIED;
-    //     }
-    //     return ApplyStatus.UNCHANGED;
-    // }
+    private static ApplyStatus applyCustomCommands(Services services, JsonObject files) throws Exception {
+        Map<String, com.google.gson.JsonArray> commandFiles = extractCommandFiles(files);
+        if (commandFiles.isEmpty()) {
+            return ApplyStatus.MISSING;
+        }
+
+        Path commandsDir = Path.of("config", "paradigm", "commands");
+        Files.createDirectories(commandsDir);
+
+        boolean anyApplied = false;
+        for (Map.Entry<String, com.google.gson.JsonArray> entry : commandFiles.entrySet()) {
+            String baseName = sanitizeFileBaseName(entry.getKey());
+            if (baseName == null || baseName.isEmpty()) {
+                continue;
+            }
+
+            Path target = commandsDir.resolve(baseName + ".json");
+            com.google.gson.JsonArray normalized = normalizeCommandsArray(entry.getValue());
+            String newContent = GSON.toJson(normalized);
+            String oldContent = null;
+            if (Files.exists(target)) {
+                oldContent = Files.readString(target, StandardCharsets.UTF_8);
+            }
+
+            boolean changed = (oldContent == null) || !jsonEquals(oldContent, newContent);
+            if (changed) {
+                Files.writeString(target, newContent, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                anyApplied = true;
+            }
+        }
+
+        if (anyApplied) {
+            try {
+                services.getCmConfig().reloadCommands();
+            } catch (Throwable t) {
+                services.getLogger().warn("Failed to reload custom commands after apply", t);
+            }
+            return ApplyStatus.APPLIED;
+        }
+
+        return ApplyStatus.UNCHANGED;
+    }
+
+    private static Map<String, com.google.gson.JsonArray> extractCommandFiles(JsonObject files) {
+        Map<String, com.google.gson.JsonArray> out = new LinkedHashMap<>();
+
+        JsonElement commands = find(files, "commands", "commands.json");
+        if (commands != null) {
+            if (commands.isJsonArray()) {
+                out.put("commands", commands.getAsJsonArray());
+            } else if (commands.isJsonObject()) {
+                JsonObject obj = commands.getAsJsonObject();
+                JsonElement filesElement = obj.get("files");
+                if (filesElement != null && filesElement.isJsonObject()) {
+                    for (Map.Entry<String, JsonElement> e : filesElement.getAsJsonObject().entrySet()) {
+                        if (e.getValue() != null && e.getValue().isJsonArray()) {
+                            out.put(e.getKey(), e.getValue().getAsJsonArray());
+                        }
+                    }
+                }
+                JsonElement allElement = obj.get("all");
+                if (out.isEmpty() && allElement != null && allElement.isJsonArray()) {
+                    out.put("commands", allElement.getAsJsonArray());
+                }
+            }
+        }
+
+        JsonElement legacy = files.get("customCommands");
+        if (legacy != null && legacy.isJsonObject()) {
+            JsonObject legacyObj = legacy.getAsJsonObject();
+            JsonElement filesElement = legacyObj.get("files");
+            if (filesElement != null && filesElement.isJsonObject()) {
+                for (Map.Entry<String, JsonElement> e : filesElement.getAsJsonObject().entrySet()) {
+                    if (e.getValue() != null && e.getValue().isJsonArray()) {
+                        out.putIfAbsent(e.getKey(), e.getValue().getAsJsonArray());
+                    }
+                }
+            }
+            JsonElement allElement = legacyObj.get("all");
+            if (!out.containsKey("commands") && allElement != null && allElement.isJsonArray()) {
+                out.put("commands", allElement.getAsJsonArray());
+            }
+        }
+
+        return out;
+    }
+
+    private static String sanitizeFileBaseName(String name) {
+        if (name == null) return null;
+        String trimmed = name.trim();
+        if (trimmed.isEmpty()) return null;
+        return trimmed.replaceAll("[^a-zA-Z0-9._-]", "_");
+    }
+
+    private static com.google.gson.JsonArray normalizeCommandsArray(com.google.gson.JsonArray input) {
+        com.google.gson.JsonArray out = new com.google.gson.JsonArray();
+        if (input == null) return out;
+
+        for (JsonElement element : input) {
+            if (element == null || !element.isJsonObject()) continue;
+            out.add(normalizeCommandObject(element.getAsJsonObject()));
+        }
+        return out;
+    }
+
+    private static JsonObject normalizeCommandObject(JsonObject command) {
+        JsonObject out = new JsonObject();
+
+        copyIfPresent(command, out, "name", "name");
+        copyIfPresent(command, out, "description", "description");
+        copyIfPresent(command, out, "permission", "permission");
+        copyIfPresent(command, out, "requirePermission", "requirePermission");
+        copyIfPresent(command, out, "permissionErrorMessage", "permissionErrorMessage");
+
+        // Support both snake_case and camelCase payload variants.
+        copyIfPresent(command, out, "cooldown_seconds", "cooldown_seconds");
+        copyIfMissing(command, out, "cooldownSeconds", "cooldown_seconds");
+        copyIfPresent(command, out, "cooldown_message", "cooldown_message");
+        copyIfMissing(command, out, "cooldownMessage", "cooldown_message");
+
+        JsonElement area = command.has("area_restriction") ? command.get("area_restriction") : command.get("areaRestriction");
+        if (area != null && area.isJsonObject()) {
+            out.add("area_restriction", normalizeAreaRestriction(area.getAsJsonObject()));
+        }
+
+        JsonElement args = command.get("arguments");
+        if (args != null && args.isJsonArray()) {
+            out.add("arguments", normalizeArguments(args.getAsJsonArray()));
+        }
+
+        JsonElement actions = command.get("actions");
+        if (actions != null && actions.isJsonArray()) {
+            out.add("actions", normalizeActions(actions.getAsJsonArray()));
+        } else {
+            out.add("actions", new com.google.gson.JsonArray());
+        }
+
+        return out;
+    }
+
+    private static JsonObject normalizeAreaRestriction(JsonObject in) {
+        JsonObject out = new JsonObject();
+        copyIfPresent(in, out, "world", "world");
+        copyIfPresent(in, out, "corner1", "corner1");
+        copyIfPresent(in, out, "corner2", "corner2");
+        copyIfPresent(in, out, "restriction_message", "restriction_message");
+        copyIfMissing(in, out, "restrictionMessage", "restriction_message");
+        return out;
+    }
+
+    private static com.google.gson.JsonArray normalizeArguments(com.google.gson.JsonArray input) {
+        com.google.gson.JsonArray out = new com.google.gson.JsonArray();
+        for (JsonElement element : input) {
+            if (element == null || !element.isJsonObject()) continue;
+            JsonObject in = element.getAsJsonObject();
+            JsonObject arg = new JsonObject();
+            copyIfPresent(in, arg, "name", "name");
+            copyIfPresent(in, arg, "type", "type");
+            copyIfPresent(in, arg, "required", "required");
+            copyIfPresent(in, arg, "errorMessage", "errorMessage");
+            copyIfPresent(in, arg, "customCompletions", "customCompletions");
+            copyIfPresent(in, arg, "minValue", "minValue");
+            copyIfPresent(in, arg, "maxValue", "maxValue");
+            out.add(arg);
+        }
+        return out;
+    }
+
+    private static com.google.gson.JsonArray normalizeActions(com.google.gson.JsonArray input) {
+        com.google.gson.JsonArray out = new com.google.gson.JsonArray();
+        for (JsonElement element : input) {
+            if (element == null || !element.isJsonObject()) continue;
+            out.add(normalizeAction(element.getAsJsonObject()));
+        }
+        return out;
+    }
+
+    private static JsonObject normalizeAction(JsonObject in) {
+        JsonObject out = new JsonObject();
+
+        String rawType = in.has("type") && in.get("type").isJsonPrimitive() ? in.get("type").getAsString() : "";
+        out.addProperty("type", normalizeActionType(rawType));
+
+        copyIfPresent(in, out, "text", "text");
+        copyIfPresent(in, out, "x", "x");
+        copyIfPresent(in, out, "y", "y");
+        copyIfPresent(in, out, "z", "z");
+        copyIfPresent(in, out, "commands", "commands");
+
+        JsonElement conditions = in.get("conditions");
+        if (conditions != null && conditions.isJsonArray()) {
+            out.add("conditions", normalizeConditions(conditions.getAsJsonArray()));
+        }
+
+        JsonElement onSuccess = in.has("on_success") ? in.get("on_success") : in.get("onSuccess");
+        if (onSuccess != null && onSuccess.isJsonArray()) {
+            out.add("on_success", normalizeActions(onSuccess.getAsJsonArray()));
+        }
+
+        JsonElement onFailure = in.has("on_failure") ? in.get("on_failure") : in.get("onFailure");
+        if (onFailure != null && onFailure.isJsonArray()) {
+            out.add("on_failure", normalizeActions(onFailure.getAsJsonArray()));
+        }
+
+        return out;
+    }
+
+    private static com.google.gson.JsonArray normalizeConditions(com.google.gson.JsonArray input) {
+        com.google.gson.JsonArray out = new com.google.gson.JsonArray();
+        for (JsonElement element : input) {
+            if (element == null || !element.isJsonObject()) continue;
+            JsonObject in = element.getAsJsonObject();
+            JsonObject cond = new JsonObject();
+
+            String rawType = in.has("type") && in.get("type").isJsonPrimitive() ? in.get("type").getAsString() : "";
+            cond.addProperty("type", normalizeConditionType(rawType));
+
+            copyIfPresent(in, cond, "value", "value");
+            copyIfPresent(in, cond, "item_amount", "item_amount");
+            copyIfMissing(in, cond, "itemAmount", "item_amount");
+            copyIfPresent(in, cond, "negate", "negate");
+            out.add(cond);
+        }
+        return out;
+    }
+
+    private static String normalizeActionType(String raw) {
+        String t = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+        return switch (t) {
+            case "command", "runcommand" -> "run_command";
+            case "console", "console_command", "runconsole" -> "run_console";
+            default -> t;
+        };
+    }
+
+    private static String normalizeConditionType(String raw) {
+        String t = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+        return switch (t) {
+            case "haspermission" -> "has_permission";
+            case "hasitem" -> "has_item";
+            case "isop", "operator" -> "is_op";
+            default -> t;
+        };
+    }
+
+    private static void copyIfPresent(JsonObject in, JsonObject out, String fromKey, String toKey) {
+        JsonElement value = in.get(fromKey);
+        if (value != null && !value.isJsonNull()) {
+            out.add(toKey, value.deepCopy());
+        }
+    }
+
+    private static void copyIfMissing(JsonObject in, JsonObject out, String fromKey, String toKey) {
+        if (out.has(toKey)) return;
+        copyIfPresent(in, out, fromKey, toKey);
+    }
 
     private static boolean jsonEquals(String a, String b) {
         try {
