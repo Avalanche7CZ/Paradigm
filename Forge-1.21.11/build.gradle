@@ -179,16 +179,13 @@ sourceSets.main.output.resourcesDir = layout.buildDirectory.dir("classes/java/ma
 tasks.register('mergeCommonForDevRun', Copy) {
     description = 'Merges common module classes+resources into Forge output for FML 61.x dev runs'
     dependsOn ':common:classes'
+    dependsOn tasks.named('classes')
     from(project(':common').sourceSets.main.output.classesDirs)
     from(project(':common').sourceSets.main.output.resourcesDir)
     into(layout.buildDirectory.dir("classes/java/main"))
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
-// Run after every build so IntelliJ-launched run configs also see merged output.
-tasks.named('classes').configure {
-    finalizedBy tasks.named('mergeCommonForDevRun')
-}
 
 tasks.matching { it.name == 'runServer' }.configureEach {
     dependsOn tasks.named('prepareOfflineDevServer')
@@ -271,7 +268,6 @@ tasks.named('jar', Jar).configure {
 
     // Include common module classes/resources directly in the Forge jar (single-jar distribution).
     dependsOn(project(":common").tasks.named("jar"))
-    dependsOn(tasks.named('mergeCommonForDevRun'))
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from(layout.buildDirectory.file("classes/java/main/paradigm.refmap.json"))
     from({ zipTree(project(":common").tasks.named("jar").get().archiveFile.get().asFile) }) {

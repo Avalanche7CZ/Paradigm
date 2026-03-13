@@ -174,15 +174,13 @@ sourceSets.main.output.resourcesDir = layout.buildDirectory.dir("classes/java/ma
 tasks.register('mergeCommonForDevRun', Copy) {
     description = 'Merges common module classes/resources into Forge output for dev runs'
     dependsOn ':common:classes'
+    dependsOn tasks.named('classes')
     from(project(':common').sourceSets.main.output.classesDirs)
     from(project(':common').sourceSets.main.output.resourcesDir)
     into(layout.buildDirectory.dir("classes/java/main"))
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 }
 
-tasks.named('classes').configure {
-    finalizedBy tasks.named('mergeCommonForDevRun')
-}
 
 repositories {
     mavenCentral()
@@ -253,7 +251,6 @@ tasks.named('jar', Jar).configure {
 
     // Include common module classes/resources directly in the Forge jar (single-jar distribution).
     dependsOn(project(":common").tasks.named("jar"))
-    dependsOn(tasks.named('mergeCommonForDevRun'))
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from(layout.buildDirectory.file("classes/java/main/paradigm.refmap.json"))
     from({ zipTree(project(":common").tasks.named("jar").get().archiveFile.get().asFile) }) {
