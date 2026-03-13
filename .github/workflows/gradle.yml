@@ -32,9 +32,15 @@ jobs:
           if [ -f gradle.properties ]; then
             sed -i.bak '/^org\.gradle\.java\.home=/d' gradle.properties
           fi
+          mkdir -p ~/.gradle
+          if [ -f ~/.gradle/gradle.properties ]; then
+            sed -i.bak '/^org\.gradle\.java\.home=/d' ~/.gradle/gradle.properties
+          fi
 
       - name: Build with Gradle Wrapper
-        run: ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" build
+        env:
+          GRADLE_OPTS: -Dorg.gradle.java.home=${{ env.JAVA_HOME }}
+        run: ./gradlew --no-daemon --stacktrace -Dorg.gradle.java.home="$JAVA_HOME" build
 
   dependency-submission:
     runs-on: ubuntu-latest
@@ -58,6 +64,12 @@ jobs:
           if [ -f gradle.properties ]; then
             sed -i.bak '/^org\.gradle\.java\.home=/d' gradle.properties
           fi
+          mkdir -p ~/.gradle
+          if [ -f ~/.gradle/gradle.properties ]; then
+            sed -i.bak '/^org\.gradle\.java\.home=/d' ~/.gradle/gradle.properties
+          fi
 
       - name: Generate and submit dependency graph
         uses: gradle/actions/dependency-submission@dbbdc275be76ac10734476cc723d82dfe7ec6eda
+        env:
+          GRADLE_OPTS: -Dorg.gradle.java.home=${{ env.JAVA_HOME }}

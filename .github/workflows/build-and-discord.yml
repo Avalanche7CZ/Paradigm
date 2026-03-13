@@ -31,9 +31,15 @@ jobs:
           if [ -f gradle.properties ]; then
             sed -i.bak '/^org\.gradle\.java\.home=/d' gradle.properties
           fi
+          mkdir -p ~/.gradle
+          if [ -f ~/.gradle/gradle.properties ]; then
+            sed -i.bak '/^org\.gradle\.java\.home=/d' ~/.gradle/gradle.properties
+          fi
 
       - name: Build all versions
-        run: ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" build --parallel
+        env:
+          GRADLE_OPTS: -Dorg.gradle.java.home=${{ env.JAVA_HOME }}
+        run: ./gradlew --no-daemon --stacktrace -Dorg.gradle.java.home="$JAVA_HOME" build
 
       - name: Collect JAR files
         id: collect-jars
