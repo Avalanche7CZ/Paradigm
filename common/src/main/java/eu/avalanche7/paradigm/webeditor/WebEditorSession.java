@@ -218,6 +218,7 @@ public class WebEditorSession {
             conn.setRequestMethod("POST");
             conn.setDoOutput(true);
             conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
             conn.setRequestProperty("User-Agent", USER_AGENT);
             conn.setRequestProperty("Content-Type", "application/json");
             conn.setRequestProperty("Content-Encoding", "gzip");

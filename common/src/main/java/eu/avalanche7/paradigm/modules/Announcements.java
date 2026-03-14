@@ -44,6 +44,9 @@ public class Announcements implements ParadigmModule {
 
     @Override
     public boolean isEnabled(Services services) {
+        if (services == null || services.getMainConfig() == null || !Boolean.TRUE.equals(services.getMainConfig().announcementsEnable.value)) {
+            return false;
+        }
         var cfg = services.getAnnouncementsConfig();
         return (cfg != null) && (
             (cfg.globalEnable != null && Boolean.TRUE.equals(cfg.globalEnable.value)) ||
@@ -391,6 +394,10 @@ public class Announcements implements ParadigmModule {
         services.getDebugLogger().debugLog(NAME + ": Rescheduling announcements on config reload.");
         cancelAllTasks();
         announcementsScheduled = false;
+        if (!isEnabled(services)) {
+            services.getDebugLogger().debugLog(NAME + ": Module is disabled after reload; announcements will stay unscheduled.");
+            return;
+        }
         scheduleConfiguredAnnouncements();
     }
 }

@@ -45,7 +45,8 @@ public class CommandManager implements ParadigmModule {
         });
         ICommandBuilder reload = platform.createCommandBuilder()
                 .literal("customcommandsreload")
-                .requires(src -> src.hasPermissionLevel(2))
+                .requires(src -> src.hasPermissionLevel(2)
+                        || (src.getPlayer() != null && platform.hasPermission(src.getPlayer(), eu.avalanche7.paradigm.utils.PermissionsHandler.RELOAD_PERMISSION)))
                 .executes(ctx -> {
                     services.getCmConfig().reloadCommands();
                     services.getPermissionsHandler().refreshCustomCommandPermissions();
@@ -412,5 +413,6 @@ public class CommandManager implements ParadigmModule {
 
     @Override
     public void onServerStopping(Object event, Services services) {
+        eu.avalanche7.paradigm.configs.CooldownConfigHandler.saveCooldowns();
     }
 }

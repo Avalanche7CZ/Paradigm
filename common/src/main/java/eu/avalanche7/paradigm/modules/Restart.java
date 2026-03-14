@@ -376,6 +376,10 @@ public class Restart implements ParadigmModule {
         if (services == null) return;
         this.services = services;
         cancelAndCleanup();
+        if (!isEnabled(services)) {
+            services.getDebugLogger().debugLog(NAME + ": Module is disabled after reload; restart will stay unscheduled.");
+            return;
+        }
         scheduleNextRestart(services);
     }
 }

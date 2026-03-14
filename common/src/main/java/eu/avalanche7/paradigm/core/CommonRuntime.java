@@ -39,11 +39,11 @@ public final class CommonRuntime {
         RestartConfigHandler.init(platformConfig, bootstrapDebugLogger);
         ChatConfigHandler.init(platformConfig, bootstrapDebugLogger);
         CooldownConfigHandler.init(platformConfig, bootstrapDebugLogger);
-        EmojiConfigHandler.init(platformConfig);
+        EmojiConfigHandler.init(platformConfig, bootstrapDebugLogger);
 
         // --- utilities ---
         DebugLogger debugLogger = new DebugLogger(MainConfigHandler.getConfig());
-        CMConfig cmConfig = new CMConfig(debugLogger);
+        CMConfig cmConfig = new CMConfig(debugLogger, platformConfig);
         cmConfig.loadCommands();
 
         Placeholders placeholders = new Placeholders();
@@ -78,6 +78,8 @@ public final class CommonRuntime {
                 platformAdapter,
                 new WebEditorStore()
         );
+
+        UpdateChecker.registerInGameNotifier(services);
 
         groupChatManager.setServices(services);
 

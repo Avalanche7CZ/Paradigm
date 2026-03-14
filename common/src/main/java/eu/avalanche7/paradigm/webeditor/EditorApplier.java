@@ -136,7 +136,7 @@ public final class EditorApplier {
             if (el == null) return ApplyStatus.MISSING;
             MainConfigHandler.Config newConfig = GSON.fromJson(el, MainConfigHandler.Config.class);
             if (configsEqual(MainConfigHandler.getConfig(), newConfig)) return ApplyStatus.UNCHANGED;
-            writeConfigToFile(newConfig, "main.json");
+            writeConfigToFile(services, newConfig, "main.json");
             MainConfigHandler.reload();
             return ApplyStatus.APPLIED;
         }, "main");
@@ -150,7 +150,7 @@ public final class EditorApplier {
             if (el == null) return ApplyStatus.MISSING;
             AnnouncementsConfigHandler.Config newConfig = GSON.fromJson(el, AnnouncementsConfigHandler.Config.class);
             if (configsEqual(AnnouncementsConfigHandler.getConfig(), newConfig)) return ApplyStatus.UNCHANGED;
-            writeConfigToFile(newConfig, "announcements.json");
+            writeConfigToFile(services, newConfig, "announcements.json");
             AnnouncementsConfigHandler.reload();
             return ApplyStatus.APPLIED;
         }, "announcements");
@@ -164,7 +164,7 @@ public final class EditorApplier {
             if (el == null) return ApplyStatus.MISSING;
             ChatConfigHandler.Config newConfig = GSON.fromJson(el, ChatConfigHandler.Config.class);
             if (configsEqual(ChatConfigHandler.getConfig(), newConfig)) return ApplyStatus.UNCHANGED;
-            writeConfigToFile(newConfig, "chat.json");
+            writeConfigToFile(services, newConfig, "chat.json");
             ChatConfigHandler.reload();
             return ApplyStatus.APPLIED;
         }, "chat");
@@ -178,7 +178,7 @@ public final class EditorApplier {
             if (el == null) return ApplyStatus.MISSING;
             MOTDConfigHandler.Config newConfig = GSON.fromJson(el, MOTDConfigHandler.Config.class);
             if (configsEqual(MOTDConfigHandler.getConfig(), newConfig)) return ApplyStatus.UNCHANGED;
-            writeConfigToFile(newConfig, "motd.json");
+            writeConfigToFile(services, newConfig, "motd.json");
             MOTDConfigHandler.reload();
             return ApplyStatus.APPLIED;
         }, "motd");
@@ -192,7 +192,7 @@ public final class EditorApplier {
             if (el == null) return ApplyStatus.MISSING;
             MentionConfigHandler.Config newConfig = GSON.fromJson(el, MentionConfigHandler.Config.class);
             if (configsEqual(MentionConfigHandler.getConfig(), newConfig)) return ApplyStatus.UNCHANGED;
-            writeConfigToFile(newConfig, "mentions.json");
+            writeConfigToFile(services, newConfig, "mentions.json");
             MentionConfigHandler.reload();
             return ApplyStatus.APPLIED;
         }, "mention");
@@ -206,7 +206,7 @@ public final class EditorApplier {
             if (el == null) return ApplyStatus.MISSING;
             RestartConfigHandler.Config newConfig = GSON.fromJson(el, RestartConfigHandler.Config.class);
             if (configsEqual(RestartConfigHandler.getConfig(), newConfig)) return ApplyStatus.UNCHANGED;
-            writeConfigToFile(newConfig, "restarts.json");
+            writeConfigToFile(services, newConfig, "restarts.json");
             RestartConfigHandler.reload();
             return ApplyStatus.APPLIED;
         }, "restart");
@@ -265,7 +265,13 @@ public final class EditorApplier {
             return ApplyStatus.MISSING;
         }
 
-        Path commandsDir = Path.of("config", "paradigm", "commands");
+        Path configDir;
+        try {
+            configDir = services.getPlatformAdapter().getConfig().getConfigDirectory();
+        } catch (Throwable t) {
+            configDir = Path.of(System.getProperty("user.dir")).resolve("config");
+        }
+        Path commandsDir = configDir.resolve("paradigm").resolve("commands");
         Files.createDirectories(commandsDir);
 
         boolean anyApplied = false;
@@ -679,13 +685,13 @@ public final class EditorApplier {
         return currentJson.equals(newJson);
     }
 
-    private static void writeConfigToFile(Object config, String fileName) throws Exception {
+    private static void writeConfigToFile(Services services, Object config, String fileName) throws Exception {
         try {
             java.nio.file.Path configDir;
             try {
-                configDir = java.nio.file.Path.of(System.getProperty("user.dir")).resolve("config");
+                configDir = services.getPlatformAdapter().getConfig().getConfigDirectory();
             } catch (Throwable t) {
-                configDir = java.nio.file.Path.of("config");
+                configDir = java.nio.file.Path.of(System.getProperty("user.dir")).resolve("config");
             }
 
             java.nio.file.Path paradigmDir = configDir.resolve("paradigm");

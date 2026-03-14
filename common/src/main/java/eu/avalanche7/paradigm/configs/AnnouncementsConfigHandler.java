@@ -47,6 +47,12 @@ public class AnnouncementsConfigHandler extends BaseConfigHandler<AnnouncementsC
         }
     }
 
+    public static void persistConfig() {
+        if (INSTANCE != null && INSTANCE.config != null) {
+            INSTANCE.save(INSTANCE.config);
+        }
+    }
+
     @Override
     protected Config createDefaultConfig() {
         return new Config();
@@ -92,9 +98,9 @@ public class AnnouncementsConfigHandler extends BaseConfigHandler<AnnouncementsC
         );
         public ConfigEntry<List<String>> globalMessages = new ConfigEntry<>(
                 List.of(
-                        "<bold><gradient:#22D3EE:#A78BFA>[Paradigm]</gradient></bold> <color:#F8FAFC>Welcome!</color> <color:#94A3B8>Type </color><gradient:#38BDF8:#3A86FF><bold>/paradigm</bold></gradient><color:#94A3B8> to see available commands.</color>",
-                        "<bold><gradient:#FF006E:#8338EC>[Paradigm]</gradient></bold> <color:#F8FAFC>Links in chat are clickable:</color> <gradient:#C4B5FD:#A78BFA><underline>https://example.com</underline></gradient>",
-                        "<bold><gradient:#3A86FF:#FB5607>[Paradigm]</gradient></bold> <color:#F8FAFC>Tip:</color> <gradient:#F472B6:#FF006E>Use a group chat</gradient><color:#94A3B8> with </color><gradient:#22D3EE:#3A86FF><bold>/group</bold></gradient><color:#94A3B8> to keep things organized.</color>",
+                        "<bold><gradient:#22D3EE:#A78BFA>[Paradigm]</gradient></bold> <color:#F8FAFC>Welcome!</color> <color:#94A3B8>Type </color><click:suggest_command:/paradigm help><gradient:#38BDF8:#3A86FF><bold><underline>/paradigm help</underline></bold></gradient></click><color:#94A3B8> to see available commands.</color>",
+                        "<bold><gradient:#FF006E:#8338EC>[Paradigm]</gradient></bold> <color:#F8FAFC>Links in chat are clickable:</color> <click:open_url:https://example.com><gradient:#C4B5FD:#A78BFA><underline>https://example.com</underline></gradient></click>",
+                        "<bold><gradient:#3A86FF:#FB5607>[Paradigm]</gradient></bold> <color:#F8FAFC>Tip:</color> <gradient:#F472B6:#FF006E>Use a group chat</gradient><color:#94A3B8> with </color><click:suggest_command:/groupchat><gradient:#22D3EE:#3A86FF><bold><underline>/groupchat</underline></bold></gradient></click><color:#94A3B8> to keep things organized.</color>",
                         "<bold><gradient:#FFD700:#FB5607>[Paradigm]</gradient></bold> <gradient:#06D6A0:#1ABC9C>Server is running smoothly!</gradient>"
                 ),
                 "List of messages to be broadcast in global chat. Supports colors, gradients, bold, italic, underline, etc."

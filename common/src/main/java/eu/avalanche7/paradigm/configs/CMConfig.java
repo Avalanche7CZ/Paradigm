@@ -3,6 +3,7 @@ package eu.avalanche7.paradigm.configs;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import eu.avalanche7.paradigm.data.CustomCommand;
+import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 
 import java.io.IOException;
@@ -19,12 +20,25 @@ import java.util.stream.Stream;
 public class CMConfig {
 
     private final Gson gson = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
-    private final Path configFolderPath = Path.of("config", "paradigm", "commands");
+    private final Path configFolderPath;
     private List<CustomCommand> loadedCommands = new ArrayList<>();
     private final DebugLogger debugLogger;
 
     public CMConfig(DebugLogger debugLogger) {
+        this(debugLogger, null);
+    }
+
+    public CMConfig(DebugLogger debugLogger, IConfig platformConfig) {
         this.debugLogger = debugLogger;
+        Path configDir;
+        try {
+            configDir = platformConfig != null
+                    ? platformConfig.getConfigDirectory()
+                    : Path.of(System.getProperty("user.dir")).resolve("config");
+        } catch (Throwable t) {
+            configDir = Path.of(System.getProperty("user.dir")).resolve("config");
+        }
+        this.configFolderPath = configDir.resolve("paradigm").resolve("commands");
     }
 
     public void loadCommands() {

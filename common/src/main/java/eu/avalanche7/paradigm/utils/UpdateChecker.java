@@ -4,6 +4,11 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import org.slf4j.Logger;
 
 import java.io.BufferedReader;
@@ -14,8 +19,16 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public final class UpdateChecker {
+
+    private static final String OP_PERMISSION = "minecraft.command.op";
+    private static final int OP_LEVEL = 2;
+    private static volatile boolean inGameNotifierRegistered = false;
+
+    private static volatile UpdateConfig lastConfig;
+    private static volatile UpdateResult lastResult = new UpdateResult(false, null, null);
 
     public record UpdateConfig(
             String modrinthProjectId,
@@ -43,20 +56,95 @@ public final class UpdateChecker {
         if (config == null) throw new IllegalArgumentException("config cannot be null");
         if (logger == null) throw new IllegalArgumentException("logger cannot be null");
         if (currentVersion == null || currentVersion.isBlank()) currentVersion = "unknown";
+        lastConfig = config;
 
         UpdateResult modrinth = checkModrinth(config, currentVersion, mcVersion, loader, logger);
         if (modrinth != null && modrinth.updateAvailable()) {
+            lastResult = modrinth;
             logResult(logger, config, currentVersion, modrinth);
             return modrinth;
         }
 
         UpdateResult github = checkGithubRaw(config, currentVersion, logger);
         if (github != null && github.updateAvailable()) {
+            lastResult = github;
             logResult(logger, config, currentVersion, github);
             return github;
         }
 
-        return new UpdateResult(false, null, null);
+        lastResult = new UpdateResult(false, null, null);
+        return lastResult;
+    }
+
+    public static UpdateResult getLastResult() {
+        return lastResult;
+    }
+
+    public static boolean isUpdateAvailable() {
+        UpdateResult result = lastResult;
+        return result != null && result.updateAvailable();
+    }
+
+    public static String getLastModrinthUrl() {
+        UpdateConfig config = lastConfig;
+        if (config == null || config.modrinthProjectId() == null || config.modrinthProjectId().isBlank()) return null;
+        return "https://modrinth.com/mod/" + config.modrinthProjectId();
+    }
+
+    public static synchronized void registerInGameNotifier(Services services) {
+        if (inGameNotifierRegistered || services == null) return;
+
+        IPlatformAdapter platform = services.getPlatformAdapter();
+        if (platform == null) return;
+        IEventSystem events = platform.getEventSystem();
+        if (events == null) return;
+
+        events.onPlayerJoin(evt -> {
+            IPlayer player = evt.getPlayer();
+            if (player == null) return;
+            try {
+                services.getTaskScheduler().schedule(() -> notifyPlayerAboutUpdate(services, player), 1200, TimeUnit.MILLISECONDS);
+            } catch (Throwable ignored) {
+                notifyPlayerAboutUpdate(services, player);
+            }
+        });
+        events.onPlayerLeave(evt -> notifyPlayerAboutUpdate(services, evt.getPlayer()));
+        inGameNotifierRegistered = true;
+    }
+
+    private static void notifyPlayerAboutUpdate(Services services, IPlayer player) {
+        if (services == null || player == null) return;
+        if (!isUpdateAvailable()) return;
+
+        IPlatformAdapter platform = services.getPlatformAdapter();
+        if (platform == null) return;
+        if (!platform.hasPermission(player, OP_PERMISSION, OP_LEVEL)) return;
+
+        UpdateResult result = getLastResult();
+        if (result == null || !result.updateAvailable()) return;
+
+        String latestVersion = result.latestVersion() != null ? result.latestVersion() : "unknown";
+        String modrinthUrl = getLastModrinthUrl();
+
+        platform.sendSystemMessage(
+                player,
+                services.getMessageParser().parseMessage(
+                        "<color:yellow><bold>[Paradigm]</bold></color> <color:white>A new version is available:</color> <color:green>"
+                                + latestVersion + "</color>",
+                        player
+                )
+        );
+
+        if (modrinthUrl != null && !modrinthUrl.isBlank()) {
+            IComponent clickLink = platform.createLiteralComponent("Open Modrinth page")
+                    .withColor("aqua")
+                    .withFormatting("underline")
+                    .onClickOpenUrl(modrinthUrl);
+            platform.sendSystemMessage(
+                    player,
+                    clickLink
+            );
+        }
     }
 
     private static void logResult(Logger logger, UpdateConfig config, String currentVersion, UpdateResult result) {

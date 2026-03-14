@@ -41,6 +41,12 @@ public class MentionConfigHandler extends BaseConfigHandler<MentionConfigHandler
         }
     }
 
+    public static void persistConfig() {
+        if (INSTANCE != null && INSTANCE.config != null) {
+            INSTANCE.save(INSTANCE.config);
+        }
+    }
+
     @Override
     protected Config createDefaultConfig() {
         return new Config();

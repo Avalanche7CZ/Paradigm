@@ -40,19 +40,9 @@ public class TelemetryReporter {
             MainConfigHandler.Config config = MainConfigHandler.getConfig();
             config.telemetryServerId.value = UUID.randomUUID().toString();
             try {
-                java.nio.file.Path configDir;
-                try {
-                    configDir = services.getPlatformAdapter().getConfig().getConfigDirectory();
-                } catch (Throwable t) {
-                    configDir = java.nio.file.Path.of(System.getProperty("user.dir")).resolve("config");
-                }
-                java.nio.file.Path mainConfigFile = configDir.resolve("paradigm").resolve("main.json");
-                java.nio.file.Files.createDirectories(mainConfigFile.getParent());
-                try (java.io.Writer writer = java.nio.file.Files.newBufferedWriter(mainConfigFile, java.nio.charset.StandardCharsets.UTF_8)) {
-                    new com.google.gson.GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create().toJson(config, writer);
-                }
-            } catch (Exception e) {
-                services.getDebugLogger().debugLog("TelemetryReporter: failed to save server ID: " + e.getMessage());
+                MainConfigHandler.persistConfig();
+            } catch (RuntimeException e) {
+                services.getDebugLogger().debugLog("TelemetryReporter: failed to persist server ID: " + e.getMessage());
             }
             services.getDebugLogger().debugLog("TelemetryReporter: generated new server ID");
         }

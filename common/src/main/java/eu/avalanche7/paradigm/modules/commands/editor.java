@@ -69,7 +69,7 @@ public class editor implements ParadigmModule {
             services.getWebEditorStore().keyPair();
         } catch (Throwable ignored) {}
 
-        platform.sendSuccess(source, platform.createLiteralComponent("Creating web editor session..."), false);
+        platform.sendSuccess(source, parseUi(services, "<color:#38BDF8><bold>[WebEditor]</bold></color> <color:white>Creating web editor session...</color>"), false);
 
         try { services.getLogger().info("Paradigm WebEditor: openEditor invoked by {}", source.getSourceName()); } catch (Throwable ignored) {}
 
@@ -104,21 +104,21 @@ public class editor implements ParadigmModule {
                             IComponent link = platform.createComponentFromLiteral(url)
                                     .onClickOpenUrl(url)
                                     .onHoverText("Click to open the Web Editor in your browser");
-                            IComponent message = platform.createComponentFromLiteral("Web Editor: ").append(link);
+                            IComponent message = parseUi(services, "<color:#22C55E><bold>[WebEditor]</bold></color> <color:white>Session ready:</color> ").append(link);
                             platform.sendSuccess(source, message, false);
                         });
                     } catch (Throwable ignored) {
                         IComponent link = platform.createComponentFromLiteral(url)
                                 .onClickOpenUrl(url)
                                 .onHoverText("Click to open the Web Editor in your browser");
-                        IComponent message = platform.createComponentFromLiteral("Web Editor: ").append(link);
+                        IComponent message = parseUi(services, "<color:#22C55E><bold>[WebEditor]</bold></color> <color:white>Session ready:</color> ").append(link);
                         platform.sendSuccess(source, message, false);
                     }
                 } else {
                     IComponent link = platform.createComponentFromLiteral(url)
                             .onClickOpenUrl(url)
                             .onHoverText("Click to open the Web Editor in your browser");
-                    IComponent message = platform.createComponentFromLiteral("Web Editor: ").append(link);
+                    IComponent message = parseUi(services, "<color:#22C55E><bold>[WebEditor]</bold></color> <color:white>Session ready:</color> ").append(link);
                     platform.sendSuccess(source, message, false);
                 }
             } catch (Exception e) {
@@ -250,19 +250,23 @@ public class editor implements ParadigmModule {
             EditorApplier.ApplyResult result = EditorApplier.applyFromBytebinWithReport(services, code);
             if (result.applied <= 0) {
                 if (result.unchanged > 0) {
-                    platform.sendSuccess(source, platform.createLiteralComponent(result.message), false);
+                    platform.sendSuccess(source, parseUi(services, "<color:#F59E0B><bold>[WebEditor]</bold></color> <color:white>" + result.message + "</color>"), false);
                 } else {
-                    platform.sendFailure(source, platform.createLiteralComponent(result.message));
+                    platform.sendFailure(source, parseUi(services, "<color:#EF4444><bold>[WebEditor]</bold></color> <color:white>" + result.message + "</color>"));
                 }
                 return result.applied > 0 || result.unchanged > 0 ? 1 : 0;
             }
-            platform.sendSuccess(source, platform.createLiteralComponent(result.message), false);
+            platform.sendSuccess(source, parseUi(services, "<color:#22C55E><bold>[WebEditor]</bold></color> <color:white>" + result.message + "</color>"), false);
             return 1;
         } catch (Exception e) {
-            platform.sendFailure(source, platform.createLiteralComponent("Apply failed: " + e.getMessage()));
+            platform.sendFailure(source, parseUi(services, "<color:#EF4444><bold>[WebEditor]</bold></color> <color:white>Apply failed: " + e.getMessage() + "</color>"));
             try { services.getLogger().warn("Paradigm Apply: Failed for code {}", code, e); } catch (Throwable ignored) {}
             return 0;
         }
+    }
+
+    private IComponent parseUi(Services services, String text) {
+        return services.getMessageParser().parseMessage(text, null);
     }
 
     @Override public void onLoad(Object event, Services services, Object modEventBus) {}

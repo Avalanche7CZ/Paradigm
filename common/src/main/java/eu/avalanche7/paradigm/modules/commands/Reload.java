@@ -1,20 +1,22 @@
 package eu.avalanche7.paradigm.modules.commands;
 
 import eu.avalanche7.paradigm.ParadigmAPI;
-import eu.avalanche7.paradigm.ParadigmConstants;
 import eu.avalanche7.paradigm.configs.*;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.*;
 import eu.avalanche7.paradigm.modules.Announcements;
 import eu.avalanche7.paradigm.modules.Restart;
+import eu.avalanche7.paradigm.utils.PermissionsHandler;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Reload implements ParadigmModule {
+    private static final Map<ParadigmModule, Boolean> LAST_HELP_STATE = new ConcurrentHashMap<>();
+
     @Override public String getName() { return "Reload"; }
     @Override public boolean isEnabled(Services services) { return true; }
     @Override public void onLoad(Object e, Services s, Object b) {}
@@ -30,7 +32,8 @@ public class Reload implements ParadigmModule {
 
         ICommandBuilder reload = platform.createCommandBuilder()
                 .literal("reload")
-                .requires(src -> src.hasPermissionLevel(2))
+                .requires(src -> src.hasPermissionLevel(2)
+                        || (src.getPlayer() != null && platform.hasPermission(src.getPlayer(), PermissionsHandler.RELOAD_PERMISSION)))
                 .then(platform.createCommandBuilder()
                         .argument("config", ICommandBuilder.ArgumentType.WORD)
                         .executes(ctx -> {
@@ -71,12 +74,13 @@ public class Reload implements ParadigmModule {
                                 }
                             }
 
-                            for (var m : ParadigmAPI.getModules()) {
-                                boolean before = prevEnabled.getOrDefault(m, false);
-                                boolean after;
-                                try { after = m.isEnabled(services); } catch (Throwable ignored) { after = false; }
-                                if (before && !after) m.onDisable(services);
-                                else if (!before && after) m.onEnable(services);
+                            refreshModuleStates(services, prevEnabled);
+
+                            if ("main".equals(cfg) || "announcements".equals(cfg) || "all".equals(cfg)) {
+                                rescheduleAnnouncements();
+                            }
+                            if ("main".equals(cfg) || "restart".equals(cfg) || "all".equals(cfg)) {
+                                rescheduleRestart(services);
                             }
 
                             platform.sendSuccess(ctx.getSource(), platform.createLiteralComponent("§a" + msg), true);
@@ -106,10 +110,14 @@ public class Reload implements ParadigmModule {
         }
     }
 
-    private void refreshModuleStates(Services services, Map<ParadigmModule, Boolean> prevEnabled) {
+    public static void refreshModuleStatesForHelp(Services services) {
+        refreshModuleStates(services, LAST_HELP_STATE);
+    }
+
+    public static void refreshModuleStates(Services services, Map<ParadigmModule, Boolean> prevEnabled) {
         for (var m : ParadigmAPI.getModules()) {
             try {
-                boolean before = prevEnabled.getOrDefault(m, false);
+                boolean before = prevEnabled.getOrDefault(m, m.isEnabled(services));
                 boolean after;
                 try { after = m.isEnabled(services); } catch (Throwable t) { after = false; }
 
@@ -118,6 +126,7 @@ public class Reload implements ParadigmModule {
                 } else if (!before && after) {
                     m.onEnable(services);
                 }
+                prevEnabled.put(m, after);
             } catch (Throwable t) {
                 if (services != null && services.getLogger() != null) {
                     services.getLogger().warn("Failed to refresh module {}: {}", m.getName(), t.toString());

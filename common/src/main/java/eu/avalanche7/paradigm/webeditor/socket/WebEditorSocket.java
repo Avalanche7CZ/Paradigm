@@ -214,6 +214,65 @@ public class WebEditorSocket {
         try { return el.getAsString(); } catch (Throwable ignored) { return null; }
     }
 
+    private void runOnServerThread(Runnable task) {
+        Object server = services.getMinecraftServer();
+        if (server != null) {
+            try {
+                var m = server.getClass().getMethod("execute", Runnable.class);
+                m.invoke(server, task);
+                return;
+            } catch (Throwable ignored) {
+            }
+        }
+        task.run();
+    }
+
+    private void sendOwnerFeedback(boolean success, String message, String accentHex) {
+        if (this.owner == null || message == null || message.isEmpty()) {
+            try {
+                services.getLogger().info("Paradigm WebEditor: Feedback skipped (owner/message missing), channel={}, hasOwner={}, hasMessage={}",
+                        getChannelId(), this.owner != null, message != null && !message.isEmpty());
+            } catch (Throwable ignored) {}
+            return;
+        }
+        runOnServerThread(() -> {
+            try {
+                String ownerName;
+                try {
+                    ownerName = this.owner.getSourceName();
+                } catch (Throwable t) {
+                    ownerName = "unknown";
+                }
+                try {
+                    services.getLogger().info("Paradigm WebEditor: Sending feedback to owner={}, channel={}, success={}, text={}",
+                            ownerName, getChannelId(), success, message);
+                } catch (Throwable ignored) {}
+
+                IComponent prefix = services.getMessageParser().parseMessage(
+                        "<color:" + accentHex + "><bold>[WebEditor]</bold></color> ", null
+                );
+                IComponent body = services.getPlatformAdapter().createComponentFromLiteral(message);
+                IComponent full = prefix.append(body);
+                if (success) {
+                    services.getPlatformAdapter().sendSuccess(this.owner, full, false);
+                } else {
+                    services.getPlatformAdapter().sendFailure(this.owner, full);
+                }
+            } catch (Throwable t) {
+                try {
+                    IComponent fallback = services.getPlatformAdapter().createComponentFromLiteral("[WebEditor] " + message);
+                    if (success) {
+                        services.getPlatformAdapter().sendSuccess(this.owner, fallback, false);
+                    } else {
+                        services.getPlatformAdapter().sendFailure(this.owner, fallback);
+                    }
+                    services.getLogger().warn("Paradigm WebEditor: Rich feedback failed, used fallback. channel={}", getChannelId(), t);
+                } catch (Throwable ignored) {
+                }
+            }
+        });
+    }
+
     private void handleMessageFrame(String stringMsg) {
         try {
             if (stringMsg == null || stringMsg.trim().isEmpty()) {
@@ -377,11 +436,7 @@ public class WebEditorSocket {
 
                     try {
                         if (this.owner != null && !reconnected) {
-                            String msgTxt = "Web Editor socket connected.";
-                            IComponent comp = services.getPlatformAdapter().createComponentFromLiteral(msgTxt);
-                            try {
-                                services.getPlatformAdapter().sendSuccess(this.owner, comp, false);
-                            } catch (Throwable ignored) {}
+                            sendOwnerFeedback(true, "Socket connected and trusted.", "#38BDF8");
                         }
                     } catch (Throwable ignored) {}
                 } catch (Exception e) {
@@ -418,9 +473,9 @@ public class WebEditorSocket {
                             changeAccepted.addProperty("state", "accepted");
                             send(changeAccepted);
 
-                            int applied;
+                            EditorApplier.ApplyResult result;
                             try {
-                                applied = EditorApplier.applyFromBytebin(services, code);
+                                result = EditorApplier.applyFromBytebinWithReport(services, code);
                             } catch (Exception ex) {
                                 throw new RuntimeException(ex);
                             }
@@ -432,10 +487,20 @@ public class WebEditorSocket {
                             appliedMsg.addProperty("type", SocketMessageType.CHANGE_RESPONSE.id);
                             appliedMsg.addProperty("state", "applied");
                             if (newSessionCode != null) appliedMsg.addProperty("newSessionCode", newSessionCode);
-                            appliedMsg.addProperty("appliedCount", applied);
+                            appliedMsg.addProperty("appliedCount", result.applied);
+                            appliedMsg.addProperty("unchangedCount", result.unchanged);
+                            appliedMsg.addProperty("message", result.message);
                             send(appliedMsg);
+
+                            if (result.applied > 0) {
+                                sendOwnerFeedback(true, result.message, "#22C55E");
+                            } else if (result.unchanged > 0) {
+                                sendOwnerFeedback(true, result.message, "#F59E0B");
+                            } else {
+                                sendOwnerFeedback(false, result.message, "#EF4444");
+                            }
                             try {
-                                services.getLogger().info("Paradigm WebEditor: Applied {} change(s) from socket channel {}.", applied, getChannelId());
+                                services.getLogger().info("Paradigm WebEditor: Applied {} change(s) from socket channel {}.", result.applied, getChannelId());
                             } catch (Throwable ignored) {}
                         } catch (Exception e) {
                             JsonObject err = new JsonObject();
@@ -443,6 +508,7 @@ public class WebEditorSocket {
                             err.addProperty("state", "error");
                             err.addProperty("message", e.getMessage() == null ? e.toString() : e.getMessage());
                             send(err);
+                            sendOwnerFeedback(false, "Apply failed: " + (e.getMessage() == null ? e.toString() : e.getMessage()), "#EF4444");
                             try {
                                 services.getLogger().warn("Paradigm WebEditor: Apply from socket failed for channel {}", getChannelId(), e);
                             } catch (Throwable ignored) {}

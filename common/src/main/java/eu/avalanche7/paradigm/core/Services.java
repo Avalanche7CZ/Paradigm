@@ -28,7 +28,7 @@ public class Services {
     private final GroupChatManager groupChatManagerInstance;
     private final IPlatformAdapter platformAdapter;
 
-    private final WebEditorStore webEditorStore = new WebEditorStore();
+    private final WebEditorStore webEditorStore;
 
 
     public Services(
@@ -66,6 +66,7 @@ public class Services {
         this.placeholdersInstance = placeholders;
         this.taskSchedulerInstance = taskScheduler;
         this.platformAdapter = platformAdapter;
+        this.webEditorStore = webEditorStore != null ? webEditorStore : new WebEditorStore();
     }
 
     public void setServer(Object server) {

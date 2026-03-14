@@ -1,6 +1,7 @@
 package eu.avalanche7.paradigm.configs;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import eu.avalanche7.paradigm.utils.DebugLogger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,10 +19,15 @@ public class EmojiConfigHandler extends BaseConfigHandler<EmojiConfigHandler.Con
     }
 
     public static void init(IConfig platformConfig) {
+        init(platformConfig, null);
+    }
+
+    public static void init(IConfig platformConfig, DebugLogger debugLogger) {
         if (INSTANCE == null) {
             synchronized (EmojiConfigHandler.class) {
                 if (INSTANCE == null) {
                     INSTANCE = new EmojiConfigHandler(platformConfig);
+                    INSTANCE.setJsonValidator(debugLogger);
                     INSTANCE.config = INSTANCE.load();
                     LOGGER.info("[Paradigm] Loaded {} emojis from config", INSTANCE.config.emojis.size());
                 }
@@ -48,7 +54,7 @@ public class EmojiConfigHandler extends BaseConfigHandler<EmojiConfigHandler.Con
             throw new IllegalStateException("EmojiConfigHandler not initialized! Call init() first.");
         }
         INSTANCE.config.emojis.put(name.toLowerCase(), emoji);
-        INSTANCE.save(INSTANCE.config);
+        persistConfig();
     }
 
     public static void removeEmoji(String name) {
@@ -56,7 +62,13 @@ public class EmojiConfigHandler extends BaseConfigHandler<EmojiConfigHandler.Con
             throw new IllegalStateException("EmojiConfigHandler not initialized! Call init() first.");
         }
         INSTANCE.config.emojis.remove(name.toLowerCase());
-        INSTANCE.save(INSTANCE.config);
+        persistConfig();
+    }
+
+    public static void persistConfig() {
+        if (INSTANCE != null && INSTANCE.config != null) {
+            INSTANCE.save(INSTANCE.config);
+        }
     }
 
     @Override
