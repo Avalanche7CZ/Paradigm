@@ -116,6 +116,11 @@ public class Help implements ParadigmModule {
                 "/sc toggle or /sc [message]",
                 "chat.json"
         ));
+        m.put("PrivateMessages", new HelpEntry(
+                "Direct private messaging between players with quick reply support.",
+                "/msg|/tell|/w|/whisper [player] [message], /reply|/r [message]",
+                "chat.json"
+        ));
         m.put("Mentions", new HelpEntry(
                 "Highlights @player and @everyone with optional cooldowns.",
                 "/mention [message]",

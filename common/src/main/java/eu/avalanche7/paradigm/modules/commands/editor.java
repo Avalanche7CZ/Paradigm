@@ -4,10 +4,8 @@ import com.google.gson.JsonObject;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
-import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.*;
+import eu.avalanche7.paradigm.utils.PermissionsHandler;
 import eu.avalanche7.paradigm.webeditor.EditorApplier;
 import eu.avalanche7.paradigm.webeditor.WebEditorSession;
 import eu.avalanche7.paradigm.webeditor.socket.WebEditorSocket;
@@ -34,7 +32,7 @@ public class editor implements ParadigmModule {
                 .literal("paradigm")
                 .then(platform.createCommandBuilder()
                         .literal("editor")
-                        .requires(src -> src.hasPermissionLevel(2))
+                        .requires(src -> hasEditorPermission(src, platform))
                         .executes(ctx -> openEditor(ctx.getSource(), services))
                         .then(platform.createCommandBuilder()
                                 .literal("trust")
@@ -52,11 +50,24 @@ public class editor implements ParadigmModule {
                                 .executes(ctx -> listTrusted(ctx.getSource(), services))))
                 .then(platform.createCommandBuilder()
                         .literal("apply")
+                        .requires(src -> hasEditorPermission(src, platform))
                         .then(platform.createCommandBuilder()
                                 .argument("code", ICommandBuilder.ArgumentType.WORD)
                                 .executes(ctx -> applyChanges(ctx.getSource(), services, ctx.getStringArgument("code")))));
 
         platform.registerCommand(cmd);
+    }
+
+    private boolean hasEditorPermission(ICommandSource source, IPlatformAdapter platform) {
+        if (source == null) return false;
+        if (source.isConsole()) return true;
+        IPlayer player = source.getPlayer();
+        if (player == null) return false;
+        return platform.hasPermission(
+                player,
+                PermissionsHandler.EDITOR_PERMISSION,
+                PermissionsHandler.EDITOR_PERMISSION_LEVEL
+        );
     }
 
     private int openEditor(ICommandSource source, Services services) {

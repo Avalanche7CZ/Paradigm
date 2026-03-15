@@ -78,5 +78,13 @@
     "no_permission_everyone": "You do not have permission to mention everyone.",
     "too_frequent_mention_player": "You are mentioning players too frequently. Please wait a while.",
     "no_permission_player": "You do not have permission to mention players."
+  },
+
+  "pm": {
+    "player_not_found": "That player is not online.",
+    "cannot_message_self": "You cannot message yourself.",
+    "empty_message": "Message cannot be empty.",
+    "no_reply_target": "No recent conversation to reply to.",
+    "reply_target_offline": "Your last conversation partner is no longer online."
   }
 }

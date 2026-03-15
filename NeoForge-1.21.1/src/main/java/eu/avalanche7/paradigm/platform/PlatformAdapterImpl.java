@@ -99,6 +99,9 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         } catch (Throwable ignored) {}
 
         if (commandDispatcher != null) {
+            if (shouldOverrideRootLiteral(root)) {
+                unregisterRootLiteral(commandDispatcher, root);
+            }
             commandDispatcher.register(cast);
             try {
                 if (debugLogger != null) debugLogger.debugLog("[NeoForge] Registered command to event dispatcher: /" + (root != null ? root : "<unknown>"));
@@ -107,7 +110,11 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         }
 
         if (server != null) {
-            server.getCommands().getDispatcher().register(cast);
+            com.mojang.brigadier.CommandDispatcher<CommandSourceStack> dispatcher = server.getCommands().getDispatcher();
+            if (shouldOverrideRootLiteral(root)) {
+                unregisterRootLiteral(dispatcher, root);
+            }
+            dispatcher.register(cast);
             try {
                 if (debugLogger != null) debugLogger.debugLog("[NeoForge] Registered command to server dispatcher: /" + (root != null ? root : "<unknown>") + " (event dispatcher was null)");
             } catch (Throwable ignored) {}
@@ -115,6 +122,52 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             try {
                 if (debugLogger != null) debugLogger.debugLog("[NeoForge] FAILED to register command /" + (root != null ? root : "<unknown>") + ": server and dispatcher are null");
             } catch (Throwable ignored) {}
+        }
+    }
+
+    private boolean shouldOverrideRootLiteral(String rootLiteral) {
+        if (rootLiteral == null || rootLiteral.isBlank()) {
+            return false;
+        }
+        String root = rootLiteral.toLowerCase(java.util.Locale.ROOT);
+        return root.equals("msg")
+                || root.equals("tell")
+                || root.equals("w")
+                || root.equals("whisper")
+                || root.equals("reply")
+                || root.equals("r");
+    }
+
+    private void unregisterRootLiteral(com.mojang.brigadier.CommandDispatcher<CommandSourceStack> dispatcher, String rootLiteral) {
+        if (dispatcher == null || rootLiteral == null || rootLiteral.isBlank()) {
+            return;
+        }
+        try {
+            Object rootNode = dispatcher.getRoot();
+            Class<?> nodeClass = com.mojang.brigadier.tree.CommandNode.class;
+
+            java.lang.reflect.Field childrenField = nodeClass.getDeclaredField("children");
+            java.lang.reflect.Field literalsField = nodeClass.getDeclaredField("literals");
+            java.lang.reflect.Field argumentsField = nodeClass.getDeclaredField("arguments");
+
+            childrenField.setAccessible(true);
+            literalsField.setAccessible(true);
+            argumentsField.setAccessible(true);
+
+            Object children = childrenField.get(rootNode);
+            Object literals = literalsField.get(rootNode);
+            Object arguments = argumentsField.get(rootNode);
+
+            if (children instanceof java.util.Map<?, ?> map) {
+                ((java.util.Map<?, ?>) map).remove(rootLiteral);
+            }
+            if (literals instanceof java.util.Map<?, ?> map) {
+                ((java.util.Map<?, ?>) map).remove(rootLiteral);
+            }
+            if (arguments instanceof java.util.Map<?, ?> map) {
+                ((java.util.Map<?, ?>) map).remove(rootLiteral);
+            }
+        } catch (Throwable ignored) {
         }
     }
 

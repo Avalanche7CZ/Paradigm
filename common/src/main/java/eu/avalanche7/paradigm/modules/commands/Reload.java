@@ -32,8 +32,16 @@ public class Reload implements ParadigmModule {
 
         ICommandBuilder reload = platform.createCommandBuilder()
                 .literal("reload")
-                .requires(src -> src.hasPermissionLevel(2)
-                        || (src.getPlayer() != null && platform.hasPermission(src.getPlayer(), PermissionsHandler.RELOAD_PERMISSION)))
+                .requires(src -> {
+                    if (src == null) return false;
+                    if (src.isConsole()) return true;
+                    IPlayer player = src.getPlayer();
+                    return player != null && platform.hasPermission(
+                            player,
+                            PermissionsHandler.RELOAD_PERMISSION,
+                            PermissionsHandler.RELOAD_PERMISSION_LEVEL
+                    );
+                })
                 .then(platform.createCommandBuilder()
                         .argument("config", ICommandBuilder.ArgumentType.WORD)
                         .executes(ctx -> {

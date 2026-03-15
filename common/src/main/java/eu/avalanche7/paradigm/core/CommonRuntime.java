@@ -92,6 +92,7 @@ public final class CommonRuntime {
         modules.add(new Mentions());
         modules.add(new Restart());
         modules.add(new StaffChat());
+        modules.add(new PrivateMessages());
         modules.add(new GroupChat(groupChatManager));
         modules.add(new JoinLeaveMessages());
         modules.add(new CommandManager());

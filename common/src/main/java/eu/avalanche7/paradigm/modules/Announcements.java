@@ -102,25 +102,27 @@ public class Announcements implements ParadigmModule {
 
         ICommandBuilder cmd = platform.createCommandBuilder()
                 .literal("paradigm")
-                .requires(source -> source.hasPermissionLevel(PermissionsHandler.BROADCAST_PERMISSION_LEVEL)
-                        || (source.getPlayer() != null && platform.hasPermission(source.getPlayer(), PermissionsHandler.BROADCAST_PERMISSION)))
                 .then(platform.createCommandBuilder()
                         .literal("broadcast")
+                        .requires(this::hasBroadcastPermission)
                         .then(platform.createCommandBuilder()
                                 .argument("message", ICommandBuilder.ArgumentType.GREEDY_STRING)
                                 .executes(ctx -> broadcastMessageCmd(ctx, "broadcast"))))
                 .then(platform.createCommandBuilder()
                         .literal("actionbar")
+                        .requires(this::hasBroadcastPermission)
                         .then(platform.createCommandBuilder()
                                 .argument("message", ICommandBuilder.ArgumentType.GREEDY_STRING)
                                 .executes(ctx -> broadcastMessageCmd(ctx, "actionbar"))))
                 .then(platform.createCommandBuilder()
                         .literal("title")
+                        .requires(this::hasBroadcastPermission)
                         .then(platform.createCommandBuilder()
                                 .argument("titleAndSubtitle", ICommandBuilder.ArgumentType.GREEDY_STRING)
                                 .executes(this::broadcastTitleCmd)))
                 .then(platform.createCommandBuilder()
                         .literal("bossbar")
+                        .requires(this::hasBroadcastPermission)
                         .then(platform.createCommandBuilder()
                                 .argument("interval", ICommandBuilder.ArgumentType.INTEGER)
                                 .then(platform.createCommandBuilder()
@@ -131,6 +133,18 @@ public class Announcements implements ParadigmModule {
                                                 .executes(ctx -> broadcastMessageCmd(ctx, "bossbar"))))));
 
         platform.registerCommand(cmd);
+    }
+
+    private boolean hasBroadcastPermission(ICommandSource source) {
+        if (source == null) return false;
+        if (source.isConsole()) return true;
+
+        IPlayer player = source.getPlayer();
+        return player != null && platform.hasPermission(
+                player,
+                PermissionsHandler.BROADCAST_PERMISSION,
+                PermissionsHandler.BROADCAST_PERMISSION_LEVEL
+        );
     }
 
     @Override

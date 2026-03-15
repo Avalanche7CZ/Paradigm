@@ -74,6 +74,18 @@ public class ChatConfigHandler extends BaseConfigHandler<ChatConfigHandler.Confi
                 true,
                 "Shows a boss bar at the top of the screen when a staff member has staff chat toggled on."
         );
+        public ConfigEntry<Boolean> enablePrivateMessages = new ConfigEntry<>(
+                true,
+                "Enables or disables private messages via /msg and /reply."
+        );
+        public ConfigEntry<String> privateMessageToFormat = new ConfigEntry<>(
+                "&d[To %s] &f%s",
+                "Format for private message feedback to the sender. First %s is target player name, second %s is the message."
+        );
+        public ConfigEntry<String> privateMessageFromFormat = new ConfigEntry<>(
+                "&d[From %s] &f%s",
+                "Format for private message received by target. First %s is sender player name, second %s is the message."
+        );
         public ConfigEntry<Boolean> enableGroupChat = new ConfigEntry<>(
                 true,
                 "Enables or disables the Group Chat feature and its commands."

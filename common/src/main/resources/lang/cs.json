@@ -75,5 +75,13 @@
     "no_permission_everyone": "Nemáte oprávnění zmiňovat všechny.",
     "too_frequent_mention_player": "Příliš často zmiňujete hráče. Počkejte chvíli.",
     "no_permission_player": "Nemáte oprávnění zmiňovat hráče."
+  },
+
+  "pm": {
+    "player_not_found": "Tento hráč není online.",
+    "cannot_message_self": "Nemůžeš poslat zprávu sám sobě.",
+    "empty_message": "Zpráva nemůže být prázdná.",
+    "no_reply_target": "Nemáš komu odpovědět.",
+    "reply_target_offline": "Poslední hráč z konverzace už není online."
   }
 }

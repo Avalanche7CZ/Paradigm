@@ -554,7 +554,61 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             @SuppressWarnings("unchecked")
             com.mojang.brigadier.builder.LiteralArgumentBuilder<ServerCommandSource> literalBuilder =
                     (com.mojang.brigadier.builder.LiteralArgumentBuilder<ServerCommandSource>) lit;
+            String rootLiteral = null;
+            try {
+                rootLiteral = literalBuilder.getLiteral();
+            } catch (Throwable ignored) {
+            }
+            if (shouldOverrideRootLiteral(rootLiteral)) {
+                unregisterRootLiteral(dispatcher, rootLiteral);
+            }
             dispatcher.register(literalBuilder);
+        }
+    }
+
+    private boolean shouldOverrideRootLiteral(String rootLiteral) {
+        if (rootLiteral == null || rootLiteral.isBlank()) {
+            return false;
+        }
+        String root = rootLiteral.toLowerCase(java.util.Locale.ROOT);
+        return root.equals("msg")
+                || root.equals("tell")
+                || root.equals("w")
+                || root.equals("whisper")
+                || root.equals("reply")
+                || root.equals("r");
+    }
+
+    private void unregisterRootLiteral(CommandDispatcher<ServerCommandSource> dispatcher, String rootLiteral) {
+        if (dispatcher == null || rootLiteral == null || rootLiteral.isBlank()) {
+            return;
+        }
+        try {
+            Object rootNode = dispatcher.getRoot();
+            Class<?> nodeClass = com.mojang.brigadier.tree.CommandNode.class;
+
+            java.lang.reflect.Field childrenField = nodeClass.getDeclaredField("children");
+            java.lang.reflect.Field literalsField = nodeClass.getDeclaredField("literals");
+            java.lang.reflect.Field argumentsField = nodeClass.getDeclaredField("arguments");
+
+            childrenField.setAccessible(true);
+            literalsField.setAccessible(true);
+            argumentsField.setAccessible(true);
+
+            Object children = childrenField.get(rootNode);
+            Object literals = literalsField.get(rootNode);
+            Object arguments = argumentsField.get(rootNode);
+
+            if (children instanceof java.util.Map<?, ?> map) {
+                ((java.util.Map<?, ?>) map).remove(rootLiteral);
+            }
+            if (literals instanceof java.util.Map<?, ?> map) {
+                ((java.util.Map<?, ?>) map).remove(rootLiteral);
+            }
+            if (arguments instanceof java.util.Map<?, ?> map) {
+                ((java.util.Map<?, ?>) map).remove(rootLiteral);
+            }
+        } catch (Throwable ignored) {
         }
     }
 

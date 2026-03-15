@@ -27,11 +27,18 @@ public class PermissionsHandler {
     public static final String BROADCAST_PERMISSION = "paradigm.broadcast";
     public static final String GROUPCHAT_PERMISSION = "paradigm.groupchat";
     public static final String RELOAD_PERMISSION = "paradigm.reload";
+    public static final String EDITOR_PERMISSION = "paradigm.editor";
+    public static final String PRIVATE_MESSAGE_PERMISSION = "paradigm.msg";
+    public static final String PRIVATE_REPLY_PERMISSION = "paradigm.reply";
 
     public static final int MENTION_EVERYONE_PERMISSION_LEVEL = 2;
     public static final int MENTION_PLAYER_PERMISSION_LEVEL = 0;
     public static final int BROADCAST_PERMISSION_LEVEL = 2;
     public static final int RESTART_MANAGE_PERMISSION_LEVEL = 2;
+    public static final int RELOAD_PERMISSION_LEVEL = 2;
+    public static final int EDITOR_PERMISSION_LEVEL = 2;
+    public static final int PRIVATE_MESSAGE_PERMISSION_LEVEL = 0;
+    public static final int PRIVATE_REPLY_PERMISSION_LEVEL = 0;
 
     public PermissionsHandler(Logger logger, CMConfig cmConfig, DebugLogger debugLogger, IPlatformAdapter platform) {
         this.logger = logger;
@@ -276,7 +283,10 @@ public class PermissionsHandler {
 
         if (permission.equals(STAFF_CHAT_PERMISSION)) return 2;
         if (permission.equals(GROUPCHAT_PERMISSION)) return 2;
-        if (permission.equals(RELOAD_PERMISSION)) return 2;
+        if (permission.equals(RELOAD_PERMISSION)) return RELOAD_PERMISSION_LEVEL;
+        if (permission.equals(EDITOR_PERMISSION)) return EDITOR_PERMISSION_LEVEL;
+        if (permission.equals(PRIVATE_MESSAGE_PERMISSION)) return PRIVATE_MESSAGE_PERMISSION_LEVEL;
+        if (permission.equals(PRIVATE_REPLY_PERMISSION)) return PRIVATE_REPLY_PERMISSION_LEVEL;
 
         return 0;
     }
@@ -291,6 +301,9 @@ public class PermissionsHandler {
         nodes.put(BROADCAST_PERMISSION, "Allows using /paradigm broadcast, actionbar, title, and bossbar commands.");
         nodes.put(GROUPCHAT_PERMISSION, "Allows using /groupchat commands (create, invite, join, etc.).");
         nodes.put(RELOAD_PERMISSION, "Allows using /paradigm reload and /customcommandsreload commands.");
+        nodes.put(EDITOR_PERMISSION, "Allows using /paradigm editor and /paradigm apply.");
+        nodes.put(PRIVATE_MESSAGE_PERMISSION, "Allows sending private messages with /msg.");
+        nodes.put(PRIVATE_REPLY_PERMISSION, "Allows replying to private messages with /reply.");
 
         if (cmConfig != null && cmConfig.getLoadedCommands() != null) {
             for (CustomCommand cmd : cmConfig.getLoadedCommands()) {
