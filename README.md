@@ -1,7 +1,7 @@
 # Paradigm
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L4Z8L38)
 
-**Paradigm** is a modular server administration and communication tool for Minecraft, designed to give you powerful control over server messaging, player interactions, and automation. Whether you need scheduled announcements, dynamic MOTD, staff coordination channels, or custom commands, Paradigm provides a complete suite of features to enhance your server's functionality and keep your community engaged.
+**Paradigm** is a modular server administration and communication tool for Minecraft, designed to give you powerful control over server messaging, player interactions, and automation. Whether you need scheduled announcements, dynamic MOTD, staff coordination channels, private messages, or custom commands, Paradigm provides a complete suite of features to enhance your server's functionality and keep your community engaged.
 
 **Current Version:** `Whatever the latest version is` | **Author:** Avalanche7CZ | **License:** CC-BY-NC-ND-4.0
 
@@ -16,6 +16,7 @@
 * **Server Status Broadcasts:** Announce server events and status changes automatically
 
 ### Communication & Chat Features
+* **Private Messages:** Direct player-to-player messaging with `/msg` plus aliases `/tell`, `/w`, `/whisper`, and quick reply via `/reply` or `/r`
 * **Mentions System:** Players can ping each other with `@PlayerName` syntax with configurable cooldowns and permissions
 * **Group Chat:** Create and manage private chat groups for teams, friends, or special discussions
 * **Staff Chat:** Dedicated private channel for server administrators with optional boss bar indicator when enabled
@@ -114,14 +115,22 @@ config/Paradigm/
 ├── config.json               # Main settings and module toggles
 ├── announcements.json        # Automated announcement scheduling
 ├── motd.json                 # Message of the Day configuration
-├── mentions.json             # Mention system settings
+├── mention.json              # Mention system settings
 ├── restart.json              # Server restart scheduler
-├── chat.json                 # Group chat and staff chat settings
+├── chat.json                 # Group chat, staff chat, and private message settings
 └── cooldown.json             # Cooldown configurations
 ```
 
 ### Using the Web Editor
 Paradigm includes a web-based configuration editor for convenient live editing without server restarts. Access the web interface and make real-time changes to your configuration files.
+
+### Multiplayer Server List (Custom MOTD/Icon)
+Paradigm supports custom MOTD and server icon directly in the multiplayer server list (the server browser screen).
+
+- Configure this in `motd.json`
+- You can use formatted text and random MOTD rotation
+- You can set a custom 64x64 server icon and rotate icons together with MOTD profiles
+- This affects how your server appears before players join (in the multiplayer list)
 
 ---
 ## Commands Reference
@@ -132,6 +141,21 @@ Paradigm includes a web-based configuration editor for convenient live editing w
 - `/paradigm help <module>` - Show help for a specific module
 - `/paradigm reload <config>` - Reload specific config (main, announcements, chat, motd, mention, restart, customcommands, all)
 - `/paradigm editor` - Access web configuration editor
+- `/paradigm apply <code>` - Apply web editor changes from code
+
+### Broadcast Commands
+- `/paradigm broadcast <message>` - Send chat broadcast
+- `/paradigm actionbar <message>` - Send actionbar message
+- `/paradigm title <title || subtitle>` - Send title/subtitle message
+- `/paradigm bossbar <interval> <color> <message>` - Send bossbar message
+
+### Private Messages
+- `/msg <player> <message>` - Send a private message
+- `/tell <player> <message>` - Alias for `/msg`
+- `/w <player> <message>` - Alias for `/msg`
+- `/whisper <player> <message>` - Alias for `/msg`
+- `/reply <message>` - Reply to your last PM conversation
+- `/r <message>` - Alias for `/reply`
 
 ### Restart Management
 - `/restart now` - Schedule an immediate server restart
@@ -153,7 +177,6 @@ Paradigm includes a web-based configuration editor for convenient live editing w
 - `/paradigm editor trust` - Trust a player for web editor access
 - `/paradigm editor untrust` - Remove web editor trust
 - `/paradigm editor trusted` - List trusted players
-- `/paradigm editor apply` - Apply web editor configuration changes
 
 ---
 ## Permissions
@@ -163,13 +186,13 @@ Paradigm uses LuckPerms for permission management. Common permission nodes:
 ```
 paradigm.mention.everyone     # Use @everyone in Mentions
 paradigm.mention.player       # Mention individual players
+paradigm.msg                  # Send private messages (/msg, /tell, /w, /whisper)
+paradigm.reply                # Reply to private messages (/reply, /r)
 paradigm.staff                # Access staff chat (/sc)
 paradigm.restart.manage       # Manage server restarts
-paradigm.broadcast            # Send broadcast messages
-paradigm.actionbar            # Send actionbar messages
-paradigm.title                # Send title messages
-paradigm.bossbar              # Send bossbar messages
+paradigm.broadcast            # Access /paradigm broadcast, actionbar, title, bossbar
 paradigm.reload               # Reload configurations
+paradigm.editor               # Access /paradigm editor and /paradigm apply
 paradigm.groupchat            # Use group chat commands
 ```
 
