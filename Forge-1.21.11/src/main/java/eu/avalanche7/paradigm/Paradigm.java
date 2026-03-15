@@ -160,6 +160,11 @@ public class Paradigm {
         if (telemetryReporter == null) telemetryReporter = new TelemetryReporter(services);
         telemetryReporter.start();
 
+        try {
+            services.getPermissionsHandler().registerLuckPermsPermissions();
+        } catch (Throwable ignored) {
+        }
+
         paradigm$applyServerListMotd(event.getServer());
 
         modules.forEach(module -> {

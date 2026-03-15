@@ -156,6 +156,11 @@ public class Paradigm {
         if (telemetryReporter == null) telemetryReporter = new TelemetryReporter(services);
         telemetryReporter.start();
 
+        try {
+            services.getPermissionsHandler().registerLuckPermsPermissions();
+        } catch (Throwable ignored) {
+        }
+
         modules.forEach(module -> {
             if (module.isEnabled(services)) {
                 module.onServerStarting(event, services);

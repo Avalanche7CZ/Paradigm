@@ -2,9 +2,11 @@ plugins {
     id 'java-library'
 }
 
-// Common module is now a plain Java library (no Loom/mappings).
-// This avoids Yarn bytecode being mixed into the Forge jar.
-version = rootProject.version
+def rawCommonVersion = (rootProject.findProperty('mod_version') ?: '0.0.0-dev').toString()
+def commonSemver = rawCommonVersion ==~ /\d+\.\d+\.\d+[A-Za-z].*/
+        ? rawCommonVersion.replaceFirst(/(\d+\.\d+\.\d+)([A-Za-z].*)/, '$1-$2')
+        : rawCommonVersion
+version = commonSemver
 group = 'eu.avalanche7'
 
 repositories {
@@ -12,11 +14,8 @@ repositories {
 }
 
 dependencies {
-    // Pure Java dependencies only (no Minecraft, no Fabric, no mappings)
-    // Gson for JSON handling (provided by Minecraft at runtime)
     compileOnly 'com.google.code.gson:gson:2.10.1'
 
-    // SLF4J API (provided by Minecraft at runtime)
     compileOnly 'org.slf4j:slf4j-api:2.0.9'
 
     // LuckPerms API

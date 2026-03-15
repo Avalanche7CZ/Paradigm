@@ -19,3 +19,10 @@ ForgeAnnoucements-1.0.0/plugin.yml
 
 /Legacy_code
 /release-jars
+
+# Local release secrets
+*.env
+*.local.env
+scripts/release-secrets.local.env
+
+/scripts

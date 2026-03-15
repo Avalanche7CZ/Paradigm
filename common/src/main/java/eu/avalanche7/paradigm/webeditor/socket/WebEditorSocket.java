@@ -51,6 +51,7 @@ import java.util.concurrent.TimeUnit;
 public class WebEditorSocket {
 
     private static final Gson GSON = new Gson();
+    private static final long APPLY_DEDUP_WINDOW_MS = 2500L;
 
     private final Services services;
     private final ICommandSource owner;
@@ -63,6 +64,9 @@ public class WebEditorSocket {
     private final CompletableFuture<Void> connectFuture = new CompletableFuture<>();
     private ScheduledFuture<?> keepaliveTask;
     private final Map<String, PublicKey> attemptedConnections = new ConcurrentHashMap<>();
+    private final Map<String, Long> recentApplyCodes = new ConcurrentHashMap<>();
+    private final Object inboundTextLock = new Object();
+    private final StringBuilder inboundTextBuffer = new StringBuilder(512);
 
     public WebEditorSocket(Services services, ICommandSource owner) {
         this.services = Objects.requireNonNull(services, "services");
@@ -212,6 +216,25 @@ public class WebEditorSocket {
         JsonElement el = obj.get(key);
         if (el == null || el.isJsonNull()) return null;
         try { return el.getAsString(); } catch (Throwable ignored) { return null; }
+    }
+
+    private boolean shouldProcessApplyCode(String code) {
+        if (code == null || code.isEmpty()) return false;
+
+        long now = System.currentTimeMillis();
+        Long previous = this.recentApplyCodes.get(code);
+        if (previous != null && now - previous < APPLY_DEDUP_WINDOW_MS) {
+            return false;
+        }
+
+        this.recentApplyCodes.put(code, now);
+
+        if (this.recentApplyCodes.size() > 128) {
+            long cutoff = now - (APPLY_DEDUP_WINDOW_MS * 4L);
+            this.recentApplyCodes.entrySet().removeIf(e -> e.getValue() < cutoff);
+        }
+
+        return true;
     }
 
     private void runOnServerThread(Runnable task) {
@@ -466,6 +489,24 @@ public class WebEditorSocket {
                 case CHANGE_REQUEST: {
                     String code = safeGetAsString(msg, "code");
                     if (code == null || code.isEmpty()) throw new IllegalArgumentException("Invalid code");
+
+                    if (!shouldProcessApplyCode(code)) {
+                        JsonObject duplicateMsg = new JsonObject();
+                        duplicateMsg.addProperty("type", SocketMessageType.CHANGE_RESPONSE.id);
+                        duplicateMsg.addProperty("state", "unchanged");
+                        duplicateMsg.addProperty("appliedCount", 0);
+                        duplicateMsg.addProperty("unchangedCount", 0);
+                        duplicateMsg.addProperty("message", "Duplicate change request ignored.");
+                        send(duplicateMsg);
+                        if (debugEnabled()) {
+                            try {
+                                services.getLogger().debug("Paradigm WebEditor: Duplicate CHANGE_REQUEST ignored, channel={}, code={}", getChannelId(), code);
+                            } catch (Throwable ignored) {
+                            }
+                        }
+                        break;
+                    }
+
                     services.getTaskScheduler().schedule(() -> {
                         try {
                             JsonObject changeAccepted = new JsonObject();
@@ -538,8 +579,19 @@ public class WebEditorSocket {
         public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
             try { parent.services.getLogger().info("Paradigm WebEditor: onText received, channel={}, bytes={}", parent.getChannelId(), data == null ? 0 : data.length()); } catch (Throwable ignored) {}
             try {
-                String s = data == null ? "" : data.toString();
-                this.parent.handleMessageFrame(s);
+                String chunk = data == null ? "" : data.toString();
+                String assembled = null;
+                synchronized (this.parent.inboundTextLock) {
+                    this.parent.inboundTextBuffer.append(chunk);
+                    if (last) {
+                        assembled = this.parent.inboundTextBuffer.toString();
+                        this.parent.inboundTextBuffer.setLength(0);
+                    }
+                }
+
+                if (assembled != null && !assembled.isEmpty()) {
+                    this.parent.handleMessageFrame(assembled);
+                }
             } catch (Exception e) {
                 try { parent.services.getLogger().warn("Paradigm WebEditor: Error handling socket frame", e); } catch (Throwable ignored) {}
             } finally {

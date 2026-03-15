@@ -13,6 +13,9 @@ import java.util.*;
 
 public class Help implements ParadigmModule {
     private static final String NAME = "Help";
+    private static final String SEP = "<gradient:#334155:#64748B>&m----------------------------------------</gradient>";
+
+    private record HelpEntry(String summary, String usage, String configHint) {}
 
     @Override public String getName() { return NAME; }
     @Override public boolean isEnabled(Services services) { return true; }
@@ -26,7 +29,7 @@ public class Help implements ParadigmModule {
     @Override
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         IPlatformAdapter platform = services.getPlatformAdapter();
-        Map<String, String> moduleHelps = buildModuleHelpMap();
+        Map<String, HelpEntry> moduleHelps = buildModuleHelpMap();
 
         List<String> baseSuggestions = new ArrayList<>();
         try {
@@ -101,17 +104,53 @@ public class Help implements ParadigmModule {
         platform.registerCommand(cmd);
     }
 
-    private Map<String, String> buildModuleHelpMap() {
-        Map<String, String> m = new LinkedHashMap<>();
-        m.put("GroupChat", "GroupChat lets players create private groups with their own chat channel. Commands: /groupchat create <name>, invite <player>, join <name>, say <msg>, toggle, leave, list, info [name], request <name>, accept <group>, deny <group>. Use invites or requests to manage membership.");
-        m.put("StaffChat", "StaffChat provides a private channel for staff members. Use /sc toggle to switch, or /sc <message> to send one-off staff messages.");
-        m.put("Mentions", "Mentions adds @player and @everyone highlighting. Configure cooldowns & permissions in mention config. Command: /mention <message> (if enabled).");
-        m.put("Announcements", "Scheduled or manual broadcasts to chat, action bar, title, or boss bar. Commands: /paradigm broadcast|actionbar|title|bossbar <text> (requires permission). Schedules defined in announcements config.");
-        m.put("MOTD", "Displays a configurable Message Of The Day when players join. Manage content in motd config. No direct commands.");
-        m.put("Restart", "Handles timed restarts with warning countdowns. Commands: /restart now, /restart cancel. Times configured in restart config.");
-        m.put("CustomCommands", "Create simple scripted commands via configuration. Reload with /paradigm reload customcommands.");
-        m.put("Reload", "Reload specific configuration segments. Command: /paradigm reload <main|announcements|chat|motd|mention|restart|customcommands|all>.");
-        m.put("Help", "Shows this interactive help system. Command: /paradigm help [module|all|list|search <query>].");
+    private Map<String, HelpEntry> buildModuleHelpMap() {
+        Map<String, HelpEntry> m = new LinkedHashMap<>();
+        m.put("GroupChat", new HelpEntry(
+                "Private group channels with invites and join requests.",
+                "/groupchat create [name], invite [player], join [name], say [message]",
+                "groupchat.json"
+        ));
+        m.put("StaffChat", new HelpEntry(
+                "Private staff-only chat for moderation communication.",
+                "/sc toggle or /sc [message]",
+                "chat.json"
+        ));
+        m.put("Mentions", new HelpEntry(
+                "Highlights @player and @everyone with optional cooldowns.",
+                "/mention [message]",
+                "mention.json"
+        ));
+        m.put("Announcements", new HelpEntry(
+                "Scheduled broadcasts in chat, actionbar, title, and bossbar.",
+                "/paradigm broadcast|actionbar|title|bossbar [text]",
+                "announcements.json"
+        ));
+        m.put("MOTD", new HelpEntry(
+                "Shows a configurable MOTD when players join/server list refreshes.",
+                "No direct command (config driven).",
+                "motd.json"
+        ));
+        m.put("Restart", new HelpEntry(
+                "Timed restart system with countdown and notifications.",
+                "/restart now or /restart cancel",
+                "restart.json"
+        ));
+        m.put("CustomCommands", new HelpEntry(
+                "Create custom commands from config with cooldown support.",
+                "Reload changes via /paradigm reload customcommands",
+                "customcommands.json"
+        ));
+        m.put("Reload", new HelpEntry(
+                "Reload one config or all configs without full restart.",
+                "/paradigm reload [main|announcements|chat|motd|mention|restart|customcommands|all]",
+                "main config + module configs"
+        ));
+        m.put("Help", new HelpEntry(
+                "Interactive help with module list, details and search.",
+                "/paradigm help [module|all|list|search query]",
+                "N/A"
+        ));
         return m;
     }
 
@@ -119,7 +158,7 @@ public class Help implements ParadigmModule {
         MessageParser parser = services.getMessageParser();
         String version = ParadigmAPI.getModVersion();
 
-        IComponent sep = parser.parseMessage("<gradient:#334155:#64748B>&m----------------------------------------</gradient>", p);
+        IComponent sep = parser.parseMessage(SEP, p);
         platform.sendSystemMessage(p, sep);
 
         platform.sendSystemMessage(p, parser.parseMessage(
@@ -146,7 +185,7 @@ public class Help implements ParadigmModule {
         platform.sendSystemMessage(p, sep);
 
         IComponent hint = parser.parseMessage(
-                        "<color:#FBBF24>Tip:</color> <color:#F8FAFC>Type</color> <color:#FBBF24><bold>/paradigm help &lt;module&gt;</bold></color> <color:#F8FAFC>for details, or click a module above.</color>",
+                        "<color:#FBBF24>Tip:</color> <color:#F8FAFC>Type</color> <color:#FBBF24><bold>/paradigm help [module]</bold></color> <color:#F8FAFC>for details, or click a module above.</color>",
                         p)
                 .onClickSuggestCommand("/paradigm help ")
                 .onHoverText("Click to start typing a help command");
@@ -178,7 +217,6 @@ public class Help implements ParadigmModule {
             IComponent line = parser.parseMessage(raw, p);
 
             if (interactive) {
-                // Suggest command is nicer than run-command here.
                 line = line.onClickSuggestCommand("/paradigm help " + mod.getName())
                         .onHoverText("Click for help about " + mod.getName());
             }
@@ -186,64 +224,97 @@ public class Help implements ParadigmModule {
         }
     }
 
-    private void showModuleDetail(IPlayer p, IPlatformAdapter platform, Services services, String name, Map<String,String> moduleHelps) {
+    private void showModuleDetail(IPlayer p, IPlatformAdapter platform, Services services, String name, Map<String, HelpEntry> moduleHelps) {
         String key = moduleHelps.keySet().stream().filter(k -> k.equalsIgnoreCase(name)).findFirst().orElse(null);
+        MessageParser parser = services.getMessageParser();
         if (key == null) {
-            platform.sendSystemMessage(p, platform.createComponentFromLiteral("§cNo help available for " + name + ". Try checking the wiki or ask on Discord."));
+            platform.sendSystemMessage(p, parser.parseMessage("<color:#EF4444>No help available for</color> <color:#F8FAFC>" + name + "</color><color:#EF4444>.</color>", p));
             suggestClosest(p, platform, moduleHelps, name);
             return;
         }
+
+        HelpEntry entry = moduleHelps.get(key);
         boolean enabled = ParadigmAPI.getModules().stream()
                 .filter(m -> m.getName().equalsIgnoreCase(key))
                 .findFirst()
                 .map(m -> m.isEnabled(services))
                 .orElse(false);
-        MessageParser parser = services.getMessageParser();
-        platform.sendSystemMessage(p, parser.parseMessage("&b&l[ Paradigm Module Help ]", p));
-        platform.sendSystemMessage(p, parser.parseMessage("&b" + key + " Help", p));
-        for (String line : wrap(moduleHelps.get(key))) {
-            platform.sendSystemMessage(p, parser.parseMessage("&7" + line, p));
+
+        platform.sendSystemMessage(p, parser.parseMessage(SEP, p));
+        platform.sendSystemMessage(p, parser.parseMessage(
+                "<bold><gradient:#F472B6:#A78BFA>" + key + "</gradient></bold> <color:#94A3B8>module</color>",
+                p
+        ));
+
+        String status = enabled
+                ? "<color:#22C55E>Enabled</color>"
+                : "<color:#94A3B8>Disabled</color>";
+        platform.sendSystemMessage(p, parser.parseMessage("<color:#94A3B8>Status:</color> " + status, p));
+
+        for (String line : wrap(entry.summary())) {
+            platform.sendSystemMessage(p, parser.parseMessage("<color:#CBD5E1>" + line + "</color>", p));
         }
-        String status = enabled ? "&a✔ &7Module is enabled" : "&7✖ &8Module is disabled";
-        platform.sendSystemMessage(p, parser.parseMessage(status, p));
+
+        IComponent usage = parser.parseMessage(
+                        "<color:#94A3B8>Usage:</color> <color:#F8FAFC>" + entry.usage() + "</color>",
+                        p)
+                .onClickSuggestCommand(toCommandSuggestion(entry.usage(), key))
+                .onHoverText("Click to suggest this command");
+        platform.sendSystemMessage(p, usage);
+
+        platform.sendSystemMessage(p, parser.parseMessage(
+                "<color:#94A3B8>Config:</color> <color:#38BDF8>" + entry.configHint() + "</color>",
+                p
+        ));
+        platform.sendSystemMessage(p, parser.parseMessage(SEP, p));
     }
 
-    private void sendAllModuleDetails(IPlayer p, IPlatformAdapter platform, Services services, Map<String,String> moduleHelps) {
+    private void sendAllModuleDetails(IPlayer p, IPlatformAdapter platform, Services services, Map<String, HelpEntry> moduleHelps) {
         List<String> ordered = new ArrayList<>(moduleHelps.keySet());
         ordered.sort(String.CASE_INSENSITIVE_ORDER);
-        platform.sendSystemMessage(p, platform.createComponentFromLiteral("§d§lAll Module Details:"));
+        platform.sendSystemMessage(p, services.getMessageParser().parseMessage("<bold><gradient:#F472B6:#A78BFA>All Module Details</gradient></bold>", p));
         for (String k : ordered) showModuleDetail(p, platform, services, k, moduleHelps);
     }
 
-    private void sendSearchResults(IPlayer p, IPlatformAdapter platform, Services services, String query, Map<String,String> moduleHelps) {
+    private void sendSearchResults(IPlayer p, IPlatformAdapter platform, Services services, String query, Map<String, HelpEntry> moduleHelps) {
         if (query == null) query = "";
         query = query.trim();
         final String qLower = query.toLowerCase(Locale.ROOT);
+        MessageParser parser = services.getMessageParser();
 
         if (query.isEmpty()) {
-            platform.sendSystemMessage(p, platform.createComponentFromLiteral("§cSearch query cannot be empty."));
+            platform.sendSystemMessage(p, parser.parseMessage("<color:#EF4444>Search query cannot be empty.</color>", p));
             return;
         }
         List<String> matches = moduleHelps.keySet().stream()
-                .filter(k -> k.toLowerCase(Locale.ROOT).contains(qLower))
+                .filter(k -> {
+                    HelpEntry entry = moduleHelps.get(k);
+                    return k.toLowerCase(Locale.ROOT).contains(qLower)
+                            || (entry != null && (
+                            entry.summary().toLowerCase(Locale.ROOT).contains(qLower)
+                                    || entry.usage().toLowerCase(Locale.ROOT).contains(qLower)
+                    ));
+                })
                 .sorted(String.CASE_INSENSITIVE_ORDER)
                 .toList();
         if (matches.isEmpty()) {
-            platform.sendSystemMessage(p, platform.createComponentFromLiteral("§cNo modules matched: §f" + query));
+            platform.sendSystemMessage(p, parser.parseMessage("<color:#EF4444>No modules matched:</color> <color:#F8FAFC>" + query + "</color>", p));
             return;
         }
-        platform.sendSystemMessage(p, platform.createComponentFromLiteral("§dMatches (§f" + matches.size() + "§d):"));
+        platform.sendSystemMessage(p, parser.parseMessage("<bold><gradient:#F472B6:#A78BFA>Matches</gradient></bold> <color:#94A3B8>(" + matches.size() + ")</color>", p));
         for (String m : matches) {
             boolean enabled = ParadigmAPI.getModules().stream().anyMatch(pm -> pm.getName().equalsIgnoreCase(m) && pm.isEnabled(services));
-            String text = (enabled ? "§a" : "§7") + m;
-            IComponent line = platform.createComponentFromLiteral(text)
+            HelpEntry entry = moduleHelps.get(m);
+            String color = enabled ? "#22C55E" : "#94A3B8";
+            String text = "<color:" + color + ">" + m + "</color><color:#64748B> - " + (entry != null ? entry.summary() : "") + "</color>";
+            IComponent line = parser.parseMessage(text, p)
                     .onClickSuggestCommand("/paradigm help " + m)
                     .onHoverText("Click for detail");
             platform.sendSystemMessage(p, line);
         }
     }
 
-    private void suggestClosest(IPlayer p, IPlatformAdapter platform, Map<String,String> moduleHelps, String input) {
+    private void suggestClosest(IPlayer p, IPlatformAdapter platform, Map<String, HelpEntry> moduleHelps, String input) {
         String lower = (input == null ? "" : input).toLowerCase(Locale.ROOT);
         String best = null; int bestDist = Integer.MAX_VALUE;
         for (String k : moduleHelps.keySet()) {
@@ -251,7 +322,8 @@ public class Help implements ParadigmModule {
             if (d < bestDist) { bestDist = d; best = k; }
         }
         if (best != null) {
-            IComponent suggestion = platform.createComponentFromLiteral("§7Did you mean: §b" + best)
+            IComponent suggestion = platform.createComponentFromLiteral("Did you mean: " + best)
+                    .withColor("aqua")
                     .onClickSuggestCommand("/paradigm help " + best)
                     .onHoverText("Click to show help for " + best);
             platform.sendSystemMessage(p, suggestion);
@@ -289,5 +361,19 @@ public class Help implements ParadigmModule {
             }
         }
         return costs[b.length()];
+    }
+
+    private String toCommandSuggestion(String usage, String moduleName) {
+        if (usage == null || usage.isBlank()) return "/paradigm help " + moduleName;
+        if (!usage.startsWith("/")) return "/paradigm help " + moduleName;
+
+        int commaIdx = usage.indexOf(',');
+        int orIdx = usage.indexOf(" or ");
+        int endIdx;
+        if (commaIdx >= 0 && orIdx >= 0) endIdx = Math.min(commaIdx, orIdx);
+        else endIdx = Math.max(commaIdx, orIdx);
+
+        String first = endIdx > 0 ? usage.substring(0, endIdx) : usage;
+        return first.trim();
     }
 }

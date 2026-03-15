@@ -97,7 +97,7 @@ public class MainConfigHandler extends BaseConfigHandler<MainConfigHandler.Confi
                 "Enables anonymous telemetry (server count, online players). Sends only anonymized metrics."
         );
         public ConfigEntry<Integer> telemetryIntervalSeconds = new ConfigEntry<>(
-                900,
+                300,
                 "Telemetry ping interval in seconds."
         );
         public ConfigEntry<String> telemetryServerId = new ConfigEntry<>(

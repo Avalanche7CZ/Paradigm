@@ -19,6 +19,9 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.concurrent.TimeUnit;
 
 public final class UpdateChecker {
@@ -29,6 +32,7 @@ public final class UpdateChecker {
 
     private static volatile UpdateConfig lastConfig;
     private static volatile UpdateResult lastResult = new UpdateResult(false, null, null);
+    private static final Pattern NUMBERS_PATTERN = Pattern.compile("\\d+");
 
     public record UpdateConfig(
             String modrinthProjectId,
@@ -108,7 +112,6 @@ public final class UpdateChecker {
                 notifyPlayerAboutUpdate(services, player);
             }
         });
-        events.onPlayerLeave(evt -> notifyPlayerAboutUpdate(services, evt.getPlayer()));
         inGameNotifierRegistered = true;
     }
 
@@ -166,7 +169,7 @@ public final class UpdateChecker {
             String latest = reader.readLine();
             if (latest != null) {
                 latest = latest.trim();
-                if (!latest.isEmpty() && !latest.equals(currentVersion)) {
+                if (!latest.isEmpty() && isNewerVersion(latest, currentVersion, logger)) {
                     return new UpdateResult(true, latest, "github");
                 }
             }
@@ -225,7 +228,7 @@ public final class UpdateChecker {
                     }
                 }
 
-                if (newestCompatible != null && !newestCompatible.equals(currentVersion)) {
+                if (newestCompatible != null && isNewerVersion(newestCompatible, currentVersion, logger)) {
                     return new UpdateResult(true, newestCompatible, "modrinth");
                 }
             }
@@ -272,5 +275,103 @@ public final class UpdateChecker {
         if (a == null) return false;
         if (b == null) return true;
         return a.compareTo(b) > 0;
+    }
+
+    private static boolean isNewerVersion(String latest, String current, Logger logger) {
+        Integer comparison = compareVersions(latest, current);
+        if (comparison == null) {
+            logger.debug("Paradigm: Could not compare versions safely (latest='{}', current='{}'). Skipping update flag.", latest, current);
+            return false;
+        }
+        return comparison > 0;
+    }
+
+    private static Integer compareVersions(String a, String b) {
+        ParsedVersion left = parseVersion(a);
+        ParsedVersion right = parseVersion(b);
+        if (left == null || right == null) return null;
+
+        int maxParts = Math.max(left.numericParts.size(), right.numericParts.size());
+        for (int i = 0; i < maxParts; i++) {
+            int l = i < left.numericParts.size() ? left.numericParts.get(i) : 0;
+            int r = i < right.numericParts.size() ? right.numericParts.get(i) : 0;
+            if (l != r) return Integer.compare(l, r);
+        }
+
+        if (left.stabilityRank != right.stabilityRank) {
+            return Integer.compare(left.stabilityRank, right.stabilityRank);
+        }
+
+        if (left.qualifierNumber != right.qualifierNumber) {
+            return Integer.compare(left.qualifierNumber, right.qualifierNumber);
+        }
+
+        return left.qualifier.compareTo(right.qualifier);
+    }
+
+    private static ParsedVersion parseVersion(String raw) {
+        if (raw == null) return null;
+        String normalized = raw.trim().toLowerCase(Locale.ROOT);
+        if (normalized.isEmpty()) return null;
+        if (normalized.startsWith("v")) normalized = normalized.substring(1);
+
+        int buildMetadataIndex = normalized.indexOf('+');
+        if (buildMetadataIndex >= 0) {
+            normalized = normalized.substring(0, buildMetadataIndex);
+        }
+
+        String core = normalized;
+        String qualifier = "";
+        int firstQualifierChar = findFirstQualifierIndex(normalized);
+        if (firstQualifierChar >= 0) {
+            core = normalized.substring(0, firstQualifierChar);
+            qualifier = normalized.substring(firstQualifierChar).replaceAll("^[^a-z0-9]+", "");
+        }
+
+        Matcher matcher = NUMBERS_PATTERN.matcher(core);
+        List<Integer> numbers = new ArrayList<>();
+        while (matcher.find()) {
+            numbers.add(Integer.parseInt(matcher.group()));
+        }
+        if (numbers.isEmpty()) return null;
+
+        int qualifierNumber = 0;
+        if (!qualifier.isEmpty()) {
+            Matcher qualifierNumberMatcher = NUMBERS_PATTERN.matcher(qualifier);
+            if (qualifierNumberMatcher.find()) {
+                qualifierNumber = Integer.parseInt(qualifierNumberMatcher.group());
+            }
+        }
+
+        return new ParsedVersion(numbers, qualifier, stabilityRank(qualifier), qualifierNumber);
+    }
+
+    private static int findFirstQualifierIndex(String input) {
+        for (int i = 0; i < input.length(); i++) {
+            char c = input.charAt(i);
+            if ((c >= 'a' && c <= 'z') || c == '-') {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static int stabilityRank(String qualifier) {
+        if (qualifier == null || qualifier.isBlank()) return 4;
+
+        if (qualifier.startsWith("rc") || qualifier.contains("releasecandidate") || qualifier.contains("candidate")) return 3;
+        if (qualifier.startsWith("b") || qualifier.contains("beta")) return 2;
+        if (qualifier.startsWith("a") || qualifier.contains("alpha")) return 1;
+        if (qualifier.contains("snapshot") || qualifier.contains("dev") || qualifier.contains("pre")) return 0;
+
+        return 2;
+    }
+
+    private record ParsedVersion(
+            List<Integer> numericParts,
+            String qualifier,
+            int stabilityRank,
+            int qualifierNumber
+    ) {
     }
 }

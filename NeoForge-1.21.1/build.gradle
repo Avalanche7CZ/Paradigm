@@ -43,7 +43,7 @@ neoForge {
     runs {
         client {
             client()
-            systemProperty 'neoforge.enabledGameTestNamespaces', archivesBaseName
+            loadedMods = []
         }
 
         server {
@@ -162,6 +162,12 @@ tasks.register('prepareDevClient') {
 
     doLast {
         devClientDir.mkdirs()
+
+        // Ensure client dev run stays mod-free for this server-side module.
+        def modsDir = new File(devClientDir, 'mods')
+        if (modsDir.exists()) {
+            modsDir.listFiles()?.findAll { it.name.startsWith('Paradigm') && it.name.endsWith('.jar') }?.each { it.delete() }
+        }
 
         def optionsFile = new File(devClientDir, 'options.txt')
         def lines = optionsFile.exists() ? optionsFile.readLines('UTF-8') : []

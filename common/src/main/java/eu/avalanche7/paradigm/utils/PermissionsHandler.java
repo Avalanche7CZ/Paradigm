@@ -6,14 +6,19 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import org.slf4j.Logger;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class PermissionsHandler {
     private final Logger logger;
     private final CMConfig cmConfig;
     private final DebugLogger debugLogger;
     private final IPlatformAdapter platform;
+    private final Set<UUID> discoveryWarmedUsers = ConcurrentHashMap.newKeySet();
 
     public static final String MENTION_EVERYONE_PERMISSION = "paradigm.mention.everyone";
     public static final String MENTION_PLAYER_PERMISSION = "paradigm.mention.player";
@@ -36,7 +41,6 @@ public class PermissionsHandler {
     }
 
     public void initialize() {
-        // no-op: platform decides how permissions work
     }
 
     public void registerLuckPermsPermissions() {
@@ -69,16 +73,12 @@ public class PermissionsHandler {
             net.luckperms.api.LuckPerms api = net.luckperms.api.LuckPermsProvider.get();
             Map<String, String> allPermissions = knownPermissionNodes();
 
-            java.util.UUID dummyUuid = java.util.UUID.fromString("00000000-0000-0000-0000-000000000000");
-            net.luckperms.api.model.user.User dummyUser = api.getUserManager().loadUser(dummyUuid).join();
-
-            if (dummyUser != null) {
-                for (String permission : allPermissions.keySet()) {
-                    dummyUser.getCachedData().getPermissionData().checkPermission(permission);
-                    debugLogger.debugLog("Registered permission with LuckPerms: " + permission);
-                }
-                logger.info("Paradigm: Made {} permissions visible to LuckPerms.", allPermissions.size());
+            for (String permission : allPermissions.keySet()) {
+                debugLogger.debugLog("Discovered permission for LuckPerms integration: " + permission);
             }
+
+            warmupLuckPermsPermissionDiscovery(api, allPermissions);
+            logger.info("Paradigm: LuckPerms integration initialized with {} known permission nodes.", allPermissions.size());
         } catch (IllegalStateException e) {
             if (e.getMessage() != null && e.getMessage().contains("API isn't loaded")) {
                 debugLogger.debugLog("LuckPerms not ready yet, retrying in " + (attemptCount + 1) + " seconds... (attempt " + (attemptCount + 1) + "/5)");
@@ -91,15 +91,107 @@ public class PermissionsHandler {
         }
     }
 
+    private void warmupLuckPermsPermissionDiscovery(net.luckperms.api.LuckPerms api, Map<String, String> allPermissions) {
+        if (api == null || allPermissions == null || allPermissions.isEmpty()) return;
+
+        warmupLuckPermsGroups(api, allPermissions);
+
+        Set<UUID> warmedUsers = new HashSet<>();
+
+        for (net.luckperms.api.model.user.User user : api.getUserManager().getLoadedUsers()) {
+            if (user == null) continue;
+            warmedUsers.add(user.getUniqueId());
+            warmupUserPermissions(user, allPermissions);
+        }
+
+        if (platform == null || platform.getOnlinePlayers() == null) return;
+
+        for (IPlayer onlinePlayer : platform.getOnlinePlayers()) {
+            if (onlinePlayer == null || onlinePlayer.getUUID() == null) continue;
+
+            UUID uuid;
+            try {
+                uuid = UUID.fromString(onlinePlayer.getUUID());
+            } catch (Throwable ignored) {
+                continue;
+            }
+
+            if (warmedUsers.contains(uuid)) continue;
+
+            net.luckperms.api.model.user.User cachedUser = api.getUserManager().getUser(uuid);
+            if (cachedUser != null) {
+                warmupUserPermissions(cachedUser, allPermissions);
+                continue;
+            }
+
+            api.getUserManager().loadUser(uuid).thenAccept(user -> {
+                if (user != null) {
+                    warmupUserPermissions(user, allPermissions);
+                }
+            }).exceptionally(ex -> {
+                debugLogger.debugLog("LuckPerms user warm-up load failed for " + uuid + ": " + ex);
+                return null;
+            });
+        }
+    }
+
+    private void warmupLuckPermsGroups(net.luckperms.api.LuckPerms api, Map<String, String> allPermissions) {
+        if (api == null || allPermissions == null || allPermissions.isEmpty()) return;
+
+        for (net.luckperms.api.model.group.Group group : api.getGroupManager().getLoadedGroups()) {
+            warmupGroupPermissions(group, allPermissions);
+        }
+
+        api.getGroupManager().loadGroup("default").thenAccept(optionalGroup -> {
+            if (optionalGroup != null) {
+                optionalGroup.ifPresent(group -> warmupGroupPermissions(group, allPermissions));
+            }
+        }).exceptionally(ex -> {
+            debugLogger.debugLog("LuckPerms group warm-up load failed for default: " + ex);
+            return null;
+        });
+    }
+
+    private void warmupGroupPermissions(net.luckperms.api.model.group.Group group, Map<String, String> allPermissions) {
+        if (group == null || allPermissions == null || allPermissions.isEmpty()) return;
+
+        for (String permission : allPermissions.keySet()) {
+            try {
+                group.getCachedData().getPermissionData().checkPermission(permission);
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private void warmupUserPermissions(net.luckperms.api.model.user.User user, Map<String, String> allPermissions) {
+        if (user == null || allPermissions == null || allPermissions.isEmpty()) return;
+
+        for (String permission : allPermissions.keySet()) {
+            try {
+                user.getCachedData().getPermissionData().checkPermission(permission);
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private void warmupUserPermissionsOnce(net.luckperms.api.model.user.User user) {
+        if (user == null) return;
+        UUID uuid = user.getUniqueId();
+        if (uuid == null || !discoveryWarmedUsers.add(uuid)) return;
+        warmupUserPermissions(user, knownPermissionNodes());
+    }
+
     private void scheduleRetry(int attemptCount) {
-        new Thread(() -> {
+        Thread retryThread = new Thread(() -> {
             try {
                 Thread.sleep((attemptCount + 1) * 1000L);
                 registerPermissionsWithLuckPermsRetry(attemptCount + 1);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-        }).start();
+        }, "Paradigm-LuckPerms-Retry");
+        retryThread.setDaemon(true);
+        retryThread.start();
     }
 
     public void refreshCustomCommandPermissions() {
@@ -125,35 +217,53 @@ public class PermissionsHandler {
 
                 net.luckperms.api.model.user.User user = api.getUserManager().getUser(uuid);
                 if (user != null) {
+                    warmupUserPermissionsOnce(user);
                     boolean lpResult = user.getCachedData().getPermissionData().checkPermission(permission).asBoolean();
                     debugLogger.debugLog("[PermissionsHandler] LuckPerms check for '" + permission + "' -> " + lpResult);
                     return lpResult;
                 }
 
-                user = api.getUserManager().loadUser(uuid).join();
-                if (user != null) {
-                    boolean lpResult = user.getCachedData().getPermissionData().checkPermission(permission).asBoolean();
-                    debugLogger.debugLog("[PermissionsHandler] LuckPerms (loaded) check for '" + permission + "' -> " + lpResult);
-                    return lpResult;
-                }
+                debugLogger.debugLog("[PermissionsHandler] LuckPerms user not cached yet for player: " + player.getName() + ", falling back to vanilla level check.");
             } catch (Throwable t) {
-                debugLogger.debugLog("[PermissionsHandler] LuckPerms check failed: " + t.toString());
+                debugLogger.debugLog("[PermissionsHandler] LuckPerms check failed: " + t);
             }
         }
 
-        if (platform != null) {
-            int level = vanillaLevelFor(permission);
-            debugLogger.debugLog("[PermissionsHandler] Using vanilla fallback for '" + permission + "' with level=" + level);
-            try {
-                boolean vanillaResult = platform.hasPermission(player, permission, level);
-                debugLogger.debugLog("[PermissionsHandler] Vanilla check result: " + vanillaResult);
-                return vanillaResult;
-            } catch (Throwable t) {
-                debugLogger.debugLog("[PermissionsHandler] Vanilla check failed: " + t.toString());
-            }
+        int level = vanillaLevelFor(permission);
+        debugLogger.debugLog("[PermissionsHandler] Using vanilla fallback for '" + permission + "' with level=" + level);
+        try {
+            boolean vanillaResult = hasVanillaPermissionLevel(player, level);
+            debugLogger.debugLog("[PermissionsHandler] Vanilla check result: " + vanillaResult);
+            return vanillaResult;
+        } catch (Throwable t) {
+            debugLogger.debugLog("[PermissionsHandler] Vanilla check failed: " + t);
         }
 
         debugLogger.debugLog("[PermissionsHandler] All checks failed for '" + permission + "', returning false");
+        return false;
+    }
+
+    private static boolean hasVanillaPermissionLevel(IPlayer player, int level) {
+        if (player == null) return false;
+        Object original = player.getOriginalPlayer();
+        if (original == null) return false;
+
+        // Forge/NeoForge mapping style
+        try {
+            java.lang.reflect.Method m = original.getClass().getMethod("hasPermissions", int.class);
+            Object result = m.invoke(original, level);
+            if (result instanceof Boolean b) return b;
+        } catch (Throwable ignored) {
+        }
+
+        // Fabric/Yarn mapping style
+        try {
+            java.lang.reflect.Method m = original.getClass().getMethod("hasPermissionLevel", int.class);
+            Object result = m.invoke(original, level);
+            if (result instanceof Boolean b) return b;
+        } catch (Throwable ignored) {
+        }
+
         return false;
     }
 
