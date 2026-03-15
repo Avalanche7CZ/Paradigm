@@ -14,11 +14,8 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.network.packet.s2c.play.ClearTitleS2CPacket;
 import net.minecraft.network.packet.s2c.play.OverlayMessageS2CPacket;
-import net.minecraft.network.packet.s2c.play.PlaySoundS2CPacket;
 import net.minecraft.network.packet.s2c.play.SubtitleS2CPacket;
 import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.RegistryKeys;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -27,6 +24,8 @@ import net.minecraft.stat.Stats;
 import net.minecraft.text.*;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.registry.Registry;
+import net.minecraft.util.registry.RegistryKey;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
 
@@ -145,7 +144,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public ItemStack createItemStack(String itemId) {
-        Item item = Registries.ITEM.get(new Identifier("minecraft", itemId));
+        Item item = Registry.ITEM.get(new Identifier("minecraft", itemId));
         return item != Items.AIR ? new ItemStack(item) : new ItemStack(Items.STONE);
     }
 
@@ -167,7 +166,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         if (!(player instanceof MinecraftPlayer mp)) {
             return false;
         }
-
         if (permissionsHandler != null) {
             try {
                 if (permissionsHandler.hasPermission(player, permissionNode)) {
@@ -176,7 +174,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             } catch (Throwable ignored) {
             }
         }
-
         return mp.getHandle().hasPermissionLevel(vanillaLevel);
     }
 
@@ -361,7 +358,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         if (soundIdentifier == null) {
             soundIdentifier = new Identifier("minecraft", soundId);
         }
-        SoundEvent soundEvent = Registries.SOUND_EVENT.get(soundIdentifier);
+        SoundEvent soundEvent = Registry.SOUND_EVENT.get(soundIdentifier);
         if (soundEvent != null) {
             ServerPlayerEntity handle = mp.getHandle();
             net.minecraft.sound.SoundCategory cat;
@@ -370,12 +367,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             } catch (IllegalArgumentException e) {
                 cat = net.minecraft.sound.SoundCategory.MASTER;
             }
-            handle.networkHandler.sendPacket(new PlaySoundS2CPacket(
-                    Registries.SOUND_EVENT.getEntry(soundEvent),
-                    cat,
-                    handle.getX(), handle.getY(), handle.getZ(),
-                    volume, pitch, handle.getWorld().getRandom().nextLong()
-            ));
+            handle.playSound(soundEvent, cat, volume, pitch);
         }
     }
 
@@ -450,7 +442,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         if (orig instanceof ServerCommandSource scs && message != null) {
             Object nativeMsg = message.getOriginalText();
             if (nativeMsg instanceof Text t) {
-                scs.sendFeedback(() -> t, toOps);
+                scs.sendFeedback(t, toOps);
             }
         }
     }
@@ -481,7 +473,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         if (!(player instanceof MinecraftPlayer mp)) {
             return false;
         }
-        Item item = Registries.ITEM.get(new Identifier("minecraft", itemId));
+        Item item = Registry.ITEM.get(new Identifier("minecraft", itemId));
         if (item == Items.AIR) {
             debugLogger.debugLog("PlatformAdapter: Could not find item with ID: " + itemId);
             return false;
@@ -502,7 +494,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         String namespace = parts.length > 1 ? parts[0] : "minecraft";
         String path = parts.length > 1 ? parts[1] : worldId;
         Identifier worldIdentifier = new Identifier(namespace, path);
-        net.minecraft.registry.RegistryKey<World> targetWorldKey = net.minecraft.registry.RegistryKey.of(RegistryKeys.WORLD, worldIdentifier);
+        RegistryKey<World> targetWorldKey = RegistryKey.of(Registry.WORLD_KEY, worldIdentifier);
 
         if (!mp.getHandle().getWorld().getRegistryKey().equals(targetWorldKey)) {
             return false;

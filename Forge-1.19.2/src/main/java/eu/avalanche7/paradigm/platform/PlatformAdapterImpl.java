@@ -469,7 +469,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         return new ForgeCommandBuilder();
     }
 
-    // Not part of common IPlatformAdapter; called from RegisterCommandsEvent.
     public void setCommandDispatcher(Object dispatcher) {
         if (dispatcher instanceof CommandDispatcher<?> cd) {
             @SuppressWarnings("unchecked")

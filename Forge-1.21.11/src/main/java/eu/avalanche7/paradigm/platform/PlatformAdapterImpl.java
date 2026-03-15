@@ -633,13 +633,11 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         @SuppressWarnings("unchecked")
         LiteralArgumentBuilder<CommandSourceStack> literalBuilder = (LiteralArgumentBuilder<CommandSourceStack>) lit;
 
-        // Prefer dispatcher from RegisterCommandsEvent (available before server is set)
         if (commandDispatcher != null) {
             commandDispatcher.register(literalBuilder);
             return;
         }
 
-        // Fallback: if server is already available
         if (server != null) {
             server.getCommands().getDispatcher().register(literalBuilder);
         }

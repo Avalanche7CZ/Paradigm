@@ -1,4 +1,5 @@
 [
+  { "artifact": "Paradigm-fabric-1.19.2-__VERSION__.jar", "loader": "fabric", "minecraft": "1.19.2", "curseforge_tags": ["Server", "Java 17"] },
   { "artifact": "Paradigm-fabric-1.20.1-__VERSION__.jar", "loader": "fabric", "minecraft": "1.20.1", "curseforge_tags": ["Server", "Java 17"] },
   { "artifact": "Paradigm-fabric-1.21.1-__VERSION__.jar", "loader": "fabric", "minecraft": "1.21.1", "curseforge_tags": ["Server", "Java 21"] },
   { "artifact": "Paradigm-fabric-1.21.8-__VERSION__.jar", "loader": "fabric", "minecraft": "1.21.8", "curseforge_tags": ["Server", "Java 21", "Java 25"] },

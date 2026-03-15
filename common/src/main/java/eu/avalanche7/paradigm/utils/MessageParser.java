@@ -34,6 +34,15 @@ public class MessageParser {
         }
 
         IComponent parsed = parseTagBasedMessage(rawMessage, player);
+        if (parsed != null
+                && (parsed.getRawText() == null || parsed.getRawText().isBlank())
+                && !rawMessage.isBlank()) {
+            String fallback = platformAdapter.replacePlaceholders(rawMessage, player);
+            fallback = fallback.replace("&", "§");
+            fallback = fallback.replaceAll("<[^>]+>", "");
+            parsed = platformAdapter.createLiteralComponent(fallback);
+        }
+
         if (cacheable) {
             messageCache.put(cacheKey, parsed);
         }

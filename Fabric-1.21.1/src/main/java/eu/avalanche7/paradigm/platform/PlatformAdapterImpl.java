@@ -50,7 +50,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     private final eu.avalanche7.paradigm.platform.Interfaces.IConfig config;
     private final IEventSystem eventSystem;
 
-    // Fabric registers commands before SERVER_STARTING; keep dispatcher when available.
     private CommandDispatcher<ServerCommandSource> commandDispatcher;
 
     public PlatformAdapterImpl(
@@ -538,7 +537,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public void registerCommand(eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder builder) {
-        // Use dispatcher captured from CommandRegistrationCallback, or fallback to server if already set.
         CommandDispatcher<ServerCommandSource> dispatcher = this.commandDispatcher;
         if (dispatcher == null && this.server != null) {
             try {

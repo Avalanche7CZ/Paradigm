@@ -548,13 +548,11 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> literalBuilder =
             (com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack>) lit;
 
-        // Prefer dispatcher from RegisterCommandsEvent (available before server start)
         if (commandDispatcher != null) {
             commandDispatcher.register(literalBuilder);
             return;
         }
 
-        // Fallback: if server is already available
         if (server != null) {
             server.getCommands().getDispatcher().register(literalBuilder);
         }
