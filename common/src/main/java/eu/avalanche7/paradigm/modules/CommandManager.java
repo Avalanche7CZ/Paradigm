@@ -46,7 +46,7 @@ public class CommandManager implements ParadigmModule {
         ICommandBuilder reload = platform.createCommandBuilder()
                 .literal("customcommandsreload")
                 .requires(src -> src.hasPermissionLevel(2)
-                        || (src.getPlayer() != null && platform.hasPermission(src.getPlayer(), eu.avalanche7.paradigm.utils.PermissionsHandler.RELOAD_PERMISSION)))
+                        || (src.getPlayer() != null && services.getPermissionsHandler().hasPermission(src.getPlayer(), eu.avalanche7.paradigm.utils.PermissionsHandler.RELOAD_PERMISSION)))
                 .executes(ctx -> {
                     services.getCmConfig().reloadCommands();
                     services.getPermissionsHandler().refreshCustomCommandPermissions();
@@ -193,7 +193,7 @@ public class CommandManager implements ParadigmModule {
         IPlayer player = source != null ? source.getPlayer() : null;
 
         if (command.isRequirePermission()) {
-            if (player != null && !platform.hasPermission(player, command.getPermission())) {
+            if (player != null && !services.getPermissionsHandler().hasPermission(player, command.getPermission())) {
                 platform.sendFailure(source, services.getMessageParser().parseMessage(command.getPermissionErrorMessage(), player));
                 return;
             }
@@ -349,7 +349,7 @@ public class CommandManager implements ParadigmModule {
 
         switch (condition.getType()) {
             case "has_permission" -> result = (player != null && condition.getValue() != null)
-                    && platform.hasPermission(player, condition.getValue());
+                    && services.getPermissionsHandler().hasPermission(player, condition.getValue());
             case "has_item" -> result = (player != null && condition.getValue() != null)
                     && platform.playerHasItem(player, condition.getValue(), condition.getItemAmount());
             case "health_above" -> {
@@ -387,7 +387,7 @@ public class CommandManager implements ParadigmModule {
                 try {
                     if (condition.getValue() != null) level = Integer.parseInt(condition.getValue());
                 } catch (NumberFormatException ignored) {}
-                result = player != null && platform.hasPermission(player, "minecraft.command.op", level);
+                result = player != null && services.getPermissionsHandler().hasPermission(player, "minecraft.command.op", level);
             }
             default -> {
                 platform.sendFailure(source,

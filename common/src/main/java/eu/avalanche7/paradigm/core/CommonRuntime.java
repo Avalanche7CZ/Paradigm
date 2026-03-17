@@ -2,6 +2,7 @@ package eu.avalanche7.paradigm.core;
 
 import eu.avalanche7.paradigm.ParadigmAPI;
 import eu.avalanche7.paradigm.configs.*;
+import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.modules.*;
 import eu.avalanche7.paradigm.modules.chat.*;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
@@ -48,6 +49,7 @@ public final class CommonRuntime {
 
         Placeholders placeholders = new Placeholders();
         TaskScheduler taskScheduler = new TaskScheduler(debugLogger);
+        PlayerDataStore playerDataStore = new PlayerDataStore(logger, debugLogger, platformAdapter.getConfig());
 
         PermissionsHandler permissionsHandler = new PermissionsHandler(logger, cmConfig, debugLogger, platformAdapter);
 
@@ -75,6 +77,7 @@ public final class CommonRuntime {
                 permissionsHandler,
                 placeholders,
                 taskScheduler,
+                playerDataStore,
                 platformAdapter,
                 new WebEditorStore()
         );
@@ -96,6 +99,9 @@ public final class CommonRuntime {
         modules.add(new GroupChat(groupChatManager));
         modules.add(new JoinLeaveMessages());
         modules.add(new CommandManager());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.HomeCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.TpaCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.WarpCommand());
         modules.add(new eu.avalanche7.paradigm.modules.commands.Reload());
         modules.add(new eu.avalanche7.paradigm.modules.commands.editor());
 

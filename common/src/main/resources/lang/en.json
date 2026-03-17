@@ -86,5 +86,52 @@
     "empty_message": "Message cannot be empty.",
     "no_reply_target": "No recent conversation to reply to.",
     "reply_target_offline": "Your last conversation partner is no longer online."
+  },
+
+  "home": {
+    "location_unavailable": "Unable to read your location right now.",
+    "sethome_success": "Home {home} has been set.",
+    "home_not_found": "Home {home} was not found.",
+    "teleported": "Teleported to home {home}.",
+    "delhome_success": "Home {home} has been deleted.",
+    "delhome_missing": "Home {home} does not exist.",
+    "homes_header": "Homes ({count}):",
+    "homes_empty": "You do not have any homes yet.",
+    "homes_list": "Your homes: {homes}",
+    "back_missing": "No previous location saved for /back.",
+    "back_teleported": "Teleported back to your previous location.",
+    "teleport_failed": "Teleport failed."
+  },
+
+  "tpa": {
+    "player_not_found": "That player is not online.",
+    "cannot_target_self": "You cannot target yourself.",
+    "request_failed": "Could not create teleport request.",
+    "request_sent_tpa": "Teleport request sent to {player}.",
+    "request_sent_tpahere": "Teleport-here request sent to {player}.",
+    "request_received_tpa": "{player} wants to teleport to you. Use /tpaccept or /tpdeny.",
+    "request_received_tpahere": "{player} wants you to teleport to them. Use /tpaccept or /tpdeny.",
+    "no_pending_request": "You have no pending teleport requests.",
+    "requester_offline": "That request is no longer valid because requester is offline.",
+    "accepted_you": "Accepted request from {player}.",
+    "accepted_sender": "{player} accepted your teleport request.",
+    "denied_you": "Denied request from {player}.",
+    "denied_sender": "{player} denied your teleport request.",
+    "no_outgoing_request": "You have no outgoing teleport request.",
+    "cancelled_you": "Cancelled request to {player}.",
+    "cancelled_target": "{player} cancelled their teleport request."
+  },
+
+  "warp": {
+    "invalid_name": "Invalid warp name.",
+    "location_unavailable": "Unable to read your location right now.",
+    "set_success": "Warp {warp} has been set.",
+    "not_found": "Warp {warp} was not found.",
+    "no_permission": "You do not have permission to use warp {warp}.",
+    "teleport_failed": "Teleport failed.",
+    "teleported": "Teleported to warp {warp}.",
+    "delete_success": "Warp {warp} has been deleted.",
+    "list_empty": "No warps are set.",
+    "list_header": "Warps ({count}):"
   }
 }

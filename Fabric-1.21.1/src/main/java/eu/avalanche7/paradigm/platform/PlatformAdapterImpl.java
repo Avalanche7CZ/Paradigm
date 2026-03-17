@@ -2,6 +2,7 @@ package eu.avalanche7.paradigm.platform;
 
 import com.mojang.brigadier.CommandDispatcher;
 import eu.avalanche7.paradigm.data.CustomCommand;
+import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
@@ -31,10 +32,12 @@ import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
 
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 public class PlatformAdapterImpl implements IPlatformAdapter {
@@ -657,6 +660,119 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         if (player instanceof MinecraftPlayer mp) {
             mp.getHandle().requestTeleport(x, y, z);
         }
+    }
+
+    @Override
+    public boolean teleportPlayer(IPlayer player, PlayerDataStore.StoredLocation location) {
+        if (!(player instanceof MinecraftPlayer mp) || location == null || location.getWorldId() == null || location.getWorldId().isBlank()) {
+            return false;
+        }
+
+        ServerPlayerEntity handle = mp.getHandle();
+        MinecraftServer minecraftServer = handle.getServer();
+        Identifier worldId = Identifier.tryParse(location.getWorldId());
+        if (minecraftServer == null || worldId == null) {
+            return false;
+        }
+
+        var targetWorld = minecraftServer.getWorld(net.minecraft.registry.RegistryKey.of(RegistryKeys.WORLD, worldId));
+        if (targetWorld == null) {
+            return false;
+        }
+
+        try {
+            Method teleportMethod = findTeleportMethod(handle.getClass(), targetWorld.getClass());
+            if (teleportMethod != null) {
+                Object[] args = buildTeleportArgs(teleportMethod.getParameterTypes(), targetWorld, location);
+                if (args != null) {
+                    teleportMethod.setAccessible(true);
+                    teleportMethod.invoke(handle, args);
+                    return true;
+                }
+            }
+
+            if (handle.getWorld().getRegistryKey().equals(targetWorld.getRegistryKey())) {
+                try {
+                    Method requestWithRotation = handle.getClass().getMethod("requestTeleport", double.class, double.class, double.class, float.class, float.class);
+                    requestWithRotation.setAccessible(true);
+                    requestWithRotation.invoke(handle, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+                } catch (NoSuchMethodException ignored) {
+                    handle.requestTeleport(location.getX(), location.getY(), location.getZ());
+                    handle.setYaw(location.getYaw());
+                    handle.setPitch(location.getPitch());
+                }
+                return true;
+            }
+        } catch (Throwable t) {
+            debugLogger.debugLog("PlatformAdapter: native teleport failed, falling back to command teleport", t);
+        }
+
+        // Last-resort fallback to keep behavior functional on unexpected mappings/signatures.
+        String command = String.format(
+                java.util.Locale.US,
+                "execute in %s run tp %s %.3f %.3f %.3f %.2f %.2f",
+                location.getWorldId(),
+                player.getName(),
+                location.getX(),
+                location.getY(),
+                location.getZ(),
+                location.getYaw(),
+                location.getPitch()
+        );
+        executeCommandAsConsole(command);
+        return true;
+    }
+
+    private Method findTeleportMethod(Class<?> playerClass, Class<?> worldClass) {
+        for (Method method : playerClass.getMethods()) {
+            if (!"teleport".equals(method.getName())) {
+                continue;
+            }
+            Class<?>[] types = method.getParameterTypes();
+            if (types.length < 6) {
+                continue;
+            }
+            if (!types[0].isAssignableFrom(worldClass) && !worldClass.isAssignableFrom(types[0])) {
+                continue;
+            }
+            return method;
+        }
+        return null;
+    }
+
+    private Object[] buildTeleportArgs(Class<?>[] types, Object targetWorld, PlayerDataStore.StoredLocation location) {
+        Object[] args = new Object[types.length];
+        args[0] = targetWorld;
+
+        double[] coords = {location.getX(), location.getY(), location.getZ()};
+        int coordIdx = 0;
+        float[] rot = {location.getYaw(), location.getPitch()};
+        int rotIdx = 0;
+
+        for (int i = 1; i < types.length; i++) {
+            Class<?> type = types[i];
+            if (type == double.class || type == Double.class) {
+                if (coordIdx >= coords.length) {
+                    return null;
+                }
+                args[i] = coords[coordIdx++];
+                continue;
+            }
+            if (type == float.class || type == Float.class) {
+                args[i] = rotIdx < rot.length ? rot[rotIdx++] : 0.0f;
+                continue;
+            }
+            if (type == boolean.class || type == Boolean.class) {
+                args[i] = false;
+                continue;
+            }
+            if (Set.class.isAssignableFrom(type)) {
+                args[i] = Set.of();
+                continue;
+            }
+            return null;
+        }
+        return args;
     }
 
     @Override

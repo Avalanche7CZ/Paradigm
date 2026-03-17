@@ -4,6 +4,8 @@ import eu.avalanche7.paradigm.configs.CMConfig;
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.utils.PermissionAPI.PermissionAPI;
+import eu.avalanche7.paradigm.utils.PermissionAPI.PermissionDataStore;
 import org.slf4j.Logger;
 
 import java.util.HashSet;
@@ -19,6 +21,7 @@ public class PermissionsHandler {
     private final DebugLogger debugLogger;
     private final IPlatformAdapter platform;
     private final Set<UUID> discoveryWarmedUsers = ConcurrentHashMap.newKeySet();
+    private final PermissionAPI internalPermissionApi;
 
     public static final String MENTION_EVERYONE_PERMISSION = "paradigm.mention.everyone";
     public static final String MENTION_PLAYER_PERMISSION = "paradigm.mention.player";
@@ -30,6 +33,24 @@ public class PermissionsHandler {
     public static final String EDITOR_PERMISSION = "paradigm.editor";
     public static final String PRIVATE_MESSAGE_PERMISSION = "paradigm.msg";
     public static final String PRIVATE_REPLY_PERMISSION = "paradigm.reply";
+    public static final String HOME_USE_PERMISSION = "paradigm.home";
+    public static final String HOME_SET_PERMISSION = "paradigm.sethome";
+    public static final String HOME_DEL_PERMISSION = "paradigm.delhome";
+    public static final String HOME_LIST_PERMISSION = "paradigm.homes";
+    public static final String HOME_LIMIT_PERMISSION_PREFIX = "paradigm.home.limit.";
+    public static final String HOME_LIMIT_UNLIMITED_PERMISSION = "paradigm.home.limit.unlimited";
+    public static final String BACK_PERMISSION = "paradigm.back";
+    public static final String TPA_PERMISSION = "paradigm.tpa";
+    public static final String TPAHERE_PERMISSION = "paradigm.tpahere";
+    public static final String TPACCEPT_PERMISSION = "paradigm.tpaccept";
+    public static final String TPDENY_PERMISSION = "paradigm.tpdeny";
+    public static final String TPCANCEL_PERMISSION = "paradigm.tpcancel";
+    public static final String WARP_USE_PERMISSION = "paradigm.warp";
+    public static final String WARP_WILDCARD_PERMISSION = "paradigm.warp.*";
+    public static final String WARP_SET_PERMISSION = "paradigm.warp.set";
+    public static final String WARP_DELETE_PERMISSION = "paradigm.warp.delete";
+    public static final String WARP_LIST_PERMISSION = "paradigm.warps";
+    public static final String WARP_INFO_PERMISSION = "paradigm.warp.info";
 
     public static final int MENTION_EVERYONE_PERMISSION_LEVEL = 2;
     public static final int MENTION_PLAYER_PERMISSION_LEVEL = 0;
@@ -39,15 +60,38 @@ public class PermissionsHandler {
     public static final int EDITOR_PERMISSION_LEVEL = 2;
     public static final int PRIVATE_MESSAGE_PERMISSION_LEVEL = 0;
     public static final int PRIVATE_REPLY_PERMISSION_LEVEL = 0;
+    public static final int HOME_USE_PERMISSION_LEVEL = 0;
+    public static final int HOME_SET_PERMISSION_LEVEL = 0;
+    public static final int HOME_DEL_PERMISSION_LEVEL = 0;
+    public static final int HOME_LIST_PERMISSION_LEVEL = 0;
+    public static final int BACK_PERMISSION_LEVEL = 0;
+    public static final int TPA_PERMISSION_LEVEL = 0;
+    public static final int TPAHERE_PERMISSION_LEVEL = 0;
+    public static final int TPACCEPT_PERMISSION_LEVEL = 0;
+    public static final int TPDENY_PERMISSION_LEVEL = 0;
+    public static final int TPCANCEL_PERMISSION_LEVEL = 0;
+    public static final int WARP_USE_PERMISSION_LEVEL = 0;
+    public static final int WARP_WILDCARD_PERMISSION_LEVEL = 0;
+    public static final int WARP_SET_PERMISSION_LEVEL = 2;
+    public static final int WARP_DELETE_PERMISSION_LEVEL = 2;
+    public static final int WARP_LIST_PERMISSION_LEVEL = 0;
+    public static final int WARP_INFO_PERMISSION_LEVEL = 0;
 
     public PermissionsHandler(Logger logger, CMConfig cmConfig, DebugLogger debugLogger, IPlatformAdapter platform) {
         this.logger = logger;
         this.cmConfig = cmConfig;
         this.debugLogger = debugLogger;
         this.platform = platform;
+        this.internalPermissionApi = new PermissionAPI(
+                logger,
+                debugLogger,
+                new PermissionDataStore(logger, debugLogger, platform != null ? platform.getConfig() : null)
+        );
+        Placeholders.setPermissionMetaResolver(this::resolvePermissionMeta);
     }
 
     public void initialize() {
+        internalPermissionApi.initialize();
     }
 
     public void registerLuckPermsPermissions() {
@@ -202,10 +246,16 @@ public class PermissionsHandler {
     }
 
     public void refreshCustomCommandPermissions() {
+        internalPermissionApi.reload();
         registerPermissionsWithLuckPerms();
     }
 
     public boolean hasPermission(IPlayer player, String permission) {
+        int fallbackLevel = vanillaLevelFor(permission);
+        return hasPermission(player, permission, fallbackLevel);
+    }
+
+    public boolean hasPermission(IPlayer player, String permission, int vanillaLevelFallback) {
         if (player == null) {
             debugLogger.debugLog("[PermissionsHandler] hasPermission called with null player for: " + permission);
             return false;
@@ -225,21 +275,35 @@ public class PermissionsHandler {
                 net.luckperms.api.model.user.User user = api.getUserManager().getUser(uuid);
                 if (user != null) {
                     warmupUserPermissionsOnce(user);
-                    boolean lpResult = user.getCachedData().getPermissionData().checkPermission(permission).asBoolean();
-                    debugLogger.debugLog("[PermissionsHandler] LuckPerms check for '" + permission + "' -> " + lpResult);
-                    return lpResult;
+                    net.luckperms.api.util.Tristate lpState = user.getCachedData().getPermissionData().checkPermission(permission);
+                    if (lpState != net.luckperms.api.util.Tristate.UNDEFINED) {
+                        boolean lpResult = lpState.asBoolean();
+                        debugLogger.debugLog("[PermissionsHandler] LuckPerms check for '" + permission + "' -> " + lpResult + " (defined)");
+                        return lpResult;
+                    }
+                    debugLogger.debugLog("[PermissionsHandler] LuckPerms check for '" + permission + "' is UNDEFINED, falling back to internal/vanilla.");
                 }
 
-                debugLogger.debugLog("[PermissionsHandler] LuckPerms user not cached yet for player: " + player.getName() + ", falling back to vanilla level check.");
+                debugLogger.debugLog("[PermissionsHandler] LuckPerms user not cached yet for player: " + player.getName() + ", continuing with internal/vanilla fallback.");
             } catch (Throwable t) {
                 debugLogger.debugLog("[PermissionsHandler] LuckPerms check failed: " + t);
             }
         }
 
-        int level = vanillaLevelFor(permission);
-        debugLogger.debugLog("[PermissionsHandler] Using vanilla fallback for '" + permission + "' with level=" + level);
+        Boolean internalResult = internalPermissionApi.hasPermission(player, permission);
+        if (internalResult != null) {
+            debugLogger.debugLog("[PermissionsHandler] Internal PermissionAPI check for '" + permission + "' -> " + internalResult);
+            return internalResult;
+        }
+
+        if (vanillaLevelFallback < 0) {
+            debugLogger.debugLog("[PermissionsHandler] No vanilla fallback level for '" + permission + "', returning false.");
+            return false;
+        }
+
+        debugLogger.debugLog("[PermissionsHandler] Using vanilla fallback for '" + permission + "' with level=" + vanillaLevelFallback);
         try {
-            boolean vanillaResult = hasVanillaPermissionLevel(player, level);
+            boolean vanillaResult = hasVanillaPermissionLevel(player, vanillaLevelFallback);
             debugLogger.debugLog("[PermissionsHandler] Vanilla check result: " + vanillaResult);
             return vanillaResult;
         } catch (Throwable t) {
@@ -287,8 +351,24 @@ public class PermissionsHandler {
         if (permission.equals(EDITOR_PERMISSION)) return EDITOR_PERMISSION_LEVEL;
         if (permission.equals(PRIVATE_MESSAGE_PERMISSION)) return PRIVATE_MESSAGE_PERMISSION_LEVEL;
         if (permission.equals(PRIVATE_REPLY_PERMISSION)) return PRIVATE_REPLY_PERMISSION_LEVEL;
+        if (permission.equals(HOME_USE_PERMISSION)) return HOME_USE_PERMISSION_LEVEL;
+        if (permission.equals(HOME_SET_PERMISSION)) return HOME_SET_PERMISSION_LEVEL;
+        if (permission.equals(HOME_DEL_PERMISSION)) return HOME_DEL_PERMISSION_LEVEL;
+        if (permission.equals(HOME_LIST_PERMISSION)) return HOME_LIST_PERMISSION_LEVEL;
+        if (permission.equals(BACK_PERMISSION)) return BACK_PERMISSION_LEVEL;
+        if (permission.equals(TPA_PERMISSION)) return TPA_PERMISSION_LEVEL;
+        if (permission.equals(TPAHERE_PERMISSION)) return TPAHERE_PERMISSION_LEVEL;
+        if (permission.equals(TPACCEPT_PERMISSION)) return TPACCEPT_PERMISSION_LEVEL;
+        if (permission.equals(TPDENY_PERMISSION)) return TPDENY_PERMISSION_LEVEL;
+        if (permission.equals(TPCANCEL_PERMISSION)) return TPCANCEL_PERMISSION_LEVEL;
+        if (permission.equals(WARP_USE_PERMISSION)) return WARP_USE_PERMISSION_LEVEL;
+        if (permission.equals(WARP_WILDCARD_PERMISSION)) return WARP_WILDCARD_PERMISSION_LEVEL;
+        if (permission.equals(WARP_SET_PERMISSION)) return WARP_SET_PERMISSION_LEVEL;
+        if (permission.equals(WARP_DELETE_PERMISSION)) return WARP_DELETE_PERMISSION_LEVEL;
+        if (permission.equals(WARP_LIST_PERMISSION)) return WARP_LIST_PERMISSION_LEVEL;
+        if (permission.equals(WARP_INFO_PERMISSION)) return WARP_INFO_PERMISSION_LEVEL;
 
-        return 0;
+        return -1;
     }
 
     public Map<String, String> knownPermissionNodes() {
@@ -304,6 +384,24 @@ public class PermissionsHandler {
         nodes.put(EDITOR_PERMISSION, "Allows using /paradigm editor and /paradigm apply.");
         nodes.put(PRIVATE_MESSAGE_PERMISSION, "Allows sending private messages with /msg.");
         nodes.put(PRIVATE_REPLY_PERMISSION, "Allows replying to private messages with /reply.");
+        nodes.put(HOME_USE_PERMISSION, "Allows teleporting to home with /home.");
+        nodes.put(HOME_SET_PERMISSION, "Allows setting home locations with /sethome.");
+        nodes.put(HOME_DEL_PERMISSION, "Allows deleting homes with /delhome.");
+        nodes.put(HOME_LIST_PERMISSION, "Allows listing homes with /homes.");
+        nodes.put(HOME_LIMIT_PERMISSION_PREFIX + "<number>", "Maximum number of homes a player can have (e.g. paradigm.home.limit.3).");
+        nodes.put(HOME_LIMIT_UNLIMITED_PERMISSION, "Removes home count limit for the player/group.");
+        nodes.put(BACK_PERMISSION, "Allows returning to previous location with /back.");
+        nodes.put(TPA_PERMISSION, "Allows sending teleport requests with /tpa.");
+        nodes.put(TPAHERE_PERMISSION, "Allows sending summon requests with /tpahere.");
+        nodes.put(TPACCEPT_PERMISSION, "Allows accepting teleport requests with /tpaccept.");
+        nodes.put(TPDENY_PERMISSION, "Allows denying teleport requests with /tpdeny.");
+        nodes.put(TPCANCEL_PERMISSION, "Allows cancelling outgoing teleport requests with /tpcancel.");
+        nodes.put(WARP_USE_PERMISSION, "Allows using /warp commands globally.");
+        nodes.put(WARP_WILDCARD_PERMISSION, "Allows using all named warp permissions paradigm.warp.<name>.");
+        nodes.put(WARP_SET_PERMISSION, "Allows setting global warps with /setwarp.");
+        nodes.put(WARP_DELETE_PERMISSION, "Allows deleting global warps with /delwarp.");
+        nodes.put(WARP_LIST_PERMISSION, "Allows listing global warps with /warps.");
+        nodes.put(WARP_INFO_PERMISSION, "Allows viewing warp details with /warpinfo.");
 
         if (cmConfig != null && cmConfig.getLoadedCommands() != null) {
             for (CustomCommand cmd : cmConfig.getLoadedCommands()) {
@@ -317,5 +415,18 @@ public class PermissionsHandler {
         }
 
         return nodes;
+    }
+
+    private Placeholders.PermissionMeta resolvePermissionMeta(IPlayer player) {
+        PermissionAPI.PermissionMeta meta = internalPermissionApi.resolveMeta(player);
+        if (meta == null) {
+            return null;
+        }
+        return new Placeholders.PermissionMeta(
+                meta.primaryGroup(),
+                meta.prefix(),
+                meta.suffix(),
+                meta.groups()
+        );
     }
 }

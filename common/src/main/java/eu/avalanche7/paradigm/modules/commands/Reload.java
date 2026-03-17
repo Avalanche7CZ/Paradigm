@@ -36,7 +36,7 @@ public class Reload implements ParadigmModule {
                     if (src == null) return false;
                     if (src.isConsole()) return true;
                     IPlayer player = src.getPlayer();
-                    return player != null && platform.hasPermission(
+                    return player != null && services.getPermissionsHandler().hasPermission(
                             player,
                             PermissionsHandler.RELOAD_PERMISSION,
                             PermissionsHandler.RELOAD_PERMISSION_LEVEL

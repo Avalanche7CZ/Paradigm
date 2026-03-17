@@ -140,7 +140,7 @@ public class Announcements implements ParadigmModule {
         if (source.isConsole()) return true;
 
         IPlayer player = source.getPlayer();
-        return player != null && platform.hasPermission(
+        return player != null && services.getPermissionsHandler().hasPermission(
                 player,
                 PermissionsHandler.BROADCAST_PERMISSION,
                 PermissionsHandler.BROADCAST_PERMISSION_LEVEL

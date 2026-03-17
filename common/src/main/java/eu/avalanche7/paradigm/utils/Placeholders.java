@@ -2,12 +2,20 @@ package eu.avalanche7.paradigm.utils;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
+import java.util.List;
+import java.util.function.Function;
+
 public class Placeholders {
 
     private Object luckPerms;
     private Boolean luckPermsAvailable = null;
+    private static volatile Function<IPlayer, PermissionMeta> permissionMetaResolver;
 
     public Placeholders() {
+    }
+
+    public static void setPermissionMetaResolver(Function<IPlayer, PermissionMeta> resolver) {
+        permissionMetaResolver = resolver;
     }
 
     private void initLuckPerms() {
@@ -56,7 +64,7 @@ public class Placeholders {
             if (luckPermsAvailable != null && luckPermsAvailable) {
                 replacedText = replaceLuckPermsPlaceholders(replacedText, player.getOriginalPlayer());
             } else {
-                replacedText = stripLuckPermsPlaceholders(replacedText);
+                replacedText = replaceInternalPermissionPlaceholders(replacedText, player);
             }
             return replacedText;
         }
@@ -68,6 +76,7 @@ public class Placeholders {
         replacedText = replacedText.replace("{player_health}", "");
         replacedText = replacedText.replace("{max_player_health}", "");
         replacedText = stripLuckPermsPlaceholders(replacedText);
+        replacedText = stripInternalGroupPlaceholders(replacedText);
         return replacedText;
     }
 
@@ -141,7 +150,7 @@ public class Placeholders {
             if (luckPermsAvailable != null && luckPermsAvailable) {
                 replacedText = replaceLuckPermsPlaceholders(replacedText, player);
             } else {
-                replacedText = stripLuckPermsPlaceholders(replacedText);
+                replacedText = replaceInternalPermissionPlaceholders(replacedText, null);
             }
         } else {
             replacedText = replacedText.replace("{player}", "");
@@ -151,6 +160,7 @@ public class Placeholders {
             replacedText = replacedText.replace("{player_health}", "");
             replacedText = replacedText.replace("{max_player_health}", "");
             replacedText = stripLuckPermsPlaceholders(replacedText);
+            replacedText = stripInternalGroupPlaceholders(replacedText);
         }
 
         return replacedText;
@@ -163,7 +173,61 @@ public class Placeholders {
         replacedText = replacedText.replace("{player_group}", "");
         replacedText = replacedText.replace("{player_primary_group}", "");
         replacedText = replacedText.replace("{player_groups}", "");
+        replacedText = replacedText.replace("{prefix}", "");
+        replacedText = replacedText.replace("{suffix}", "");
+        replacedText = replacedText.replace("{group}", "");
         return replacedText;
+    }
+
+    private String stripInternalGroupPlaceholders(String text) {
+        String replacedText = text;
+        replacedText = replacedText.replace("{player_prefix}", "");
+        replacedText = replacedText.replace("{player_suffix}", "");
+        replacedText = replacedText.replace("{player_group}", "");
+        replacedText = replacedText.replace("{player_primary_group}", "");
+        replacedText = replacedText.replace("{player_groups}", "");
+        replacedText = replacedText.replace("{prefix}", "");
+        replacedText = replacedText.replace("{suffix}", "");
+        replacedText = replacedText.replace("{group}", "");
+        return replacedText;
+    }
+
+    private String replaceInternalPermissionPlaceholders(String text, IPlayer player) {
+        if (text == null) {
+            return "";
+        }
+
+        Function<IPlayer, PermissionMeta> resolver = permissionMetaResolver;
+        if (resolver == null || player == null) {
+            return stripInternalGroupPlaceholders(text);
+        }
+
+        PermissionMeta meta;
+        try {
+            meta = resolver.apply(player);
+        } catch (Throwable ignored) {
+            meta = null;
+        }
+        if (meta == null) {
+            return stripInternalGroupPlaceholders(text);
+        }
+
+        String group = safe(meta.primaryGroup());
+        String prefix = safe(meta.prefix());
+        String suffix = safe(meta.suffix());
+        String groups = meta.groups() != null ? String.join(",", meta.groups()) : "";
+
+        String replaced = text;
+        replaced = replaced.replace("{player_group}", group);
+        replaced = replaced.replace("{player_primary_group}", group);
+        replaced = replaced.replace("{player_prefix}", prefix);
+        replaced = replaced.replace("{player_suffix}", suffix);
+        replaced = replaced.replace("{player_groups}", groups);
+
+        replaced = replaced.replace("{group}", group);
+        replaced = replaced.replace("{prefix}", prefix);
+        replaced = replaced.replace("{suffix}", suffix);
+        return replaced;
     }
 
     private String replaceLuckPermsPlaceholders(String text, Object player) {
@@ -193,9 +257,11 @@ public class Placeholders {
             if (primaryGroup != null) {
                 replacedText = replacedText.replace("{player_group}", primaryGroup);
                 replacedText = replacedText.replace("{player_primary_group}", primaryGroup);
+                replacedText = replacedText.replace("{group}", primaryGroup);
             } else {
                 replacedText = replacedText.replace("{player_group}", "");
                 replacedText = replacedText.replace("{player_primary_group}", "");
+                replacedText = replacedText.replace("{group}", "");
             }
 
             java.lang.reflect.Method getCachedDataMethod = user.getClass().getMethod("getCachedData");
@@ -207,10 +273,12 @@ public class Placeholders {
             java.lang.reflect.Method getPrefixMethod = metaData.getClass().getMethod("getPrefix");
             String prefix = (String) getPrefixMethod.invoke(metaData);
             replacedText = replacedText.replace("{player_prefix}", prefix != null ? prefix : "");
+            replacedText = replacedText.replace("{prefix}", prefix != null ? prefix : "");
 
             java.lang.reflect.Method getSuffixMethod = metaData.getClass().getMethod("getSuffix");
             String suffix = (String) getSuffixMethod.invoke(metaData);
             replacedText = replacedText.replace("{player_suffix}", suffix != null ? suffix : "");
+            replacedText = replacedText.replace("{suffix}", suffix != null ? suffix : "");
 
             replacedText = replacedText.replace("{player_groups}", "");
 
@@ -271,5 +339,8 @@ public class Placeholders {
 
     private static String format1(double d) {
         return String.format(java.util.Locale.ROOT, "%.1f", d);
+    }
+
+    public record PermissionMeta(String primaryGroup, String prefix, String suffix, List<String> groups) {
     }
 }

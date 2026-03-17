@@ -64,7 +64,7 @@ public class StaffChat implements ParadigmModule {
         ICommandBuilder cmd = platform.createCommandBuilder()
                 .literal("sc")
                 .requires(source -> source.getPlayer() != null &&
-                        platform.hasPermission(source.getPlayer(), PermissionsHandler.STAFF_CHAT_PERMISSION))
+                        services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.STAFF_CHAT_PERMISSION))
                 .executes(ctx -> {
                     IPlayer player = ctx.getSource().requirePlayer();
                     toggleStaffChat(player);
@@ -135,7 +135,7 @@ public class StaffChat implements ParadigmModule {
         IComponent chatComponent = services.getMessageParser().parseMessage(formattedMessage, sender);
 
         platform.getOnlinePlayers().stream()
-                .filter(onlinePlayer -> platform.hasPermission(onlinePlayer, PermissionsHandler.STAFF_CHAT_PERMISSION))
+                .filter(onlinePlayer -> services.getPermissionsHandler().hasPermission(onlinePlayer, PermissionsHandler.STAFF_CHAT_PERMISSION))
                 .forEach(staffMember -> platform.sendSystemMessage(staffMember, chatComponent));
 
         services.getLogger().info("(StaffChat) {}: {}", sender.getName(), message);

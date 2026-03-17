@@ -83,5 +83,52 @@
     "empty_message": "Zpráva nemůže být prázdná.",
     "no_reply_target": "Nemáš komu odpovědět.",
     "reply_target_offline": "Poslední hráč z konverzace už není online."
+  },
+
+  "home": {
+    "location_unavailable": "Teď nejde načíst tvoje pozice.",
+    "sethome_success": "Home {home} byl nastaven.",
+    "home_not_found": "Home {home} nebyl nalezen.",
+    "teleported": "Teleport na home {home} proběhl.",
+    "delhome_success": "Home {home} byl smazán.",
+    "delhome_missing": "Home {home} neexistuje.",
+    "homes_header": "Homes ({count}):",
+    "homes_empty": "Zatím nemáš žádné homes.",
+    "homes_list": "Tvoje homes: {homes}",
+    "back_missing": "Pro /back není uložená žádná předchozí pozice.",
+    "back_teleported": "Teleport zpět na předchozí pozici proběhl.",
+    "teleport_failed": "Teleport selhal."
+  },
+
+  "tpa": {
+    "player_not_found": "Tento hráč není online.",
+    "cannot_target_self": "Nemůžeš cílit sám sebe.",
+    "request_failed": "Nepodařilo se vytvořit teleport request.",
+    "request_sent_tpa": "Teleport request byl odeslán hráči {player}.",
+    "request_sent_tpahere": "Teleport-here request byl odeslán hráči {player}.",
+    "request_received_tpa": "{player} se chce teleportovat k tobě. Použij /tpaccept nebo /tpdeny.",
+    "request_received_tpahere": "{player} chce, aby ses teleportoval k němu. Použij /tpaccept nebo /tpdeny.",
+    "no_pending_request": "Nemáš žádné čekající teleport requesty.",
+    "requester_offline": "Request už není platný, protože odesílatel je offline.",
+    "accepted_you": "Přijal jsi request od hráče {player}.",
+    "accepted_sender": "{player} přijal tvůj teleport request.",
+    "denied_you": "Odmítl jsi request od hráče {player}.",
+    "denied_sender": "{player} odmítl tvůj teleport request.",
+    "no_outgoing_request": "Nemáš žádný odchozí teleport request.",
+    "cancelled_you": "Zrušil jsi request hráči {player}.",
+    "cancelled_target": "{player} zrušil svůj teleport request."
+  },
+
+  "warp": {
+    "invalid_name": "Neplatný název warpu.",
+    "location_unavailable": "Teď nejde načíst tvoje pozice.",
+    "set_success": "Warp {warp} byl nastaven.",
+    "not_found": "Warp {warp} nebyl nalezen.",
+    "no_permission": "Nemáš oprávnění použít warp {warp}.",
+    "teleport_failed": "Teleport selhal.",
+    "teleported": "Teleport na warp {warp} proběhl.",
+    "delete_success": "Warp {warp} byl smazán.",
+    "list_empty": "Žádné warpy nejsou nastavené.",
+    "list_header": "Warpy ({count}):"
   }
 }

@@ -146,6 +146,21 @@ public class Help implements ParadigmModule {
                 "Reload changes via /paradigm reload customcommands",
                 "customcommands.json"
         ));
+        m.put("Home", new HelpEntry(
+                "Homes and back teleport commands.",
+                "/sethome [name], /home [name], /delhome <name>, /homes, /back",
+                "paradigm/playerdata/*.json"
+        ));
+        m.put("Tpa", new HelpEntry(
+                "Player teleport requests.",
+                "/tpa <player>, /tpahere <player>, /tpaccept [player], /tpdeny [player], /tpcancel [player]",
+                "runtime state"
+        ));
+        m.put("Warp", new HelpEntry(
+                "Global server warps with permission nodes per warp.",
+                "/warp <name>, /warps, /setwarp <name>, /delwarp <name>, /warpinfo <name>",
+                "warps.json"
+        ));
         m.put("Reload", new HelpEntry(
                 "Reload one config or all configs without full restart.",
                 "/paradigm reload [main|announcements|chat|motd|mention|restart|customcommands|all]",

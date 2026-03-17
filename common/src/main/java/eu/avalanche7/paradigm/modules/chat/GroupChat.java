@@ -68,7 +68,7 @@ public class GroupChat implements ParadigmModule {
         ICommandBuilder cmd = platform.createCommandBuilder()
                 .literal("groupchat")
                 .requires(source -> source.getPlayer() != null &&
-                        platform.hasPermission(source.getPlayer(), PermissionsHandler.GROUPCHAT_PERMISSION))
+                        services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.GROUPCHAT_PERMISSION))
                 .executes(ctx -> {
                     IPlayer player = ctx.getSource().requirePlayer();
                     displayHelp(player, services);

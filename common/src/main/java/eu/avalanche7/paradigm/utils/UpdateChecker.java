@@ -121,7 +121,7 @@ public final class UpdateChecker {
 
         IPlatformAdapter platform = services.getPlatformAdapter();
         if (platform == null) return;
-        if (!platform.hasPermission(player, OP_PERMISSION, OP_LEVEL)) return;
+        if (!services.getPermissionsHandler().hasPermission(player, OP_PERMISSION, OP_LEVEL)) return;
 
         UpdateResult result = getLastResult();
         if (result == null || !result.updateAvailable()) return;

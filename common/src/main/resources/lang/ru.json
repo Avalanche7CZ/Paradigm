@@ -83,5 +83,52 @@
     "empty_message": "Сообщение не может быть пустым.",
     "no_reply_target": "Некому отвечать.",
     "reply_target_offline": "Ваш последний собеседник уже не в сети."
+  },
+
+  "home": {
+    "location_unavailable": "Сейчас не удалось определить вашу позицию.",
+    "sethome_success": "Точка дома {home} установлена.",
+    "home_not_found": "Точка дома {home} не найдена.",
+    "teleported": "Телепортация в дом {home} выполнена.",
+    "delhome_success": "Точка дома {home} удалена.",
+    "delhome_missing": "Точка дома {home} не существует.",
+    "homes_header": "Дома ({count}):",
+    "homes_empty": "У вас пока нет точек дома.",
+    "homes_list": "Ваши дома: {homes}",
+    "back_missing": "Для /back нет сохраненной предыдущей позиции.",
+    "back_teleported": "Телепортация назад выполнена.",
+    "teleport_failed": "Телепортация не удалась."
+  },
+
+  "tpa": {
+    "player_not_found": "Этот игрок не в сети.",
+    "cannot_target_self": "Вы не можете выбрать себя.",
+    "request_failed": "Не удалось создать запрос на телепортацию.",
+    "request_sent_tpa": "Запрос на телепортацию отправлен игроку {player}.",
+    "request_sent_tpahere": "Запрос на телепортацию к вам отправлен игроку {player}.",
+    "request_received_tpa": "{player} хочет телепортироваться к вам. Используйте /tpaccept или /tpdeny.",
+    "request_received_tpahere": "{player} хочет, чтобы вы телепортировались к нему. Используйте /tpaccept или /tpdeny.",
+    "no_pending_request": "У вас нет ожидающих запросов на телепортацию.",
+    "requester_offline": "Запрос больше не действителен: отправитель офлайн.",
+    "accepted_you": "Вы приняли запрос от {player}.",
+    "accepted_sender": "{player} принял ваш запрос на телепортацию.",
+    "denied_you": "Вы отклонили запрос от {player}.",
+    "denied_sender": "{player} отклонил ваш запрос на телепортацию.",
+    "no_outgoing_request": "У вас нет исходящих запросов на телепортацию.",
+    "cancelled_you": "Вы отменили запрос к {player}.",
+    "cancelled_target": "{player} отменил свой запрос на телепортацию."
+  },
+
+  "warp": {
+    "invalid_name": "Недопустимое имя варпа.",
+    "location_unavailable": "Сейчас не удалось определить вашу позицию.",
+    "set_success": "Варп {warp} установлен.",
+    "not_found": "Варп {warp} не найден.",
+    "no_permission": "У вас нет права использовать варп {warp}.",
+    "teleport_failed": "Телепортация не удалась.",
+    "teleported": "Телепортация на варп {warp} выполнена.",
+    "delete_success": "Варп {warp} удален.",
+    "list_empty": "Варпы не настроены.",
+    "list_header": "Варпы ({count}):"
   }
 }

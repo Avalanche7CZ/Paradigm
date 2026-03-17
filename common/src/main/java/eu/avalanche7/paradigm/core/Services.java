@@ -1,6 +1,7 @@
 package eu.avalanche7.paradigm.core;
 
 import eu.avalanche7.paradigm.configs.*;
+import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.*;
 import org.slf4j.Logger;
@@ -25,6 +26,7 @@ public class Services {
     private final PermissionsHandler permissionsHandlerInstance;
     private final Placeholders placeholdersInstance;
     private final TaskScheduler taskSchedulerInstance;
+    private final PlayerDataStore playerDataStoreInstance;
     private final GroupChatManager groupChatManagerInstance;
     private final IPlatformAdapter platformAdapter;
 
@@ -47,6 +49,7 @@ public class Services {
             PermissionsHandler permissionsHandler,
             Placeholders placeholders,
             TaskScheduler taskScheduler,
+            PlayerDataStore playerDataStore,
             IPlatformAdapter platformAdapter,
             WebEditorStore webEditorStore
     ) {
@@ -65,6 +68,7 @@ public class Services {
         this.permissionsHandlerInstance = permissionsHandler;
         this.placeholdersInstance = placeholders;
         this.taskSchedulerInstance = taskScheduler;
+        this.playerDataStoreInstance = playerDataStore;
         this.platformAdapter = platformAdapter;
         this.webEditorStore = webEditorStore != null ? webEditorStore : new WebEditorStore();
     }
@@ -122,6 +126,12 @@ public class Services {
     public TaskScheduler getTaskScheduler() {
         return taskSchedulerInstance;
     }
+
+    public PlayerDataStore getPlayerDataStore() {
+        return playerDataStoreInstance;
+    }
+
+
 
     public MainConfigHandler.Config getMainConfig() {
         return MainConfigHandler.getConfig();

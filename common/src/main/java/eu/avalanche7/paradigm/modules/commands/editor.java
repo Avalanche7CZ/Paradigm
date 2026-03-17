@@ -32,7 +32,7 @@ public class editor implements ParadigmModule {
                 .literal("paradigm")
                 .then(platform.createCommandBuilder()
                         .literal("editor")
-                        .requires(src -> hasEditorPermission(src, platform))
+                        .requires(src -> hasEditorPermission(src, services))
                         .executes(ctx -> openEditor(ctx.getSource(), services))
                         .then(platform.createCommandBuilder()
                                 .literal("trust")
@@ -50,7 +50,7 @@ public class editor implements ParadigmModule {
                                 .executes(ctx -> listTrusted(ctx.getSource(), services))))
                 .then(platform.createCommandBuilder()
                         .literal("apply")
-                        .requires(src -> hasEditorPermission(src, platform))
+                        .requires(src -> hasEditorPermission(src, services))
                         .then(platform.createCommandBuilder()
                                 .argument("code", ICommandBuilder.ArgumentType.WORD)
                                 .executes(ctx -> applyChanges(ctx.getSource(), services, ctx.getStringArgument("code")))));
@@ -58,12 +58,12 @@ public class editor implements ParadigmModule {
         platform.registerCommand(cmd);
     }
 
-    private boolean hasEditorPermission(ICommandSource source, IPlatformAdapter platform) {
+    private boolean hasEditorPermission(ICommandSource source, Services services) {
         if (source == null) return false;
         if (source.isConsole()) return true;
         IPlayer player = source.getPlayer();
         if (player == null) return false;
-        return platform.hasPermission(
+        return services.getPermissionsHandler().hasPermission(
                 player,
                 PermissionsHandler.EDITOR_PERMISSION,
                 PermissionsHandler.EDITOR_PERMISSION_LEVEL

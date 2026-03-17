@@ -72,7 +72,7 @@ public class PrivateMessages implements ParadigmModule {
         ICommandBuilder command = platform.createCommandBuilder()
                 .literal(literal)
                 .requires(source -> source.getPlayer() != null &&
-                        platform.hasPermission(
+                        services.getPermissionsHandler().hasPermission(
                                 source.getPlayer(),
                                 PermissionsHandler.PRIVATE_MESSAGE_PERMISSION,
                                 PermissionsHandler.PRIVATE_MESSAGE_PERMISSION_LEVEL
@@ -89,7 +89,7 @@ public class PrivateMessages implements ParadigmModule {
         ICommandBuilder command = platform.createCommandBuilder()
                 .literal(literal)
                 .requires(source -> source.getPlayer() != null &&
-                        platform.hasPermission(
+                        services.getPermissionsHandler().hasPermission(
                                 source.getPlayer(),
                                 PermissionsHandler.PRIVATE_REPLY_PERMISSION,
                                 PermissionsHandler.PRIVATE_REPLY_PERMISSION_LEVEL
