@@ -2,6 +2,7 @@ package eu.avalanche7.paradigm.utils;
 
 import eu.avalanche7.paradigm.configs.CMConfig;
 import eu.avalanche7.paradigm.data.CustomCommand;
+import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.PermissionAPI.PermissionAPI;
@@ -30,9 +31,24 @@ public class PermissionsHandler {
     public static final String BROADCAST_PERMISSION = "paradigm.broadcast";
     public static final String GROUPCHAT_PERMISSION = "paradigm.groupchat";
     public static final String RELOAD_PERMISSION = "paradigm.reload";
+    public static final String COMMAND_TOGGLE_PERMISSION = "paradigm.command.toggle";
+    public static final String GROUP_MANAGE_PERMISSION = "paradigm.group.manage";
     public static final String EDITOR_PERMISSION = "paradigm.editor";
     public static final String PRIVATE_MESSAGE_PERMISSION = "paradigm.msg";
     public static final String PRIVATE_REPLY_PERMISSION = "paradigm.reply";
+    public static final String SOCIALSPY_PERMISSION = "paradigm.socialspy";
+    public static final String SPAWN_PERMISSION = "paradigm.spawn";
+    public static final String SETSPAWN_PERMISSION = "paradigm.setspawn";
+    public static final String SEEN_PERMISSION = "paradigm.seen";
+    public static final String IGNORE_PERMISSION = "paradigm.ignore";
+    public static final String GAMEMODE_PERMISSION = "paradigm.gamemode";
+    public static final String FLY_PERMISSION = "paradigm.fly";
+    public static final String CLEARINV_PERMISSION = "paradigm.clearinv";
+    public static final String TIME_PERMISSION = "paradigm.time";
+    public static final String WEATHER_PERMISSION = "paradigm.weather";
+    public static final String SPEED_PERMISSION = "paradigm.speed";
+    public static final String FEED_PERMISSION = "paradigm.feed";
+    public static final String HEAL_PERMISSION = "paradigm.heal";
     public static final String HOME_USE_PERMISSION = "paradigm.home";
     public static final String HOME_SET_PERMISSION = "paradigm.sethome";
     public static final String HOME_DEL_PERMISSION = "paradigm.delhome";
@@ -57,9 +73,24 @@ public class PermissionsHandler {
     public static final int BROADCAST_PERMISSION_LEVEL = 2;
     public static final int RESTART_MANAGE_PERMISSION_LEVEL = 2;
     public static final int RELOAD_PERMISSION_LEVEL = 2;
+    public static final int COMMAND_TOGGLE_PERMISSION_LEVEL = 2;
+    public static final int GROUP_MANAGE_PERMISSION_LEVEL = 2;
     public static final int EDITOR_PERMISSION_LEVEL = 2;
     public static final int PRIVATE_MESSAGE_PERMISSION_LEVEL = 0;
     public static final int PRIVATE_REPLY_PERMISSION_LEVEL = 0;
+    public static final int SOCIALSPY_PERMISSION_LEVEL = 2;
+    public static final int SPAWN_PERMISSION_LEVEL = 0;
+    public static final int SETSPAWN_PERMISSION_LEVEL = 2;
+    public static final int SEEN_PERMISSION_LEVEL = 0;
+    public static final int IGNORE_PERMISSION_LEVEL = 0;
+    public static final int GAMEMODE_PERMISSION_LEVEL = 2;
+    public static final int FLY_PERMISSION_LEVEL = 2;
+    public static final int CLEARINV_PERMISSION_LEVEL = 2;
+    public static final int TIME_PERMISSION_LEVEL = 2;
+    public static final int WEATHER_PERMISSION_LEVEL = 2;
+    public static final int SPEED_PERMISSION_LEVEL = 2;
+    public static final int FEED_PERMISSION_LEVEL = 2;
+    public static final int HEAL_PERMISSION_LEVEL = 2;
     public static final int HOME_USE_PERMISSION_LEVEL = 0;
     public static final int HOME_SET_PERMISSION_LEVEL = 0;
     public static final int HOME_DEL_PERMISSION_LEVEL = 0;
@@ -77,7 +108,7 @@ public class PermissionsHandler {
     public static final int WARP_LIST_PERMISSION_LEVEL = 0;
     public static final int WARP_INFO_PERMISSION_LEVEL = 0;
 
-    public PermissionsHandler(Logger logger, CMConfig cmConfig, DebugLogger debugLogger, IPlatformAdapter platform) {
+    public PermissionsHandler(Logger logger, CMConfig cmConfig, DebugLogger debugLogger, IPlatformAdapter platform, PlayerDataStore playerDataStore) {
         this.logger = logger;
         this.cmConfig = cmConfig;
         this.debugLogger = debugLogger;
@@ -85,7 +116,8 @@ public class PermissionsHandler {
         this.internalPermissionApi = new PermissionAPI(
                 logger,
                 debugLogger,
-                new PermissionDataStore(logger, debugLogger, platform != null ? platform.getConfig() : null)
+                new PermissionDataStore(logger, debugLogger, platform != null ? platform.getConfig() : null),
+                playerDataStore
         );
         Placeholders.setPermissionMetaResolver(this::resolvePermissionMeta);
     }
@@ -314,6 +346,10 @@ public class PermissionsHandler {
         return false;
     }
 
+    public boolean hasStrictVanillaPermissionLevel(IPlayer player, int level) {
+        return hasVanillaPermissionLevel(player, level);
+    }
+
     private static boolean hasVanillaPermissionLevel(IPlayer player, int level) {
         if (player == null) return false;
         Object original = player.getOriginalPlayer();
@@ -348,9 +384,24 @@ public class PermissionsHandler {
         if (permission.equals(STAFF_CHAT_PERMISSION)) return 2;
         if (permission.equals(GROUPCHAT_PERMISSION)) return 2;
         if (permission.equals(RELOAD_PERMISSION)) return RELOAD_PERMISSION_LEVEL;
+        if (permission.equals(COMMAND_TOGGLE_PERMISSION)) return COMMAND_TOGGLE_PERMISSION_LEVEL;
+        if (permission.equals(GROUP_MANAGE_PERMISSION)) return GROUP_MANAGE_PERMISSION_LEVEL;
         if (permission.equals(EDITOR_PERMISSION)) return EDITOR_PERMISSION_LEVEL;
         if (permission.equals(PRIVATE_MESSAGE_PERMISSION)) return PRIVATE_MESSAGE_PERMISSION_LEVEL;
         if (permission.equals(PRIVATE_REPLY_PERMISSION)) return PRIVATE_REPLY_PERMISSION_LEVEL;
+        if (permission.equals(SOCIALSPY_PERMISSION)) return SOCIALSPY_PERMISSION_LEVEL;
+        if (permission.equals(SPAWN_PERMISSION)) return SPAWN_PERMISSION_LEVEL;
+        if (permission.equals(SETSPAWN_PERMISSION)) return SETSPAWN_PERMISSION_LEVEL;
+        if (permission.equals(SEEN_PERMISSION)) return SEEN_PERMISSION_LEVEL;
+        if (permission.equals(IGNORE_PERMISSION)) return IGNORE_PERMISSION_LEVEL;
+        if (permission.equals(GAMEMODE_PERMISSION)) return GAMEMODE_PERMISSION_LEVEL;
+        if (permission.equals(FLY_PERMISSION)) return FLY_PERMISSION_LEVEL;
+        if (permission.equals(CLEARINV_PERMISSION)) return CLEARINV_PERMISSION_LEVEL;
+        if (permission.equals(TIME_PERMISSION)) return TIME_PERMISSION_LEVEL;
+        if (permission.equals(WEATHER_PERMISSION)) return WEATHER_PERMISSION_LEVEL;
+        if (permission.equals(SPEED_PERMISSION)) return SPEED_PERMISSION_LEVEL;
+        if (permission.equals(FEED_PERMISSION)) return FEED_PERMISSION_LEVEL;
+        if (permission.equals(HEAL_PERMISSION)) return HEAL_PERMISSION_LEVEL;
         if (permission.equals(HOME_USE_PERMISSION)) return HOME_USE_PERMISSION_LEVEL;
         if (permission.equals(HOME_SET_PERMISSION)) return HOME_SET_PERMISSION_LEVEL;
         if (permission.equals(HOME_DEL_PERMISSION)) return HOME_DEL_PERMISSION_LEVEL;
@@ -381,9 +432,24 @@ public class PermissionsHandler {
         nodes.put(BROADCAST_PERMISSION, "Allows using /paradigm broadcast, actionbar, title, and bossbar commands.");
         nodes.put(GROUPCHAT_PERMISSION, "Allows using /groupchat commands (create, invite, join, etc.).");
         nodes.put(RELOAD_PERMISSION, "Allows using /paradigm reload and /customcommandsreload commands.");
+        nodes.put(COMMAND_TOGGLE_PERMISSION, "Allows enabling/disabling Paradigm commands at runtime via /paradigm command.");
+        nodes.put(GROUP_MANAGE_PERMISSION, "Allows managing internal permission groups via /paradigm group.");
         nodes.put(EDITOR_PERMISSION, "Allows using /paradigm editor and /paradigm apply.");
         nodes.put(PRIVATE_MESSAGE_PERMISSION, "Allows sending private messages with /msg.");
         nodes.put(PRIVATE_REPLY_PERMISSION, "Allows replying to private messages with /reply.");
+        nodes.put(SOCIALSPY_PERMISSION, "Allows toggling /socialspy and receiving mirrored private messages.");
+        nodes.put(SPAWN_PERMISSION, "Allows teleporting to server spawn with /spawn.");
+        nodes.put(SETSPAWN_PERMISSION, "Allows setting server spawn with /setspawn.");
+        nodes.put(SEEN_PERMISSION, "Allows checking when a player was last seen with /seen.");
+        nodes.put(IGNORE_PERMISSION, "Allows managing ignored players with /ignore and /unignore.");
+        nodes.put(GAMEMODE_PERMISSION, "Allows changing gamemode with /gamemode and /gm* aliases.");
+        nodes.put(FLY_PERMISSION, "Allows toggling flight with /fly.");
+        nodes.put(CLEARINV_PERMISSION, "Allows clearing inventories with /clearinv and /ci.");
+        nodes.put(TIME_PERMISSION, "Allows changing time with /day and /night.");
+        nodes.put(WEATHER_PERMISSION, "Allows changing weather with /sun, /rain, /thunder.");
+        nodes.put(SPEED_PERMISSION, "Allows using /speed.");
+        nodes.put(FEED_PERMISSION, "Allows using /feed.");
+        nodes.put(HEAL_PERMISSION, "Allows using /heal.");
         nodes.put(HOME_USE_PERMISSION, "Allows teleporting to home with /home.");
         nodes.put(HOME_SET_PERMISSION, "Allows setting home locations with /sethome.");
         nodes.put(HOME_DEL_PERMISSION, "Allows deleting homes with /delhome.");
@@ -428,5 +494,45 @@ public class PermissionsHandler {
                 meta.suffix(),
                 meta.groups()
         );
+    }
+
+    public boolean createPermissionGroup(String groupName) {
+        return internalPermissionApi.createGroup(groupName);
+    }
+
+    public boolean deletePermissionGroup(String groupName) {
+        return internalPermissionApi.deleteGroup(groupName);
+    }
+
+    public boolean addPermissionGroupParent(String groupName, String parentName) {
+        return internalPermissionApi.addGroupParent(groupName, parentName);
+    }
+
+    public boolean removePermissionGroupParent(String groupName, String parentName) {
+        return internalPermissionApi.removeGroupParent(groupName, parentName);
+    }
+
+    public boolean assignPlayerGroup(UUID playerUuid, String groupName) {
+        return internalPermissionApi.assignGroup(playerUuid, groupName);
+    }
+
+    public boolean assignPlayerGroupTemp(UUID playerUuid, String groupName, long expiresAtMs, String assignedBy) {
+        return internalPermissionApi.assignGroup(playerUuid, groupName, expiresAtMs, assignedBy);
+    }
+
+    public boolean revokePlayerGroup(UUID playerUuid, String groupName) {
+        return internalPermissionApi.revokeGroup(playerUuid, groupName);
+    }
+
+    public java.util.List<String> listPermissionGroups() {
+        return internalPermissionApi.listGroups();
+    }
+
+    public PermissionAPI.GroupInfo getPermissionGroupInfo(String groupName) {
+        return internalPermissionApi.getGroupInfo(groupName);
+    }
+
+    public PermissionAPI.UserGroupsInfo getPlayerGroups(UUID playerUuid) {
+        return internalPermissionApi.getUserGroups(playerUuid);
     }
 }

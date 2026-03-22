@@ -74,7 +74,7 @@ public class Mentions implements ParadigmModule {
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         ICommandBuilder cmd = platform.createCommandBuilder()
                 .literal("mention")
-                .requires(source -> true)
+                .requires(source -> services.getCommandToggleStore().isEnabled("mention"))
                 .then(platform.createCommandBuilder()
                         .argument("message", ICommandBuilder.ArgumentType.GREEDY_STRING)
                         .executes(ctx -> executeMentionCommand(ctx, services)));

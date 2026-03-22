@@ -14,9 +14,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -143,6 +145,133 @@ public class PlayerDataStore {
         }
     }
 
+    public void setLastSeen(IPlayer player, long timestampMs) {
+        if (player == null || player.getUUID() == null || player.getUUID().isBlank()) {
+            return;
+        }
+        synchronized (lock) {
+            PlayerEntry entry = getOrCreateEntry(player);
+            entry.setLastSeenMs(Math.max(0L, timestampMs));
+            saveEntryLocked(entry);
+        }
+    }
+
+    public Long getLastSeen(String playerUuid) {
+        String uuid = normalizePlayerKey(playerUuid);
+        if (uuid == null) {
+            return null;
+        }
+        synchronized (lock) {
+            PlayerEntry entry = getOrCreateEntryByUuidLocked(uuid, "");
+            return entry.getLastSeenMs() > 0L ? entry.getLastSeenMs() : null;
+        }
+    }
+
+    public boolean addIgnoredPlayer(String ownerUuid, String targetUuid) {
+        String owner = normalizePlayerKey(ownerUuid);
+        String target = normalizePlayerKey(targetUuid);
+        if (owner == null || target == null || owner.equals(target)) {
+            return false;
+        }
+        synchronized (lock) {
+            PlayerEntry entry = getOrCreateEntryByUuidLocked(owner, "");
+            boolean changed = entry.getIgnoredPlayers().add(target);
+            if (changed) {
+                entry.normalize(owner);
+                saveEntryLocked(entry);
+            }
+            return changed;
+        }
+    }
+
+    public boolean removeIgnoredPlayer(String ownerUuid, String targetUuid) {
+        String owner = normalizePlayerKey(ownerUuid);
+        String target = normalizePlayerKey(targetUuid);
+        if (owner == null || target == null) {
+            return false;
+        }
+        synchronized (lock) {
+            PlayerEntry entry = getOrCreateEntryByUuidLocked(owner, "");
+            boolean changed = entry.getIgnoredPlayers().remove(target);
+            if (changed) {
+                entry.normalize(owner);
+                saveEntryLocked(entry);
+            }
+            return changed;
+        }
+    }
+
+    public boolean isIgnoring(String ownerUuid, String targetUuid) {
+        String owner = normalizePlayerKey(ownerUuid);
+        String target = normalizePlayerKey(targetUuid);
+        if (owner == null || target == null) {
+            return false;
+        }
+        synchronized (lock) {
+            PlayerEntry entry = getOrCreateEntryByUuidLocked(owner, "");
+            return entry.getIgnoredPlayers().contains(target);
+        }
+    }
+
+    public boolean setTemporaryGroup(String playerUuid, String group, long expiresAtMs, long assignedAtMs, String assignedBy) {
+        String uuid = normalizePlayerKey(playerUuid);
+        String groupKey = normalizeHomeKey(group);
+        if (uuid == null || groupKey == null || expiresAtMs <= 0L) {
+            return false;
+        }
+
+        synchronized (lock) {
+            migrateLegacyIfNeededLocked();
+            PlayerEntry entry = getOrCreateEntryByUuidLocked(uuid, "");
+            if (entry.getTempGroups() == null) {
+                entry.setTempGroups(new ArrayList<>());
+            }
+            entry.getTempGroups().removeIf(temp -> temp != null && groupKey.equals(normalizeHomeKey(temp.getGroup())));
+            entry.getTempGroups().add(new TemporaryGroupEntry(groupKey, expiresAtMs, assignedAtMs > 0L ? assignedAtMs : System.currentTimeMillis(), assignedBy));
+            entry.normalize(uuid);
+            saveEntryLocked(entry);
+            return true;
+        }
+    }
+
+    public boolean removeTemporaryGroup(String playerUuid, String group) {
+        String uuid = normalizePlayerKey(playerUuid);
+        String groupKey = normalizeHomeKey(group);
+        if (uuid == null || groupKey == null) {
+            return false;
+        }
+
+        synchronized (lock) {
+            migrateLegacyIfNeededLocked();
+            PlayerEntry entry = getOrCreateEntryByUuidLocked(uuid, "");
+            boolean changed = entry.getTempGroups().removeIf(temp -> temp != null && groupKey.equals(normalizeHomeKey(temp.getGroup())));
+            if (changed) {
+                entry.normalize(uuid);
+                saveEntryLocked(entry);
+            }
+            return changed;
+        }
+    }
+
+    public List<TemporaryGroupEntry> getTemporaryGroups(String playerUuid) {
+        String uuid = normalizePlayerKey(playerUuid);
+        if (uuid == null) {
+            return List.of();
+        }
+
+        synchronized (lock) {
+            migrateLegacyIfNeededLocked();
+            PlayerEntry entry = getOrCreateEntryByUuidLocked(uuid, "");
+            long now = System.currentTimeMillis();
+            boolean removedExpired = entry.getTempGroups().removeIf(temp -> temp == null || temp.getExpiresAtMs() <= now || temp.getGroup() == null || temp.getGroup().isBlank());
+            if (removedExpired) {
+                entry.normalize(uuid);
+                saveEntryLocked(entry);
+            }
+            return List.copyOf(entry.getTempGroups());
+        }
+    }
+
     private PlayerEntry getOrCreateEntry(IPlayer player) {
         if (player == null || player.getUUID() == null || player.getUUID().isBlank()) {
             return new PlayerEntry();
@@ -155,7 +284,7 @@ public class PlayerDataStore {
             return new PlayerEntry();
         }
 
-        PlayerEntry entry = cache.computeIfAbsent(uuid, ignored -> loadEntryLocked(uuid, player.getName()));
+        PlayerEntry entry = getOrCreateEntryByUuidLocked(uuid, player.getName());
 
         if (entry.getUuid() == null || entry.getUuid().isBlank()) {
             entry.setUuid(uuid);
@@ -164,6 +293,23 @@ public class PlayerDataStore {
             entry.setName(player.getName());
         }
         entry.normalize(uuid);
+        return entry;
+    }
+
+    private PlayerEntry getOrCreateEntryByUuidLocked(String uuid, String nameHint) {
+        String normalizedUuid = normalizePlayerKey(uuid);
+        if (normalizedUuid == null) {
+            return new PlayerEntry();
+        }
+
+        PlayerEntry entry = cache.computeIfAbsent(normalizedUuid, ignored -> loadEntryLocked(normalizedUuid, nameHint));
+        if (entry.getUuid() == null || entry.getUuid().isBlank()) {
+            entry.setUuid(normalizedUuid);
+        }
+        if (nameHint != null && !nameHint.isBlank()) {
+            entry.setName(nameHint);
+        }
+        entry.normalize(normalizedUuid);
         return entry;
     }
 
@@ -285,6 +431,9 @@ public class PlayerDataStore {
         private String name;
         private Map<String, HomeEntry> homes = new LinkedHashMap<>();
         private StoredLocation lastLocation;
+        private long lastSeenMs;
+        private Set<String> ignoredPlayers = new LinkedHashSet<>();
+        private List<TemporaryGroupEntry> tempGroups = new ArrayList<>();
 
         public String getUuid() {
             return uuid;
@@ -314,6 +463,26 @@ public class PlayerDataStore {
             this.lastLocation = lastLocation;
         }
 
+        public long getLastSeenMs() {
+            return lastSeenMs;
+        }
+
+        public void setLastSeenMs(long lastSeenMs) {
+            this.lastSeenMs = lastSeenMs;
+        }
+
+        public Set<String> getIgnoredPlayers() {
+            return ignoredPlayers;
+        }
+
+        public List<TemporaryGroupEntry> getTempGroups() {
+            return tempGroups;
+        }
+
+        public void setTempGroups(List<TemporaryGroupEntry> tempGroups) {
+            this.tempGroups = tempGroups;
+        }
+
         public void normalize(String fallbackUuid) {
             if (uuid == null || uuid.isBlank()) {
                 uuid = fallbackUuid;
@@ -327,6 +496,12 @@ public class PlayerDataStore {
             }
             if (homes == null) {
                 homes = new LinkedHashMap<>();
+            }
+            if (ignoredPlayers == null) {
+                ignoredPlayers = new LinkedHashSet<>();
+            }
+            if (tempGroups == null) {
+                tempGroups = new ArrayList<>();
             }
 
             Map<String, HomeEntry> normalizedHomes = new LinkedHashMap<>();
@@ -342,6 +517,92 @@ public class PlayerDataStore {
                 }
             }
             homes = normalizedHomes;
+
+            Set<String> normalizedIgnored = new LinkedHashSet<>();
+            for (String ignored : ignoredPlayers) {
+                String normalized = normalizePlayerKey(ignored);
+                if (normalized != null && !normalized.equals(uuid)) {
+                    normalizedIgnored.add(normalized);
+                }
+            }
+            ignoredPlayers = normalizedIgnored;
+
+            if (lastSeenMs < 0L) {
+                lastSeenMs = 0L;
+            }
+
+            Set<String> seenGroups = new LinkedHashSet<>();
+            List<TemporaryGroupEntry> normalizedTempGroups = new ArrayList<>();
+            for (TemporaryGroupEntry tempGroup : tempGroups) {
+                if (tempGroup == null) {
+                    continue;
+                }
+                tempGroup.normalize();
+                if (tempGroup.group == null || tempGroup.group.isBlank()) {
+                    continue;
+                }
+                if (tempGroup.expiresAtMs <= System.currentTimeMillis()) {
+                    continue;
+                }
+                if (seenGroups.add(tempGroup.group)) {
+                    normalizedTempGroups.add(tempGroup);
+                }
+            }
+            tempGroups = normalizedTempGroups;
+        }
+    }
+
+    public static class TemporaryGroupEntry {
+        private String group;
+        private long expiresAtMs;
+        private long assignedAtMs;
+        private String assignedBy;
+
+        public TemporaryGroupEntry() {
+        }
+
+        public TemporaryGroupEntry(String group, long expiresAtMs, long assignedAtMs, String assignedBy) {
+            this.group = group;
+            this.expiresAtMs = expiresAtMs;
+            this.assignedAtMs = assignedAtMs;
+            this.assignedBy = assignedBy;
+        }
+
+        public String getGroup() {
+            return group;
+        }
+
+        public long getExpiresAtMs() {
+            return expiresAtMs;
+        }
+
+        public long getAssignedAtMs() {
+            return assignedAtMs;
+        }
+
+        public String getAssignedBy() {
+            return assignedBy;
+        }
+
+        public void normalize() {
+            if (group == null) {
+                group = "";
+            }
+            group = normalizeHomeKey(group);
+            if (group == null) {
+                group = "";
+            }
+            if (expiresAtMs < 0L) {
+                expiresAtMs = 0L;
+            }
+            if (assignedAtMs < 0L) {
+                assignedAtMs = 0L;
+            }
+            if (assignedBy == null) {
+                assignedBy = "";
+            } else {
+                assignedBy = assignedBy.trim();
+            }
         }
     }
 

@@ -32,7 +32,7 @@ public class editor implements ParadigmModule {
                 .literal("paradigm")
                 .then(platform.createCommandBuilder()
                         .literal("editor")
-                        .requires(src -> hasEditorPermission(src, services))
+                        .requires(src -> services.getCommandToggleStore().isEnabled("paradigm.editor") && hasEditorPermission(src, services))
                         .executes(ctx -> openEditor(ctx.getSource(), services))
                         .then(platform.createCommandBuilder()
                                 .literal("trust")
@@ -50,7 +50,7 @@ public class editor implements ParadigmModule {
                                 .executes(ctx -> listTrusted(ctx.getSource(), services))))
                 .then(platform.createCommandBuilder()
                         .literal("apply")
-                        .requires(src -> hasEditorPermission(src, services))
+                        .requires(src -> services.getCommandToggleStore().isEnabled("paradigm.apply") && hasEditorPermission(src, services))
                         .then(platform.createCommandBuilder()
                                 .argument("code", ICommandBuilder.ArgumentType.WORD)
                                 .executes(ctx -> applyChanges(ctx.getSource(), services, ctx.getStringArgument("code")))));

@@ -26,7 +26,9 @@ public class HomeCommand implements ParadigmModule {
 
     @Override
     public boolean isEnabled(Services services) {
-        return true;
+        return services == null
+                || services.getMainConfig() == null
+                || Boolean.TRUE.equals(services.getMainConfig().homeCommandsEnable.value);
     }
 
     @Override
@@ -67,7 +69,8 @@ public class HomeCommand implements ParadigmModule {
     private void registerSetHome() {
         ICommandBuilder command = platform.createCommandBuilder()
                 .literal("sethome")
-                .requires(source -> source.getPlayer() != null
+                .requires(source -> services.getCommandToggleStore().isEnabled("sethome")
+                        && source.getPlayer() != null
                         && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.HOME_SET_PERMISSION, PermissionsHandler.HOME_SET_PERMISSION_LEVEL))
                 .executes(ctx -> executeSetHome(ctx.getSource().getPlayer(), "home"))
                 .then(platform.createCommandBuilder()
@@ -79,20 +82,83 @@ public class HomeCommand implements ParadigmModule {
     private void registerHome() {
         ICommandBuilder command = platform.createCommandBuilder()
                 .literal("home")
-                .requires(source -> source.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.HOME_USE_PERMISSION, PermissionsHandler.HOME_USE_PERMISSION_LEVEL))
-                .executes(ctx -> executeHome(ctx.getSource().getPlayer(), "home"))
+                .requires(source -> source.getPlayer() != null)
+                .executes(ctx -> canUseHome(ctx.getSource().getPlayer())
+                        ? executeHome(ctx.getSource().getPlayer(), "home")
+                        : 0)
+                .then(platform.createCommandBuilder()
+                        .literal("set")
+                        .requires(source -> canSetHome(source.getPlayer()))
+                        .executes(ctx -> executeSetHome(ctx.getSource().getPlayer(), "home"))
+                        .then(platform.createCommandBuilder()
+                                .argument("name", ICommandBuilder.ArgumentType.WORD)
+                                .executes(ctx -> executeSetHome(ctx.getSource().getPlayer(), ctx.getStringArgument("name")))))
+                .then(platform.createCommandBuilder()
+                        .literal("delete")
+                        .requires(source -> canDeleteHome(source.getPlayer()))
+                        .then(platform.createCommandBuilder()
+                                .argument("name", ICommandBuilder.ArgumentType.WORD)
+                                .suggests((c, input) -> homeSuggestions(c.getSource().getPlayer()))
+                                .executes(ctx -> executeDelHome(ctx.getSource().getPlayer(), ctx.getStringArgument("name")))))
+                .then(platform.createCommandBuilder()
+                        .literal("del")
+                        .requires(source -> canDeleteHome(source.getPlayer()))
+                        .then(platform.createCommandBuilder()
+                                .argument("name", ICommandBuilder.ArgumentType.WORD)
+                                .suggests((c, input) -> homeSuggestions(c.getSource().getPlayer()))
+                                .executes(ctx -> executeDelHome(ctx.getSource().getPlayer(), ctx.getStringArgument("name")))))
+                .then(platform.createCommandBuilder()
+                        .literal("list")
+                        .requires(source -> canListHomes(source.getPlayer()))
+                        .executes(ctx -> executeHomes(ctx.getSource().getPlayer())))
+                .then(platform.createCommandBuilder()
+                        .literal("back")
+                        .requires(source -> canBack(source.getPlayer()))
+                        .executes(ctx -> executeBack(ctx.getSource().getPlayer())))
                 .then(platform.createCommandBuilder()
                         .argument("name", ICommandBuilder.ArgumentType.WORD)
                         .suggests((c, input) -> homeSuggestions(c.getSource().getPlayer()))
-                        .executes(ctx -> executeHome(ctx.getSource().getPlayer(), ctx.getStringArgument("name"))));
+                        .executes(ctx -> canUseHome(ctx.getSource().getPlayer())
+                                ? executeHome(ctx.getSource().getPlayer(), ctx.getStringArgument("name"))
+                                : 0));
         platform.registerCommand(command);
+    }
+
+    private boolean canUseHome(IPlayer player) {
+        return player != null
+                && services.getCommandToggleStore().isEnabled("home")
+                && services.getPermissionsHandler().hasPermission(player, PermissionsHandler.HOME_USE_PERMISSION, PermissionsHandler.HOME_USE_PERMISSION_LEVEL);
+    }
+
+    private boolean canSetHome(IPlayer player) {
+        return player != null
+                && services.getCommandToggleStore().isEnabled("sethome")
+                && services.getPermissionsHandler().hasPermission(player, PermissionsHandler.HOME_SET_PERMISSION, PermissionsHandler.HOME_SET_PERMISSION_LEVEL);
+    }
+
+    private boolean canDeleteHome(IPlayer player) {
+        return player != null
+                && services.getCommandToggleStore().isEnabled("delhome")
+                && services.getPermissionsHandler().hasPermission(player, PermissionsHandler.HOME_DEL_PERMISSION, PermissionsHandler.HOME_DEL_PERMISSION_LEVEL);
+    }
+
+    private boolean canListHomes(IPlayer player) {
+        return player != null
+                && services.getCommandToggleStore().isEnabled("homes")
+                && services.getPermissionsHandler().hasPermission(player, PermissionsHandler.HOME_LIST_PERMISSION, PermissionsHandler.HOME_LIST_PERMISSION_LEVEL);
+    }
+
+    private boolean canBack(IPlayer player) {
+        return player != null
+                && services.getCommandToggleStore().isEnabled("back")
+                && services.getPermissionsHandler().hasPermission(player, PermissionsHandler.BACK_PERMISSION, PermissionsHandler.BACK_PERMISSION_LEVEL);
     }
 
     private void registerDelHome() {
         ICommandBuilder command = platform.createCommandBuilder()
                 .literal("delhome")
-                .requires(source -> source.getPlayer() != null
+                .requires(source -> services.getCommandToggleStore().isEnabled("delhome")
+                        && source.getPlayer() != null
                         && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.HOME_DEL_PERMISSION, PermissionsHandler.HOME_DEL_PERMISSION_LEVEL))
                 .then(platform.createCommandBuilder()
                         .argument("name", ICommandBuilder.ArgumentType.WORD)
@@ -104,7 +170,8 @@ public class HomeCommand implements ParadigmModule {
     private void registerHomes() {
         ICommandBuilder command = platform.createCommandBuilder()
                 .literal("homes")
-                .requires(source -> source.getPlayer() != null
+                .requires(source -> services.getCommandToggleStore().isEnabled("homes")
+                        && source.getPlayer() != null
                         && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.HOME_LIST_PERMISSION, PermissionsHandler.HOME_LIST_PERMISSION_LEVEL))
                 .executes(ctx -> executeHomes(ctx.getSource().getPlayer()));
         platform.registerCommand(command);
@@ -113,7 +180,8 @@ public class HomeCommand implements ParadigmModule {
     private void registerBack() {
         ICommandBuilder command = platform.createCommandBuilder()
                 .literal("back")
-                .requires(source -> source.getPlayer() != null
+                .requires(source -> services.getCommandToggleStore().isEnabled("back")
+                        && source.getPlayer() != null
                         && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.BACK_PERMISSION, PermissionsHandler.BACK_PERMISSION_LEVEL))
                 .executes(ctx -> executeBack(ctx.getSource().getPlayer()));
         platform.registerCommand(command);

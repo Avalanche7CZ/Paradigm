@@ -28,6 +28,7 @@ public class Services {
     private final TaskScheduler taskSchedulerInstance;
     private final PlayerDataStore playerDataStoreInstance;
     private final GroupChatManager groupChatManagerInstance;
+    private final CommandToggleStore commandToggleStoreInstance;
     private final IPlatformAdapter platformAdapter;
 
     private final WebEditorStore webEditorStore;
@@ -50,6 +51,7 @@ public class Services {
             Placeholders placeholders,
             TaskScheduler taskScheduler,
             PlayerDataStore playerDataStore,
+            CommandToggleStore commandToggleStore,
             IPlatformAdapter platformAdapter,
             WebEditorStore webEditorStore
     ) {
@@ -69,6 +71,7 @@ public class Services {
         this.placeholdersInstance = placeholders;
         this.taskSchedulerInstance = taskScheduler;
         this.playerDataStoreInstance = playerDataStore;
+        this.commandToggleStoreInstance = commandToggleStore;
         this.platformAdapter = platformAdapter;
         this.webEditorStore = webEditorStore != null ? webEditorStore : new WebEditorStore();
     }
@@ -129,6 +132,10 @@ public class Services {
 
     public PlayerDataStore getPlayerDataStore() {
         return playerDataStoreInstance;
+    }
+
+    public CommandToggleStore getCommandToggleStore() {
+        return commandToggleStoreInstance;
     }
 
 

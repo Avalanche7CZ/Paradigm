@@ -108,5 +108,81 @@ public class MainConfigHandler extends BaseConfigHandler<MainConfigHandler.Confi
                 false,
                 "When enabled, use the local web editor test URL (http://localhost:8083) instead of production."
         );
+        public ConfigEntry<String> spawnWorld = new ConfigEntry<>(
+                "",
+                "Global spawn world id (set via /setspawn). Empty means spawn is not configured."
+        );
+        public ConfigEntry<Double> spawnX = new ConfigEntry<>(
+                0.0,
+                "Global spawn X coordinate."
+        );
+        public ConfigEntry<Double> spawnY = new ConfigEntry<>(
+                64.0,
+                "Global spawn Y coordinate."
+        );
+        public ConfigEntry<Double> spawnZ = new ConfigEntry<>(
+                0.0,
+                "Global spawn Z coordinate."
+        );
+        public ConfigEntry<Float> spawnYaw = new ConfigEntry<>(
+                0.0f,
+                "Global spawn yaw rotation."
+        );
+        public ConfigEntry<Float> spawnPitch = new ConfigEntry<>(
+                0.0f,
+                "Global spawn pitch rotation."
+        );
+        public ConfigEntry<Boolean> homeCommandsEnable = new ConfigEntry<>(
+                true,
+                "Enable or disable /sethome, /home, /delhome, /homes and /back commands."
+        );
+        public ConfigEntry<Boolean> tpaCommandsEnable = new ConfigEntry<>(
+                true,
+                "Enable or disable /tpa, /tpahere, /tpaccept, /tpdeny and /tpcancel commands."
+        );
+        public ConfigEntry<Boolean> warpCommandsEnable = new ConfigEntry<>(
+                true,
+                "Enable or disable /warp, /warps, /setwarp, /delwarp and /warpinfo commands."
+        );
+        public ConfigEntry<Boolean> spawnCommandsEnable = new ConfigEntry<>(
+                true,
+                "Enable or disable /spawn and /setspawn commands."
+        );
+        public ConfigEntry<Boolean> seenCommandEnable = new ConfigEntry<>(
+                true,
+                "Enable or disable /seen command."
+        );
+        public ConfigEntry<Boolean> ignoreCommandsEnable = new ConfigEntry<>(
+                true,
+                "Enable or disable /ignore and /unignore commands."
+        );
+        public ConfigEntry<Boolean> gamemodeCommandsEnable = new ConfigEntry<>(
+                true,
+                "Enable or disable /gamemode and gm aliases."
+        );
+        public ConfigEntry<Boolean> flyCommandEnable = new ConfigEntry<>(
+                true,
+                "Enable or disable /fly command."
+        );
+        public ConfigEntry<Boolean> clearInventoryCommandEnable = new ConfigEntry<>(
+                true,
+                "Enable or disable /clearinv and /ci commands."
+        );
+        public ConfigEntry<Boolean> timeWeatherCommandsEnable = new ConfigEntry<>(
+                true,
+                "Enable or disable /day, /night, /sun, /rain and /thunder commands."
+        );
+        public ConfigEntry<Boolean> speedCommandEnable = new ConfigEntry<>(
+                true,
+                "Enable or disable /speed command."
+        );
+        public ConfigEntry<Boolean> feedCommandEnable = new ConfigEntry<>(
+                true,
+                "Enable or disable /feed command."
+        );
+        public ConfigEntry<Boolean> healCommandEnable = new ConfigEntry<>(
+                true,
+                "Enable or disable /heal command."
+        );
     }
 }

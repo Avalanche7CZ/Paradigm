@@ -110,7 +110,8 @@ public class Restart implements ParadigmModule {
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         ICommandBuilder cmd = platform.createCommandBuilder()
                 .literal("restart")
-                .requires(source -> source.hasPermissionLevel(2) || (source.getPlayer() != null && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.RESTART_MANAGE_PERMISSION)))
+                .requires(source -> services.getCommandToggleStore().isEnabled("restart")
+                        && (source.hasPermissionLevel(2) || (source.getPlayer() != null && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.RESTART_MANAGE_PERMISSION))))
                 .then(platform.createCommandBuilder()
                         .literal("now")
                         .executes(context -> {

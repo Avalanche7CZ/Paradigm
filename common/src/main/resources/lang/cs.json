@@ -67,7 +67,34 @@
     "kick_cannot_self": "Nemůžeš vyhodit sám sebe. Použij /groupchat leave.",
     "kick_success_target": "Byl jsi vyhozen ze skupiny {group_name}.",
     "kick_success_owner": "Hráč {player_name} byl vyhozen ze skupiny.",
-    "kick_success_notify": "Hráč {player_name} byl vyhozen ze skupiny."
+    "kick_success_notify": "Hráč {player_name} byl vyhozen ze skupiny.",
+    "manage": {
+      "help": "Použij /paradigm group list|add|remove|info|parent|user",
+      "list": "Skupiny: {groups}",
+      "add_ok": "Skupina {group} byla vytvořena.",
+      "add_fail": "Skupinu {group} se nepodařilo vytvořit.",
+      "remove_ok": "Skupina {group} byla odstraněna.",
+      "remove_fail": "Skupinu {group} se nepodařilo odstranit.",
+      "not_found": "Skupina {group} nebyla nalezena.",
+      "info_header": "Skupina {group} | weight={weight}",
+      "info_parents": "Rodiče: {parents}",
+      "info_perms": "Perms: {perms}",
+      "parent_add_ok": "Rodič {parent} byl přidán do {group}.",
+      "parent_add_fail": "Rodiče {parent} se nepodařilo přidat do {group}.",
+      "parent_remove_ok": "Rodič {parent} byl odebrán z {group}.",
+      "parent_remove_fail": "Rodiče {parent} se nepodařilo odebrat z {group}.",
+      "user_invalid": "Hráč musí být online jménem nebo UUID.",
+      "user_add_ok": "Skupina {group} byla hráči přiřazena.",
+      "user_add_temp_ok": "Skupina {group} byla přiřazena do {until}.",
+      "user_add_fail": "Skupinu {group} se nepodařilo přiřadit.",
+      "user_remove_ok": "Skupina {group} byla hráči odebrána.",
+      "user_remove_fail": "Skupinu {group} se hráči nepodařilo odebrat.",
+      "user_empty": "Hráč nemá přiřazené skupiny.",
+      "user_list_perm": "Trvalé: {groups}",
+      "user_list_temp": "Dočasné: -",
+      "user_temp_line": "Dočasné {group} do {until}",
+      "duration_invalid": "Neplatná doba. Použij days/weeks/months a amount > 0."
+    }
   },
 
   "mention": {
@@ -130,5 +157,55 @@
     "delete_success": "Warp {warp} byl smazán.",
     "list_empty": "Žádné warpy nejsou nastavené.",
     "list_header": "Warpy ({count}):"
+  },
+
+  "spawn": {
+    "not_set": "Spawn zatím není nastaven. Použij /setspawn.",
+    "teleport_failed": "Teleport na spawn selhal.",
+    "teleported": "Teleport na spawn proběhl.",
+    "location_unavailable": "Nepodařilo se načíst tvoji aktuální pozici.",
+    "set_success": "Spawn byl aktualizován."
+  },
+
+  "seen": {
+    "online": "{player} je právě online.",
+    "need_uuid": "Hráč je offline. Pro přesné hledání použij UUID.",
+    "unknown": "Pro tohoto hráče nejsou data /seen.",
+    "last_seen": "Naposledy online: před {ago}."
+  },
+
+  "ignore": {
+    "self": "Nemůžeš ignorovat sám sebe.",
+    "already": "Hráče {player} už ignoruješ.",
+    "added": "Nyní ignoruješ hráče {player}.",
+    "not_found": "Hráče {player} neignoruješ.",
+    "removed": "Hráče {player} už neignoruješ."
+  },
+
+  "utility": {
+    "gamemode_invalid": "Neplatný gamemode.",
+    "gamemode_set": "Gamemode {mode} byl nastaven hráči {player}.",
+    "fly_failed": "Nepodařilo se přepnout fly hráči {player}.",
+    "fly_toggled": "Fly pro {player}: {state}",
+    "clearinv_ok": "Inventář hráče {player} byl vyčištěn.",
+    "time_set": "Čas byl změněn na {state}.",
+    "weather_set": "Počasí bylo změněno na {state}.",
+    "speed_cleared": "Speed hráče {player} byl zrušen.",
+    "speed_fail": "Nepodařilo se nastavit speed hráči {player}.",
+    "speed_set": "Speed {level} byl nastaven hráči {player}.",
+    "feed_ok": "Hráč {player} byl nasycen.",
+    "feed_fail": "Nepodařilo se obnovit hlad hráči {player}.",
+    "heal_ok": "Hráč {player} byl vyléčen.",
+    "heal_fail": "Nepodařilo se obnovit plné HP hráči {player}."
+  },
+
+  "command_toggle": {
+    "list": "Stavy příkazů: {list}",
+    "status": "{command} je aktuálně {state}.",
+    "enabled": "Příkaz {command} byl zapnut.",
+    "disabled": "Příkaz {command} byl vypnut.",
+    "protected": "Příkaz {command} je chráněný a nejde vypnout.",
+    "unknown": "Neznámý klíč příkazu: {command}",
+    "reloaded": "Command toggles byly načteny z commands.json."
   }
 }

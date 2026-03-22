@@ -64,7 +64,8 @@ public class CommandManager implements ParadigmModule {
     private ICommandBuilder buildCustomCommand(CustomCommand command) {
         ICommandBuilder root = platform.createCommandBuilder()
                 .literal(command.getName())
-                .requires(source -> platform.hasPermissionForCustomCommand(source, command));
+                .requires(source -> services.getCommandToggleStore().isEnabled("customcommands")
+                        && platform.hasPermissionForCustomCommand(source, command));
 
         List<CustomCommand.ArgumentDefinition> args = command.getArguments();
         if (args == null) args = List.of();

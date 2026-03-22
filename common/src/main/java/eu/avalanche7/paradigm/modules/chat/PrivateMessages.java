@@ -11,12 +11,14 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 public class PrivateMessages implements ParadigmModule {
 
     private static final String NAME = "PrivateMessages";
 
     private final ConcurrentHashMap<String, String> lastContactByUuid = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, Boolean> socialSpyEnabledByUuid = new ConcurrentHashMap<>();
     private Services services;
     private IPlatformAdapter platform;
 
@@ -50,6 +52,7 @@ public class PrivateMessages implements ParadigmModule {
     @Override
     public void onDisable(Services services) {
         lastContactByUuid.clear();
+        socialSpyEnabledByUuid.clear();
     }
 
     @Override
@@ -66,12 +69,15 @@ public class PrivateMessages implements ParadigmModule {
 
         registerReplyRoot("reply");
         registerReplyRoot("r");
+
+        registerSocialSpy();
     }
 
     private void registerMsgRoot(String literal) {
         ICommandBuilder command = platform.createCommandBuilder()
                 .literal(literal)
-                .requires(source -> source.getPlayer() != null &&
+                .requires(source -> services.getCommandToggleStore().isEnabled("msg")
+                        && source.getPlayer() != null &&
                         services.getPermissionsHandler().hasPermission(
                                 source.getPlayer(),
                                 PermissionsHandler.PRIVATE_MESSAGE_PERMISSION,
@@ -88,7 +94,8 @@ public class PrivateMessages implements ParadigmModule {
     private void registerReplyRoot(String literal) {
         ICommandBuilder command = platform.createCommandBuilder()
                 .literal(literal)
-                .requires(source -> source.getPlayer() != null &&
+                .requires(source -> services.getCommandToggleStore().isEnabled("reply")
+                        && source.getPlayer() != null &&
                         services.getPermissionsHandler().hasPermission(
                                 source.getPlayer(),
                                 PermissionsHandler.PRIVATE_REPLY_PERMISSION,
@@ -97,6 +104,31 @@ public class PrivateMessages implements ParadigmModule {
                 .then(platform.createCommandBuilder()
                         .argument("message", ICommandBuilder.ArgumentType.GREEDY_STRING)
                         .executes(this::executeReplyCommand));
+        platform.registerCommand(command);
+    }
+
+    private void registerSocialSpy() {
+        ICommandBuilder command = platform.createCommandBuilder()
+                .literal("socialspy")
+                .requires(source -> services.getCommandToggleStore().isEnabled("socialspy")
+                        && source.getPlayer() != null
+                        && services.getPermissionsHandler().hasPermission(
+                                source.getPlayer(),
+                                PermissionsHandler.SOCIALSPY_PERMISSION,
+                                PermissionsHandler.SOCIALSPY_PERMISSION_LEVEL
+                        ))
+                .executes(ctx -> {
+                    IPlayer player = ctx.getSource().requirePlayer();
+                    if (player == null || player.getUUID() == null || player.getUUID().isBlank()) {
+                        return 0;
+                    }
+                    boolean newState = !socialSpyEnabledByUuid.getOrDefault(player.getUUID(), false);
+                    socialSpyEnabledByUuid.put(player.getUUID(), newState);
+                    platform.sendSystemMessage(player, services.getMessageParser().parseMessage(
+                            "<color:#A78BFA><bold>[Spy]</bold></color> <color:#E5E7EB>SocialSpy " + (newState ? "enabled" : "disabled") + ".</color>",
+                            player));
+                    return 1;
+                });
         platform.registerCommand(command);
     }
 
@@ -122,6 +154,12 @@ public class PrivateMessages implements ParadigmModule {
 
         if (target.getUUID() != null && target.getUUID().equals(sender.getUUID())) {
             platform.sendSystemMessage(sender, services.getLang().translate("pm.cannot_message_self"));
+            return 0;
+        }
+
+        if (target.getUUID() != null && sender.getUUID() != null
+                && services.getPlayerDataStore().isIgnoring(target.getUUID(), sender.getUUID())) {
+            platform.sendSystemMessage(sender, services.getMessageParser().parseMessage("<color:#EF4444>That player is ignoring you.</color>", sender));
             return 0;
         }
 
@@ -166,6 +204,12 @@ public class PrivateMessages implements ParadigmModule {
             return 0;
         }
 
+        if (target.getUUID() != null && sender.getUUID() != null
+                && services.getPlayerDataStore().isIgnoring(target.getUUID(), sender.getUUID())) {
+            platform.sendSystemMessage(sender, services.getMessageParser().parseMessage("<color:#EF4444>That player is ignoring you.</color>", sender));
+            return 0;
+        }
+
         sendPrivateMessage(sender, target, message.trim());
         return 1;
     }
@@ -202,8 +246,43 @@ public class PrivateMessages implements ParadigmModule {
         platform.sendSystemMessage(sender, services.getMessageParser().parseMessage(toFormatted, sender));
         platform.sendSystemMessage(target, services.getMessageParser().parseMessage(fromFormatted, target));
 
+        mirrorToSocialSpy(sender, target, message);
+
         updateLastContact(sender, target);
         services.getLogger().info("[MSG] {} -> {}: {}", senderName, targetName, message);
+    }
+
+    private void mirrorToSocialSpy(IPlayer sender, IPlayer target, String message) {
+        if (sender == null || target == null) {
+            return;
+        }
+
+        String line = "<color:#A78BFA><bold>[SocialSpy]</bold></color> <color:#E5E7EB>"
+                + safe(sender.getName()) + " -> " + safe(target.getName()) + ": " + safe(message)
+                + "</color>";
+
+        for (IPlayer online : platform.getOnlinePlayers()) {
+            if (online == null || online.getUUID() == null || online.getUUID().isBlank()) {
+                continue;
+            }
+            if (online.getUUID().equals(sender.getUUID()) || online.getUUID().equals(target.getUUID())) {
+                continue;
+            }
+            if (!socialSpyEnabledByUuid.getOrDefault(online.getUUID(), false)) {
+                continue;
+            }
+            if (!services.getPermissionsHandler().hasPermission(online, PermissionsHandler.SOCIALSPY_PERMISSION, PermissionsHandler.SOCIALSPY_PERMISSION_LEVEL)) {
+                continue;
+            }
+            platform.sendSystemMessage(online, services.getMessageParser().parseMessage(line, online));
+        }
+    }
+
+    private static String safe(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("<", "").replace(">", "").replace("'", "");
     }
 
     private void updateLastContact(IPlayer sender, IPlayer target) {
@@ -226,6 +305,7 @@ public class PrivateMessages implements ParadigmModule {
             return;
         }
         lastContactByUuid.remove(playerUuid);
+        socialSpyEnabledByUuid.remove(playerUuid);
         lastContactByUuid.entrySet().removeIf(entry -> playerUuid.equals(entry.getValue()));
     }
 }

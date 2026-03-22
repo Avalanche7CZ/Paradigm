@@ -47,6 +47,7 @@ public class Help implements ParadigmModule {
 
         ICommandBuilder cmd = platform.createCommandBuilder()
                 .literal("paradigm")
+                .requires(src -> services.getCommandToggleStore().isEnabled("paradigm.help"))
                 .executes(ctx -> {
                     Reload.refreshModuleStatesForHelp(services);
                     IPlayer p = ctx.getSource().getPlayer();
@@ -161,10 +162,65 @@ public class Help implements ParadigmModule {
                 "/warp <name>, /warps, /setwarp <name>, /delwarp <name>, /warpinfo <name>",
                 "warps.json"
         ));
+        m.put("Spawn", new HelpEntry(
+                "Server spawn teleport and management.",
+                "/spawn, /setspawn",
+                "main.json"
+        ));
+        m.put("Seen", new HelpEntry(
+                "Shows if a player is online or last seen time.",
+                "/seen <player|uuid>",
+                "paradigm/playerdata/<uuid>.json"
+        ));
+        m.put("Ignore", new HelpEntry(
+                "Ignore and unignore private messages from players.",
+                "/ignore <player>, /unignore <player>",
+                "paradigm/playerdata/<uuid>.json"
+        ));
+        m.put("Gamemode", new HelpEntry(
+                "Quick gamemode switches.",
+                "/gamemode <mode> [player], /gmc, /gms, /gma, /gmsp",
+                "runtime command"
+        ));
+        m.put("Fly", new HelpEntry(
+                "Toggle player flight.",
+                "/fly [player]",
+                "runtime player abilities"
+        ));
+        m.put("ClearInventory", new HelpEntry(
+                "Clear inventory of self or target player.",
+                "/clearinv [player], /ci [player]",
+                "runtime command"
+        ));
+        m.put("TimeWeather", new HelpEntry(
+                "Quick world time/weather controls.",
+                "/day, /night, /sun, /rain, /thunder",
+                "runtime command"
+        ));
+        m.put("Speed", new HelpEntry(
+                "Set speed level.",
+                "/speed <0-10> [player]",
+                "runtime effect"
+        ));
+        m.put("Feed", new HelpEntry(
+                "Restore food/saturation.",
+                "/feed [player]",
+                "runtime player stats"
+        ));
+        m.put("Heal", new HelpEntry(
+                "Restore full HP.",
+                "/heal [player]",
+                "runtime player stats"
+        ));
         m.put("Reload", new HelpEntry(
                 "Reload one config or all configs without full restart.",
                 "/paradigm reload [main|announcements|chat|motd|mention|restart|customcommands|all]",
                 "main config + module configs"
+        ));
+        m.put("PermissionGroups", new HelpEntry(
+                "Manage internal permission groups, parents, and temporary user assignments.",
+                "/paradigm group list|add|remove|info|parent|user",
+                "permissions.json + paradigm/playerdata/<uuid>.json"
         ));
         m.put("Help", new HelpEntry(
                 "Interactive help with module list, details and search.",

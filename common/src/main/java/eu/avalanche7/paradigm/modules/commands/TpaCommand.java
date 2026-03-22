@@ -29,7 +29,9 @@ public class TpaCommand implements ParadigmModule {
 
     @Override
     public boolean isEnabled(Services services) {
-        return true;
+        return services == null
+                || services.getMainConfig() == null
+                || Boolean.TRUE.equals(services.getMainConfig().tpaCommandsEnable.value);
     }
 
     @Override
@@ -80,7 +82,8 @@ public class TpaCommand implements ParadigmModule {
     private void registerTpa() {
         ICommandBuilder command = platform.createCommandBuilder()
                 .literal("tpa")
-                .requires(source -> source.getPlayer() != null
+                .requires(source -> services.getCommandToggleStore().isEnabled("tpa")
+                        && source.getPlayer() != null
                         && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.TPA_PERMISSION, PermissionsHandler.TPA_PERMISSION_LEVEL))
                 .then(platform.createCommandBuilder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
@@ -92,7 +95,8 @@ public class TpaCommand implements ParadigmModule {
     private void registerTpaHere() {
         ICommandBuilder command = platform.createCommandBuilder()
                 .literal("tpahere")
-                .requires(source -> source.getPlayer() != null
+                .requires(source -> services.getCommandToggleStore().isEnabled("tpahere")
+                        && source.getPlayer() != null
                         && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.TPAHERE_PERMISSION, PermissionsHandler.TPAHERE_PERMISSION_LEVEL))
                 .then(platform.createCommandBuilder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
@@ -104,7 +108,8 @@ public class TpaCommand implements ParadigmModule {
     private void registerTpAccept() {
         ICommandBuilder root = platform.createCommandBuilder()
                 .literal("tpaccept")
-                .requires(source -> source.getPlayer() != null
+                .requires(source -> services.getCommandToggleStore().isEnabled("tpaccept")
+                        && source.getPlayer() != null
                         && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.TPACCEPT_PERMISSION, PermissionsHandler.TPACCEPT_PERMISSION_LEVEL))
                 .executes(ctx -> executeAccept(ctx.getSource().getPlayer(), null));
 
@@ -122,7 +127,8 @@ public class TpaCommand implements ParadigmModule {
     private void registerTpDeny() {
         ICommandBuilder root = platform.createCommandBuilder()
                 .literal("tpdeny")
-                .requires(source -> source.getPlayer() != null
+                .requires(source -> services.getCommandToggleStore().isEnabled("tpdeny")
+                        && source.getPlayer() != null
                         && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.TPDENY_PERMISSION, PermissionsHandler.TPDENY_PERMISSION_LEVEL))
                 .executes(ctx -> executeDeny(ctx.getSource().getPlayer(), null));
 
@@ -140,7 +146,8 @@ public class TpaCommand implements ParadigmModule {
     private void registerTpCancel() {
         ICommandBuilder root = platform.createCommandBuilder()
                 .literal("tpcancel")
-                .requires(source -> source.getPlayer() != null
+                .requires(source -> services.getCommandToggleStore().isEnabled("tpcancel")
+                        && source.getPlayer() != null
                         && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.TPCANCEL_PERMISSION, PermissionsHandler.TPCANCEL_PERMISSION_LEVEL))
                 .executes(ctx -> executeCancel(ctx.getSource().getPlayer(), null));
 
@@ -163,6 +170,11 @@ public class TpaCommand implements ParadigmModule {
         }
         if (requester.getUUID() != null && requester.getUUID().equals(target.getUUID())) {
             send(requester, "tpa.cannot_target_self", "You cannot target yourself.");
+            return 0;
+        }
+        if (target.getUUID() != null && requester.getUUID() != null
+                && services.getPlayerDataStore().isIgnoring(target.getUUID(), requester.getUUID())) {
+            send(requester, "tpa.blocked_by_ignore", "That player is ignoring you.");
             return 0;
         }
 

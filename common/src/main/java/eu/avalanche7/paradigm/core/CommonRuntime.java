@@ -50,8 +50,9 @@ public final class CommonRuntime {
         Placeholders placeholders = new Placeholders();
         TaskScheduler taskScheduler = new TaskScheduler(debugLogger);
         PlayerDataStore playerDataStore = new PlayerDataStore(logger, debugLogger, platformAdapter.getConfig());
+        CommandToggleStore commandToggleStore = new CommandToggleStore(logger, debugLogger, platformAdapter.getConfig());
 
-        PermissionsHandler permissionsHandler = new PermissionsHandler(logger, cmConfig, debugLogger, platformAdapter);
+        PermissionsHandler permissionsHandler = new PermissionsHandler(logger, cmConfig, debugLogger, platformAdapter, playerDataStore);
 
         MessageParser messageParser = new MessageParser(placeholders, platformAdapter);
         platformAdapter.provideMessageParser(messageParser);
@@ -78,9 +79,12 @@ public final class CommonRuntime {
                 placeholders,
                 taskScheduler,
                 playerDataStore,
+                commandToggleStore,
                 platformAdapter,
                 new WebEditorStore()
         );
+
+        registerDefaultCommandToggles(commandToggleStore);
 
         UpdateChecker.registerInGameNotifier(services);
 
@@ -102,6 +106,16 @@ public final class CommonRuntime {
         modules.add(new eu.avalanche7.paradigm.modules.commands.HomeCommand());
         modules.add(new eu.avalanche7.paradigm.modules.commands.TpaCommand());
         modules.add(new eu.avalanche7.paradigm.modules.commands.WarpCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.SpawnCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.SeenCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.IgnoreCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.GamemodeCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.FlyCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.ClearInventoryCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.TimeWeatherCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.SpeedCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.FeedCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.HealCommand());
         modules.add(new eu.avalanche7.paradigm.modules.commands.Reload());
         modules.add(new eu.avalanche7.paradigm.modules.commands.editor());
 
@@ -129,5 +143,61 @@ public final class CommonRuntime {
     }
 
     public record Runtime(List<ParadigmModule> modules, Services services, PermissionsHandler permissionsHandler) {
+    }
+
+    private static void registerDefaultCommandToggles(CommandToggleStore store) {
+        if (store == null) {
+            return;
+        }
+
+        store.registerCommand("msg", true, false, "tell", "w", "whisper");
+        store.registerCommand("reply", true, false, "r");
+        store.registerCommand("mention", true, false);
+        store.registerCommand("restart", true, false);
+        store.registerCommand("customcommands", true, false);
+
+        store.registerCommand("sethome", true, false);
+        store.registerCommand("home", true, false);
+        store.registerCommand("delhome", true, false);
+        store.registerCommand("homes", true, false);
+        store.registerCommand("back", true, false);
+        store.registerCommand("spawn", true, false);
+        store.registerCommand("setspawn", true, false);
+        store.registerCommand("seen", true, false);
+        store.registerCommand("ignore", true, false);
+        store.registerCommand("unignore", true, false);
+        store.registerCommand("speed", true, false);
+        store.registerCommand("feed", true, false);
+        store.registerCommand("heal", true, false);
+        store.registerCommand("socialspy", true, false);
+        store.registerCommand("gamemode", true, false);
+        store.registerCommand("gmc", true, false);
+        store.registerCommand("gms", true, false);
+        store.registerCommand("gma", true, false);
+        store.registerCommand("gmsp", true, false);
+        store.registerCommand("fly", true, false);
+        store.registerCommand("clearinv", true, false, "ci");
+        store.registerCommand("day", true, false);
+        store.registerCommand("night", true, false);
+        store.registerCommand("sun", true, false);
+        store.registerCommand("rain", true, false);
+        store.registerCommand("thunder", true, false);
+
+        store.registerCommand("tpa", true, false);
+        store.registerCommand("tpahere", true, false);
+        store.registerCommand("tpaccept", true, false);
+        store.registerCommand("tpdeny", true, false);
+        store.registerCommand("tpcancel", true, false);
+
+        store.registerCommand("warp", true, false);
+        store.registerCommand("warps", true, false);
+        store.registerCommand("setwarp", true, false);
+        store.registerCommand("delwarp", true, false);
+        store.registerCommand("warpinfo", true, false);
+
+        store.registerCommand("paradigm.editor", true, false, "editor");
+        store.registerCommand("paradigm.apply", true, false, "apply");
+        store.registerCommand("paradigm.help", true, false, "help");
+        store.registerCommand("paradigm.command", true, true, "command", "commands");
     }
 }

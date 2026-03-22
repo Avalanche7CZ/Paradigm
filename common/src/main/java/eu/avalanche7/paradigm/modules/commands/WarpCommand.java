@@ -25,7 +25,9 @@ public class WarpCommand implements ParadigmModule {
 
     @Override
     public boolean isEnabled(Services services) {
-        return true;
+        return services == null
+                || services.getMainConfig() == null
+                || Boolean.TRUE.equals(services.getMainConfig().warpCommandsEnable.value);
     }
 
     @Override
@@ -69,16 +71,78 @@ public class WarpCommand implements ParadigmModule {
                 .literal("warp")
                 .requires(source -> source.getPlayer() != null)
                 .then(platform.createCommandBuilder()
+                        .literal("set")
+                        .requires(source -> canSetWarp(source.getPlayer()))
+                        .then(platform.createCommandBuilder()
+                                .argument("name", ICommandBuilder.ArgumentType.WORD)
+                                .executes(ctx -> executeSetWarp(ctx.getSource().getPlayer(), ctx.getStringArgument("name")))))
+                .then(platform.createCommandBuilder()
+                        .literal("delete")
+                        .requires(source -> canDeleteWarp(source.getPlayer()))
+                        .then(platform.createCommandBuilder()
+                                .argument("name", ICommandBuilder.ArgumentType.WORD)
+                                .suggests((c, input) -> warpSuggestions(input))
+                                .executes(ctx -> executeDelWarp(ctx.getSource().getPlayer(), ctx.getStringArgument("name")))))
+                .then(platform.createCommandBuilder()
+                        .literal("del")
+                        .requires(source -> canDeleteWarp(source.getPlayer()))
+                        .then(platform.createCommandBuilder()
+                                .argument("name", ICommandBuilder.ArgumentType.WORD)
+                                .suggests((c, input) -> warpSuggestions(input))
+                                .executes(ctx -> executeDelWarp(ctx.getSource().getPlayer(), ctx.getStringArgument("name")))))
+                .then(platform.createCommandBuilder()
+                        .literal("list")
+                        .requires(source -> canListWarps(source.getPlayer()))
+                        .executes(ctx -> executeWarps(ctx.getSource().getPlayer())))
+                .then(platform.createCommandBuilder()
+                        .literal("info")
+                        .requires(source -> canWarpInfo(source.getPlayer()))
+                        .then(platform.createCommandBuilder()
+                                .argument("name", ICommandBuilder.ArgumentType.WORD)
+                                .suggests((c, input) -> warpSuggestions(input))
+                                .executes(ctx -> executeWarpInfo(ctx.getSource().getPlayer(), ctx.getStringArgument("name")))))
+                .then(platform.createCommandBuilder()
                         .argument("name", ICommandBuilder.ArgumentType.WORD)
                         .suggests((c, input) -> warpSuggestions(input))
-                        .executes(ctx -> executeWarp(ctx.getSource().getPlayer(), ctx.getStringArgument("name"))));
+                        .executes(ctx -> canUseWarpCommand(ctx.getSource().getPlayer())
+                                ? executeWarp(ctx.getSource().getPlayer(), ctx.getStringArgument("name"))
+                                : 0));
         platform.registerCommand(command);
+    }
+
+    private boolean canUseWarpCommand(IPlayer player) {
+        return player != null && services.getCommandToggleStore().isEnabled("warp");
+    }
+
+    private boolean canSetWarp(IPlayer player) {
+        return player != null
+                && services.getCommandToggleStore().isEnabled("setwarp")
+                && services.getPermissionsHandler().hasPermission(player, PermissionsHandler.WARP_SET_PERMISSION, PermissionsHandler.WARP_SET_PERMISSION_LEVEL);
+    }
+
+    private boolean canDeleteWarp(IPlayer player) {
+        return player != null
+                && services.getCommandToggleStore().isEnabled("delwarp")
+                && services.getPermissionsHandler().hasPermission(player, PermissionsHandler.WARP_DELETE_PERMISSION, PermissionsHandler.WARP_DELETE_PERMISSION_LEVEL);
+    }
+
+    private boolean canListWarps(IPlayer player) {
+        return player != null
+                && services.getCommandToggleStore().isEnabled("warps")
+                && services.getPermissionsHandler().hasPermission(player, PermissionsHandler.WARP_LIST_PERMISSION, PermissionsHandler.WARP_LIST_PERMISSION_LEVEL);
+    }
+
+    private boolean canWarpInfo(IPlayer player) {
+        return player != null
+                && services.getCommandToggleStore().isEnabled("warpinfo")
+                && services.getPermissionsHandler().hasPermission(player, PermissionsHandler.WARP_INFO_PERMISSION, PermissionsHandler.WARP_INFO_PERMISSION_LEVEL);
     }
 
     private void registerWarps() {
         ICommandBuilder command = platform.createCommandBuilder()
                 .literal("warps")
-                .requires(source -> source.getPlayer() != null
+                .requires(source -> services.getCommandToggleStore().isEnabled("warps")
+                        && source.getPlayer() != null
                         && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.WARP_LIST_PERMISSION, PermissionsHandler.WARP_LIST_PERMISSION_LEVEL))
                 .executes(ctx -> executeWarps(ctx.getSource().getPlayer()));
         platform.registerCommand(command);
@@ -87,7 +151,8 @@ public class WarpCommand implements ParadigmModule {
     private void registerSetWarp() {
         ICommandBuilder command = platform.createCommandBuilder()
                 .literal("setwarp")
-                .requires(source -> source.getPlayer() != null
+                .requires(source -> services.getCommandToggleStore().isEnabled("setwarp")
+                        && source.getPlayer() != null
                         && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.WARP_SET_PERMISSION, PermissionsHandler.WARP_SET_PERMISSION_LEVEL))
                 .then(platform.createCommandBuilder()
                         .argument("name", ICommandBuilder.ArgumentType.WORD)
@@ -98,7 +163,8 @@ public class WarpCommand implements ParadigmModule {
     private void registerDelWarp() {
         ICommandBuilder command = platform.createCommandBuilder()
                 .literal("delwarp")
-                .requires(source -> source.getPlayer() != null
+                .requires(source -> services.getCommandToggleStore().isEnabled("delwarp")
+                        && source.getPlayer() != null
                         && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.WARP_DELETE_PERMISSION, PermissionsHandler.WARP_DELETE_PERMISSION_LEVEL))
                 .then(platform.createCommandBuilder()
                         .argument("name", ICommandBuilder.ArgumentType.WORD)
@@ -110,7 +176,8 @@ public class WarpCommand implements ParadigmModule {
     private void registerWarpInfo() {
         ICommandBuilder command = platform.createCommandBuilder()
                 .literal("warpinfo")
-                .requires(source -> source.getPlayer() != null
+                .requires(source -> services.getCommandToggleStore().isEnabled("warpinfo")
+                        && source.getPlayer() != null
                         && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.WARP_INFO_PERMISSION, PermissionsHandler.WARP_INFO_PERMISSION_LEVEL))
                 .then(platform.createCommandBuilder()
                         .argument("name", ICommandBuilder.ArgumentType.WORD)

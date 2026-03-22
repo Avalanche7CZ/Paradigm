@@ -26,7 +26,6 @@ import java.util.concurrent.TimeUnit;
 
 public final class UpdateChecker {
 
-    private static final String OP_PERMISSION = "minecraft.command.op";
     private static final int OP_LEVEL = 2;
     private static volatile boolean inGameNotifierRegistered = false;
 
@@ -121,7 +120,7 @@ public final class UpdateChecker {
 
         IPlatformAdapter platform = services.getPlatformAdapter();
         if (platform == null) return;
-        if (!services.getPermissionsHandler().hasPermission(player, OP_PERMISSION, OP_LEVEL)) return;
+        if (!services.getPermissionsHandler().hasStrictVanillaPermissionLevel(player, OP_LEVEL)) return;
 
         UpdateResult result = getLastResult();
         if (result == null || !result.updateAvailable()) return;

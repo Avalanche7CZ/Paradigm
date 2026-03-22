@@ -70,7 +70,34 @@
     "kick_success_notify": "{player_name} was kicked from the group.",
     "cancel_request_none": "You don't have a pending request to that group.",
     "cancel_request_success": "Your join request to {group_name} has been cancelled.",
-    "invite_rate_limit": "Please wait {seconds}s before sending another invite."
+    "invite_rate_limit": "Please wait {seconds}s before sending another invite.",
+    "manage": {
+      "help": "Use /paradigm group list|add|remove|info|parent|user",
+      "list": "Groups: {groups}",
+      "add_ok": "Created group {group}.",
+      "add_fail": "Could not create group {group}.",
+      "remove_ok": "Removed group {group}.",
+      "remove_fail": "Could not remove group {group}.",
+      "not_found": "Group {group} was not found.",
+      "info_header": "Group {group} | weight={weight}",
+      "info_parents": "Parents: {parents}",
+      "info_perms": "Perms: {perms}",
+      "parent_add_ok": "Added parent {parent} to {group}.",
+      "parent_add_fail": "Could not add parent {parent} to {group}.",
+      "parent_remove_ok": "Removed parent {parent} from {group}.",
+      "parent_remove_fail": "Could not remove parent {parent} from {group}.",
+      "user_invalid": "Player must be online name or UUID.",
+      "user_add_ok": "Assigned group {group}.",
+      "user_add_temp_ok": "Assigned group {group} until {until}.",
+      "user_add_fail": "Could not assign group {group}.",
+      "user_remove_ok": "Removed group {group} from player.",
+      "user_remove_fail": "Could not remove group {group} from player.",
+      "user_empty": "No groups assigned.",
+      "user_list_perm": "Permanent: {groups}",
+      "user_list_temp": "Temporary: -",
+      "user_temp_line": "Temporary {group} until {until}",
+      "duration_invalid": "Invalid duration. Use days/weeks/months with amount > 0."
+    }
   },
 
   "mention": {
@@ -133,5 +160,54 @@
     "delete_success": "Warp {warp} has been deleted.",
     "list_empty": "No warps are set.",
     "list_header": "Warps ({count}):"
+  },
+
+  "spawn": {
+    "not_set": "Spawn is not set yet. Use /setspawn.",
+    "teleport_failed": "Teleport to spawn failed.",
+    "teleported": "Teleported to spawn.",
+    "location_unavailable": "Unable to read your current location.",
+    "set_success": "Spawn has been updated."
+  },
+
+  "seen": {
+    "online": "{player} is online right now.",
+    "need_uuid": "Player is offline. Use UUID for exact lookup.",
+    "unknown": "No seen data for that player.",
+    "last_seen": "Last seen: {ago} ago."
+  },
+
+  "ignore": {
+    "self": "You cannot ignore yourself.",
+    "already": "You already ignore {player}.",
+    "added": "You now ignore {player}.",
+    "not_found": "You do not ignore {player}.",
+    "removed": "You no longer ignore {player}."
+  },
+
+  "utility": {
+    "gamemode_invalid": "Invalid gamemode.",
+    "gamemode_set": "Set gamemode {mode} for {player}.",
+    "fly_failed": "Could not toggle fly for {player}.",
+    "fly_toggled": "Fly for {player}: {state}",
+    "clearinv_ok": "Cleared inventory for {player}.",
+    "time_set": "Time changed to {state}.",
+    "weather_set": "Weather changed to {state}.",
+    "speed_cleared": "Speed cleared for {player}.",
+    "speed_set": "Set speed {level} for {player}.",
+    "feed_ok": "Fed {player}.",
+    "feed_fail": "Could not restore food for {player}.",
+    "heal_ok": "Healed {player}.",
+    "heal_fail": "Could not restore full HP for {player}."
+  },
+
+  "command_toggle": {
+    "list": "Command states: {list}",
+    "status": "{command} is currently {state}.",
+    "enabled": "Enabled command {command}.",
+    "disabled": "Disabled command {command}.",
+    "protected": "Command {command} is protected and cannot be disabled.",
+    "unknown": "Unknown command key: {command}",
+    "reloaded": "Command toggles reloaded from commands.json."
   }
 }
