@@ -1,6 +1,7 @@
 package eu.avalanche7.paradigm.utils;
 
 import eu.avalanche7.paradigm.configs.CMConfig;
+import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
@@ -123,7 +124,9 @@ public class PermissionsHandler {
     }
 
     public void initialize() {
-        internalPermissionApi.initialize();
+        if (isInternalPermissionsEnabled()) {
+            internalPermissionApi.initialize();
+        }
     }
 
     public void registerLuckPermsPermissions() {
@@ -278,7 +281,9 @@ public class PermissionsHandler {
     }
 
     public void refreshCustomCommandPermissions() {
-        internalPermissionApi.reload();
+        if (isInternalPermissionsEnabled()) {
+            internalPermissionApi.reload();
+        }
         registerPermissionsWithLuckPerms();
     }
 
@@ -322,10 +327,14 @@ public class PermissionsHandler {
             }
         }
 
-        Boolean internalResult = internalPermissionApi.hasPermission(player, permission);
-        if (internalResult != null) {
-            debugLogger.debugLog("[PermissionsHandler] Internal PermissionAPI check for '" + permission + "' -> " + internalResult);
-            return internalResult;
+        if (isInternalPermissionsEnabled()) {
+            Boolean internalResult = internalPermissionApi.hasPermission(player, permission);
+            if (internalResult != null) {
+                debugLogger.debugLog("[PermissionsHandler] Internal PermissionAPI check for '" + permission + "' -> " + internalResult);
+                return internalResult;
+            }
+        } else {
+            debugLogger.debugLog("[PermissionsHandler] Internal permissions are disabled, skipping PermissionAPI check.");
         }
 
         if (vanillaLevelFallback < 0) {
@@ -484,6 +493,9 @@ public class PermissionsHandler {
     }
 
     private Placeholders.PermissionMeta resolvePermissionMeta(IPlayer player) {
+        if (!isInternalPermissionsEnabled()) {
+            return null;
+        }
         PermissionAPI.PermissionMeta meta = internalPermissionApi.resolveMeta(player);
         if (meta == null) {
             return null;
@@ -497,42 +509,63 @@ public class PermissionsHandler {
     }
 
     public boolean createPermissionGroup(String groupName) {
+        if (!isInternalPermissionsEnabled()) return false;
         return internalPermissionApi.createGroup(groupName);
     }
 
     public boolean deletePermissionGroup(String groupName) {
+        if (!isInternalPermissionsEnabled()) return false;
         return internalPermissionApi.deleteGroup(groupName);
     }
 
     public boolean addPermissionGroupParent(String groupName, String parentName) {
+        if (!isInternalPermissionsEnabled()) return false;
         return internalPermissionApi.addGroupParent(groupName, parentName);
     }
 
     public boolean removePermissionGroupParent(String groupName, String parentName) {
+        if (!isInternalPermissionsEnabled()) return false;
         return internalPermissionApi.removeGroupParent(groupName, parentName);
     }
 
     public boolean assignPlayerGroup(UUID playerUuid, String groupName) {
+        if (!isInternalPermissionsEnabled()) return false;
         return internalPermissionApi.assignGroup(playerUuid, groupName);
     }
 
     public boolean assignPlayerGroupTemp(UUID playerUuid, String groupName, long expiresAtMs, String assignedBy) {
+        if (!isInternalPermissionsEnabled()) return false;
         return internalPermissionApi.assignGroup(playerUuid, groupName, expiresAtMs, assignedBy);
     }
 
     public boolean revokePlayerGroup(UUID playerUuid, String groupName) {
+        if (!isInternalPermissionsEnabled()) return false;
         return internalPermissionApi.revokeGroup(playerUuid, groupName);
     }
 
     public java.util.List<String> listPermissionGroups() {
+        if (!isInternalPermissionsEnabled()) return java.util.List.of();
         return internalPermissionApi.listGroups();
     }
 
     public PermissionAPI.GroupInfo getPermissionGroupInfo(String groupName) {
+        if (!isInternalPermissionsEnabled()) return null;
         return internalPermissionApi.getGroupInfo(groupName);
     }
 
     public PermissionAPI.UserGroupsInfo getPlayerGroups(UUID playerUuid) {
+        if (!isInternalPermissionsEnabled()) return null;
         return internalPermissionApi.getUserGroups(playerUuid);
+    }
+
+    public boolean isInternalPermissionsEnabled() {
+        try {
+            MainConfigHandler.Config cfg = MainConfigHandler.getConfig();
+            return cfg != null
+                    && cfg.internalPermissionsEnable != null
+                    && Boolean.TRUE.equals(cfg.internalPermissionsEnable.value);
+        } catch (Throwable ignored) {
+            return true;
+        }
     }
 }

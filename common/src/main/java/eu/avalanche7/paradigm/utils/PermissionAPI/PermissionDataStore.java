@@ -99,13 +99,8 @@ public class PermissionDataStore {
 
         public static PermissionState createDefault() {
             PermissionState state = new PermissionState();
-            GroupEntry defaultGroupEntry = new GroupEntry();
-            defaultGroupEntry.description = "Default group for all players";
-            defaultGroupEntry.prefix = "&b[Default]&r ";
-            defaultGroupEntry.suffix = " &7#New";
-            defaultGroupEntry.permissions.add("paradigm.msg");
-            defaultGroupEntry.permissions.add("paradigm.reply");
-            state.groups.put("default", defaultGroupEntry);
+            state.groups.put("default", createBuiltInDefaultGroupEntry());
+            state.groups.put("admin", createBuiltInAdminGroupEntry());
             return state;
         }
 
@@ -148,9 +143,53 @@ public class PermissionDataStore {
             }
             users = normalizedUsers;
 
-            if (!groups.containsKey(defaultGroup.toLowerCase(Locale.ROOT))) {
-                groups.put(defaultGroup.toLowerCase(Locale.ROOT), new GroupEntry());
+            String defaultKey = defaultGroup.toLowerCase(Locale.ROOT);
+            if (!groups.containsKey(defaultKey)) {
+                groups.put(defaultKey, createBuiltInDefaultGroupEntry());
             }
+
+            // Keep built-in admin group available for older configs that predate it.
+            if (!groups.containsKey("admin")) {
+                groups.put("admin", createBuiltInAdminGroupEntry());
+            }
+        }
+
+        private static GroupEntry createBuiltInDefaultGroupEntry() {
+            GroupEntry entry = new GroupEntry();
+            entry.description = "Default group for all players";
+            entry.prefix = "&b[Default]&r ";
+            entry.suffix = " &7#New";
+            entry.permissions.addAll(List.of(
+                    "paradigm.msg",
+                    "paradigm.reply",
+                    "paradigm.mention.player",
+                    "paradigm.spawn",
+                    "paradigm.seen",
+                    "paradigm.ignore",
+                    "paradigm.home",
+                    "paradigm.sethome",
+                    "paradigm.delhome",
+                    "paradigm.homes",
+                    "paradigm.back",
+                    "paradigm.tpa",
+                    "paradigm.tpahere",
+                    "paradigm.tpaccept",
+                    "paradigm.tpdeny",
+                    "paradigm.tpcancel",
+                    "paradigm.warp",
+                    "paradigm.warps",
+                    "paradigm.warp.info"
+            ));
+            return entry;
+        }
+
+        private static GroupEntry createBuiltInAdminGroupEntry() {
+            GroupEntry entry = new GroupEntry();
+            entry.description = "Administrative group with full Paradigm access";
+            entry.prefix = "&c[Admin]&r ";
+            entry.inherits.add("default");
+            entry.permissions.add("paradigm.*");
+            return entry;
         }
 
         private static String normalizeGroupName(String name) {

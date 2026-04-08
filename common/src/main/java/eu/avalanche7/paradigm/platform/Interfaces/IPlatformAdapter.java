@@ -87,13 +87,21 @@ public interface IPlatformAdapter {
             return Optional.empty();
         }
 
+        // Prefer platform-provided values when available; reflection is only fallback.
+        String worldId = player.getWorldId();
+        Double x = player.getX();
+        Double y = player.getY();
+        Double z = player.getZ();
+        Float yaw = player.getYaw();
+        Float pitch = player.getPitch();
+
         Object handle = player.getOriginalPlayer();
-        String worldId = extractWorldId(handle);
-        Double x = invokeDouble(handle, "getX");
-        Double y = invokeDouble(handle, "getY");
-        Double z = invokeDouble(handle, "getZ");
-        Float yaw = firstFloat(handle, "getYRot", "getYaw");
-        Float pitch = firstFloat(handle, "getXRot", "getPitch");
+        if (worldId == null) worldId = extractWorldId(handle);
+        if (x == null) x = invokeDouble(handle, "getX");
+        if (y == null) y = invokeDouble(handle, "getY");
+        if (z == null) z = invokeDouble(handle, "getZ");
+        if (yaw == null) yaw = firstFloat(handle, "getYRot", "getYaw");
+        if (pitch == null) pitch = firstFloat(handle, "getXRot", "getPitch");
 
         if (worldId == null || x == null || y == null || z == null) {
             return Optional.empty();

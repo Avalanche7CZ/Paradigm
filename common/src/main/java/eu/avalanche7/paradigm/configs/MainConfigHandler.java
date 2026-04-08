@@ -92,6 +92,10 @@ public class MainConfigHandler extends BaseConfigHandler<MainConfigHandler.Confi
                 true,
                 "Enable or disable the custom Command Manager for custom commands."
         );
+        public ConfigEntry<Boolean> internalPermissionsEnable = new ConfigEntry<>(
+                true,
+                "Enable or disable Paradigm internal permissions/groups (permissions.json and /paradigm group)."
+        );
         public ConfigEntry<Boolean> telemetryEnable = new ConfigEntry<>(
                 true,
                 "Enables anonymous telemetry (server count, online players). Sends only anonymized metrics."

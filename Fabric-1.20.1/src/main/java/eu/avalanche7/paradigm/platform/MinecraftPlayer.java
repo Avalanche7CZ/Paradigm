@@ -30,6 +30,60 @@ public class MinecraftPlayer implements IPlayer {
     }
 
     @Override
+    public String getWorldId() {
+        try {
+            return player.getWorld().getRegistryKey().getValue().toString();
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    @Override
+    public Double getX() {
+        try {
+            return player.getX();
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    @Override
+    public Double getY() {
+        try {
+            return player.getY();
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    @Override
+    public Double getZ() {
+        try {
+            return player.getZ();
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    @Override
+    public Float getYaw() {
+        try {
+            return player.getYaw();
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    @Override
+    public Float getPitch() {
+        try {
+            return player.getPitch();
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    @Override
     public Integer getLevel() {
         try {
             return player.experienceLevel;

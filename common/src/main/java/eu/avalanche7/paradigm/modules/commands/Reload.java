@@ -95,8 +95,11 @@ public class Reload implements ParadigmModule {
         ICommandBuilder paradigm = platform.createCommandBuilder()
                 .literal("paradigm")
                 .then(reload)
-                .then(buildCommandToggleBranch(platform, services))
-                .then(buildGroupBranch(platform, services));
+                .then(buildCommandToggleBranch(platform, services));
+
+        if (services.getPermissionsHandler().isInternalPermissionsEnabled()) {
+            paradigm = paradigm.then(buildGroupBranch(platform, services));
+        }
 
         platform.registerCommand(paradigm);
     }
