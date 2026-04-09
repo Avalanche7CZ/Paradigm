@@ -82,12 +82,41 @@ public interface IPlatformAdapter {
     ICommandBuilder createCommandBuilder();
     void registerCommand(ICommandBuilder builder);
 
+    default void refreshPlayerCommandTree(@Nullable IPlayer player) {
+        if (player == null || player.getOriginalPlayer() == null) {
+            return;
+        }
+
+        Object handle = player.getOriginalPlayer();
+        Object server = firstObject(handle, "getServer", "server");
+        if (server == null) {
+            server = getMinecraftServer();
+        }
+        if (server == null) {
+            return;
+        }
+
+        Object commands = firstObject(server, "getCommands", "commands");
+        if (commands == null) {
+            return;
+        }
+
+        if (invokeSingleArgMethod(commands, "sendCommands", handle)) return;
+        if (invokeSingleArgMethod(commands, "sendCommandTree", handle)) return;
+        if (invokeSingleArgMethod(commands, "send", handle)) return;
+
+        Object dispatcher = firstObject(commands, "getDispatcher", "dispatcher");
+        if (dispatcher == null) {
+            return;
+        }
+        if (invokeSingleArgMethod(dispatcher, "sendCommands", handle)) return;
+        invokeSingleArgMethod(dispatcher, "sendCommandTree", handle);
+    }
+
     default Optional<PlayerDataStore.StoredLocation> getPlayerLocation(IPlayer player) {
         if (player == null || player.getOriginalPlayer() == null) {
             return Optional.empty();
         }
-
-        // Prefer platform-provided values when available; reflection is only fallback.
         String worldId = player.getWorldId();
         Double x = player.getX();
         Double y = player.getY();
@@ -236,6 +265,29 @@ public interface IPlatformAdapter {
         } catch (Throwable ignored) {
             return null;
         }
+    }
+
+    private static boolean invokeSingleArgMethod(Object target, String name, Object arg) {
+        if (target == null || name == null || arg == null) {
+            return false;
+        }
+        try {
+            Class<?> argClass = arg.getClass();
+            for (Method method : target.getClass().getMethods()) {
+                if (!method.getName().equals(name) || method.getParameterCount() != 1) {
+                    continue;
+                }
+                Class<?> param = method.getParameterTypes()[0];
+                if (!param.isAssignableFrom(argClass)) {
+                    continue;
+                }
+                method.setAccessible(true);
+                method.invoke(target, arg);
+                return true;
+            }
+        } catch (Throwable ignored) {
+        }
+        return false;
     }
 
     private static void invokeWithArgs(Object target, String name, Class<?>[] signature, Object... args) {

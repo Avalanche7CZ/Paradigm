@@ -15,8 +15,6 @@ import net.minecraft.network.packet.s2c.play.PlaySoundS2CPacket;
 import net.minecraft.network.packet.s2c.play.SubtitleS2CPacket;
 import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
 import net.minecraft.command.permission.LeveledPermissionPredicate;
-import net.minecraft.command.permission.Permission;
-import net.minecraft.command.permission.PermissionLevel;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.server.MinecraftServer;
@@ -154,17 +152,26 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public boolean hasPermission(IPlayer player, String permissionNode, int vanillaLevel) {
-        if (player instanceof MinecraftPlayer mp) {
-            try {
-                PermissionLevel permLevel = PermissionLevel.fromLevel(vanillaLevel);
-                boolean hasVanillaLevel = mp.getHandle().getCommandSource().getPermissions()
-                        .hasPermission(new Permission.Level(permLevel));
-                return this.hasPermission(player, permissionNode) || hasVanillaLevel;
-            } catch (Exception e) {
-                return this.hasPermission(player, permissionNode);
-            }
+        if (!(player instanceof MinecraftPlayer mp)) {
+            return false;
         }
-        return false;
+        if (permissionsHandler != null) {
+            // Keep all permission decisions in one place (LuckPerms/internal/vanilla fallback).
+            return permissionsHandler.hasPermission(mp, permissionNode, vanillaLevel);
+        }
+
+        boolean pluginPermission = this.hasPermission(player, permissionNode);
+        boolean hasVanillaLevel = false;
+        try {
+            java.lang.reflect.Method direct = mp.getHandle().getClass().getMethod("hasPermissionLevel", int.class);
+            Object result = direct.invoke(mp.getHandle(), vanillaLevel);
+            if (result instanceof Boolean b) {
+                hasVanillaLevel = b;
+            }
+        } catch (Throwable ignored) {
+        }
+
+        return pluginPermission || hasVanillaLevel;
     }
 
     @Override

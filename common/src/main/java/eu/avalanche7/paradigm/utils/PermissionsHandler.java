@@ -330,6 +330,10 @@ public class PermissionsHandler {
         if (isInternalPermissionsEnabled()) {
             Boolean internalResult = internalPermissionApi.hasPermission(player, permission);
             if (internalResult != null) {
+                if (!internalResult && hasOperatorBypass(player)) {
+                    debugLogger.debugLog("[PermissionsHandler] Internal PermissionAPI denied '" + permission + "', but OP bypass is active for player: " + player.getName());
+                    return true;
+                }
                 debugLogger.debugLog("[PermissionsHandler] Internal PermissionAPI check for '" + permission + "' -> " + internalResult);
                 return internalResult;
             }
@@ -355,6 +359,15 @@ public class PermissionsHandler {
         return false;
     }
 
+    private static boolean hasOperatorBypass(IPlayer player) {
+        try {
+            // Level 2 is the common admin/operator threshold across loaders.
+            return hasVanillaPermissionLevel(player, 2);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
     public boolean hasStrictVanillaPermissionLevel(IPlayer player, int level) {
         return hasVanillaPermissionLevel(player, level);
     }
@@ -364,23 +377,142 @@ public class PermissionsHandler {
         Object original = player.getOriginalPlayer();
         if (original == null) return false;
 
-        // Forge/NeoForge mapping style
-        try {
-            java.lang.reflect.Method m = original.getClass().getMethod("hasPermissions", int.class);
-            Object result = m.invoke(original, level);
-            if (result instanceof Boolean b) return b;
-        } catch (Throwable ignored) {
+        Boolean directResult = invokeBooleanIntMethod(original, level, "hasPermissions", "hasPermissionLevel");
+        if (directResult != null) {
+            return directResult;
         }
 
-        // Fabric/Yarn mapping style
+        // Command source based checks (common across multiple mappings).
+        Object source = invokeNoArg(original, "createCommandSourceStack");
+        if (source == null) source = invokeNoArg(original, "getCommandSource");
+        if (source == null) source = invokeNoArg(original, "getCommandSourceStack");
+        if (source != null) {
+            Boolean sourceResult = invokeBooleanIntMethod(source, level, "hasPermission", "hasPermissionLevel");
+            if (sourceResult != null) {
+                return sourceResult;
+            }
+        }
+
+        // Last fallback: check server operator list directly.
         try {
-            java.lang.reflect.Method m = original.getClass().getMethod("hasPermissionLevel", int.class);
-            Object result = m.invoke(original, level);
-            if (result instanceof Boolean b) return b;
+            Object server = invokeNoArg(original, "getServer");
+            if (server != null) {
+                Object profile = invokeNoArg(original, "getGameProfile");
+                if (profile != null) {
+                    Object playerManager = invokeNoArg(server, "getPlayerList");
+                    if (playerManager == null) playerManager = invokeNoArg(server, "getPlayerManager");
+                    if (playerManager != null) {
+                        Boolean opResult = invokeBooleanSingleArgMethod(playerManager, profile, "isOp", "isOperator");
+                        if (opResult != null) {
+                            return opResult;
+                        }
+                    }
+                }
+            }
         } catch (Throwable ignored) {
         }
 
         return false;
+    }
+
+    private static Object invokeNoArg(Object target, String name) {
+        if (target == null || name == null || name.isBlank()) {
+            return null;
+        }
+        try {
+            java.lang.reflect.Method m = findMethod(target.getClass(), name);
+            if (m == null) {
+                return null;
+            }
+            m.setAccessible(true);
+            return m.invoke(target);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static Boolean invokeBooleanIntMethod(Object target, int arg, String... methodNames) {
+        if (target == null || methodNames == null) {
+            return null;
+        }
+        for (String methodName : methodNames) {
+            try {
+                java.lang.reflect.Method m = findMethod(target.getClass(), methodName, int.class);
+                if (m == null) {
+                    continue;
+                }
+                m.setAccessible(true);
+                Object result = m.invoke(target, arg);
+                if (result instanceof Boolean b) {
+                    return b;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static Boolean invokeBooleanSingleArgMethod(Object target, Object arg, String... methodNames) {
+        if (target == null || arg == null || methodNames == null) {
+            return null;
+        }
+        Class<?> argClass = arg.getClass();
+        for (String methodName : methodNames) {
+            try {
+                for (java.lang.reflect.Method m : target.getClass().getMethods()) {
+                    if (!m.getName().equals(methodName) || m.getParameterCount() != 1) {
+                        continue;
+                    }
+                    Class<?> param = m.getParameterTypes()[0];
+                    if (!param.isAssignableFrom(argClass)) {
+                        continue;
+                    }
+                    m.setAccessible(true);
+                    Object result = m.invoke(target, arg);
+                    if (result instanceof Boolean b) {
+                        return b;
+                    }
+                }
+
+                for (java.lang.Class<?> c = target.getClass(); c != null; c = c.getSuperclass()) {
+                    for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
+                        if (!m.getName().equals(methodName) || m.getParameterCount() != 1) {
+                            continue;
+                        }
+                        Class<?> param = m.getParameterTypes()[0];
+                        if (!param.isAssignableFrom(argClass)) {
+                            continue;
+                        }
+                        m.setAccessible(true);
+                        Object result = m.invoke(target, arg);
+                        if (result instanceof Boolean b) {
+                            return b;
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static java.lang.reflect.Method findMethod(Class<?> type, String name, Class<?>... params) {
+        if (type == null || name == null || name.isBlank()) {
+            return null;
+        }
+
+        try {
+            return type.getMethod(name, params);
+        } catch (Throwable ignored) {
+        }
+
+        for (Class<?> c = type; c != null; c = c.getSuperclass()) {
+            try {
+                return c.getDeclaredMethod(name, params);
+            } catch (Throwable ignored) {
+            }
+        }
+        return null;
     }
 
     private static int vanillaLevelFor(String permission) {
@@ -530,17 +662,43 @@ public class PermissionsHandler {
 
     public boolean assignPlayerGroup(UUID playerUuid, String groupName) {
         if (!isInternalPermissionsEnabled()) return false;
-        return internalPermissionApi.assignGroup(playerUuid, groupName);
+        boolean changed = internalPermissionApi.assignGroup(playerUuid, groupName);
+        if (changed) {
+            refreshPlayerCommandTree(playerUuid);
+        }
+        return changed;
     }
 
     public boolean assignPlayerGroupTemp(UUID playerUuid, String groupName, long expiresAtMs, String assignedBy) {
         if (!isInternalPermissionsEnabled()) return false;
-        return internalPermissionApi.assignGroup(playerUuid, groupName, expiresAtMs, assignedBy);
+        boolean changed = internalPermissionApi.assignGroup(playerUuid, groupName, expiresAtMs, assignedBy);
+        if (changed) {
+            refreshPlayerCommandTree(playerUuid);
+        }
+        return changed;
     }
 
     public boolean revokePlayerGroup(UUID playerUuid, String groupName) {
         if (!isInternalPermissionsEnabled()) return false;
-        return internalPermissionApi.revokeGroup(playerUuid, groupName);
+        boolean changed = internalPermissionApi.revokeGroup(playerUuid, groupName);
+        if (changed) {
+            refreshPlayerCommandTree(playerUuid);
+        }
+        return changed;
+    }
+
+    private void refreshPlayerCommandTree(UUID playerUuid) {
+        if (playerUuid == null || platform == null) {
+            return;
+        }
+        try {
+            IPlayer online = platform.getPlayerByUuid(playerUuid.toString());
+            if (online != null) {
+                platform.refreshPlayerCommandTree(online);
+            }
+        } catch (Throwable t) {
+            debugLogger.debugLog("[PermissionsHandler] Failed to refresh command tree for " + playerUuid + ": " + t);
+        }
     }
 
     public java.util.List<String> listPermissionGroups() {

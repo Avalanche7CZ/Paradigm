@@ -62,7 +62,8 @@ public class GamemodeCommand implements ParadigmModule {
                 .literal("gamemode")
                 .requires(src -> services.getCommandToggleStore().isEnabled("gamemode")
                         && src.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), PermissionsHandler.GAMEMODE_PERMISSION, PermissionsHandler.GAMEMODE_PERMISSION_LEVEL));
+                        && (src.hasPermissionLevel(2)
+                        || services.getPermissionsHandler().hasPermission(src.getPlayer(), PermissionsHandler.GAMEMODE_PERMISSION, PermissionsHandler.GAMEMODE_PERMISSION_LEVEL)));
 
         ICommandBuilder modeArg = services.getPlatformAdapter().createCommandBuilder()
                 .argument("mode", ICommandBuilder.ArgumentType.WORD)
@@ -80,7 +81,8 @@ public class GamemodeCommand implements ParadigmModule {
                 .literal(literal)
                 .requires(src -> services.getCommandToggleStore().isEnabled(literal)
                         && src.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), PermissionsHandler.GAMEMODE_PERMISSION, PermissionsHandler.GAMEMODE_PERMISSION_LEVEL))
+                        && (src.hasPermissionLevel(2)
+                        || services.getPermissionsHandler().hasPermission(src.getPlayer(), PermissionsHandler.GAMEMODE_PERMISSION, PermissionsHandler.GAMEMODE_PERMISSION_LEVEL)))
                 .executes(ctx -> applyGamemode(ctx.getSource().getPlayer(), ctx.getSource().getPlayer(), mode))
                 .then(services.getPlatformAdapter().createCommandBuilder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)

@@ -285,15 +285,19 @@ public class TpaCommand implements ParadigmModule {
         }
 
         PlayerDataStore.StoredLocation location = platform.getPlayerLocation(destination).orElse(null);
-        if (location == null) {
+        if (location != null) {
+            if (platform.teleportPlayer(player, location)) {
+                return true;
+            }
+        }
+        String fromName = player.getName();
+        String toName = destination.getName();
+        if (fromName == null || fromName.isBlank() || toName == null || toName.isBlank()) {
             send(player, "home.location_unavailable", "Unable to read your location right now.");
             return false;
         }
 
-        if (!platform.teleportPlayer(player, location)) {
-            send(player, "home.teleport_failed", "Teleport failed.");
-            return false;
-        }
+        platform.executeCommandAsConsole("tp " + safe(fromName) + " " + safe(toName));
         return true;
     }
 
@@ -551,5 +555,4 @@ public class TpaCommand implements ParadigmModule {
         return value.replace("'", "").replace("\n", " ");
     }
 }
-
 

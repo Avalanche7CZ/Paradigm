@@ -242,6 +242,7 @@ public class Reload implements ParadigmModule {
     private boolean hasReloadPermission(ICommandSource src, Services services) {
         if (src == null) return false;
         if (src.isConsole()) return true;
+        if (src.hasPermissionLevel(2)) return true;
         IPlayer player = src.getPlayer();
         return player != null && services.getPermissionsHandler().hasPermission(
                 player,
@@ -253,6 +254,7 @@ public class Reload implements ParadigmModule {
     private boolean hasTogglePermission(ICommandSource src, Services services) {
         if (src == null) return false;
         if (src.isConsole()) return true;
+        if (src.hasPermissionLevel(2)) return true;
         IPlayer player = src.getPlayer();
         return player != null && services.getPermissionsHandler().hasPermission(
                 player,
@@ -542,6 +544,7 @@ public class Reload implements ParadigmModule {
     private boolean hasGroupManagePermission(ICommandSource src, Services services) {
         if (src == null) return false;
         if (src.isConsole()) return true;
+        if (src.hasPermissionLevel(2)) return true;
         IPlayer player = src.getPlayer();
         return player != null && services.getPermissionsHandler().hasPermission(
                 player,
