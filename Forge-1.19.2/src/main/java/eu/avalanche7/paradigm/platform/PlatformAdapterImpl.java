@@ -47,6 +47,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     private final MinecraftEventSystem eventSystem;
 
     private CommandDispatcher<CommandSourceStack> commandDispatcher;
+    private final Set<String> ownedRootsRegisteredThisCycle = new HashSet<>();
 
     public PlatformAdapterImpl(
             PermissionsHandler permissionsHandler,
@@ -474,6 +475,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             @SuppressWarnings("unchecked")
             CommandDispatcher<CommandSourceStack> cast = (CommandDispatcher<CommandSourceStack>) cd;
             this.commandDispatcher = cast;
+            this.ownedRootsRegisteredThisCycle.clear();
         }
     }
 
@@ -488,66 +490,32 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
                 rootLiteral = l.getLiteral();
             } catch (Throwable ignored) {
             }
-            if (commandDispatcher != null) {
-                if (shouldOverrideRootLiteral(rootLiteral)) {
-                    unregisterRootLiteral(commandDispatcher, rootLiteral);
-                }
-                commandDispatcher.register(l);
+            CommandDispatcher<CommandSourceStack> dispatcher = commandDispatcher;
+            if (dispatcher == null && server != null) {
+                dispatcher = server.getCommands().getDispatcher();
+            }
+            if (dispatcher == null) {
                 return;
             }
-            if (server != null) {
-                CommandDispatcher<CommandSourceStack> dispatcher = server.getCommands().getDispatcher();
-                if (shouldOverrideRootLiteral(rootLiteral)) {
-                    unregisterRootLiteral(dispatcher, rootLiteral);
-                }
-                dispatcher.register(l);
+
+            String normalizedRoot = CommandPriority.normalizeRoot(rootLiteral);
+            if (normalizedRoot == null) {
+                return;
+            }
+
+            boolean shouldOwnRoot = CommandPriority.shouldOwnRoot(normalizedRoot);
+            boolean firstParadigmRegistrationForRoot = shouldOwnRoot && ownedRootsRegisteredThisCycle.add(normalizedRoot);
+            if (firstParadigmRegistrationForRoot) {
+                CommandPriority.unregisterRootLiteral(dispatcher, normalizedRoot);
+            }
+
+            com.mojang.brigadier.tree.LiteralCommandNode<CommandSourceStack> registeredNode = dispatcher.register(l);
+            if (firstParadigmRegistrationForRoot
+                    && !CommandPriority.isOwnedByExpectedNode(dispatcher, normalizedRoot, registeredNode)
+                    && debugLogger != null) {
+                debugLogger.debugLog("[Paradigm] Command root /" + normalizedRoot + " did not resolve to the newly registered Paradigm node.");
             }
         }
     }
 
-    private boolean shouldOverrideRootLiteral(String rootLiteral) {
-        if (rootLiteral == null || rootLiteral.isBlank()) {
-            return false;
-        }
-        String root = rootLiteral.toLowerCase(java.util.Locale.ROOT);
-        return root.equals("msg")
-                || root.equals("tell")
-                || root.equals("w")
-                || root.equals("whisper")
-                || root.equals("reply")
-                || root.equals("r");
-    }
-
-    private void unregisterRootLiteral(CommandDispatcher<CommandSourceStack> dispatcher, String rootLiteral) {
-        if (dispatcher == null || rootLiteral == null || rootLiteral.isBlank()) {
-            return;
-        }
-        try {
-            Object rootNode = dispatcher.getRoot();
-            Class<?> nodeClass = com.mojang.brigadier.tree.CommandNode.class;
-
-            java.lang.reflect.Field childrenField = nodeClass.getDeclaredField("children");
-            java.lang.reflect.Field literalsField = nodeClass.getDeclaredField("literals");
-            java.lang.reflect.Field argumentsField = nodeClass.getDeclaredField("arguments");
-
-            childrenField.setAccessible(true);
-            literalsField.setAccessible(true);
-            argumentsField.setAccessible(true);
-
-            Object children = childrenField.get(rootNode);
-            Object literals = literalsField.get(rootNode);
-            Object arguments = argumentsField.get(rootNode);
-
-            if (children instanceof java.util.Map<?, ?> map) {
-                ((java.util.Map<?, ?>) map).remove(rootLiteral);
-            }
-            if (literals instanceof java.util.Map<?, ?> map) {
-                ((java.util.Map<?, ?>) map).remove(rootLiteral);
-            }
-            if (arguments instanceof java.util.Map<?, ?> map) {
-                ((java.util.Map<?, ?>) map).remove(rootLiteral);
-            }
-        } catch (Throwable ignored) {
-        }
-    }
 }

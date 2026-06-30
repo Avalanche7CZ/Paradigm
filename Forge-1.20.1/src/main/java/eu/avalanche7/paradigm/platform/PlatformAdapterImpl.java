@@ -1,6 +1,8 @@
 package eu.avalanche7.paradigm.platform;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.tree.CommandNode;
+import com.mojang.brigadier.tree.LiteralCommandNode;
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.platform.Interfaces.*;
 import eu.avalanche7.paradigm.utils.*;
@@ -28,12 +30,15 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraftforge.registries.ForgeRegistries;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.Nullable;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public class PlatformAdapterImpl implements IPlatformAdapter {
+    private static final Logger LOGGER = LoggerFactory.getLogger("paradigm");
 
     private MinecraftServer server;
     private MessageParser messageParser;
@@ -46,6 +51,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     private final IConfig config;
     private final IEventSystem eventSystem;
     private CommandDispatcher<CommandSourceStack> commandDispatcher;
+    private final Set<String> ownedRootsRegisteredThisCycle = new HashSet<>();
 
     public PlatformAdapterImpl(
             PermissionsHandler permissionsHandler,
@@ -323,15 +329,31 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public void shutdownServer(IComponent kickMessage) {
         MinecraftServer server = (MinecraftServer) getMinecraftServer();
-        if (server != null && kickMessage instanceof MinecraftComponent mc) {
-            try {
-                server.getPlayerList().broadcastSystemMessage(mc.getHandle(), false);
-                server.saveEverything(true, true, true);
-                server.halt(false);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+        if (server == null) {
+            LOGGER.warn("[Paradigm] Restart requested, but server instance is null. Cannot stop cleanly.");
+            return;
         }
+
+        LOGGER.warn("Paradigm restart requested: stopping server. External wrapper/script must restart the process.");
+
+        server.execute(() -> {
+            try {
+                if (kickMessage instanceof MinecraftComponent mc) {
+                    server.getPlayerList().broadcastSystemMessage(mc.getHandle(), false);
+                }
+                server.saveEverything(true, true, true);
+                if (!tryGracefulStop(server)) {
+                    LOGGER.warn("[Paradigm] Graceful stop API unavailable; falling back to server.halt(false).");
+                    server.halt(false);
+                }
+            } catch (Throwable t) {
+                LOGGER.warn("[Paradigm] Failed during restart shutdown flow: {}", t.toString());
+                try {
+                    server.halt(false);
+                } catch (Throwable ignored) {
+                }
+            }
+        });
     }
 
     @Override
@@ -534,6 +556,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             @SuppressWarnings("unchecked")
             CommandDispatcher<CommandSourceStack> cast = (CommandDispatcher<CommandSourceStack>) cd;
             this.commandDispatcher = cast;
+            this.ownedRootsRegisteredThisCycle.clear();
         }
     }
 
@@ -553,40 +576,107 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             rootLiteral = literalBuilder.getLiteral();
         } catch (Throwable ignored) {
         }
+        if (rootLiteral == null || rootLiteral.isBlank()) {
+            LOGGER.warn("[Paradigm] Skipping command registration for literal with blank root.");
+            return;
+        }
+        String normalizedRoot = rootLiteral.trim().toLowerCase(Locale.ROOT);
 
-        if (commandDispatcher != null) {
-            if (shouldOverrideRootLiteral(rootLiteral)) {
-                unregisterRootLiteral(commandDispatcher, rootLiteral);
-            }
-            commandDispatcher.register(literalBuilder);
+        CommandDispatcher<CommandSourceStack> dispatcher = resolveDispatcher();
+        if (dispatcher == null) {
+            LOGGER.warn("[Paradigm] Command dispatcher unavailable, failed to register /{}", normalizedRoot);
             return;
         }
 
-        if (server != null) {
-            CommandDispatcher<CommandSourceStack> dispatcher = server.getCommands().getDispatcher();
-            if (shouldOverrideRootLiteral(rootLiteral)) {
-                unregisterRootLiteral(dispatcher, rootLiteral);
+        boolean shouldOwnRoot = shouldOverrideRootLiteral(normalizedRoot);
+        boolean firstParadigmRegistrationForRoot = shouldOwnRoot && !ownedRootsRegisteredThisCycle.contains(normalizedRoot);
+        boolean strictIdentityVerification = firstParadigmRegistrationForRoot;
+
+        if (firstParadigmRegistrationForRoot) {
+            boolean hadExistingRoot = hasRootLiteral(dispatcher, normalizedRoot);
+            if (hadExistingRoot) {
+                LOGGER.info("[Paradigm] Overriding existing command root: /{}", normalizedRoot);
+                boolean removed = unregisterRootLiteral(dispatcher, normalizedRoot);
+                if (!removed) {
+                    LOGGER.warn("[Paradigm] Failed to remove existing command root before override: /{}", normalizedRoot);
+                }
             }
-            dispatcher.register(literalBuilder);
         }
+
+        LiteralCommandNode<CommandSourceStack> registeredNode = dispatcher.register(literalBuilder);
+        debugLogger.debugLog("[Paradigm] Registered command root: /" + normalizedRoot);
+
+        if (shouldOwnRoot) {
+            ownedRootsRegisteredThisCycle.add(normalizedRoot);
+            verifyCommandOwnership(dispatcher, normalizedRoot, registeredNode, strictIdentityVerification);
+        }
+    }
+
+    private CommandDispatcher<CommandSourceStack> resolveDispatcher() {
+        if (commandDispatcher != null) {
+            return commandDispatcher;
+        }
+        if (server != null && server.getCommands() != null) {
+            return server.getCommands().getDispatcher();
+        }
+        return null;
     }
 
     private boolean shouldOverrideRootLiteral(String rootLiteral) {
         if (rootLiteral == null || rootLiteral.isBlank()) {
             return false;
         }
-        String root = rootLiteral.toLowerCase(java.util.Locale.ROOT);
-        return root.equals("msg")
-                || root.equals("tell")
-                || root.equals("w")
-                || root.equals("whisper")
-                || root.equals("reply")
-                || root.equals("r");
+        try {
+            if (!eu.avalanche7.paradigm.configs.MainConfigHandler.getConfig().forceCommandPriorityEnable.value) {
+                return false;
+            }
+            return ParadigmCommandRoots.isOwnedRoot(rootLiteral);
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
-    private void unregisterRootLiteral(CommandDispatcher<CommandSourceStack> dispatcher, String rootLiteral) {
+    private boolean hasRootLiteral(CommandDispatcher<CommandSourceStack> dispatcher, String rootLiteral) {
+        if (dispatcher == null || rootLiteral == null || rootLiteral.isBlank()) {
+            return false;
+        }
+        try {
+            return dispatcher.getRoot().getChild(rootLiteral) != null;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private void verifyCommandOwnership(
+            CommandDispatcher<CommandSourceStack> dispatcher,
+            String rootLiteral,
+            LiteralCommandNode<CommandSourceStack> expectedNode,
+            boolean strictIdentityVerification
+    ) {
         if (dispatcher == null || rootLiteral == null || rootLiteral.isBlank()) {
             return;
+        }
+        CommandNode<CommandSourceStack> actualNode;
+        try {
+            actualNode = dispatcher.getRoot().getChild(rootLiteral);
+        } catch (Throwable t) {
+            LOGGER.warn("[Paradigm] Could not verify ownership for /{}: {}", rootLiteral, t.toString());
+            return;
+        }
+
+        if (actualNode == null) {
+            LOGGER.warn("[Paradigm] Command root registration failed, /{} is missing after register.", rootLiteral);
+            return;
+        }
+
+        if (strictIdentityVerification && expectedNode != null && actualNode != expectedNode) {
+            LOGGER.warn("[Paradigm] Command root /{} still points to non-Paradigm logic after registration.", rootLiteral);
+        }
+    }
+
+    private boolean unregisterRootLiteral(CommandDispatcher<CommandSourceStack> dispatcher, String rootLiteral) {
+        if (dispatcher == null || rootLiteral == null || rootLiteral.isBlank()) {
+            return false;
         }
         try {
             Object rootNode = dispatcher.getRoot();
@@ -603,18 +693,46 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             Object children = childrenField.get(rootNode);
             Object literals = literalsField.get(rootNode);
             Object arguments = argumentsField.get(rootNode);
+            boolean removed = false;
 
             if (children instanceof java.util.Map<?, ?> map) {
-                ((java.util.Map<?, ?>) map).remove(rootLiteral);
+                removed |= ((java.util.Map<?, ?>) map).remove(rootLiteral) != null;
             }
             if (literals instanceof java.util.Map<?, ?> map) {
-                ((java.util.Map<?, ?>) map).remove(rootLiteral);
+                removed |= ((java.util.Map<?, ?>) map).remove(rootLiteral) != null;
             }
             if (arguments instanceof java.util.Map<?, ?> map) {
-                ((java.util.Map<?, ?>) map).remove(rootLiteral);
+                removed |= ((java.util.Map<?, ?>) map).remove(rootLiteral) != null;
             }
+            return removed;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private boolean tryGracefulStop(MinecraftServer server) {
+        try {
+            java.lang.reflect.Method stopServer = server.getClass().getDeclaredMethod("stopServer");
+            stopServer.setAccessible(true);
+            stopServer.invoke(server);
+            return true;
         } catch (Throwable ignored) {
         }
+        try {
+            java.lang.reflect.Method stop = server.getClass().getDeclaredMethod("stop");
+            stop.setAccessible(true);
+            stop.invoke(server);
+            return true;
+        } catch (Throwable ignored) {
+        }
+        try {
+            java.lang.reflect.Method stopBool = server.getClass().getDeclaredMethod("stop", boolean.class);
+            stopBool.setAccessible(true);
+            stopBool.invoke(server, false);
+            return true;
+        } catch (Throwable ignored) {
+        }
+        return false;
     }
 
     @Override

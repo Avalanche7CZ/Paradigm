@@ -92,6 +92,10 @@ public class MainConfigHandler extends BaseConfigHandler<MainConfigHandler.Confi
                 true,
                 "Enable or disable the custom Command Manager for custom commands."
         );
+        public ConfigEntry<Boolean> forceCommandPriorityEnable = new ConfigEntry<>(
+                true,
+                "When enabled, Paradigm commands override existing root command literals from other mods/plugins (e.g., /home)."
+        );
         public ConfigEntry<Boolean> internalPermissionsEnable = new ConfigEntry<>(
                 true,
                 "Enable or disable Paradigm internal permissions/groups (permissions.json and /paradigm group)."

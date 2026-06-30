@@ -51,6 +51,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     private final eu.avalanche7.paradigm.platform.Interfaces.IConfig config;
     private final IEventSystem eventSystem;
     private CommandDispatcher<ServerCommandSource> commandDispatcher;
+    private final java.util.Set<String> ownedRootsRegisteredThisCycle = new java.util.HashSet<>();
 
     public PlatformAdapterImpl(
             PermissionsHandler permissionsHandler,
@@ -90,6 +91,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     public void setCommandDispatcher(CommandDispatcher<ServerCommandSource> dispatcher) {
         this.commandDispatcher = dispatcher;
+        this.ownedRootsRegisteredThisCycle.clear();
     }
 
     @Override
@@ -679,56 +681,23 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
                 rootLiteral = literalBuilder.getLiteral();
             } catch (Throwable ignored) {
             }
-            if (shouldOverrideRootLiteral(rootLiteral)) {
-                unregisterRootLiteral(dispatcher, rootLiteral);
+            String normalizedRoot = CommandPriority.normalizeRoot(rootLiteral);
+            if (normalizedRoot == null) {
+                return;
             }
-            dispatcher.register(literalBuilder);
-        }
-    }
 
-    private boolean shouldOverrideRootLiteral(String rootLiteral) {
-        if (rootLiteral == null || rootLiteral.isBlank()) {
-            return false;
-        }
-        String root = rootLiteral.toLowerCase(java.util.Locale.ROOT);
-        return root.equals("msg")
-                || root.equals("tell")
-                || root.equals("w")
-                || root.equals("whisper")
-                || root.equals("reply")
-                || root.equals("r");
-    }
-
-    private void unregisterRootLiteral(CommandDispatcher<ServerCommandSource> dispatcher, String rootLiteral) {
-        if (dispatcher == null || rootLiteral == null || rootLiteral.isBlank()) {
-            return;
-        }
-        try {
-            Object rootNode = dispatcher.getRoot();
-            Class<?> nodeClass = com.mojang.brigadier.tree.CommandNode.class;
-
-            java.lang.reflect.Field childrenField = nodeClass.getDeclaredField("children");
-            java.lang.reflect.Field literalsField = nodeClass.getDeclaredField("literals");
-            java.lang.reflect.Field argumentsField = nodeClass.getDeclaredField("arguments");
-
-            childrenField.setAccessible(true);
-            literalsField.setAccessible(true);
-            argumentsField.setAccessible(true);
-
-            Object children = childrenField.get(rootNode);
-            Object literals = literalsField.get(rootNode);
-            Object arguments = argumentsField.get(rootNode);
-
-            if (children instanceof java.util.Map<?, ?> map) {
-                ((java.util.Map<?, ?>) map).remove(rootLiteral);
+            boolean shouldOwnRoot = CommandPriority.shouldOwnRoot(normalizedRoot);
+            boolean firstParadigmRegistrationForRoot = shouldOwnRoot && ownedRootsRegisteredThisCycle.add(normalizedRoot);
+            if (firstParadigmRegistrationForRoot) {
+                CommandPriority.unregisterRootLiteral(dispatcher, normalizedRoot);
             }
-            if (literals instanceof java.util.Map<?, ?> map) {
-                ((java.util.Map<?, ?>) map).remove(rootLiteral);
+
+            com.mojang.brigadier.tree.LiteralCommandNode<ServerCommandSource> registeredNode = dispatcher.register(literalBuilder);
+            if (firstParadigmRegistrationForRoot
+                    && !CommandPriority.isOwnedByExpectedNode(dispatcher, normalizedRoot, registeredNode)
+                    && debugLogger != null) {
+                debugLogger.debugLog("[Paradigm] Command root /" + normalizedRoot + " did not resolve to the newly registered Paradigm node.");
             }
-            if (arguments instanceof java.util.Map<?, ?> map) {
-                ((java.util.Map<?, ?>) map).remove(rootLiteral);
-            }
-        } catch (Throwable ignored) {
         }
     }
 

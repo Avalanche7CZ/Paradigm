@@ -43,6 +43,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     private eu.avalanche7.paradigm.platform.Interfaces.IConfig config;
 
     private com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> commandDispatcher;
+    private final Set<String> ownedRootsRegisteredThisCycle = new HashSet<>();
 
     public PlatformAdapterImpl(
             eu.avalanche7.paradigm.utils.PermissionsHandler permissionsHandler,
@@ -70,6 +71,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     public void setCommandDispatcher(com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher) {
         this.commandDispatcher = dispatcher;
+        this.ownedRootsRegisteredThisCycle.clear();
         try {
             if (debugLogger != null) debugLogger.debugLog("[NeoForge] CommandDispatcher set: " + (dispatcher != null));
         } catch (Throwable ignored) {}
@@ -98,74 +100,37 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             root = cast.getLiteral();
         } catch (Throwable ignored) {}
 
-        if (commandDispatcher != null) {
-            if (shouldOverrideRootLiteral(root)) {
-                unregisterRootLiteral(commandDispatcher, root);
-            }
-            commandDispatcher.register(cast);
-            try {
-                if (debugLogger != null) debugLogger.debugLog("[NeoForge] Registered command to event dispatcher: /" + (root != null ? root : "<unknown>"));
-            } catch (Throwable ignored) {}
-            return;
+        com.mojang.brigadier.CommandDispatcher<CommandSourceStack> dispatcher = commandDispatcher;
+        if (dispatcher == null && server != null) {
+            dispatcher = server.getCommands().getDispatcher();
         }
-
-        if (server != null) {
-            com.mojang.brigadier.CommandDispatcher<CommandSourceStack> dispatcher = server.getCommands().getDispatcher();
-            if (shouldOverrideRootLiteral(root)) {
-                unregisterRootLiteral(dispatcher, root);
-            }
-            dispatcher.register(cast);
-            try {
-                if (debugLogger != null) debugLogger.debugLog("[NeoForge] Registered command to server dispatcher: /" + (root != null ? root : "<unknown>") + " (event dispatcher was null)");
-            } catch (Throwable ignored) {}
-        } else {
+        if (dispatcher == null) {
             try {
                 if (debugLogger != null) debugLogger.debugLog("[NeoForge] FAILED to register command /" + (root != null ? root : "<unknown>") + ": server and dispatcher are null");
             } catch (Throwable ignored) {}
-        }
-    }
-
-    private boolean shouldOverrideRootLiteral(String rootLiteral) {
-        if (rootLiteral == null || rootLiteral.isBlank()) {
-            return false;
-        }
-        String root = rootLiteral.toLowerCase(java.util.Locale.ROOT);
-        return root.equals("msg")
-                || root.equals("tell")
-                || root.equals("w")
-                || root.equals("whisper")
-                || root.equals("reply")
-                || root.equals("r");
-    }
-
-    private void unregisterRootLiteral(com.mojang.brigadier.CommandDispatcher<CommandSourceStack> dispatcher, String rootLiteral) {
-        if (dispatcher == null || rootLiteral == null || rootLiteral.isBlank()) {
             return;
         }
+
+        String normalizedRoot = CommandPriority.normalizeRoot(root);
+        if (normalizedRoot == null) {
+            return;
+        }
+
+        boolean shouldOwnRoot = CommandPriority.shouldOwnRoot(normalizedRoot);
+        boolean firstParadigmRegistrationForRoot = shouldOwnRoot && ownedRootsRegisteredThisCycle.add(normalizedRoot);
+        if (firstParadigmRegistrationForRoot) {
+            CommandPriority.unregisterRootLiteral(dispatcher, normalizedRoot);
+        }
+
+        com.mojang.brigadier.tree.LiteralCommandNode<CommandSourceStack> registeredNode = dispatcher.register(cast);
+        if (firstParadigmRegistrationForRoot
+                && !CommandPriority.isOwnedByExpectedNode(dispatcher, normalizedRoot, registeredNode)
+                && debugLogger != null) {
+            debugLogger.debugLog("[Paradigm] Command root /" + normalizedRoot + " did not resolve to the newly registered Paradigm node.");
+        }
         try {
-            Object rootNode = dispatcher.getRoot();
-            Class<?> nodeClass = com.mojang.brigadier.tree.CommandNode.class;
-
-            java.lang.reflect.Field childrenField = nodeClass.getDeclaredField("children");
-            java.lang.reflect.Field literalsField = nodeClass.getDeclaredField("literals");
-            java.lang.reflect.Field argumentsField = nodeClass.getDeclaredField("arguments");
-
-            childrenField.setAccessible(true);
-            literalsField.setAccessible(true);
-            argumentsField.setAccessible(true);
-
-            Object children = childrenField.get(rootNode);
-            Object literals = literalsField.get(rootNode);
-            Object arguments = argumentsField.get(rootNode);
-
-            if (children instanceof java.util.Map<?, ?> map) {
-                ((java.util.Map<?, ?>) map).remove(rootLiteral);
-            }
-            if (literals instanceof java.util.Map<?, ?> map) {
-                ((java.util.Map<?, ?>) map).remove(rootLiteral);
-            }
-            if (arguments instanceof java.util.Map<?, ?> map) {
-                ((java.util.Map<?, ?>) map).remove(rootLiteral);
+            if (debugLogger != null) {
+                debugLogger.debugLog("[NeoForge] Registered command: /" + normalizedRoot);
             }
         } catch (Throwable ignored) {
         }

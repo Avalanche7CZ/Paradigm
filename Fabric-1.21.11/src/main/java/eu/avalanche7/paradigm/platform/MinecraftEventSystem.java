@@ -4,7 +4,11 @@ import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+
+import java.lang.reflect.Method;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeUnit;
 
 public class MinecraftEventSystem implements IEventSystem {
     private final CopyOnWriteArrayList<PlayerJoinEventListener> joinListeners = new CopyOnWriteArrayList<>();
@@ -15,6 +19,9 @@ public class MinecraftEventSystem implements IEventSystem {
         // Chat event registration will be handled via mixin !!!! - By Avalanche7 14.09.2025 - For Now
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             var player = handler.getPlayer();
+            // Run one immediate and one delayed resync to avoid stale client command trees after permission plugins finish loading data.
+            resyncCommandTree(server, player);
+            CompletableFuture.delayedExecutor(2, TimeUnit.SECONDS).execute(() -> server.execute(() -> resyncCommandTree(server, player)));
             if (joinListeners.isEmpty()) return;
             MinecraftPlayerJoinEvent joinEvent = new MinecraftPlayerJoinEvent(player);
             for (PlayerJoinEventListener listener : joinListeners) {
@@ -80,6 +87,40 @@ public class MinecraftEventSystem implements IEventSystem {
     @Override
     public void onPlayerLeave(PlayerLeaveEventListener listener) {
         registerLeaveListener(listener);
+    }
+
+    private static void resyncCommandTree(net.minecraft.server.MinecraftServer server, net.minecraft.server.network.ServerPlayerEntity player) {
+        if (server == null || player == null) {
+            return;
+        }
+
+        Object commandManager = server.getCommandManager();
+        if (invokeSingleArgMethod(commandManager, "sendCommands", player)) return;
+        if (invokeSingleArgMethod(commandManager, "sendCommandTree", player)) return;
+        invokeSingleArgMethod(commandManager, "send", player);
+    }
+
+    private static boolean invokeSingleArgMethod(Object target, String name, Object arg) {
+        if (target == null || name == null || arg == null) {
+            return false;
+        }
+        try {
+            Class<?> argClass = arg.getClass();
+            for (Method method : target.getClass().getMethods()) {
+                if (!method.getName().equals(name) || method.getParameterCount() != 1) {
+                    continue;
+                }
+                Class<?> param = method.getParameterTypes()[0];
+                if (!param.isAssignableFrom(argClass)) {
+                    continue;
+                }
+                method.setAccessible(true);
+                method.invoke(target, arg);
+                return true;
+            }
+        } catch (Throwable ignored) {
+        }
+        return false;
     }
 
     private static class MinecraftPlayerJoinEvent implements PlayerJoinEvent {

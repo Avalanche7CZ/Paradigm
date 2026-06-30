@@ -14,6 +14,7 @@ import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
+import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.ModList;
 import net.minecraftforge.fml.common.Mod;
@@ -163,7 +164,7 @@ public class Paradigm {
         });
     }
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.LOWEST)
     public void onRegisterCommands(RegisterCommandsEvent event) {
         try {
             if (services != null && services.getPlatformAdapter() instanceof eu.avalanche7.paradigm.platform.PlatformAdapterImpl pai) {
@@ -183,6 +184,14 @@ public class Paradigm {
                 module.registerCommands(event.getDispatcher(), registryAccess, services);
             }
         });
+
+        try {
+            if (services != null && services.getPlatformAdapter() != null) {
+                services.getPlatformAdapter().refreshAllPlayerCommandTrees();
+            }
+        } catch (Throwable t) {
+            LOGGER.warn("[Paradigm] Failed to refresh command trees after command registration: {}", t.toString());
+        }
     }
 
     @SubscribeEvent

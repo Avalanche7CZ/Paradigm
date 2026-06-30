@@ -96,7 +96,7 @@ public interface IPlatformAdapter {
             return;
         }
 
-        Object commands = firstObject(server, "getCommands", "commands");
+        Object commands = firstObject(server, "getCommands", "getCommandManager", "commands", "commandManager");
         if (commands == null) {
             return;
         }
@@ -107,10 +107,32 @@ public interface IPlatformAdapter {
 
         Object dispatcher = firstObject(commands, "getDispatcher", "dispatcher");
         if (dispatcher == null) {
+            Object playerManager = firstObject(server, "getPlayerManager", "getPlayerList", "playerManager", "playerList");
+            if (invokeSingleArgMethod(playerManager, "sendCommands", handle)) return;
+            if (invokeSingleArgMethod(playerManager, "sendCommandTree", handle)) return;
+            invokeSingleArgMethod(playerManager, "send", handle);
             return;
         }
         if (invokeSingleArgMethod(dispatcher, "sendCommands", handle)) return;
         invokeSingleArgMethod(dispatcher, "sendCommandTree", handle);
+    }
+
+    default void refreshAllPlayerCommandTrees() {
+        List<IPlayer> players;
+        try {
+            players = getOnlinePlayers();
+        } catch (Throwable ignored) {
+            return;
+        }
+        if (players == null || players.isEmpty()) {
+            return;
+        }
+        for (IPlayer player : players) {
+            try {
+                refreshPlayerCommandTree(player);
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     default Optional<PlayerDataStore.StoredLocation> getPlayerLocation(IPlayer player) {

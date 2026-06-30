@@ -200,6 +200,7 @@ public class Reload implements ParadigmModule {
                 .literal("reload")
                 .executes(ctx -> {
                     toggles.reload();
+                    platform.refreshAllPlayerCommandTrees();
                     sendToggleMessage(ctx.getSource(), services, "command_toggle.reloaded", "Command toggles reloaded from commands.json.");
                     return 1;
                 });
@@ -222,6 +223,7 @@ public class Reload implements ParadigmModule {
                 enabled ? "command_toggle.enabled" : "command_toggle.disabled",
                 enabled ? "Enabled command {command}." : "Disabled command {command}.",
                 "{command}", result.canonicalId());
+        services.getPlatformAdapter().refreshAllPlayerCommandTrees();
         return 1;
     }
 

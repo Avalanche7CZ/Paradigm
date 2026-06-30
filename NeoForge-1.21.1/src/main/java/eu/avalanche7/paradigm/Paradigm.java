@@ -8,6 +8,7 @@ import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.PlatformAdapterImpl;
 import eu.avalanche7.paradigm.utils.TelemetryReporter;
 import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.Mod;
@@ -147,7 +148,7 @@ public class Paradigm {
         });
     }
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.LOWEST)
     public void onRegisterCommands(RegisterCommandsEvent event) {
         try {
             if (services != null && services.getPlatformAdapter() instanceof eu.avalanche7.paradigm.platform.PlatformAdapterImpl pai) {

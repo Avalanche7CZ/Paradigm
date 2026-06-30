@@ -28,26 +28,10 @@ public class editor implements ParadigmModule {
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         IPlatformAdapter platform = services.getPlatformAdapter();
 
+        ICommandBuilder editorBranchForParadigm = buildEditorBranch(platform, services);
         ICommandBuilder cmd = platform.createCommandBuilder()
                 .literal("paradigm")
-                .then(platform.createCommandBuilder()
-                        .literal("editor")
-                        .requires(src -> services.getCommandToggleStore().isEnabled("paradigm.editor") && hasEditorPermission(src, services))
-                        .executes(ctx -> openEditor(ctx.getSource(), services))
-                        .then(platform.createCommandBuilder()
-                                .literal("trust")
-                                .then(platform.createCommandBuilder()
-                                        .argument("nonce", ICommandBuilder.ArgumentType.WORD)
-                                        .executes(ctx -> trustEditor(ctx.getSource(), services, ctx.getStringArgument("nonce")))))
-                        .then(platform.createCommandBuilder()
-                                .literal("untrust")
-                                .executes(ctx -> untrustEditor(ctx.getSource(), services, null))
-                                .then(platform.createCommandBuilder()
-                                        .argument("hash", ICommandBuilder.ArgumentType.GREEDY_STRING)
-                                        .executes(ctx -> untrustEditor(ctx.getSource(), services, ctx.getStringArgument("hash")))))
-                        .then(platform.createCommandBuilder()
-                                .literal("trusted")
-                                .executes(ctx -> listTrusted(ctx.getSource(), services))))
+                .then(editorBranchForParadigm)
                 .then(platform.createCommandBuilder()
                         .literal("apply")
                         .requires(src -> services.getCommandToggleStore().isEnabled("paradigm.apply") && hasEditorPermission(src, services))
@@ -56,6 +40,30 @@ public class editor implements ParadigmModule {
                                 .executes(ctx -> applyChanges(ctx.getSource(), services, ctx.getStringArgument("code")))));
 
         platform.registerCommand(cmd);
+
+        // Root alias for users who expect /editor entrypoint.
+        platform.registerCommand(buildEditorBranch(platform, services));
+    }
+
+    private ICommandBuilder buildEditorBranch(IPlatformAdapter platform, Services services) {
+        return platform.createCommandBuilder()
+                .literal("editor")
+                .requires(src -> services.getCommandToggleStore().isEnabled("paradigm.editor") && hasEditorPermission(src, services))
+                .executes(ctx -> openEditor(ctx.getSource(), services))
+                .then(platform.createCommandBuilder()
+                        .literal("trust")
+                        .then(platform.createCommandBuilder()
+                                .argument("nonce", ICommandBuilder.ArgumentType.WORD)
+                                .executes(ctx -> trustEditor(ctx.getSource(), services, ctx.getStringArgument("nonce")))))
+                .then(platform.createCommandBuilder()
+                        .literal("untrust")
+                        .executes(ctx -> untrustEditor(ctx.getSource(), services, null))
+                        .then(platform.createCommandBuilder()
+                                .argument("hash", ICommandBuilder.ArgumentType.GREEDY_STRING)
+                                .executes(ctx -> untrustEditor(ctx.getSource(), services, ctx.getStringArgument("hash")))))
+                .then(platform.createCommandBuilder()
+                        .literal("trusted")
+                        .executes(ctx -> listTrusted(ctx.getSource(), services)));
     }
 
     private boolean hasEditorPermission(ICommandSource source, Services services) {
