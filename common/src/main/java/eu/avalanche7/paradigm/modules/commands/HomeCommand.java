@@ -5,16 +5,20 @@ import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.utils.CommandCooldowns;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 
 import java.util.List;
+import java.util.regex.Pattern;
 
 public class HomeCommand implements ParadigmModule {
     private static final String HOME_LIMIT_PREFIX = "paradigm.home.limit.";
     private static final String HOME_LIMIT_UNLIMITED = "paradigm.home.limit.unlimited";
     private static final int HOME_LIMIT_SCAN_MAX = 256;
+    private static final Pattern SAFE_NAME = Pattern.compile("[A-Za-z0-9_-]{1,32}");
 
     private Services services;
     private IPlatformAdapter platform;
@@ -55,6 +59,17 @@ public class HomeCommand implements ParadigmModule {
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
+        IEventSystem events = services.getPlatformAdapter().getEventSystem();
+        if (events != null) {
+            events.onPlayerDeath(event -> {
+                IPlayer player = event.getPlayer();
+                if (player == null) {
+                    return;
+                }
+                services.getPlatformAdapter().getPlayerLocation(player)
+                        .ifPresent(location -> services.getPlayerDataStore().setLastLocation(player, location));
+            });
+        }
     }
 
     @Override
@@ -190,7 +205,11 @@ public class HomeCommand implements ParadigmModule {
     private int executeSetHome(IPlayer player, String homeName) {
         if (player == null) return 0;
 
-        String normalized = homeName == null || homeName.isBlank() ? "home" : homeName.trim();
+        String normalized = normalizeInputName(homeName, "home");
+        if (normalized == null) {
+            send(player, "home.invalid_name", "Invalid home name. Use letters, numbers, _ or -.");
+            return 0;
+        }
         int homeLimit = resolveHomeLimit(player);
         boolean alreadyExists = services.getPlayerDataStore().getHome(player, normalized) != null;
         int homeCount = services.getPlayerDataStore().getHomeNames(player).size();
@@ -217,18 +236,28 @@ public class HomeCommand implements ParadigmModule {
     private int executeHome(IPlayer player, String homeName) {
         if (player == null) return 0;
 
-        String normalized = homeName == null || homeName.isBlank() ? "home" : homeName.trim();
+        String normalized = normalizeInputName(homeName, "home");
+        if (normalized == null) {
+            send(player, "home.invalid_name", "Invalid home name. Use letters, numbers, _ or -.");
+            return 0;
+        }
         PlayerDataStore.HomeEntry home = services.getPlayerDataStore().getHome(player, normalized);
         if (home == null || home.getLocation() == null) {
             send(player, "home.home_not_found", "Home {home} was not found.", "{home}", normalized);
             return 0;
         }
 
-        platform.getPlayerLocation(player).ifPresent(current -> services.getPlayerDataStore().setLastLocation(player, current));
+        return CommandCooldowns.run(services, player, "home", () -> teleportHome(player, normalized, home.getLocation()));
+    }
 
-        if (!platform.teleportPlayer(player, home.getLocation())) {
+    private int teleportHome(IPlayer player, String normalized, PlayerDataStore.StoredLocation destination) {
+        PlayerDataStore.StoredLocation current = platform.getPlayerLocation(player).orElse(null);
+        if (!platform.teleportPlayer(player, destination)) {
             send(player, "home.teleport_failed", "Teleport failed.");
             return 0;
+        }
+        if (current != null) {
+            services.getPlayerDataStore().setLastLocation(player, current);
         }
 
         send(player, "home.teleported", "Teleported to home {home}.", "{home}", normalized);
@@ -238,7 +267,11 @@ public class HomeCommand implements ParadigmModule {
     private int executeDelHome(IPlayer player, String homeName) {
         if (player == null) return 0;
 
-        String normalized = homeName == null || homeName.isBlank() ? "home" : homeName.trim();
+        String normalized = normalizeInputName(homeName, "home");
+        if (normalized == null) {
+            send(player, "home.invalid_name", "Invalid home name. Use letters, numbers, _ or -.");
+            return 0;
+        }
         boolean deleted = services.getPlayerDataStore().deleteHome(player, normalized);
         if (!deleted) {
             send(player, "home.delhome_missing", "Home {home} does not exist.", "{home}", normalized);
@@ -289,6 +322,10 @@ public class HomeCommand implements ParadigmModule {
             return 0;
         }
 
+        return CommandCooldowns.run(services, player, "back", () -> teleportBack(player, last));
+    }
+
+    private int teleportBack(IPlayer player, PlayerDataStore.StoredLocation last) {
         PlayerDataStore.StoredLocation now = platform.getPlayerLocation(player).orElse(null);
         if (!platform.teleportPlayer(player, last)) {
             send(player, "home.teleport_failed", "Teleport failed.");
@@ -321,6 +358,11 @@ public class HomeCommand implements ParadigmModule {
         return 1;
     }
 
+    private String normalizeInputName(String value, String defaultName) {
+        String normalized = value == null || value.isBlank() ? defaultName : value.trim();
+        return SAFE_NAME.matcher(normalized).matches() ? normalized : null;
+    }
+
     private void send(IPlayer player, String key, String fallback) {
         sendWithPlaceholders(player, key, fallback);
     }
@@ -349,8 +391,11 @@ public class HomeCommand implements ParadigmModule {
         if (value == null) {
             return "";
         }
-        return value.replace("'", "").replace("\n", " ");
+        return value.replace("<", "")
+                .replace(">", "")
+                .replace("&", "")
+                .replace("'", "")
+                .replace("\"", "")
+                .replace("\n", " ");
     }
 }
-
-

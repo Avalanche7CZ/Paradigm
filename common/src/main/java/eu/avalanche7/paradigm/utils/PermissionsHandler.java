@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -24,6 +25,7 @@ public class PermissionsHandler {
     private final IPlatformAdapter platform;
     private final Set<UUID> discoveryWarmedUsers = ConcurrentHashMap.newKeySet();
     private final PermissionAPI internalPermissionApi;
+    private final PermissionNodeRegistry permissionNodeRegistry;
 
     public static final String MENTION_EVERYONE_PERMISSION = "paradigm.mention.everyone";
     public static final String MENTION_PLAYER_PERMISSION = "paradigm.mention.player";
@@ -43,13 +45,19 @@ public class PermissionsHandler {
     public static final String SEEN_PERMISSION = "paradigm.seen";
     public static final String IGNORE_PERMISSION = "paradigm.ignore";
     public static final String GAMEMODE_PERMISSION = "paradigm.gamemode";
+    public static final String GAMEMODE_OTHERS_PERMISSION = "paradigm.gamemode.others";
     public static final String FLY_PERMISSION = "paradigm.fly";
+    public static final String FLY_OTHERS_PERMISSION = "paradigm.fly.others";
     public static final String CLEARINV_PERMISSION = "paradigm.clearinv";
+    public static final String CLEARINV_OTHERS_PERMISSION = "paradigm.clearinv.others";
     public static final String TIME_PERMISSION = "paradigm.time";
     public static final String WEATHER_PERMISSION = "paradigm.weather";
     public static final String SPEED_PERMISSION = "paradigm.speed";
+    public static final String SPEED_OTHERS_PERMISSION = "paradigm.speed.others";
     public static final String FEED_PERMISSION = "paradigm.feed";
+    public static final String FEED_OTHERS_PERMISSION = "paradigm.feed.others";
     public static final String HEAL_PERMISSION = "paradigm.heal";
+    public static final String HEAL_OTHERS_PERMISSION = "paradigm.heal.others";
     public static final String HOME_USE_PERMISSION = "paradigm.home";
     public static final String HOME_SET_PERMISSION = "paradigm.sethome";
     public static final String HOME_DEL_PERMISSION = "paradigm.delhome";
@@ -85,13 +93,19 @@ public class PermissionsHandler {
     public static final int SEEN_PERMISSION_LEVEL = 0;
     public static final int IGNORE_PERMISSION_LEVEL = 0;
     public static final int GAMEMODE_PERMISSION_LEVEL = 2;
+    public static final int GAMEMODE_OTHERS_PERMISSION_LEVEL = 2;
     public static final int FLY_PERMISSION_LEVEL = 2;
+    public static final int FLY_OTHERS_PERMISSION_LEVEL = 2;
     public static final int CLEARINV_PERMISSION_LEVEL = 2;
+    public static final int CLEARINV_OTHERS_PERMISSION_LEVEL = 2;
     public static final int TIME_PERMISSION_LEVEL = 2;
     public static final int WEATHER_PERMISSION_LEVEL = 2;
     public static final int SPEED_PERMISSION_LEVEL = 2;
+    public static final int SPEED_OTHERS_PERMISSION_LEVEL = 2;
     public static final int FEED_PERMISSION_LEVEL = 2;
+    public static final int FEED_OTHERS_PERMISSION_LEVEL = 2;
     public static final int HEAL_PERMISSION_LEVEL = 2;
+    public static final int HEAL_OTHERS_PERMISSION_LEVEL = 2;
     public static final int HOME_USE_PERMISSION_LEVEL = 0;
     public static final int HOME_SET_PERMISSION_LEVEL = 0;
     public static final int HOME_DEL_PERMISSION_LEVEL = 0;
@@ -103,7 +117,7 @@ public class PermissionsHandler {
     public static final int TPDENY_PERMISSION_LEVEL = 0;
     public static final int TPCANCEL_PERMISSION_LEVEL = 0;
     public static final int WARP_USE_PERMISSION_LEVEL = 0;
-    public static final int WARP_WILDCARD_PERMISSION_LEVEL = 0;
+    public static final int WARP_WILDCARD_PERMISSION_LEVEL = 2;
     public static final int WARP_SET_PERMISSION_LEVEL = 2;
     public static final int WARP_DELETE_PERMISSION_LEVEL = 2;
     public static final int WARP_LIST_PERMISSION_LEVEL = 0;
@@ -120,6 +134,7 @@ public class PermissionsHandler {
                 new PermissionDataStore(logger, debugLogger, platform != null ? platform.getConfig() : null),
                 playerDataStore
         );
+        this.permissionNodeRegistry = new PermissionNodeRegistry(logger, debugLogger, platform != null ? platform.getConfig() : null);
         Placeholders.setPermissionMetaResolver(this::resolvePermissionMeta);
     }
 
@@ -285,6 +300,146 @@ public class PermissionsHandler {
             internalPermissionApi.reload();
         }
         registerPermissionsWithLuckPerms();
+    }
+
+    public int discoverCommandTreeFromServer(Object server) {
+        if (!isExternalCommandPermissionsEnabled() || server == null) {
+            return 0;
+        }
+        Object commands = invokeNoArg(server, "getCommands");
+        if (commands == null) commands = invokeNoArg(server, "getCommandManager");
+        if (commands == null) commands = invokeNoArg(server, "commands");
+        if (commands == null) commands = invokeNoArg(server, "commandManager");
+        Object dispatcher = commands != null ? invokeNoArg(commands, "getDispatcher") : null;
+        if (dispatcher == null && commands != null) dispatcher = invokeNoArg(commands, "dispatcher");
+        return discoverCommandTree(dispatcher);
+    }
+
+    public int discoverCommandTree(Object dispatcher) {
+        if (!isExternalCommandPermissionsEnabled() || dispatcher == null) {
+            return 0;
+        }
+        int changed = permissionNodeRegistry.discoverCommandTree(dispatcher);
+        if (changed > 0) {
+            registerPermissionsWithLuckPerms();
+        }
+        return changed;
+    }
+
+    public void registerExternalPermissionNode(String node, String source, String description, int defaultLevel) {
+        if (node == null || node.isBlank()) {
+            return;
+        }
+        permissionNodeRegistry.registerNode(node, source, description, defaultLevel);
+        registerPermissionsWithLuckPerms();
+    }
+
+    public List<PermissionNodeRegistry.DiscoveredPermission> listDiscoveredPermissionNodes(String query, int limit) {
+        return permissionNodeRegistry.listNodes(query, limit);
+    }
+
+    public CommandGuardResult evaluateCommandPermission(IPlayer player, String commandLine) {
+        if (!isExternalCommandPermissionsEnabled()) {
+            return CommandGuardResult.allowed(commandLine, null, "disabled");
+        }
+        if (player == null || commandLine == null || commandLine.isBlank()) {
+            return CommandGuardResult.allowed(commandLine, null, "empty");
+        }
+
+        Set<String> candidates = permissionNodeRegistry.commandCandidates(commandLine);
+        if (candidates.isEmpty()) {
+            return CommandGuardResult.allowed(commandLine, null, "no_candidates");
+        }
+
+        for (String node : candidates) {
+            Boolean explicit = queryDefinedPermission(player, node);
+            if (explicit != null) {
+                return explicit
+                        ? CommandGuardResult.allowed(commandLine, node, "explicit_allow")
+                        : CommandGuardResult.denied(commandLine, node, "explicit_deny");
+            }
+        }
+
+        if (isExternalCommandStrictMode()) {
+            if (hasOperatorBypass(player)) {
+                return CommandGuardResult.allowed(commandLine, firstCandidate(candidates), "strict_op_fallback");
+            }
+            return CommandGuardResult.denied(commandLine, firstCandidate(candidates), "strict_missing_allow");
+        }
+
+        return CommandGuardResult.allowed(commandLine, firstCandidate(candidates), "undefined");
+    }
+
+    public Boolean queryDefinedPermission(IPlayer player, String permission) {
+        if (player == null || permission == null || permission.isBlank()) {
+            return null;
+        }
+
+        if (isLuckPermsAvailable()) {
+            try {
+                net.luckperms.api.LuckPerms api = net.luckperms.api.LuckPermsProvider.get();
+                java.util.UUID uuid = java.util.UUID.fromString(player.getUUID());
+                net.luckperms.api.model.user.User user = api.getUserManager().getUser(uuid);
+                if (user != null) {
+                    warmupUserPermissionsOnce(user);
+                    net.luckperms.api.util.Tristate lpState = user.getCachedData().getPermissionData().checkPermission(permission);
+                    if (lpState != net.luckperms.api.util.Tristate.UNDEFINED) {
+                        return lpState.asBoolean();
+                    }
+                }
+            } catch (Throwable t) {
+                debugLogger.debugLog("[PermissionsHandler] LuckPerms explicit query failed for '" + permission + "': " + t);
+            }
+        }
+
+        if (isInternalPermissionsEnabled()) {
+            try {
+                return internalPermissionApi.hasPermission(player, permission);
+            } catch (Throwable t) {
+                debugLogger.debugLog("[PermissionsHandler] Internal explicit query failed for '" + permission + "': " + t);
+            }
+        }
+
+        return null;
+    }
+
+    public Boolean queryDefinedPermission(UUID playerUuid, String permission) {
+        if (playerUuid == null || permission == null || permission.isBlank()) {
+            return null;
+        }
+
+        if (isLuckPermsAvailable()) {
+            try {
+                net.luckperms.api.LuckPerms api = net.luckperms.api.LuckPermsProvider.get();
+                net.luckperms.api.model.user.User user = api.getUserManager().getUser(playerUuid);
+                if (user != null) {
+                    warmupUserPermissionsOnce(user);
+                    net.luckperms.api.util.Tristate lpState = user.getCachedData().getPermissionData().checkPermission(permission);
+                    if (lpState != net.luckperms.api.util.Tristate.UNDEFINED) {
+                        return lpState.asBoolean();
+                    }
+                }
+            } catch (Throwable t) {
+                debugLogger.debugLog("[PermissionsHandler] LuckPerms UUID explicit query failed for '" + permission + "': " + t);
+            }
+        }
+
+        if (isInternalPermissionsEnabled()) {
+            try {
+                return internalPermissionApi.hasPermission(playerUuid, permission);
+            } catch (Throwable t) {
+                debugLogger.debugLog("[PermissionsHandler] Internal UUID explicit query failed for '" + permission + "': " + t);
+            }
+        }
+
+        return null;
+    }
+
+    private static String firstCandidate(Set<String> candidates) {
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+        return candidates.iterator().next();
     }
 
     public boolean hasPermission(IPlayer player, String permission) {
@@ -536,13 +691,19 @@ public class PermissionsHandler {
         if (permission.equals(SEEN_PERMISSION)) return SEEN_PERMISSION_LEVEL;
         if (permission.equals(IGNORE_PERMISSION)) return IGNORE_PERMISSION_LEVEL;
         if (permission.equals(GAMEMODE_PERMISSION)) return GAMEMODE_PERMISSION_LEVEL;
+        if (permission.equals(GAMEMODE_OTHERS_PERMISSION)) return GAMEMODE_OTHERS_PERMISSION_LEVEL;
         if (permission.equals(FLY_PERMISSION)) return FLY_PERMISSION_LEVEL;
+        if (permission.equals(FLY_OTHERS_PERMISSION)) return FLY_OTHERS_PERMISSION_LEVEL;
         if (permission.equals(CLEARINV_PERMISSION)) return CLEARINV_PERMISSION_LEVEL;
+        if (permission.equals(CLEARINV_OTHERS_PERMISSION)) return CLEARINV_OTHERS_PERMISSION_LEVEL;
         if (permission.equals(TIME_PERMISSION)) return TIME_PERMISSION_LEVEL;
         if (permission.equals(WEATHER_PERMISSION)) return WEATHER_PERMISSION_LEVEL;
         if (permission.equals(SPEED_PERMISSION)) return SPEED_PERMISSION_LEVEL;
+        if (permission.equals(SPEED_OTHERS_PERMISSION)) return SPEED_OTHERS_PERMISSION_LEVEL;
         if (permission.equals(FEED_PERMISSION)) return FEED_PERMISSION_LEVEL;
+        if (permission.equals(FEED_OTHERS_PERMISSION)) return FEED_OTHERS_PERMISSION_LEVEL;
         if (permission.equals(HEAL_PERMISSION)) return HEAL_PERMISSION_LEVEL;
+        if (permission.equals(HEAL_OTHERS_PERMISSION)) return HEAL_OTHERS_PERMISSION_LEVEL;
         if (permission.equals(HOME_USE_PERMISSION)) return HOME_USE_PERMISSION_LEVEL;
         if (permission.equals(HOME_SET_PERMISSION)) return HOME_SET_PERMISSION_LEVEL;
         if (permission.equals(HOME_DEL_PERMISSION)) return HOME_DEL_PERMISSION_LEVEL;
@@ -583,14 +744,20 @@ public class PermissionsHandler {
         nodes.put(SETSPAWN_PERMISSION, "Allows setting server spawn with /setspawn.");
         nodes.put(SEEN_PERMISSION, "Allows checking when a player was last seen with /seen.");
         nodes.put(IGNORE_PERMISSION, "Allows managing ignored players with /ignore and /unignore.");
-        nodes.put(GAMEMODE_PERMISSION, "Allows changing gamemode with /gamemode and /gm* aliases.");
+        nodes.put(GAMEMODE_PERMISSION, "Allows changing gamemode with /gamemode and gamemode aliases.");
+        nodes.put(GAMEMODE_OTHERS_PERMISSION, "Allows changing another player's gamemode.");
         nodes.put(FLY_PERMISSION, "Allows toggling flight with /fly.");
+        nodes.put(FLY_OTHERS_PERMISSION, "Allows toggling flight for another player.");
         nodes.put(CLEARINV_PERMISSION, "Allows clearing inventories with /clearinv and /ci.");
+        nodes.put(CLEARINV_OTHERS_PERMISSION, "Allows clearing another player's inventory.");
         nodes.put(TIME_PERMISSION, "Allows changing time with /day and /night.");
         nodes.put(WEATHER_PERMISSION, "Allows changing weather with /sun, /rain, /thunder.");
         nodes.put(SPEED_PERMISSION, "Allows using /speed.");
+        nodes.put(SPEED_OTHERS_PERMISSION, "Allows changing another player's speed.");
         nodes.put(FEED_PERMISSION, "Allows using /feed.");
+        nodes.put(FEED_OTHERS_PERMISSION, "Allows feeding another player.");
         nodes.put(HEAL_PERMISSION, "Allows using /heal.");
+        nodes.put(HEAL_OTHERS_PERMISSION, "Allows healing another player.");
         nodes.put(HOME_USE_PERMISSION, "Allows teleporting to home with /home.");
         nodes.put(HOME_SET_PERMISSION, "Allows setting home locations with /sethome.");
         nodes.put(HOME_DEL_PERMISSION, "Allows deleting homes with /delhome.");
@@ -620,6 +787,8 @@ public class PermissionsHandler {
                 }
             }
         }
+
+        nodes.putAll(permissionNodeRegistry.knownNodes());
 
         return nodes;
     }
@@ -660,6 +829,21 @@ public class PermissionsHandler {
         return internalPermissionApi.removeGroupParent(groupName, parentName);
     }
 
+    public boolean addPermissionToGroup(String groupName, String permissionNode, boolean denied) {
+        if (!isInternalPermissionsEnabled()) return false;
+        return internalPermissionApi.addGroupPermission(groupName, permissionNode, denied);
+    }
+
+    public boolean removePermissionFromGroup(String groupName, String permissionNode) {
+        if (!isInternalPermissionsEnabled()) return false;
+        return internalPermissionApi.removeGroupPermission(groupName, permissionNode);
+    }
+
+    public boolean setPermissionGroupMetadata(String groupName, String field, String value) {
+        if (!isInternalPermissionsEnabled()) return false;
+        return internalPermissionApi.setGroupMetadata(groupName, field, value);
+    }
+
     public boolean assignPlayerGroup(UUID playerUuid, String groupName) {
         if (!isInternalPermissionsEnabled()) return false;
         boolean changed = internalPermissionApi.assignGroup(playerUuid, groupName);
@@ -681,6 +865,24 @@ public class PermissionsHandler {
     public boolean revokePlayerGroup(UUID playerUuid, String groupName) {
         if (!isInternalPermissionsEnabled()) return false;
         boolean changed = internalPermissionApi.revokeGroup(playerUuid, groupName);
+        if (changed) {
+            refreshPlayerCommandTree(playerUuid);
+        }
+        return changed;
+    }
+
+    public boolean addPermissionToPlayer(UUID playerUuid, String permissionNode, boolean denied) {
+        if (!isInternalPermissionsEnabled()) return false;
+        boolean changed = internalPermissionApi.addUserPermission(playerUuid, permissionNode, denied);
+        if (changed) {
+            refreshPlayerCommandTree(playerUuid);
+        }
+        return changed;
+    }
+
+    public boolean removePermissionFromPlayer(UUID playerUuid, String permissionNode) {
+        if (!isInternalPermissionsEnabled()) return false;
+        boolean changed = internalPermissionApi.removeUserPermission(playerUuid, permissionNode);
         if (changed) {
             refreshPlayerCommandTree(playerUuid);
         }
@@ -716,6 +918,16 @@ public class PermissionsHandler {
         return internalPermissionApi.getUserGroups(playerUuid);
     }
 
+    public PermissionAPI.UserInfo getPlayerPermissionInfo(UUID playerUuid) {
+        if (!isInternalPermissionsEnabled()) return null;
+        return internalPermissionApi.getUserInfo(playerUuid);
+    }
+
+    public PermissionAPI.PermissionExplain explainPlayerPermission(UUID playerUuid, String permissionNode) {
+        if (!isInternalPermissionsEnabled()) return null;
+        return internalPermissionApi.explainPermission(playerUuid, permissionNode);
+    }
+
     public boolean isInternalPermissionsEnabled() {
         try {
             MainConfigHandler.Config cfg = MainConfigHandler.getConfig();
@@ -724,6 +936,48 @@ public class PermissionsHandler {
                     && Boolean.TRUE.equals(cfg.internalPermissionsEnable.value);
         } catch (Throwable ignored) {
             return true;
+        }
+    }
+
+    public boolean isExternalCommandPermissionsEnabled() {
+        try {
+            MainConfigHandler.Config cfg = MainConfigHandler.getConfig();
+            return cfg != null
+                    && cfg.externalCommandPermissionsEnable != null
+                    && Boolean.TRUE.equals(cfg.externalCommandPermissionsEnable.value);
+        } catch (Throwable ignored) {
+            return true;
+        }
+    }
+
+    public boolean isExternalCommandStrictMode() {
+        try {
+            MainConfigHandler.Config cfg = MainConfigHandler.getConfig();
+            String mode = cfg != null && cfg.externalCommandPermissionMode != null ? cfg.externalCommandPermissionMode.value : null;
+            return mode != null && mode.trim().equalsIgnoreCase("strict");
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    public boolean shouldRegisterForgePermissionHandler() {
+        try {
+            MainConfigHandler.Config cfg = MainConfigHandler.getConfig();
+            return cfg != null
+                    && cfg.registerForgePermissionHandler != null
+                    && Boolean.TRUE.equals(cfg.registerForgePermissionHandler.value);
+        } catch (Throwable ignored) {
+            return true;
+        }
+    }
+
+    public record CommandGuardResult(boolean allowed, String commandLine, String node, String reason) {
+        public static CommandGuardResult allowed(String commandLine, String node, String reason) {
+            return new CommandGuardResult(true, commandLine, node, reason);
+        }
+
+        public static CommandGuardResult denied(String commandLine, String node, String reason) {
+            return new CommandGuardResult(false, commandLine, node, reason);
         }
     }
 }

@@ -164,25 +164,31 @@ public class Announcements implements ParadigmModule {
         }
         if (config.globalEnable.value) {
             long interval = config.globalInterval.value;
-            globalTask = services.getTaskScheduler().scheduleAtFixedRate(this::broadcastGlobalMessages, interval, interval, TimeUnit.SECONDS);
-            services.getDebugLogger().debugLog(NAME + ": Scheduled global messages with interval: " + interval + " seconds");
+            globalTask = scheduleAnnouncementTask("global", this::broadcastGlobalMessages, interval);
         }
         if (config.actionbarEnable.value) {
             long interval = config.actionbarInterval.value;
-            actionbarTask = services.getTaskScheduler().scheduleAtFixedRate(this::broadcastActionbarMessages, interval, interval, TimeUnit.SECONDS);
-            services.getDebugLogger().debugLog(NAME + ": Scheduled actionbar messages with interval: " + interval + " seconds");
+            actionbarTask = scheduleAnnouncementTask("actionbar", this::broadcastActionbarMessages, interval);
         }
         if (config.titleEnable.value) {
             long interval = config.titleInterval.value;
-            titleTask = services.getTaskScheduler().scheduleAtFixedRate(this::broadcastTitleMessages, interval, interval, TimeUnit.SECONDS);
-            services.getDebugLogger().debugLog(NAME + ": Scheduled title messages with interval: " + interval + " seconds");
+            titleTask = scheduleAnnouncementTask("title", this::broadcastTitleMessages, interval);
         }
         if (config.bossbarEnable.value) {
             long interval = config.bossbarInterval.value;
-            bossbarTask = services.getTaskScheduler().scheduleAtFixedRate(this::broadcastBossbarMessages, interval, interval, TimeUnit.SECONDS);
-            services.getDebugLogger().debugLog(NAME + ": Scheduled bossbar messages with interval: " + interval + " seconds");
+            bossbarTask = scheduleAnnouncementTask("bossbar", this::broadcastBossbarMessages, interval);
         }
         announcementsScheduled = true;
+    }
+
+    private ScheduledFuture<?> scheduleAnnouncementTask(String type, Runnable task, long intervalSeconds) {
+        if (intervalSeconds <= 0) {
+            services.getDebugLogger().debugLog(NAME + ": Skipping " + type + " messages, interval must be greater than 0 seconds but was " + intervalSeconds + ".");
+            return null;
+        }
+        ScheduledFuture<?> taskHandle = services.getTaskScheduler().scheduleAtFixedRate(task, intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
+        services.getDebugLogger().debugLog(NAME + ": Scheduled " + type + " messages with interval: " + intervalSeconds + " seconds");
+        return taskHandle;
     }
 
     private void cancelAllTasks() {
@@ -266,7 +272,7 @@ public class Announcements implements ParadigmModule {
     private void broadcastGlobalMessages() {
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
         List<String> messages = config.globalMessages.value;
-        if (platform == null || messages.isEmpty()) return;
+        if (platform == null || isNullOrEmpty(messages)) return;
         String orderMode = config.orderMode.value;
         String messageText = getNextMessage(messages, orderMode, "global");
         boolean headerFooter = config.headerAndFooter.value;
@@ -291,7 +297,7 @@ public class Announcements implements ParadigmModule {
     private void broadcastActionbarMessages() {
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
         List<String> messages = config.actionbarMessages.value;
-        if (platform == null || messages.isEmpty()) return;
+        if (platform == null || isNullOrEmpty(messages)) return;
         String orderMode = config.orderMode.value;
         String messageText = getNextMessage(messages, orderMode, "actionbar");
         platform.getOnlinePlayers().forEach(player -> {
@@ -304,7 +310,7 @@ public class Announcements implements ParadigmModule {
     private void broadcastTitleMessages() {
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
         List<String> messages = config.titleMessages.value;
-        if (platform == null || messages.isEmpty()) return;
+        if (platform == null || isNullOrEmpty(messages)) return;
         String orderMode = config.orderMode.value;
         String messageText = getNextMessage(messages, orderMode, "title");
         platform.getOnlinePlayers().forEach(player -> {
@@ -320,7 +326,7 @@ public class Announcements implements ParadigmModule {
     private void broadcastBossbarMessages() {
         AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
         List<String> messages = config.bossbarMessages.value;
-        if (platform == null || messages.isEmpty()) return;
+        if (platform == null || isNullOrEmpty(messages)) return;
         String orderMode = config.orderMode.value;
         String messageText = getNextMessage(messages, orderMode, "bossbar");
         int bossbarTime = config.bossbarTime.value != null ? config.bossbarTime.value : 10;
@@ -338,6 +344,10 @@ public class Announcements implements ParadigmModule {
             platform.sendBossBar(Collections.singletonList(player), messageComp, bossbarTime, bossbarColor, 1.0f);
         });
         services.getDebugLogger().debugLog(NAME + ": Broadcasted bossbar message: " + messageText);
+    }
+
+    private boolean isNullOrEmpty(List<String> messages) {
+        return messages == null || messages.isEmpty();
     }
 
     public int broadcastTitleCmd(ICommandContext context) {

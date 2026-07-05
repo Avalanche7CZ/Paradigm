@@ -100,6 +100,18 @@ public class MainConfigHandler extends BaseConfigHandler<MainConfigHandler.Confi
                 true,
                 "Enable or disable Paradigm internal permissions/groups (permissions.json and /paradigm group)."
         );
+        public ConfigEntry<Boolean> externalCommandPermissionsEnable = new ConfigEntry<>(
+                true,
+                "Enable command permission discovery/guard for commands from Minecraft and other mods."
+        );
+        public ConfigEntry<String> externalCommandPermissionMode = new ConfigEntry<>(
+                "deny_only",
+                "How discovered command permissions are enforced. 'deny_only' only blocks explicit denies; 'strict' requires an explicit allow or vanilla OP access."
+        );
+        public ConfigEntry<Boolean> registerForgePermissionHandler = new ConfigEntry<>(
+                true,
+                "Register Paradigm as an optional Forge/NeoForge PermissionAPI handler. Forge/NeoForge server config still decides which handler is active."
+        );
         public ConfigEntry<Boolean> telemetryEnable = new ConfigEntry<>(
                 true,
                 "Enables anonymous telemetry (server count, online players). Sends only anonymized metrics."
@@ -166,7 +178,7 @@ public class MainConfigHandler extends BaseConfigHandler<MainConfigHandler.Confi
         );
         public ConfigEntry<Boolean> gamemodeCommandsEnable = new ConfigEntry<>(
                 true,
-                "Enable or disable /gamemode and gm aliases."
+                "Enable or disable /gamemode and gamemode aliases."
         );
         public ConfigEntry<Boolean> flyCommandEnable = new ConfigEntry<>(
                 true,

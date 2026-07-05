@@ -89,6 +89,7 @@ public final class CommonRuntime {
         UpdateChecker.registerInGameNotifier(services);
 
         groupChatManager.setServices(services);
+        registerExternalCommandGuard(services);
 
 
         // --- modules ---
@@ -145,6 +146,34 @@ public final class CommonRuntime {
     public record Runtime(List<ParadigmModule> modules, Services services, PermissionsHandler permissionsHandler) {
     }
 
+    private static void registerExternalCommandGuard(Services services) {
+        if (services == null || services.getPlatformAdapter() == null || services.getPlatformAdapter().getEventSystem() == null) {
+            return;
+        }
+        services.getPlatformAdapter().getEventSystem().onPlayerCommand(event -> {
+            if (event == null || event.isCancelled()) {
+                return;
+            }
+            IPlatformAdapter platform = services.getPlatformAdapter();
+            PermissionsHandler.CommandGuardResult result = services.getPermissionsHandler()
+                    .evaluateCommandPermission(event.getPlayer(), event.getCommand());
+            if (result.allowed()) {
+                services.getDebugLogger().debugLog("[Permissions] External command allowed: /" + event.getCommand() + " node=" + result.node() + " reason=" + result.reason());
+                return;
+            }
+
+            event.setCancelled(true);
+            services.getDebugLogger().debugLog("[Permissions] External command denied: /" + event.getCommand() + " node=" + result.node() + " reason=" + result.reason());
+            if (event.getPlayer() != null && platform != null) {
+                String node = result.node() != null ? result.node() : "unknown";
+                platform.sendSystemMessage(
+                        event.getPlayer(),
+                        platform.createLiteralComponent("§cYou do not have permission to use this command. §7(" + node + ")")
+                );
+            }
+        });
+    }
+
     private static void registerDefaultCommandToggles(CommandToggleStore store) {
         if (store == null) {
             return;
@@ -172,9 +201,13 @@ public final class CommonRuntime {
         store.registerCommand("socialspy", true, false);
         store.registerCommand("gamemode", true, false);
         store.registerCommand("gmc", true, false);
+        store.registerCommand("creative", true, false);
         store.registerCommand("gms", true, false);
+        store.registerCommand("survival", true, false);
         store.registerCommand("gma", true, false);
+        store.registerCommand("adventure", true, false);
         store.registerCommand("gmsp", true, false);
+        store.registerCommand("spectator", true, false);
         store.registerCommand("fly", true, false);
         store.registerCommand("clearinv", true, false, "ci");
         store.registerCommand("day", true, false);

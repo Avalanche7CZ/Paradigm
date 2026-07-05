@@ -48,9 +48,13 @@ public class GamemodeCommand implements ParadigmModule {
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         registerGamemodeRoot();
         registerAlias("gmc", "creative");
+        registerAlias("creative", "creative");
         registerAlias("gms", "survival");
+        registerAlias("survival", "survival");
         registerAlias("gma", "adventure");
+        registerAlias("adventure", "adventure");
         registerAlias("gmsp", "spectator");
+        registerAlias("spectator", "spectator");
     }
 
     @Override
@@ -94,6 +98,10 @@ public class GamemodeCommand implements ParadigmModule {
         if (actor == null || target == null) {
             return 0;
         }
+        if (!canTargetOther(actor, target)) {
+            send(actor, "utility.no_permission_others", "You do not have permission to affect other players.");
+            return 0;
+        }
 
         String mode = normalizeMode(modeRaw);
         if (mode == null) {
@@ -101,9 +109,20 @@ public class GamemodeCommand implements ParadigmModule {
             return 0;
         }
 
-        services.getPlatformAdapter().executeCommandAsConsole("gamemode " + mode + " " + target.getName());
-        send(actor, "utility.gamemode_set", "Set gamemode {mode} for {player}.", "{mode}", mode, "{player}", target.getName());
-        return 1;
+        if (services.getPlatformAdapter().setGameMode(target, mode)) {
+            send(actor, "utility.gamemode_set", "Set gamemode {mode} for {player}.", "{mode}", mode, "{player}", target.getName());
+            return 1;
+        }
+
+        send(actor, "utility.gamemode_invalid", "Invalid gamemode.");
+        return 0;
+    }
+
+    private boolean canTargetOther(IPlayer actor, IPlayer target) {
+        if (actor == null || target == null || actor.getUUID() == null || actor.getUUID().equals(target.getUUID())) {
+            return true;
+        }
+        return services.getPermissionsHandler().hasPermission(actor, PermissionsHandler.GAMEMODE_OTHERS_PERMISSION, PermissionsHandler.GAMEMODE_OTHERS_PERMISSION_LEVEL);
     }
 
     private String normalizeMode(String modeRaw) {
@@ -135,4 +154,3 @@ public class GamemodeCommand implements ParadigmModule {
         services.getPlatformAdapter().sendSystemMessage(player, services.getMessageParser().parseMessage(decorated, player));
     }
 }
-

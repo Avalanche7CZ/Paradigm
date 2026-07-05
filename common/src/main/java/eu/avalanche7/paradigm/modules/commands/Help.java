@@ -179,7 +179,7 @@ public class Help implements ParadigmModule {
         ));
         m.put("Gamemode", new HelpEntry(
                 "Quick gamemode switches.",
-                "/gamemode <mode> [player], /gmc, /gms, /gma, /gmsp",
+                "/gamemode <mode> [player], /gmc, /creative, /gms, /survival, /gma, /adventure, /gmsp, /spectator",
                 "runtime command"
         ));
         m.put("Fly", new HelpEntry(
@@ -213,13 +213,13 @@ public class Help implements ParadigmModule {
                 "runtime player stats"
         ));
         m.put("Reload", new HelpEntry(
-                "Reload one config or all configs without full restart.",
-                "/paradigm reload [main|announcements|chat|motd|mention|restart|customcommands|all]",
+                "Reload configs and manage clickable command toggles without full restart.",
+                "/paradigm reload [config], /paradigm command list|search|enable|disable",
                 "main config + module configs"
         ));
         m.put("PermissionGroups", new HelpEntry(
-                "Manage internal permission groups, parents, and temporary user assignments.",
-                "/paradigm group list|add|remove|info|parent|user",
+                "Manage internal permission groups, users, direct permissions, and clickable admin panels.",
+                "/paradigm perms, /paradigm group list|info|perm|parent|user, /paradigm permission check",
                 "permissions.json + paradigm/playerdata/<uuid>.json"
         ));
         m.put("Help", new HelpEntry(

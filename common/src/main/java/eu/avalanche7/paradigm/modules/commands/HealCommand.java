@@ -64,12 +64,23 @@ public class HealCommand implements ParadigmModule {
         if (target == null) {
             return 0;
         }
+        if (!canTargetOther(actor, target)) {
+            send(actor, "utility.no_permission_others", "You do not have permission to affect other players.");
+            return 0;
+        }
         if (!healToMaxHealth(target)) {
             send(actor, "utility.heal_fail", "Could not restore full HP for {player}.", "{player}", target.getName());
             return 0;
         }
         send(actor, "utility.heal_ok", "Healed {player}.", "{player}", target.getName());
         return 1;
+    }
+
+    private boolean canTargetOther(IPlayer actor, IPlayer target) {
+        if (actor == null || target == null || actor.getUUID() == null || actor.getUUID().equals(target.getUUID())) {
+            return true;
+        }
+        return services.getPermissionsHandler().hasPermission(actor, PermissionsHandler.HEAL_OTHERS_PERMISSION, PermissionsHandler.HEAL_OTHERS_PERMISSION_LEVEL);
     }
 
     private boolean healToMaxHealth(IPlayer target) {
@@ -134,4 +145,3 @@ public class HealCommand implements ParadigmModule {
         services.getPlatformAdapter().sendSystemMessage(player, services.getMessageParser().parseMessage(decorated, player));
     }
 }
-

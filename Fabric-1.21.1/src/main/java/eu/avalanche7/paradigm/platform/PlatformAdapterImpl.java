@@ -29,6 +29,7 @@ import net.minecraft.stat.Stats;
 import net.minecraft.text.*;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.world.GameMode;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
 
@@ -36,6 +37,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -317,12 +319,12 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         if (restartBossBar == null) {
             restartBossBar = new ServerBossBar(t, toMinecraftColor(color), BossBar.Style.PROGRESS);
             restartBossBar.setVisible(true);
-            getOnlinePlayers().forEach(p -> {
-                if (p instanceof MinecraftPlayer mp) {
-                    restartBossBar.addPlayer(mp.getHandle());
-                }
-            });
         }
+        getOnlinePlayers().forEach(p -> {
+            if (p instanceof MinecraftPlayer mp) {
+                restartBossBar.addPlayer(mp.getHandle());
+            }
+        });
         restartBossBar.setName(t);
         restartBossBar.setPercent(progress);
     }
@@ -384,6 +386,95 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         if (server == null) return;
         ServerCommandSource consoleSource = server.getCommandSource().withLevel(4);
         server.getCommandManager().executeWithPrefix(consoleSource, command);
+    }
+
+    @Override
+    public ICommandSource createCommandSourceForPlayer(IPlayer player) {
+        if (player instanceof MinecraftPlayer mp) {
+            return MinecraftCommandSource.of(mp.getHandle().getCommandSource());
+        }
+        return IPlatformAdapter.super.createCommandSourceForPlayer(player);
+    }
+
+    @Override
+    public boolean setGameMode(IPlayer player, String mode) {
+        if (!(player instanceof MinecraftPlayer mp)) {
+            return IPlatformAdapter.super.setGameMode(player, mode);
+        }
+        GameMode gameMode = toGameMode(mode);
+        return gameMode != null && mp.getHandle().changeGameMode(gameMode);
+    }
+
+    @Override
+    public boolean setMovementSpeed(IPlayer player, double baseValue) {
+        if (!(player instanceof MinecraftPlayer mp) || baseValue < 0.0 || Double.isNaN(baseValue) || Double.isInfinite(baseValue)) {
+            return false;
+        }
+        Object attributeKey = findEntityAttribute("GENERIC_MOVEMENT_SPEED", "MOVEMENT_SPEED");
+        Object attribute = invokeCompatible(mp.getHandle(), "getAttributeInstance", attributeKey);
+        return setAttributeBaseValue(attribute, baseValue);
+    }
+
+    private static Object findEntityAttribute(String... names) {
+        try {
+            Class<?> attributes = Class.forName("net.minecraft.entity.attribute.EntityAttributes");
+            for (String name : names) {
+                try {
+                    java.lang.reflect.Field field = attributes.getField(name);
+                    return field.get(null);
+                } catch (ReflectiveOperationException ignored) {
+                }
+            }
+        } catch (ClassNotFoundException ignored) {
+        }
+        return null;
+    }
+
+    private static Object invokeCompatible(Object target, String methodName, Object arg) {
+        if (target == null || arg == null) {
+            return null;
+        }
+        for (java.lang.reflect.Method method : target.getClass().getMethods()) {
+            if (!method.getName().equals(methodName) || method.getParameterCount() != 1) {
+                continue;
+            }
+            Class<?> parameterType = method.getParameterTypes()[0];
+            if (!parameterType.isAssignableFrom(arg.getClass())) {
+                continue;
+            }
+            try {
+                method.setAccessible(true);
+                return method.invoke(target, arg);
+            } catch (ReflectiveOperationException ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static boolean setAttributeBaseValue(Object attribute, double baseValue) {
+        if (attribute == null) {
+            return false;
+        }
+        try {
+            java.lang.reflect.Method method = attribute.getClass().getMethod("setBaseValue", double.class);
+            method.invoke(attribute, baseValue);
+            return true;
+        } catch (ReflectiveOperationException ignored) {
+            return false;
+        }
+    }
+
+    private GameMode toGameMode(String mode) {
+        if (mode == null) {
+            return null;
+        }
+        return switch (mode.trim().toLowerCase(Locale.ROOT)) {
+            case "0", "s", "survival" -> GameMode.SURVIVAL;
+            case "1", "c", "creative" -> GameMode.CREATIVE;
+            case "2", "a", "adventure" -> GameMode.ADVENTURE;
+            case "3", "sp", "spectator" -> GameMode.SPECTATOR;
+            default -> null;
+        };
     }
 
     @Override

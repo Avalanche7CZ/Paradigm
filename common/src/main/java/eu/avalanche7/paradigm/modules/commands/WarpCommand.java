@@ -8,12 +8,16 @@ import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.utils.CommandCooldowns;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 public class WarpCommand implements ParadigmModule {
+    private static final Pattern SAFE_NAME = Pattern.compile("[A-Za-z0-9_-]{1,32}");
+
     private Services services;
     private IPlatformAdapter platform;
     private WarpStore warpStore;
@@ -227,10 +231,17 @@ public class WarpCommand implements ParadigmModule {
             return 0;
         }
 
-        platform.getPlayerLocation(player).ifPresent(loc -> services.getPlayerDataStore().setLastLocation(player, loc));
+        return CommandCooldowns.run(services, player, "warp", () -> teleportWarp(player, warp));
+    }
+
+    private int teleportWarp(IPlayer player, WarpStore.WarpEntry warp) {
+        PlayerDataStore.StoredLocation previous = platform.getPlayerLocation(player).orElse(null);
         if (!platform.teleportPlayer(player, warp.getLocation())) {
             send(player, "warp.teleport_failed", "Teleport failed.");
             return 0;
+        }
+        if (previous != null) {
+            services.getPlayerDataStore().setLastLocation(player, previous);
         }
 
         send(player, "warp.teleported", "Teleported to warp {warp}.", "{warp}", warp.getName());
@@ -337,8 +348,7 @@ public class WarpCommand implements ParadigmModule {
             specific = WarpStore.defaultPermissionFor(WarpStore.normalizeWarpKey(warpNameInput));
         }
 
-        return services.getPermissionsHandler().hasPermission(player, PermissionsHandler.WARP_USE_PERMISSION, PermissionsHandler.WARP_USE_PERMISSION_LEVEL)
-                || services.getPermissionsHandler().hasPermission(player, PermissionsHandler.WARP_WILDCARD_PERMISSION, PermissionsHandler.WARP_WILDCARD_PERMISSION_LEVEL)
+        return services.getPermissionsHandler().hasPermission(player, PermissionsHandler.WARP_WILDCARD_PERMISSION, PermissionsHandler.WARP_WILDCARD_PERMISSION_LEVEL)
                 || (specific != null && services.getPermissionsHandler().hasPermission(player, specific));
     }
 
@@ -354,7 +364,7 @@ public class WarpCommand implements ParadigmModule {
             return null;
         }
         String trimmed = value.trim();
-        if (trimmed.isEmpty() || trimmed.length() > 32) {
+        if (!SAFE_NAME.matcher(trimmed).matches()) {
             return null;
         }
         return trimmed;
@@ -380,7 +390,11 @@ public class WarpCommand implements ParadigmModule {
         if (value == null) {
             return "";
         }
-        return value.replace("'", "").replace("\n", " ");
+        return value.replace("<", "")
+                .replace(">", "")
+                .replace("&", "")
+                .replace("'", "")
+                .replace("\"", "")
+                .replace("\n", " ");
     }
 }
-

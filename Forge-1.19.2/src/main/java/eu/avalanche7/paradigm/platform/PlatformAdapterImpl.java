@@ -20,9 +20,11 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.BossEvent;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.jetbrains.annotations.Nullable;
@@ -242,9 +244,9 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         if (restartBossBar == null) {
             restartBossBar = new ServerBossEvent(mcMsg, BossEvent.BossBarColor.valueOf(color.name()), BossEvent.BossBarOverlay.PROGRESS);
             restartBossBar.setVisible(true);
-            for (IPlayer p : getOnlinePlayers()) {
-                restartBossBar.addPlayer(((MinecraftPlayer) p).getHandle());
-            }
+        }
+        for (IPlayer p : getOnlinePlayers()) {
+            restartBossBar.addPlayer(((MinecraftPlayer) p).getHandle());
         }
         restartBossBar.setName(mcMsg);
         restartBossBar.setProgress(progress);
@@ -304,6 +306,49 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public ICommandSource createCommandSourceForPlayer(IPlayer player) {
+        if (player instanceof MinecraftPlayer mp) {
+            return new MinecraftCommandSource(mp.getHandle().createCommandSourceStack());
+        }
+        return IPlatformAdapter.super.createCommandSourceForPlayer(player);
+    }
+
+    @Override
+    public boolean setGameMode(IPlayer player, String mode) {
+        if (!(player instanceof MinecraftPlayer mp)) {
+            return IPlatformAdapter.super.setGameMode(player, mode);
+        }
+        GameType gameType = toGameType(mode);
+        return gameType != null && mp.getHandle().setGameMode(gameType);
+    }
+
+    @Override
+    public boolean setMovementSpeed(IPlayer player, double baseValue) {
+        if (!(player instanceof MinecraftPlayer mp) || baseValue < 0.0 || Double.isNaN(baseValue) || Double.isInfinite(baseValue)) {
+            return false;
+        }
+        var attribute = mp.getHandle().getAttribute(Attributes.MOVEMENT_SPEED);
+        if (attribute == null) {
+            return false;
+        }
+        attribute.setBaseValue(baseValue);
+        return true;
+    }
+
+    private GameType toGameType(String mode) {
+        if (mode == null) {
+            return null;
+        }
+        return switch (mode.trim().toLowerCase(Locale.ROOT)) {
+            case "0", "s", "survival" -> GameType.SURVIVAL;
+            case "1", "c", "creative" -> GameType.CREATIVE;
+            case "2", "a", "adventure" -> GameType.ADVENTURE;
+            case "3", "sp", "spectator" -> GameType.SPECTATOR;
+            default -> null;
+        };
+    }
+
+    @Override
     public String replacePlaceholders(String text, @Nullable IPlayer player) {
         return placeholders.replacePlaceholders(text, player);
     }
@@ -318,10 +363,32 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public void shutdownServer(IComponent kickMessage) {
-        if (server == null) return;
-        broadcastSystemMessage(kickMessage);
-        server.saveEverything(true, true, true);
-        server.halt(false);
+        if (server == null) {
+            debugLogger.debugLog("PlatformAdapter: Shutdown called but server instance is null.");
+            return;
+        }
+        try {
+            if (kickMessage != null) {
+                broadcastSystemMessage(kickMessage);
+            }
+            server.saveEverything(true, true, true);
+            scheduleJvmExitFallback();
+            server.halt(false);
+        } catch (Exception e) {
+            debugLogger.debugLog("PlatformAdapter: Failed to shutdown server: " + e.getMessage(), e);
+            scheduleJvmExitFallback();
+            try {
+                server.halt(false);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private void scheduleJvmExitFallback() {
+        taskScheduler.scheduleRaw(() -> {
+            debugLogger.debugLog("PlatformAdapter: Forcing JVM exit with status 1 to trigger auto-restart.");
+            System.exit(1);
+        }, 2, TimeUnit.SECONDS);
     }
 
     @Override

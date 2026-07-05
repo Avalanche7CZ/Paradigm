@@ -2,6 +2,7 @@ package eu.avalanche7.paradigm.platform.Interfaces;
 
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
+import eu.avalanche7.paradigm.utils.CommandPriority;
 import eu.avalanche7.paradigm.utils.MessageParser;
 import org.jetbrains.annotations.Nullable;
 
@@ -47,6 +48,80 @@ public interface IPlatformAdapter {
 
     void executeCommandAs(ICommandSource source, String command);
     void executeCommandAsConsole(String command);
+
+    default boolean unregisterCommandRoot(String rootLiteral) {
+        Object server = getMinecraftServer();
+        Object commands = firstObject(server, "getCommands", "getCommandManager", "commands", "commandManager");
+        Object dispatcher = firstObject(commands, "getDispatcher", "dispatcher");
+        return dispatcher != null && CommandPriority.unregisterRootLiteral(dispatcher, rootLiteral);
+    }
+
+    default ICommandSource createCommandSourceForPlayer(IPlayer player) {
+        if (player == null || player.getOriginalPlayer() == null) {
+            return null;
+        }
+        Object source = firstObject(player.getOriginalPlayer(), "createCommandSourceStack", "getCommandSource", "getCommandSourceStack");
+        return source != null ? wrapCommandSource(source) : null;
+    }
+
+    default boolean setGameMode(IPlayer player, String mode) {
+        String normalized = normalizeGameMode(mode);
+        if (player == null || player.getOriginalPlayer() == null || normalized == null) {
+            return false;
+        }
+
+        Object handle = player.getOriginalPlayer();
+        if (invokeGameModeMethod(handle, normalized, "setGameMode", "changeGameMode")) {
+            return true;
+        }
+
+        Object interactionManager = firstObject(handle, "interactionManager", "gameMode");
+        return invokeGameModeMethod(interactionManager, normalized, "changeGameMode", "changeGameModeForPlayer", "setGameMode");
+    }
+
+    default boolean setMovementSpeed(IPlayer player, double baseValue) {
+        if (player == null || player.getOriginalPlayer() == null || baseValue < 0.0 || Double.isNaN(baseValue) || Double.isInfinite(baseValue)) {
+            return false;
+        }
+        Object handle = player.getOriginalPlayer();
+        Object attribute = invokeAttributeLookup(handle, "getAttribute", "minecraft:generic.movement_speed");
+        if (attribute == null) {
+            return false;
+        }
+        return invokeWithArgs(attribute, "setBaseValue", new Class<?>[]{double.class}, baseValue);
+    }
+
+    default boolean setTimeOfDay(long timeOfDay) {
+        boolean changed = false;
+        for (Object world : serverWorlds()) {
+            changed |= invokeWithArgs(world, "setDayTime", new Class<?>[]{long.class}, timeOfDay);
+            changed |= invokeWithArgs(world, "setTimeOfDay", new Class<?>[]{long.class}, timeOfDay);
+        }
+        return changed;
+    }
+
+    default boolean setWeather(String weather) {
+        String normalized = weather != null ? weather.trim().toLowerCase(Locale.ROOT) : "";
+        int clearTime = switch (normalized) {
+            case "clear", "sun" -> 6000;
+            default -> 0;
+        };
+        int weatherTime = 6000;
+        boolean raining = "rain".equals(normalized) || "thunder".equals(normalized);
+        boolean thundering = "thunder".equals(normalized);
+
+        if (!"clear".equals(normalized) && !"sun".equals(normalized) && !"rain".equals(normalized) && !"thunder".equals(normalized)) {
+            return false;
+        }
+
+        boolean changed = false;
+        for (Object world : serverWorlds()) {
+            changed |= invokeWithArgs(world, "setWeatherParameters",
+                    new Class<?>[]{int.class, int.class, boolean.class, boolean.class},
+                    clearTime, weatherTime, raining, thundering);
+        }
+        return changed;
+    }
 
     String replacePlaceholders(String text, @Nullable IPlayer player);
     boolean hasPermissionForCustomCommand(ICommandSource source, CustomCommand command);
@@ -173,6 +248,10 @@ public interface IPlatformAdapter {
             return true;
         }
 
+        if (!isKnownWorld(this, location.getWorldId()) || !isOnline(this, player)) {
+            return false;
+        }
+
         String command = String.format(
                 Locale.US,
                 "execute in %s run tp %s %.3f %.3f %.3f %.2f %.2f",
@@ -186,6 +265,35 @@ public interface IPlatformAdapter {
         );
         executeCommandAsConsole(command);
         return true;
+    }
+
+    private static boolean isKnownWorld(IPlatformAdapter platform, String worldId) {
+        try {
+            List<String> worlds = platform.getWorldNames();
+            if (worlds == null || worlds.isEmpty()) {
+                return false;
+            }
+            for (String world : worlds) {
+                if (sameWorld(world, worldId)) {
+                    return true;
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return false;
+    }
+
+    private static boolean isOnline(IPlatformAdapter platform, IPlayer player) {
+        try {
+            String uuid = player.getUUID();
+            if (uuid != null && platform.getPlayerByUuid(uuid) != null) {
+                return true;
+            }
+            String name = player.getName();
+            return name != null && platform.getPlayerByName(name) != null;
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     private static boolean sameWorld(String a, String b) {
@@ -202,6 +310,45 @@ public interface IPlatformAdapter {
         Object handle = player.getOriginalPlayer();
         invokeWithArgs(handle, "setYaw", new Class<?>[]{float.class}, yaw);
         invokeWithArgs(handle, "setPitch", new Class<?>[]{float.class}, pitch);
+    }
+
+    private static String normalizeGameMode(String mode) {
+        if (mode == null) {
+            return null;
+        }
+        return switch (mode.trim().toLowerCase(Locale.ROOT)) {
+            case "0", "s", "survival" -> "SURVIVAL";
+            case "1", "c", "creative" -> "CREATIVE";
+            case "2", "a", "adventure" -> "ADVENTURE";
+            case "3", "sp", "spectator" -> "SPECTATOR";
+            default -> null;
+        };
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static boolean invokeGameModeMethod(Object target, String normalizedMode, String... methodNames) {
+        if (target == null || normalizedMode == null) {
+            return false;
+        }
+        for (String methodName : methodNames) {
+            for (Method method : target.getClass().getMethods()) {
+                if (!method.getName().equals(methodName) || method.getParameterCount() != 1) {
+                    continue;
+                }
+                Class<?> parameterType = method.getParameterTypes()[0];
+                if (!Enum.class.isAssignableFrom(parameterType)) {
+                    continue;
+                }
+                try {
+                    Object gameMode = Enum.valueOf((Class<? extends Enum>) parameterType.asSubclass(Enum.class), normalizedMode);
+                    method.setAccessible(true);
+                    method.invoke(target, gameMode);
+                    return true;
+                } catch (Throwable ignored) {
+                }
+            }
+        }
+        return false;
     }
 
     private static String extractWorldId(Object handle) {
@@ -261,6 +408,24 @@ public interface IPlatformAdapter {
         return null;
     }
 
+    private List<Object> serverWorlds() {
+        Object server = getMinecraftServer();
+        if (server == null) {
+            return List.of();
+        }
+        Object worlds = firstObject(server, "getAllLevels", "getWorlds", "getLevels", "levels", "worlds");
+        if (worlds instanceof Iterable<?> iterable) {
+            java.util.ArrayList<Object> result = new java.util.ArrayList<>();
+            for (Object world : iterable) {
+                if (world != null) {
+                    result.add(world);
+                }
+            }
+            return result;
+        }
+        return List.of();
+    }
+
     private static Double invokeDouble(Object target, String name) {
         Object value = invokeNoArg(target, name);
         if (value instanceof Number n) {
@@ -312,13 +477,53 @@ public interface IPlatformAdapter {
         return false;
     }
 
-    private static void invokeWithArgs(Object target, String name, Class<?>[] signature, Object... args) {
+    private static boolean invokeWithArgs(Object target, String name, Class<?>[] signature, Object... args) {
         try {
             Method method = target.getClass().getMethod(name, signature);
             method.setAccessible(true);
             method.invoke(target, args);
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private static Object invokeAttributeLookup(Object target, String name, String attributeId) {
+        if (target == null || name == null || attributeId == null) {
+            return null;
+        }
+        try {
+            for (Method method : target.getClass().getMethods()) {
+                if (!method.getName().equals(name) || method.getParameterCount() != 1) {
+                    continue;
+                }
+                Object arg = createAttributeArgument(method.getParameterTypes()[0], attributeId);
+                if (arg == null) {
+                    continue;
+                }
+                method.setAccessible(true);
+                return method.invoke(target, arg);
+            }
         } catch (Throwable ignored) {
         }
+        return null;
+    }
+
+    private static Object createAttributeArgument(Class<?> parameterType, String attributeId) {
+        try {
+            if ("net.minecraft.resources.ResourceLocation".equals(parameterType.getName())) {
+                return parameterType.getMethod("tryParse", String.class).invoke(null, attributeId);
+            }
+            if ("net.minecraft.util.Identifier".equals(parameterType.getName())) {
+                try {
+                    return parameterType.getMethod("of", String.class).invoke(null, attributeId);
+                } catch (NoSuchMethodException ignored) {
+                    return parameterType.getConstructor(String.class).newInstance(attributeId);
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
     }
 
     private static Object readField(Object target, String name) {

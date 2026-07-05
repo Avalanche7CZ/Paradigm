@@ -69,9 +69,77 @@ public class ClearInventoryCommand implements ParadigmModule {
         if (actor == null || target == null) {
             return 0;
         }
-        services.getPlatformAdapter().executeCommandAsConsole("clear " + target.getName());
+        if (!canTargetOther(actor, target)) {
+            send(actor, "utility.no_permission_others", "You do not have permission to affect other players.");
+            return 0;
+        }
+        if (!clearInventoryNative(target)) {
+            send(actor, "utility.clearinv_fail", "Could not clear inventory for {player}.", "{player}", target.getName());
+            return 0;
+        }
         send(actor, "utility.clearinv_ok", "Cleared inventory for {player}.", "{player}", target.getName());
         return 1;
+    }
+
+    private boolean clearInventoryNative(IPlayer target) {
+        Object handle = target != null ? target.getOriginalPlayer() : null;
+        Object inventory = invokeNoArg(handle, "getInventory");
+        if (inventory == null) {
+            inventory = readField(handle, "inventory");
+        }
+        if (inventory == null) {
+            return false;
+        }
+        return invokeNoArgBool(inventory, "clearContent", "clear");
+    }
+
+    private Object invokeNoArg(Object target, String methodName) {
+        if (target == null) {
+            return null;
+        }
+        try {
+            var method = target.getClass().getMethod(methodName);
+            method.setAccessible(true);
+            return method.invoke(target);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private boolean invokeNoArgBool(Object target, String... methodNames) {
+        if (target == null) {
+            return false;
+        }
+        for (String methodName : methodNames) {
+            try {
+                var method = target.getClass().getMethod(methodName);
+                method.setAccessible(true);
+                method.invoke(target);
+                return true;
+            } catch (Throwable ignored) {
+            }
+        }
+        return false;
+    }
+
+    private Object readField(Object target, String fieldName) {
+        if (target == null) {
+            return null;
+        }
+        try {
+            var field = target.getClass().getDeclaredField(fieldName);
+            field.setAccessible(true);
+            return field.get(target);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private boolean canTargetOther(IPlayer actor, IPlayer target) {
+        if (actor == null || target == null || actor.getUUID() == null || actor.getUUID().equals(target.getUUID())) {
+            return true;
+        }
+        return services.getPermissionsHandler().hasPermission(actor, PermissionsHandler.CLEARINV_OTHERS_PERMISSION, PermissionsHandler.CLEARINV_OTHERS_PERMISSION_LEVEL);
     }
 
     private void send(IPlayer player, String key, String fallback, String... placeholders) {
@@ -89,4 +157,3 @@ public class ClearInventoryCommand implements ParadigmModule {
         services.getPlatformAdapter().sendSystemMessage(player, services.getMessageParser().parseMessage(decorated, player));
     }
 }
-

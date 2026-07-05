@@ -1,6 +1,7 @@
 package eu.avalanche7.paradigm.modules;
 
 import eu.avalanche7.paradigm.core.ParadigmModule;
+import eu.avalanche7.paradigm.ParadigmAPI;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
@@ -9,14 +10,19 @@ import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.utils.CommandPriority;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 public class CommandManager implements ParadigmModule {
 
     private static final String NAME = "CustomCommands";
     private Services services;
     private IPlatformAdapter platform;
+    private final Set<String> registeredCustomRoots = new LinkedHashSet<>();
 
     @Override
     public String getName() {
@@ -30,8 +36,7 @@ public class CommandManager implements ParadigmModule {
 
     @Override
     public void onLoad(Object event, Services services, Object modEventBus) {
-        this.services = services;
-        this.platform = services.getPlatformAdapter();
+        bind(services);
         services.getDebugLogger().debugLog(NAME + " module loaded.");
         services.getCmConfig().loadCommands();
         services.getPermissionsHandler().refreshCustomCommandPermissions();
@@ -39,18 +44,15 @@ public class CommandManager implements ParadigmModule {
 
     @Override
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
-        services.getCmConfig().getLoadedCommands().forEach(command -> {
-            ICommandBuilder cmd = buildCustomCommand(command);
-            platform.registerCommand(cmd);
-        });
+        bind(services);
+        registerLoadedCustomCommands();
         ICommandBuilder reload = platform.createCommandBuilder()
                 .literal("customcommandsreload")
                 .requires(src -> src.hasPermissionLevel(2)
                         || (src.getPlayer() != null && services.getPermissionsHandler().hasPermission(src.getPlayer(), eu.avalanche7.paradigm.utils.PermissionsHandler.RELOAD_PERMISSION)))
                 .executes(ctx -> {
-                    services.getCmConfig().reloadCommands();
-                    services.getPermissionsHandler().refreshCustomCommandPermissions();
-                    IComponent message = services.getMessageParser().parseMessage("&aReloaded custom commands from config.", null);
+                    int count = reloadCustomCommands(services);
+                    IComponent message = services.getMessageParser().parseMessage("&aReloaded " + count + " custom commands from config.", null);
                     platform.sendSuccess(ctx.getSource(), message, false);
                     return 1;
                 });
@@ -59,6 +61,68 @@ public class CommandManager implements ParadigmModule {
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
+    }
+
+    public static int reloadCustomCommands(Services services) {
+        if (services == null) {
+            return 0;
+        }
+        for (ParadigmModule module : ParadigmAPI.getModules()) {
+            if (module instanceof CommandManager manager) {
+                return manager.reloadCustomCommandsInternal(services);
+            }
+        }
+
+        CommandManager manager = new CommandManager();
+        return manager.reloadCustomCommandsInternal(services);
+    }
+
+    private int reloadCustomCommandsInternal(Services services) {
+        bind(services);
+        unregisterRegisteredCustomCommands();
+        services.getCmConfig().reloadCommands();
+        services.getPermissionsHandler().refreshCustomCommandPermissions();
+        int count = registerLoadedCustomCommands();
+        platform.refreshAllPlayerCommandTrees();
+        services.getDebugLogger().debugLog(NAME + ": Reloaded and registered " + count + " custom commands.");
+        return count;
+    }
+
+    private void bind(Services services) {
+        this.services = services;
+        this.platform = services != null ? services.getPlatformAdapter() : null;
+    }
+
+    private int registerLoadedCustomCommands() {
+        if (services == null || platform == null) {
+            return 0;
+        }
+
+        int count = 0;
+        for (CustomCommand command : services.getCmConfig().getLoadedCommands()) {
+            if (command == null || command.getName() == null || command.getName().trim().isEmpty()) {
+                continue;
+            }
+            String rootName = CommandPriority.normalizeRoot(command.getName());
+            if (rootName == null) {
+                continue;
+            }
+            ICommandBuilder cmd = buildCustomCommand(command);
+            platform.registerCommand(cmd);
+            registeredCustomRoots.add(rootName);
+            count++;
+        }
+        return count;
+    }
+
+    private void unregisterRegisteredCustomCommands() {
+        if (platform == null || registeredCustomRoots.isEmpty()) {
+            return;
+        }
+        for (String root : new ArrayList<>(registeredCustomRoots)) {
+            platform.unregisterCommandRoot(root);
+        }
+        registeredCustomRoots.clear();
     }
 
     private ICommandBuilder buildCustomCommand(CustomCommand command) {
@@ -97,6 +161,14 @@ public class CommandManager implements ParadigmModule {
             return builder.executes(ctx -> executeTyped(ctx, command, defs));
         }
 
+        if (!defs.get(argIndex).isRequired()) {
+            builder = builder.executes(ctx -> executeTyped(ctx, command, defs));
+        }
+
+        return builder.then(buildTypedArgumentChain(command, defs, argIndex));
+    }
+
+    private ICommandBuilder buildTypedArgumentChain(CustomCommand command, List<CustomCommand.ArgumentDefinition> defs, int argIndex) {
         CustomCommand.ArgumentDefinition def = defs.get(argIndex);
 
         ICommandBuilder.ArgumentType platformType = mapType(def.getType());
@@ -107,17 +179,17 @@ public class CommandManager implements ParadigmModule {
             argNode = argNode.suggests(sugg);
         }
 
-        if (!def.isRequired()) {
-            builder = builder.executes(ctx -> executeTyped(ctx, command, defs));
-        }
-
         if (argIndex == defs.size() - 1) {
             argNode = argNode.executes(ctx -> executeTyped(ctx, command, defs));
         } else {
-            argNode = argNode.then(buildTypedChain(platform.createCommandBuilder(), command, argIndex + 1));
+            CustomCommand.ArgumentDefinition next = defs.get(argIndex + 1);
+            if (!next.isRequired()) {
+                argNode = argNode.executes(ctx -> executeTyped(ctx, command, defs));
+            }
+            argNode = argNode.then(buildTypedArgumentChain(command, defs, argIndex + 1));
         }
 
-        return builder.then(argNode);
+        return argNode;
     }
 
     private int executeTyped(ICommandContext ctx, CustomCommand command, List<CustomCommand.ArgumentDefinition> defs) {
@@ -134,6 +206,10 @@ public class CommandManager implements ParadigmModule {
                 }
                 validated[i] = value != null ? value : "";
             } catch (Exception e) {
+                if (!def.isRequired()) {
+                    validated[i] = "";
+                    continue;
+                }
                 IPlayer p = ctx.getSource().getPlayer();
                 platform.sendFailure(ctx.getSource(), services.getMessageParser().parseMessage(def.getErrorMessage(), p));
                 return 0;

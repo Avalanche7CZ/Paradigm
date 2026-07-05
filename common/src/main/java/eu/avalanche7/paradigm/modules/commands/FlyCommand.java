@@ -66,6 +66,10 @@ public class FlyCommand implements ParadigmModule {
         if (actor == null || target == null || target.getOriginalPlayer() == null) {
             return 0;
         }
+        if (!canTargetOther(actor, target)) {
+            send(actor, "utility.no_permission_others", "You do not have permission to affect other players.");
+            return 0;
+        }
 
         Object abilities = getAbilities(target.getOriginalPlayer());
         if (abilities == null) {
@@ -93,6 +97,13 @@ public class FlyCommand implements ParadigmModule {
 
         send(actor, "utility.fly_toggled", "Fly for {player}: {state}", "{player}", target.getName(), "{state}", next ? "on" : "off");
         return 1;
+    }
+
+    private boolean canTargetOther(IPlayer actor, IPlayer target) {
+        if (actor == null || target == null || actor.getUUID() == null || actor.getUUID().equals(target.getUUID())) {
+            return true;
+        }
+        return services.getPermissionsHandler().hasPermission(actor, PermissionsHandler.FLY_OTHERS_PERMISSION, PermissionsHandler.FLY_OTHERS_PERMISSION_LEVEL);
     }
 
     private Object getAbilities(Object playerHandle) {
@@ -169,4 +180,3 @@ public class FlyCommand implements ParadigmModule {
         services.getPlatformAdapter().sendSystemMessage(player, services.getMessageParser().parseMessage(decorated, player));
     }
 }
-

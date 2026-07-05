@@ -3,6 +3,7 @@ package eu.avalanche7.paradigm.platform;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -10,7 +11,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class MinecraftEventSystem implements IEventSystem {
     private final CopyOnWriteArrayList<PlayerJoinEventListener> joinListeners = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<PlayerLeaveEventListener> leaveListeners = new CopyOnWriteArrayList<>();
+    private final CopyOnWriteArrayList<PlayerDeathEventListener> deathListeners = new CopyOnWriteArrayList<>();
     private static final CopyOnWriteArrayList<ChatEventListener> chatListeners = new CopyOnWriteArrayList<>();
+    private static final CopyOnWriteArrayList<PlayerCommandEventListener> commandListeners = new CopyOnWriteArrayList<>();
 
     public MinecraftEventSystem() {
         // Chat event registration will be handled via mixin !!!! - By Avalanche7 14.09.2025 - For Now
@@ -38,6 +41,17 @@ public class MinecraftEventSystem implements IEventSystem {
                 }
             }
         });
+        ServerLivingEntityEvents.AFTER_DEATH.register((entity, damageSource) -> {
+            if (!(entity instanceof ServerPlayerEntity player) || deathListeners.isEmpty()) return;
+            MinecraftPlayerDeathEvent deathEvent = new MinecraftPlayerDeathEvent(player);
+            for (PlayerDeathEventListener listener : deathListeners) {
+                try {
+                    listener.onPlayerDeath(deathEvent);
+                } catch (Exception e) {
+                    System.err.println("Error in player death event listener: " + e.getMessage());
+                }
+            }
+        });
     }
 
     public void registerJoinListener(PlayerJoinEventListener listener) {
@@ -48,6 +62,10 @@ public class MinecraftEventSystem implements IEventSystem {
         leaveListeners.add(listener);
     }
 
+    public void registerDeathListener(PlayerDeathEventListener listener) {
+        deathListeners.add(listener);
+    }
+
     public void unregisterJoinListener(PlayerJoinEventListener listener) {
         joinListeners.remove(listener);
     }
@@ -56,16 +74,32 @@ public class MinecraftEventSystem implements IEventSystem {
         leaveListeners.remove(listener);
     }
 
+    public void unregisterDeathListener(PlayerDeathEventListener listener) {
+        deathListeners.remove(listener);
+    }
+
     public static CopyOnWriteArrayList<ChatEventListener> getChatListeners() {
         return chatListeners;
+    }
+
+    public static CopyOnWriteArrayList<PlayerCommandEventListener> getCommandListeners() {
+        return commandListeners;
     }
 
     public void registerChatListener(ChatEventListener listener) {
         chatListeners.add(listener);
     }
 
+    public void registerCommandListener(PlayerCommandEventListener listener) {
+        commandListeners.add(listener);
+    }
+
     public void unregisterChatListener(ChatEventListener listener) {
         chatListeners.remove(listener);
+    }
+
+    public void unregisterCommandListener(PlayerCommandEventListener listener) {
+        commandListeners.remove(listener);
     }
 
     private static class MinecraftPlayerJoinEvent implements PlayerJoinEvent {
@@ -165,5 +199,58 @@ public class MinecraftEventSystem implements IEventSystem {
     @Override
     public void onPlayerLeave(PlayerLeaveEventListener listener) {
         registerLeaveListener(listener);
+    }
+
+    @Override
+    public void onPlayerDeath(PlayerDeathEventListener listener) {
+        registerDeathListener(listener);
+    }
+
+    public void onPlayerCommand(PlayerCommandEventListener listener) {
+        registerCommandListener(listener);
+    }
+
+    private static class MinecraftPlayerDeathEvent implements PlayerDeathEvent {
+        private final IPlayer player;
+
+        public MinecraftPlayerDeathEvent(ServerPlayerEntity player) {
+            this.player = MinecraftPlayer.of(player);
+        }
+
+        @Override
+        public IPlayer getPlayer() {
+            return player;
+        }
+    }
+
+    public static class CommandEventImpl implements PlayerCommandEvent {
+        private final IPlayer player;
+        private final String command;
+        private boolean cancelled = false;
+
+        public CommandEventImpl(Object player, String command) {
+            this.player = MinecraftPlayer.of((net.minecraft.server.network.ServerPlayerEntity) player);
+            this.command = command;
+        }
+
+        @Override
+        public IPlayer getPlayer() {
+            return player;
+        }
+
+        @Override
+        public String getCommand() {
+            return command;
+        }
+
+        @Override
+        public boolean isCancelled() {
+            return cancelled;
+        }
+
+        @Override
+        public void setCancelled(boolean cancelled) {
+            this.cancelled = cancelled;
+        }
     }
 }

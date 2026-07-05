@@ -126,6 +126,11 @@ public class CommandToggleStore {
         return resolve(commandOrAlias);
     }
 
+    public boolean isProtected(String commandOrAlias) {
+        String canonical = resolve(commandOrAlias);
+        return canonical != null && protectedCommands.contains(canonical);
+    }
+
     private synchronized void save() {
         Path path = resolvePath();
         if (path == null) {
@@ -241,5 +246,4 @@ public class CommandToggleStore {
         }
     }
 }
-
 

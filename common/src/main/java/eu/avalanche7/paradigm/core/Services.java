@@ -88,6 +88,9 @@ public class Services {
             this.platformAdapter.setMinecraftServer(server);
             this.platformAdapter.provideMessageParser(this.messageParserInstance);
         }
+        if (this.permissionsHandlerInstance != null) {
+            this.permissionsHandlerInstance.discoverCommandTreeFromServer(server);
+        }
     }
 
     public Object getMinecraftServer() {

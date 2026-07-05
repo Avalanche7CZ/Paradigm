@@ -40,9 +40,13 @@ public final class ParadigmCommandRoots {
         roots.add("fly");
         roots.add("gamemode");
         roots.add("gmc");
+        roots.add("creative");
         roots.add("gms");
+        roots.add("survival");
         roots.add("gma");
+        roots.add("adventure");
         roots.add("gmsp");
+        roots.add("spectator");
         roots.add("heal");
         roots.add("feed");
         roots.add("speed");

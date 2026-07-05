@@ -6,6 +6,7 @@ import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.utils.CommandCooldowns;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 
 public class SpawnCommand implements ParadigmModule {
@@ -72,7 +73,7 @@ public class SpawnCommand implements ParadigmModule {
                         return 0;
                     }
 
-                    services.getPlatformAdapter().getPlayerLocation(player).ifPresent(loc -> services.getPlayerDataStore().setLastLocation(player, loc));
+                    PlayerDataStore.StoredLocation previous = services.getPlatformAdapter().getPlayerLocation(player).orElse(null);
                     PlayerDataStore.StoredLocation location = new PlayerDataStore.StoredLocation(
                             world,
                             services.getMainConfig().spawnX.value,
@@ -81,14 +82,21 @@ public class SpawnCommand implements ParadigmModule {
                             services.getMainConfig().spawnYaw.value,
                             services.getMainConfig().spawnPitch.value
                     );
+                    return CommandCooldowns.run(services, player, "spawn", () -> teleportSpawn(player, previous, location));
+                });
+        services.getPlatformAdapter().registerCommand(cmd);
+    }
+
+    private int teleportSpawn(IPlayer player, PlayerDataStore.StoredLocation previous, PlayerDataStore.StoredLocation location) {
                     if (!services.getPlatformAdapter().teleportPlayer(player, location)) {
                         send(player, "spawn.teleport_failed", "Teleport to spawn failed.");
                         return 0;
                     }
+                    if (previous != null) {
+                        services.getPlayerDataStore().setLastLocation(player, previous);
+                    }
                     send(player, "spawn.teleported", "Teleported to spawn.");
                     return 1;
-                });
-        services.getPlatformAdapter().registerCommand(cmd);
     }
 
     private void registerSetSpawn() {
@@ -139,5 +147,3 @@ public class SpawnCommand implements ParadigmModule {
         services.getPlatformAdapter().sendSystemMessage(player, services.getMessageParser().parseMessage(decorated, player));
     }
 }
-
-

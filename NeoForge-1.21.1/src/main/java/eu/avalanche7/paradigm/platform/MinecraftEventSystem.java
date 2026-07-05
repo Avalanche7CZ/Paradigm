@@ -6,13 +6,20 @@ import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.utils.PermissionNodeRegistry;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.network.chat.MutableComponent;
+import net.neoforged.bus.api.EventPriority;
+import net.neoforged.neoforge.event.CommandEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.ServerChatEvent;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
+import net.neoforged.neoforge.server.permission.events.PermissionGatherEvent;
+import net.neoforged.neoforge.server.permission.nodes.PermissionNode;
 
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -21,6 +28,8 @@ public class MinecraftEventSystem implements IEventSystem {
     private final CopyOnWriteArrayList<ChatEventListener> chatListeners = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<PlayerJoinEventListener> joinListeners = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<PlayerLeaveEventListener> leaveListeners = new CopyOnWriteArrayList<>();
+    private final CopyOnWriteArrayList<PlayerDeathEventListener> deathListeners = new CopyOnWriteArrayList<>();
+    private final CopyOnWriteArrayList<PlayerCommandEventListener> commandListeners = new CopyOnWriteArrayList<>();
 
     @Override
     public void onPlayerChat(ChatEventListener listener) {
@@ -35,6 +44,16 @@ public class MinecraftEventSystem implements IEventSystem {
     @Override
     public void onPlayerLeave(PlayerLeaveEventListener listener) {
         if (listener != null) leaveListeners.add(listener);
+    }
+
+    @Override
+    public void onPlayerDeath(PlayerDeathEventListener listener) {
+        if (listener != null) deathListeners.add(listener);
+    }
+
+    @Override
+    public void onPlayerCommand(PlayerCommandEventListener listener) {
+        if (listener != null) commandListeners.add(listener);
     }
 
     public static final class DispatchResult {
@@ -145,6 +164,36 @@ public class MinecraftEventSystem implements IEventSystem {
         } catch (Throwable ignored) {}
     }
 
+    public void dispatchDeath(LivingDeathEvent event) {
+        if (deathListeners.isEmpty() || !(event.getEntity() instanceof ServerPlayer player)) return;
+        MinecraftPlayerDeathEvent deathEvent = new MinecraftPlayerDeathEvent(player);
+        for (PlayerDeathEventListener listener : deathListeners) {
+            try {
+                listener.onPlayerDeath(deathEvent);
+            } catch (Exception e) {
+                System.err.println("[Paradigm-NeoForge] Error in player death event listener: " + e.getMessage());
+            }
+        }
+    }
+
+    public void dispatchCommand(CommandEvent event) {
+        if (commandListeners.isEmpty()) return;
+        ServerPlayer player = commandPlayer(event);
+        if (player == null) return;
+
+        MinecraftCommandEvent commandEvent = new MinecraftCommandEvent(player, commandString(event));
+        for (PlayerCommandEventListener listener : commandListeners) {
+            try {
+                listener.onPlayerCommand(commandEvent);
+            } catch (Exception e) {
+                System.err.println("[Paradigm-NeoForge] Error in command event listener: " + e.getMessage());
+            }
+        }
+        if (commandEvent.isCancelled()) {
+            event.setCanceled(true);
+        }
+    }
+
     @SubscribeEvent
     public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         dispatchJoin(event);
@@ -153,6 +202,32 @@ public class MinecraftEventSystem implements IEventSystem {
     @SubscribeEvent
     public void onPlayerLoggedOut(PlayerEvent.PlayerLoggedOutEvent event) {
         dispatchLeave(event);
+    }
+
+    @SubscribeEvent
+    public void onPlayerDeath(LivingDeathEvent event) {
+        dispatchDeath(event);
+    }
+
+    @SubscribeEvent
+    public void onCommand(CommandEvent event) {
+        dispatchCommand(event);
+    }
+
+    @SubscribeEvent
+    public void onPermissionHandler(PermissionGatherEvent.Handler event) {
+        Services services = Paradigm.getServices();
+        if (services == null || services.getPermissionsHandler() == null || !services.getPermissionsHandler().shouldRegisterForgePermissionHandler()) {
+            return;
+        }
+        event.addPermissionHandler(ParadigmNeoForgePermissionHandler.IDENTIFIER, ParadigmNeoForgePermissionHandler::new);
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public void onPermissionNodes(PermissionGatherEvent.Nodes event) {
+        for (PermissionNode<?> node : event.getNodes()) {
+            registerNeoForgePermissionNode(node);
+        }
     }
 
     @SubscribeEvent
@@ -212,5 +287,73 @@ public class MinecraftEventSystem implements IEventSystem {
             // Store for post-dispatch fallback broadcast.
             this.leaveMessage = message;
         }
+    }
+
+    private static class MinecraftPlayerDeathEvent implements PlayerDeathEvent {
+        private final IPlayer player;
+
+        public MinecraftPlayerDeathEvent(ServerPlayer player) {
+            this.player = MinecraftPlayer.of(player);
+        }
+
+        @Override public IPlayer getPlayer() { return player; }
+    }
+
+    private static ServerPlayer commandPlayer(CommandEvent event) {
+        try {
+            Object source = event.getParseResults().getContext().getSource();
+            if (source instanceof CommandSourceStack stack) {
+                return stack.getPlayerOrException();
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    private static String commandString(CommandEvent event) {
+        try {
+            String raw = event.getParseResults().getReader().getString();
+            return raw != null ? raw : "";
+        } catch (Throwable ignored) {
+            return "";
+        }
+    }
+
+    private static class MinecraftCommandEvent implements PlayerCommandEvent {
+        private final IPlayer player;
+        private final String command;
+        private boolean cancelled;
+
+        MinecraftCommandEvent(ServerPlayer player, String command) {
+            this.player = MinecraftPlayer.of(player);
+            this.command = command;
+        }
+
+        @Override public IPlayer getPlayer() { return player; }
+        @Override public String getCommand() { return command; }
+        @Override public boolean isCancelled() { return cancelled; }
+        @Override public void setCancelled(boolean cancelled) { this.cancelled = cancelled; }
+    }
+
+    private static void registerNeoForgePermissionNode(PermissionNode<?> node) {
+        Services services = Paradigm.getServices();
+        if (services == null || services.getPermissionsHandler() == null || node == null) {
+            return;
+        }
+        services.getPermissionsHandler().registerExternalPermissionNode(
+                node.getNodeName(),
+                PermissionNodeRegistry.SOURCE_NEOFORGE_PERMISSION_API,
+                permissionDescription(node),
+                -1
+        );
+    }
+
+    private static String permissionDescription(PermissionNode<?> node) {
+        try {
+            if (node.getDescription() != null) return node.getDescription().getString();
+            if (node.getReadableName() != null) return node.getReadableName().getString();
+        } catch (Throwable ignored) {
+        }
+        return "";
     }
 }

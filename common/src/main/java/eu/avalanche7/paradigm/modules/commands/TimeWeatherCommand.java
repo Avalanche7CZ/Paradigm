@@ -44,25 +44,25 @@ public class TimeWeatherCommand implements ParadigmModule {
 
     @Override
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
-        registerTimeLiteral("day", "time set day");
-        registerTimeLiteral("night", "time set night");
+        registerTimeLiteral("day", 1000L);
+        registerTimeLiteral("night", 13000L);
 
-        registerWeatherLiteral("sun", "weather clear");
-        registerWeatherLiteral("rain", "weather rain");
-        registerWeatherLiteral("thunder", "weather thunder");
+        registerWeatherLiteral("sun", "clear");
+        registerWeatherLiteral("rain", "rain");
+        registerWeatherLiteral("thunder", "thunder");
     }
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
     }
 
-    private void registerTimeLiteral(String literal, String command) {
+    private void registerTimeLiteral(String literal, long timeOfDay) {
         ICommandBuilder cmd = services.getPlatformAdapter().createCommandBuilder()
                 .literal(literal)
                 .requires(src -> services.getCommandToggleStore().isEnabled(literal)
                         && src.getPlayer() != null
                         && services.getPermissionsHandler().hasPermission(src.getPlayer(), PermissionsHandler.TIME_PERMISSION, PermissionsHandler.TIME_PERMISSION_LEVEL))
-                .executes(ctx -> executeTimeCommand(ctx.getSource().getPlayer(), command, literal));
+                .executes(ctx -> executeTimeCommand(ctx.getSource().getPlayer(), timeOfDay, literal));
         services.getPlatformAdapter().registerCommand(cmd);
     }
 
@@ -76,11 +76,14 @@ public class TimeWeatherCommand implements ParadigmModule {
         services.getPlatformAdapter().registerCommand(cmd);
     }
 
-    private int executeTimeCommand(IPlayer actor, String command, String state) {
+    private int executeTimeCommand(IPlayer actor, long timeOfDay, String state) {
         if (actor == null) {
             return 0;
         }
-        services.getPlatformAdapter().executeCommandAsConsole(command);
+        if (!services.getPlatformAdapter().setTimeOfDay(timeOfDay)) {
+            send(actor, "utility.time_fail", "Could not change time to {state}.", "{state}", state);
+            return 0;
+        }
         send(actor, "utility.time_set", "Time changed to {state}.", "{state}", state);
         return 1;
     }
@@ -89,7 +92,10 @@ public class TimeWeatherCommand implements ParadigmModule {
         if (actor == null) {
             return 0;
         }
-        services.getPlatformAdapter().executeCommandAsConsole(command);
+        if (!services.getPlatformAdapter().setWeather(command)) {
+            send(actor, "utility.weather_fail", "Could not change weather to {state}.", "{state}", state);
+            return 0;
+        }
         send(actor, "utility.weather_set", "Weather changed to {state}.", "{state}", state);
         return 1;
     }
@@ -109,4 +115,3 @@ public class TimeWeatherCommand implements ParadigmModule {
         services.getPlatformAdapter().sendSystemMessage(player, services.getMessageParser().parseMessage(decorated, player));
     }
 }
-

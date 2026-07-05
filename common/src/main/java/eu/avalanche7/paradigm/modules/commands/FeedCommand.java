@@ -64,12 +64,23 @@ public class FeedCommand implements ParadigmModule {
         if (target == null) {
             return 0;
         }
+        if (!canTargetOther(actor, target)) {
+            send(actor, "utility.no_permission_others", "You do not have permission to affect other players.");
+            return 0;
+        }
         if (!feedToMax(target)) {
             send(actor, "utility.feed_fail", "Could not restore food for {player}.", "{player}", target.getName());
             return 0;
         }
         send(actor, "utility.feed_ok", "Fed {player}.", "{player}", target.getName());
         return 1;
+    }
+
+    private boolean canTargetOther(IPlayer actor, IPlayer target) {
+        if (actor == null || target == null || actor.getUUID() == null || actor.getUUID().equals(target.getUUID())) {
+            return true;
+        }
+        return services.getPermissionsHandler().hasPermission(actor, PermissionsHandler.FEED_OTHERS_PERMISSION, PermissionsHandler.FEED_OTHERS_PERMISSION_LEVEL);
     }
 
     private boolean feedToMax(IPlayer target) {
@@ -132,4 +143,3 @@ public class FeedCommand implements ParadigmModule {
         services.getPlatformAdapter().sendSystemMessage(player, services.getMessageParser().parseMessage(decorated, player));
     }
 }
-

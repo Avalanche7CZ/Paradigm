@@ -29,6 +29,7 @@ public class Restart implements ParadigmModule {
     private final AtomicBoolean restartInProgress = new AtomicBoolean(false);
     private ScheduledFuture<?> mainTaskFuture = null;
     private final java.util.List<ScheduledFuture<?>> warningFutures = new ArrayList<>();
+    private ScheduledFuture<?> bossBarFuture = null;
     private ScheduledFuture<?> shutdownFuture = null;
     private final java.util.List<ScheduledFuture<?>> preCommandFutures = new ArrayList<>();
     private final java.util.Set<Integer> sentWarningMoments = java.util.Collections.newSetFromMap(new ConcurrentHashMap<>());
@@ -89,6 +90,10 @@ public class Restart implements ParadigmModule {
             }
         }
         warningFutures.clear();
+        if (bossBarFuture != null && !bossBarFuture.isDone()) {
+            bossBarFuture.cancel(false);
+        }
+        bossBarFuture = null;
         for (ScheduledFuture<?> f : preCommandFutures) {
             if (f != null && !f.isDone()) {
                 f.cancel(false);
@@ -243,6 +248,7 @@ public class Restart implements ParadigmModule {
         sentWarningMoments.clear();
         services.getDebugLogger().debugLog(NAME + ": Initiating restart sequence. Total duration: " + totalIntervalSeconds + " seconds.");
         long totalIntervalMillis = (long) (totalIntervalSeconds * 1000);
+        long restartAtMillis = System.currentTimeMillis() + totalIntervalMillis;
         java.util.List<Integer> broadcastTimes = new java.util.ArrayList<>(config.timerBroadcast.value);
         broadcastTimes.sort(java.util.Collections.reverseOrder());
 
@@ -261,6 +267,8 @@ public class Restart implements ParadigmModule {
                 if (future != null) warningFutures.add(future);
             }
         }
+
+        scheduleBossBarCountdown(totalIntervalMillis, restartAtMillis, broadcastTimes, services, config, totalIntervalSeconds);
 
         List<RestartConfigHandler.PreRestartCommand> preCommands = config.preRestartCommands.value;
         if (preCommands != null && !preCommands.isEmpty()) {
@@ -282,9 +290,8 @@ public class Restart implements ParadigmModule {
                             String perPlayer = platform.replacePlaceholders(raw, sp);
                             perPlayer = replaceTimePlaceholders(perPlayer, secondsBefore);
                             try {
-                                Object orig = sp.getOriginalPlayer();
-                                if (orig != null) {
-                                    ICommandSource perPlayerSource = platform.wrapCommandSource(orig);
+                                ICommandSource perPlayerSource = platform.createCommandSourceForPlayer(sp);
+                                if (perPlayerSource != null) {
                                     platform.executeCommandAs(perPlayerSource, perPlayer);
                                 } else {
                                     platform.executeCommandAsConsole(perPlayer);
@@ -297,7 +304,7 @@ public class Restart implements ParadigmModule {
                         String replaced = platform.replacePlaceholders(commandText, null);
                         replaced = replaceTimePlaceholders(replaced, secondsBefore);
                         services.getDebugLogger().debugLog(NAME + ": Executing pre-restart console command (" + secondsBefore + "s before): " + replaced);
-                        platform.executeCommandAsConsole(replaced);
+                        executePreRestartConsoleCommand(replaced, services);
                     }
                 }, delayUntilRun, TimeUnit.MILLISECONDS);
                 if (f != null) preCommandFutures.add(f);
@@ -310,6 +317,43 @@ public class Restart implements ParadigmModule {
         }, totalIntervalMillis, TimeUnit.MILLISECONDS);
     }
 
+    private void executePreRestartConsoleCommand(String command, Services services) {
+        String trimmed = command == null ? "" : command.trim();
+        if (trimmed.regionMatches(true, 0, "broadcast ", 0, "broadcast ".length())) {
+            String message = trimmed.substring("broadcast ".length()).trim();
+            if (!message.isEmpty()) {
+                platform.broadcastSystemMessage(services.getMessageParser().parseMessage(message, null));
+            }
+            return;
+        }
+        platform.executeCommandAsConsole(command);
+    }
+
+    private void scheduleBossBarCountdown(long totalIntervalMillis, long restartAtMillis, List<Integer> broadcastTimes, Services services, RestartConfigHandler.Config config, double totalIntervalSeconds) {
+        if (!config.bossbarEnabled.value) {
+            return;
+        }
+
+        long bossBarStartSeconds = -1L;
+        for (Integer broadcastTimeSec : broadcastTimes) {
+            if (broadcastTimeSec != null && broadcastTimeSec >= 0 && broadcastTimeSec * 1000L <= totalIntervalMillis) {
+                bossBarStartSeconds = broadcastTimeSec;
+                break;
+            }
+        }
+
+        long delayUntilBossBar = bossBarStartSeconds >= 0L ? totalIntervalMillis - (bossBarStartSeconds * 1000L) : 0L;
+        bossBarFuture = services.getTaskScheduler().schedule(() -> {
+            if (!restartInProgress.get()) return;
+            bossBarFuture = services.getTaskScheduler().scheduleAtFixedRate(() -> {
+                if (!restartInProgress.get()) return;
+                long remainingMillis = Math.max(0L, restartAtMillis - System.currentTimeMillis());
+                long secondsLeft = (long) Math.ceil(remainingMillis / 1000.0);
+                updateRestartBossBar(secondsLeft, services, config, totalIntervalSeconds);
+            }, 0, 1, TimeUnit.SECONDS);
+        }, delayUntilBossBar, TimeUnit.MILLISECONDS);
+    }
+
     private void sendRestartWarning(long timeLeftSeconds, Services services, RestartConfigHandler.Config config, double originalTotalIntervalSeconds) {
         if (services.getMinecraftServer() == null) {
             services.getDebugLogger().debugLog(NAME + ": Server instance is null, cannot send restart warning.");
@@ -320,12 +364,8 @@ public class Restart implements ParadigmModule {
         List<eu.avalanche7.paradigm.platform.Interfaces.IPlayer> players = platform.getOnlinePlayers();
 
         for (eu.avalanche7.paradigm.platform.Interfaces.IPlayer player : players) {
-            final int hours = (int) (timeLeftSeconds / 3600);
-            final int minutes = (int) ((timeLeftSeconds % 3600) / 60);
-            final int seconds = (int) (timeLeftSeconds % 60);
-            final String formattedTime = String.format("%dh %sm %ss", hours, TIME_FORMATTER.format(minutes), TIME_FORMATTER.format(seconds));
-            final String chatMessage = config.BroadcastMessage.value != null ? config.BroadcastMessage.value.replace("{time}", formattedTime).replace("{minutes}", TIME_FORMATTER.format(minutes)).replace("{seconds}", TIME_FORMATTER.format(seconds)) : "";
-            final String titleMessage = config.titleMessage.value != null ? config.titleMessage.value.replace("{time}", formattedTime).replace("{minutes}", TIME_FORMATTER.format(minutes)).replace("{seconds}", TIME_FORMATTER.format(seconds)) : "";
+            final String chatMessage = replaceTimePlaceholders(config.BroadcastMessage.value != null ? config.BroadcastMessage.value : "", timeLeftSeconds);
+            final String titleMessage = replaceTimePlaceholders(config.titleMessage.value != null ? config.titleMessage.value : "", timeLeftSeconds);
 
             if (config.timerUseChat.value) {
                 platform.sendSystemMessage(player, services.getMessageParser().parseMessage(chatMessage, player));
@@ -339,20 +379,26 @@ public class Restart implements ParadigmModule {
             }
         }
 
-        if (config.bossbarEnabled.value) {
-            int hours = (int) (timeLeftSeconds / 3600);
-            int minutes = (int) ((timeLeftSeconds % 3600) / 60);
-            int seconds = (int) (timeLeftSeconds % 60);
-            String formattedTime = String.format("%dh %sm %ss", hours, TIME_FORMATTER.format(minutes), TIME_FORMATTER.format(seconds));
-            float progress = Math.max(0.0f, (float) timeLeftSeconds / (float) Math.max(1.0, originalTotalIntervalSeconds));
-            String bossBarMessage = config.bossBarMessage.value != null ? config.bossBarMessage.value.replace("{time}", formattedTime).replace("{minutes}", TIME_FORMATTER.format(minutes)).replace("{seconds}", TIME_FORMATTER.format(seconds)) : "";
-            platform.createOrUpdateRestartBossBar(services.getMessageParser().parseMessage(bossBarMessage, null), IPlatformAdapter.BossBarColor.RED, progress);
+        updateRestartBossBar(timeLeftSeconds, services, config, originalTotalIntervalSeconds);
+    }
+
+    private void updateRestartBossBar(long timeLeftSeconds, Services services, RestartConfigHandler.Config config, double originalTotalIntervalSeconds) {
+        if (!config.bossbarEnabled.value || !restartInProgress.get()) {
+            return;
         }
+        float progress = Math.max(0.0f, Math.min(1.0f, (float) timeLeftSeconds / (float) Math.max(1.0, originalTotalIntervalSeconds)));
+        String bossBarMessage = replaceTimePlaceholders(config.bossBarMessage.value != null ? config.bossBarMessage.value : "", timeLeftSeconds);
+        platform.createOrUpdateRestartBossBar(services.getMessageParser().parseMessage(bossBarMessage, null), IPlatformAdapter.BossBarColor.RED, progress);
     }
 
     private void performShutdown(Services services, RestartConfigHandler.Config config) {
         if (!restartInProgress.get()) return;
         services.getDebugLogger().debugLog(NAME + ": Initiating final shutdown procedure.");
+        restartInProgress.set(false);
+        if (bossBarFuture != null && !bossBarFuture.isDone()) {
+            bossBarFuture.cancel(false);
+        }
+        bossBarFuture = null;
         platform.removeRestartBossBar();
         IComponent kickMessage = services.getMessageParser().parseMessage(config.defaultRestartReason.value, null);
         platform.shutdownServer(kickMessage);
@@ -363,7 +409,7 @@ public class Restart implements ParadigmModule {
         final int hours = (int) (timeLeftSeconds / 3600);
         final int minutes = (int) ((timeLeftSeconds % 3600) / 60);
         final int seconds = (int) (timeLeftSeconds % 60);
-        final String formattedTime = String.format("%dh %dm %ds", hours, minutes, seconds);
+        final String formattedTime = String.format("%dh %sm %ss", hours, TIME_FORMATTER.format(minutes), TIME_FORMATTER.format(seconds));
 
         String result = text;
         result = result.replace("{time}", formattedTime);

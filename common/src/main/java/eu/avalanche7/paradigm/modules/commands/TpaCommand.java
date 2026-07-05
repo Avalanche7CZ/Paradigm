@@ -8,6 +8,7 @@ import eu.avalanche7.paradigm.platform.Interfaces.ICommandContext;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.utils.CommandCooldowns;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 
 import java.util.ArrayList;
@@ -178,6 +179,11 @@ public class TpaCommand implements ParadigmModule {
             return 0;
         }
 
+        String commandKey = type == TeleportRequestService.RequestType.TPA ? "tpa" : "tpahere";
+        return CommandCooldowns.runCooldownOnly(services, requester, commandKey, () -> createTeleportRequest(requester, target, type));
+    }
+
+    private int createTeleportRequest(IPlayer requester, IPlayer target, TeleportRequestService.RequestType type) {
         TeleportRequestService.Request request = teleportRequests.create(type, requester.getUUID(), target.getUUID(), TeleportRequestService.DEFAULT_EXPIRES_SECONDS);
         if (request == null) {
             send(requester, "tpa.request_failed", "Could not create teleport request.");
@@ -218,7 +224,7 @@ public class TpaCommand implements ParadigmModule {
     private int executeAccept(IPlayer accepter, String requesterUuidHint) {
         if (accepter == null) return 0;
 
-        TeleportRequestService.Request request = teleportRequests.accept(accepter.getUUID(), requesterUuidHint);
+        TeleportRequestService.Request request = teleportRequests.peekIncoming(accepter.getUUID(), requesterUuidHint);
         if (request == null) {
             send(accepter, "tpa.no_pending_request", "You have no pending teleport requests.");
             return 0;
@@ -230,14 +236,36 @@ public class TpaCommand implements ParadigmModule {
             return 0;
         }
 
-        if (request.type() == TeleportRequestService.RequestType.TPA) {
-            platform.getPlayerLocation(requester).ifPresent(loc -> services.getPlayerDataStore().setLastLocation(requester, loc));
-            if (!teleportPlayer(requester, accepter)) return 0;
-        } else {
-            platform.getPlayerLocation(accepter).ifPresent(loc -> services.getPlayerDataStore().setLastLocation(accepter, loc));
-            if (!teleportPlayer(accepter, requester)) return 0;
+        return CommandCooldowns.run(services, accepter, "tpaccept", () -> acceptTeleportRequest(accepter, requester, request));
+    }
+
+    private int acceptTeleportRequest(IPlayer accepter, IPlayer requester, TeleportRequestService.Request request) {
+        TeleportRequestService.Request current = teleportRequests.peekIncoming(accepter.getUUID(), request.requesterUuid());
+        if (current == null || !current.equals(request)) {
+            send(accepter, "tpa.no_pending_request", "You have no pending teleport requests.");
+            return 0;
+        }
+        requester = platform.getPlayerByUuid(request.requesterUuid());
+        if (requester == null) {
+            send(accepter, "tpa.requester_offline", "That request is no longer valid because requester is offline.");
+            return 0;
         }
 
+        if (request.type() == TeleportRequestService.RequestType.TPA) {
+            PlayerDataStore.StoredLocation previous = platform.getPlayerLocation(requester).orElse(null);
+            if (!teleportPlayer(requester, accepter)) return 0;
+            if (previous != null) {
+                services.getPlayerDataStore().setLastLocation(requester, previous);
+            }
+        } else {
+            PlayerDataStore.StoredLocation previous = platform.getPlayerLocation(accepter).orElse(null);
+            if (!teleportPlayer(accepter, requester)) return 0;
+            if (previous != null) {
+                services.getPlayerDataStore().setLastLocation(accepter, previous);
+            }
+        }
+
+        teleportRequests.remove(request);
         send(accepter, "tpa.accepted_you", "Accepted request from {player}.", "{player}", requester.getName());
         send(requester, "tpa.accepted_sender", "{player} accepted your teleport request.", "{player}", accepter.getName());
         return 1;
@@ -285,20 +313,11 @@ public class TpaCommand implements ParadigmModule {
         }
 
         PlayerDataStore.StoredLocation location = platform.getPlayerLocation(destination).orElse(null);
-        if (location != null) {
-            if (platform.teleportPlayer(player, location)) {
-                return true;
-            }
-        }
-        String fromName = player.getName();
-        String toName = destination.getName();
-        if (fromName == null || fromName.isBlank() || toName == null || toName.isBlank()) {
+        if (location == null) {
             send(player, "home.location_unavailable", "Unable to read your location right now.");
             return false;
         }
-
-        platform.executeCommandAsConsole("tp " + safe(fromName) + " " + safe(toName));
-        return true;
+        return platform.teleportPlayer(player, location);
     }
 
     private List<String> pendingRequesterNameSuggestions(IPlayer target, String input) {
@@ -372,8 +391,16 @@ public class TpaCommand implements ParadigmModule {
             return request;
         }
 
+        public synchronized Request peekIncoming(String targetUuid, String requesterUuidOrNull) {
+            return findIncoming(targetUuid, requesterUuidOrNull);
+        }
+
         public synchronized Request accept(String targetUuid, String requesterUuidOrNull) {
-            return takeIncoming(targetUuid, requesterUuidOrNull);
+            Request request = findIncoming(targetUuid, requesterUuidOrNull);
+            if (request != null) {
+                remove(request);
+            }
+            return request;
         }
 
         public synchronized Request deny(String targetUuid, String requesterUuidOrNull) {
@@ -428,6 +455,15 @@ public class TpaCommand implements ParadigmModule {
             }
         }
 
+        public synchronized void remove(Request request) {
+            if (request == null) return;
+            List<Request> list = requestsByTarget.get(request.targetUuid());
+            if (list != null) {
+                list.remove(request);
+                if (list.isEmpty()) requestsByTarget.remove(request.targetUuid());
+            }
+        }
+
         public synchronized List<String> getPendingRequesterUuids(String targetUuid) {
             if (isBlank(targetUuid)) return List.of();
             cleanupExpiredLocked(System.currentTimeMillis());
@@ -467,6 +503,14 @@ public class TpaCommand implements ParadigmModule {
         }
 
         private Request takeIncoming(String targetUuid, String requesterUuidOrNull) {
+            Request selected = findIncoming(targetUuid, requesterUuidOrNull);
+            if (selected != null) {
+                remove(selected);
+            }
+            return selected;
+        }
+
+        private Request findIncoming(String targetUuid, String requesterUuidOrNull) {
             if (isBlank(targetUuid)) return null;
             cleanupExpiredLocked(System.currentTimeMillis());
 
@@ -482,9 +526,6 @@ public class TpaCommand implements ParadigmModule {
                     .max(Comparator.comparingLong(Request::createdAtMillis))
                     .orElse(null);
 
-            if (selected == null) return null;
-            list.remove(selected);
-            if (list.isEmpty()) requestsByTarget.remove(targetKey);
             return selected;
         }
 
@@ -555,4 +596,3 @@ public class TpaCommand implements ParadigmModule {
         return value.replace("'", "").replace("\n", " ");
     }
 }
-

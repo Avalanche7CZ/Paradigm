@@ -18,6 +18,15 @@ public interface IEventSystem {
         IComponent getLeaveMessage();
         void setLeaveMessage(IComponent message);
     }
+    interface PlayerDeathEvent {
+        IPlayer getPlayer();
+    }
+    interface PlayerCommandEvent {
+        IPlayer getPlayer();
+        String getCommand();
+        boolean isCancelled();
+        void setCancelled(boolean cancelled);
+    }
     interface ChatEventListener {
         void onPlayerChat(ChatEvent event);
     }
@@ -26,6 +35,12 @@ public interface IEventSystem {
     }
     interface PlayerLeaveEventListener {
         void onPlayerLeave(PlayerLeaveEvent event);
+    }
+    interface PlayerDeathEventListener {
+        void onPlayerDeath(PlayerDeathEvent event);
+    }
+    interface PlayerCommandEventListener {
+        void onPlayerCommand(PlayerCommandEvent event);
     }
 
     /** Register chat listener (called for every player chat message). */
@@ -36,4 +51,12 @@ public interface IEventSystem {
 
     /** Register player leave listener. */
     void onPlayerLeave(PlayerLeaveEventListener listener);
+
+    /** Register player death listener. */
+    default void onPlayerDeath(PlayerDeathEventListener listener) {
+    }
+
+    /** Register player command listener before the command is executed where the platform supports it. */
+    default void onPlayerCommand(PlayerCommandEventListener listener) {
+    }
 }

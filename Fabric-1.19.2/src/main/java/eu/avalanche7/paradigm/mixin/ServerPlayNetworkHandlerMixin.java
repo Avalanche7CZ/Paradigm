@@ -3,6 +3,7 @@ package eu.avalanche7.paradigm.mixin;
 import eu.avalanche7.paradigm.ParadigmAPI;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem.ChatEventListener;
+import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem.PlayerCommandEventListener;
 import eu.avalanche7.paradigm.platform.MinecraftEventSystem;
 import net.minecraft.server.network.ServerPlayNetworkHandler;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -20,6 +21,30 @@ interface ChatMessageC2SPacketAccessor {
 
 @Mixin(ServerPlayNetworkHandler.class)
 public class ServerPlayNetworkHandlerMixin {
+    @Inject(method = "onCommandExecution", at = @At("HEAD"), cancellable = true)
+    private void onCommandExecution(net.minecraft.network.packet.c2s.play.CommandExecutionC2SPacket packet, CallbackInfo ci) {
+        ServerPlayNetworkHandler handler = (ServerPlayNetworkHandler)(Object)this;
+        ServerPlayerEntity player = handler.getPlayer();
+        String command = packet.command();
+
+        MinecraftEventSystem.CommandEventImpl event = new MinecraftEventSystem.CommandEventImpl(player, command);
+        for (PlayerCommandEventListener listener : MinecraftEventSystem.getCommandListeners()) {
+            try {
+                listener.onPlayerCommand(event);
+            } catch (Exception e) {
+                System.err.println("Error in command event listener: " + e.getMessage());
+            }
+        }
+
+        if (event.isCancelled()) {
+            Services services = ParadigmAPI.getServices();
+            if (services != null && services.getDebugLogger() != null) {
+                services.getDebugLogger().debugLog("[Command] Command cancelled for " + player.getName().getString() + ": /" + command);
+            }
+            ci.cancel();
+        }
+    }
+
     @Inject(method = "onChatMessage", at = @At("HEAD"), cancellable = true)
     private void onChatMessage(net.minecraft.network.packet.c2s.play.ChatMessageC2SPacket packet, CallbackInfo ci) {
         ServerPlayNetworkHandler handler = (ServerPlayNetworkHandler)(Object)this;
@@ -39,7 +64,7 @@ public class ServerPlayNetworkHandlerMixin {
 
         if (event.isCancelled()) {
             if (services != null && services.getDebugLogger() != null) {
-                services.getDebugLogger().debugLog("[Chat] Message cancelled for " + player.getGameProfile().getName() + ": '" + message + "'");
+                services.getDebugLogger().debugLog("[Chat] Message cancelled for " + player.getName().getString() + ": '" + message + "'");
             }
             ci.cancel();
             return;
@@ -49,7 +74,7 @@ public class ServerPlayNetworkHandlerMixin {
             try {
                 ((ChatMessageC2SPacketAccessor) (Object) packet).paradigm$setChatMessage(event.getMessage());
                 if (services != null && services.getDebugLogger() != null) {
-                    services.getDebugLogger().debugLog("[Chat] Message modified for " + player.getGameProfile().getName() + ": '" + message + "' -> '" + event.getMessage() + "'");
+                    services.getDebugLogger().debugLog("[Chat] Message modified for " + player.getName().getString() + ": '" + message + "' -> '" + event.getMessage() + "'");
                 }
             } catch (Throwable t) {
                 if (services != null && services.getDebugLogger() != null) {

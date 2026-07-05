@@ -8,6 +8,7 @@ import eu.avalanche7.paradigm.ParadigmAPI;
 import eu.avalanche7.paradigm.ParadigmConstants;
 import eu.avalanche7.paradigm.configs.*;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.CommandManager;
 
 import java.io.BufferedReader;
 import java.io.InputStream;
@@ -298,7 +299,7 @@ public final class EditorApplier {
 
         if (anyApplied) {
             try {
-                services.getCmConfig().reloadCommands();
+                CommandManager.reloadCustomCommands(services);
             } catch (Throwable t) {
                 services.getLogger().warn("Failed to reload custom commands after apply", t);
             }
@@ -754,4 +755,3 @@ public final class EditorApplier {
         return r.applied;
     }
 }
-

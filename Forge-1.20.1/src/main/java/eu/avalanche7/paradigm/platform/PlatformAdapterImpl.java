@@ -25,9 +25,11 @@ import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.BossEvent;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraftforge.registries.ForgeRegistries;
 import org.slf4j.Logger;
@@ -297,8 +299,8 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         if (restartBossBar == null) {
             restartBossBar = new ServerBossEvent(mcMessage, toMinecraftColor(color), BossEvent.BossBarOverlay.PROGRESS);
             restartBossBar.setVisible(true);
-            getOnlinePlayers().forEach(p -> restartBossBar.addPlayer(((MinecraftPlayer) p).getHandle()));
         }
+        getOnlinePlayers().forEach(p -> restartBossBar.addPlayer(((MinecraftPlayer) p).getHandle()));
         restartBossBar.setName(mcMessage);
         restartBossBar.setProgress(progress);
     }
@@ -342,18 +344,27 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
                     server.getPlayerList().broadcastSystemMessage(mc.getHandle(), false);
                 }
                 server.saveEverything(true, true, true);
+                scheduleJvmExitFallback();
                 if (!tryGracefulStop(server)) {
                     LOGGER.warn("[Paradigm] Graceful stop API unavailable; falling back to server.halt(false).");
                     server.halt(false);
                 }
             } catch (Throwable t) {
                 LOGGER.warn("[Paradigm] Failed during restart shutdown flow: {}", t.toString());
+                scheduleJvmExitFallback();
                 try {
                     server.halt(false);
                 } catch (Throwable ignored) {
                 }
             }
         });
+    }
+
+    private void scheduleJvmExitFallback() {
+        taskScheduler.scheduleRaw(() -> {
+            debugLogger.debugLog("PlatformAdapter: Forcing JVM exit with status 1 to trigger auto-restart.");
+            System.exit(1);
+        }, 2, TimeUnit.SECONDS);
     }
 
     @Override
@@ -384,6 +395,14 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             return new MinecraftCommandSource(stack);
         }
         return null;
+    }
+
+    @Override
+    public ICommandSource createCommandSourceForPlayer(IPlayer player) {
+        if (player instanceof MinecraftPlayer mp) {
+            return new MinecraftCommandSource(mp.getHandle().createCommandSourceStack());
+        }
+        return IPlatformAdapter.super.createCommandSourceForPlayer(player);
     }
 
     @Override
@@ -779,6 +798,41 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         if (server == null || command == null) return;
         CommandSourceStack console = server.createCommandSourceStack().withPermission(4);
         server.getCommands().performPrefixedCommand(console, command);
+    }
+
+    @Override
+    public boolean setGameMode(IPlayer player, String mode) {
+        if (!(player instanceof MinecraftPlayer mp)) {
+            return IPlatformAdapter.super.setGameMode(player, mode);
+        }
+        GameType gameType = toGameType(mode);
+        return gameType != null && mp.getHandle().setGameMode(gameType);
+    }
+
+    @Override
+    public boolean setMovementSpeed(IPlayer player, double baseValue) {
+        if (!(player instanceof MinecraftPlayer mp) || baseValue < 0.0 || Double.isNaN(baseValue) || Double.isInfinite(baseValue)) {
+            return false;
+        }
+        var attribute = mp.getHandle().getAttribute(Attributes.MOVEMENT_SPEED);
+        if (attribute == null) {
+            return false;
+        }
+        attribute.setBaseValue(baseValue);
+        return true;
+    }
+
+    private GameType toGameType(String mode) {
+        if (mode == null) {
+            return null;
+        }
+        return switch (mode.trim().toLowerCase(Locale.ROOT)) {
+            case "0", "s", "survival" -> GameType.SURVIVAL;
+            case "1", "c", "creative" -> GameType.CREATIVE;
+            case "2", "a", "adventure" -> GameType.ADVENTURE;
+            case "3", "sp", "spectator" -> GameType.SPECTATOR;
+            default -> null;
+        };
     }
 
     @Override

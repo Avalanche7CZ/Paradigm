@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -50,15 +51,29 @@ public class CooldownConfigHandler extends BaseConfigHandler<CooldownConfigHandl
             throw new IllegalStateException("CooldownConfigHandler not initialized! Call init() first.");
         }
         Map<String, Long> byCommand = INSTANCE.config.cooldowns.getOrDefault(playerUuid, Collections.emptyMap());
-        return byCommand.getOrDefault(commandName, 0L);
+        return byCommand.getOrDefault(normalize(commandName), 0L);
     }
 
     public static void setLastUsage(UUID playerUuid, String commandName, long timestamp) {
         if (INSTANCE == null) {
             throw new IllegalStateException("CooldownConfigHandler not initialized! Call init() first.");
         }
-        INSTANCE.config.cooldowns.computeIfAbsent(playerUuid, k -> new ConcurrentHashMap<>()).put(commandName, timestamp);
+        INSTANCE.config.cooldowns.computeIfAbsent(playerUuid, k -> new ConcurrentHashMap<>()).put(normalize(commandName), timestamp);
         INSTANCE.markChangedAndMaybePersist();
+    }
+
+    public static int getCommandCooldownSeconds(String commandName) {
+        if (INSTANCE == null || INSTANCE.config == null || commandName == null) {
+            return 0;
+        }
+        return Math.max(0, INSTANCE.config.commandCooldownSeconds.getOrDefault(normalize(commandName), 0));
+    }
+
+    public static int getCommandWarmupSeconds(String commandName) {
+        if (INSTANCE == null || INSTANCE.config == null || commandName == null) {
+            return 0;
+        }
+        return Math.max(0, INSTANCE.config.commandWarmupSeconds.getOrDefault(normalize(commandName), 0));
     }
 
     public static void saveCooldowns() {
@@ -106,13 +121,52 @@ public class CooldownConfigHandler extends BaseConfigHandler<CooldownConfigHandl
         if (loaded.cooldowns != null) {
             defaults.cooldowns = new ConcurrentHashMap<>(loaded.cooldowns);
         }
+        if (loaded.commandCooldownSeconds != null) {
+            defaults.commandCooldownSeconds.putAll(normalizeIntMap(loaded.commandCooldownSeconds));
+        }
+        if (loaded.commandWarmupSeconds != null) {
+            defaults.commandWarmupSeconds.putAll(normalizeIntMap(loaded.commandWarmupSeconds));
+        }
     }
 
     public static class Config {
         public Map<UUID, Map<String, Long>> cooldowns;
+        public Map<String, Integer> commandCooldownSeconds;
+        public Map<String, Integer> commandWarmupSeconds;
 
         public Config() {
             this.cooldowns = new ConcurrentHashMap<>();
+            this.commandCooldownSeconds = new LinkedHashMap<>();
+            this.commandWarmupSeconds = new LinkedHashMap<>();
+            addDefaultCooldowns();
         }
+
+        private void addDefaultCooldowns() {
+            for (String command : new String[]{"home", "back", "spawn", "warp", "tpa", "tpahere", "tpaccept"}) {
+                commandCooldownSeconds.put(command, 0);
+            }
+            for (String command : new String[]{"home", "back", "spawn", "warp", "tpaccept"}) {
+                commandWarmupSeconds.put(command, 0);
+            }
+        }
+    }
+
+    private static Map<String, Integer> normalizeIntMap(Map<String, Integer> input) {
+        Map<String, Integer> normalized = new LinkedHashMap<>();
+        for (Map.Entry<String, Integer> entry : input.entrySet()) {
+            String key = normalize(entry.getKey());
+            if (key != null) {
+                normalized.put(key, Math.max(0, entry.getValue() != null ? entry.getValue() : 0));
+            }
+        }
+        return normalized;
+    }
+
+    private static String normalize(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.trim().toLowerCase(java.util.Locale.ROOT);
+        return normalized.isEmpty() ? null : normalized;
     }
 }

@@ -65,7 +65,7 @@ public class TaskScheduler {
         }
         try {
             return exec.scheduleAtFixedRate(() -> syncExecute(task), initialDelay, period, unit);
-        } catch (RejectedExecutionException ex) {
+        } catch (RejectedExecutionException | IllegalArgumentException ex) {
             return reject("scheduleAtFixedRate");
         }
     }
@@ -107,26 +107,34 @@ public class TaskScheduler {
 
         Consumer<Runnable> exec = this.mainThreadExecutor;
         if (exec != null) {
-            exec.accept(task);
+            try {
+                exec.accept(() -> runSafely(task, "main thread executor"));
+            } catch (Throwable t) {
+                debugLogger.debugLog("TaskScheduler: Failed to enqueue task on main thread executor: " + t.getMessage());
+            }
             return;
         }
 
         Object currentServer = serverRef.get();
         if (currentServer == null) {
-            try {
-                task.run();
-            } catch (Throwable t) {
-                debugLogger.debugLog("TaskScheduler: Task failed (async fallback): " + t.getMessage());
-            }
+            runSafely(task, "async fallback");
             return;
         }
 
         // Last-resort reflection: MinecraftServer#execute(Runnable)
         try {
             Method m = currentServer.getClass().getMethod("execute", Runnable.class);
-            m.invoke(currentServer, task);
+            m.invoke(currentServer, (Runnable) () -> runSafely(task, "server main thread"));
         } catch (Throwable t) {
             debugLogger.debugLog("TaskScheduler: Failed to execute task on main thread: " + t.getMessage());
+        }
+    }
+
+    private void runSafely(Runnable task, String context) {
+        try {
+            task.run();
+        } catch (Throwable t) {
+            debugLogger.debugLog("TaskScheduler: Task failed (" + context + "): " + t.getMessage());
         }
     }
 

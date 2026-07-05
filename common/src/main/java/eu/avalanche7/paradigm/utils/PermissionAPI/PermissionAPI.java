@@ -84,6 +84,9 @@ public class PermissionAPI {
             if (normalized.equals(defaultGroup)) {
                 return false;
             }
+            if ("admin".equals(normalized)) {
+                return false;
+            }
             if (!state.groups.containsKey(normalized)) {
                 return false;
             }
@@ -157,6 +160,99 @@ public class PermissionAPI {
                 return false;
             }
             child.normalize();
+            saveLocked();
+            return true;
+        } finally {
+            stateLock.writeLock().unlock();
+        }
+    }
+
+    public boolean addGroupPermission(String groupName, String permissionNode, boolean denied) {
+        String group = normalizeGroupName(groupName);
+        String rule = normalizePermissionRule(permissionNode, denied);
+        if (group == null || rule == null) {
+            return false;
+        }
+
+        stateLock.writeLock().lock();
+        try {
+            PermissionDataStore.GroupEntry entry = state.groups.get(group);
+            if (entry == null) {
+                return false;
+            }
+            if (entry.permissions == null) {
+                entry.permissions = new ArrayList<>();
+            }
+            if (entry.permissions.contains(rule)) {
+                return false;
+            }
+            entry.permissions.add(rule);
+            entry.normalize();
+            saveLocked();
+            return true;
+        } finally {
+            stateLock.writeLock().unlock();
+        }
+    }
+
+    public boolean removeGroupPermission(String groupName, String permissionNode) {
+        String group = normalizeGroupName(groupName);
+        String rule = normalizePermissionRule(permissionNode, false);
+        String deniedRule = normalizePermissionRule(permissionNode, true);
+        if (group == null || rule == null || deniedRule == null) {
+            return false;
+        }
+
+        stateLock.writeLock().lock();
+        try {
+            PermissionDataStore.GroupEntry entry = state.groups.get(group);
+            if (entry == null || entry.permissions == null) {
+                return false;
+            }
+            boolean changed = entry.permissions.removeIf(value -> rule.equals(normalizePermissionRule(value, false)) || deniedRule.equals(normalizePermissionRule(value, true)));
+            if (!changed) {
+                return false;
+            }
+            entry.normalize();
+            saveLocked();
+            return true;
+        } finally {
+            stateLock.writeLock().unlock();
+        }
+    }
+
+    public boolean setGroupMetadata(String groupName, String field, String value) {
+        String group = normalizeGroupName(groupName);
+        String normalizedField = field != null ? field.trim().toLowerCase(Locale.ROOT) : "";
+        if (group == null || normalizedField.isBlank()) {
+            return false;
+        }
+
+        stateLock.writeLock().lock();
+        try {
+            PermissionDataStore.GroupEntry entry = state.groups.get(group);
+            if (entry == null) {
+                return false;
+            }
+
+            String safeValue = value != null ? value : "";
+            switch (normalizedField) {
+                case "description" -> entry.description = safeValue;
+                case "prefix" -> entry.prefix = safeValue;
+                case "suffix" -> entry.suffix = safeValue;
+                case "weight" -> {
+                    try {
+                        entry.weight = Integer.parseInt(safeValue.trim());
+                    } catch (Exception ignored) {
+                        return false;
+                    }
+                }
+                default -> {
+                    return false;
+                }
+            }
+
+            entry.normalize();
             saveLocked();
             return true;
         } finally {
@@ -239,6 +335,62 @@ public class PermissionAPI {
         }
     }
 
+    public boolean addUserPermission(UUID playerUuid, String permissionNode, boolean denied) {
+        if (playerUuid == null) {
+            return false;
+        }
+        String rule = normalizePermissionRule(permissionNode, denied);
+        if (rule == null) {
+            return false;
+        }
+
+        stateLock.writeLock().lock();
+        try {
+            PermissionDataStore.UserEntry user = state.users.computeIfAbsent(playerUuid.toString().toLowerCase(Locale.ROOT), ignored -> new PermissionDataStore.UserEntry());
+            user.normalize();
+            if (user.permissions == null) {
+                user.permissions = new ArrayList<>();
+            }
+            if (user.permissions.contains(rule)) {
+                return false;
+            }
+            user.permissions.add(rule);
+            user.normalize();
+            saveLocked();
+            return true;
+        } finally {
+            stateLock.writeLock().unlock();
+        }
+    }
+
+    public boolean removeUserPermission(UUID playerUuid, String permissionNode) {
+        if (playerUuid == null) {
+            return false;
+        }
+        String rule = normalizePermissionRule(permissionNode, false);
+        String deniedRule = normalizePermissionRule(permissionNode, true);
+        if (rule == null || deniedRule == null) {
+            return false;
+        }
+
+        stateLock.writeLock().lock();
+        try {
+            PermissionDataStore.UserEntry user = state.users.get(playerUuid.toString().toLowerCase(Locale.ROOT));
+            if (user == null || user.permissions == null) {
+                return false;
+            }
+            boolean changed = user.permissions.removeIf(value -> rule.equals(normalizePermissionRule(value, false)) || deniedRule.equals(normalizePermissionRule(value, true)));
+            if (!changed) {
+                return false;
+            }
+            user.normalize();
+            saveLocked();
+            return true;
+        } finally {
+            stateLock.writeLock().unlock();
+        }
+    }
+
     public List<String> listGroups() {
         stateLock.readLock().lock();
         try {
@@ -298,6 +450,29 @@ public class PermissionAPI {
             }
 
             return new UserGroupsInfo(permanent, List.copyOf(temporary));
+        } finally {
+            stateLock.readLock().unlock();
+        }
+    }
+
+    public UserInfo getUserInfo(UUID playerUuid) {
+        if (playerUuid == null) {
+            return null;
+        }
+
+        stateLock.readLock().lock();
+        try {
+            String uuid = playerUuid.toString().toLowerCase(Locale.ROOT);
+            PermissionDataStore.UserEntry user = state.users.get(uuid);
+            List<String> directPermissions = user != null && user.permissions != null ? List.copyOf(user.permissions) : List.of();
+            UserGroupsInfo groups = getUserGroups(playerUuid);
+            PermissionMeta meta = resolveMeta(playerUuid);
+            return new UserInfo(
+                    directPermissions,
+                    groups != null ? groups.permanentGroups() : List.of(),
+                    groups != null ? groups.temporaryGroups() : List.of(),
+                    meta
+            );
         } finally {
             stateLock.readLock().unlock();
         }
@@ -420,6 +595,42 @@ public class PermissionAPI {
         return null;
     }
 
+    public PermissionExplain explainPermission(UUID playerUuid, String permissionNode) {
+        if (playerUuid == null || permissionNode == null || permissionNode.isBlank()) {
+            return new PermissionExplain(null, "invalid", "", "", List.of());
+        }
+
+        PermissionDataStore.PermissionState snapshot;
+        stateLock.readLock().lock();
+        try {
+            snapshot = this.state;
+        } finally {
+            stateLock.readLock().unlock();
+        }
+
+        String normalizedNode = permissionNode.trim().toLowerCase(Locale.ROOT);
+        String normalizedUuid = playerUuid.toString().toLowerCase(Locale.ROOT);
+        PermissionDataStore.UserEntry user = snapshot.users.get(normalizedUuid);
+        List<String> groups = resolvePlayerGroups(snapshot, normalizedUuid, user);
+
+        RuleDecision userDecision = bestRuleMatch(user != null ? user.permissions : List.of(), normalizedNode, "user", normalizedUuid);
+        if (userDecision != null) {
+            return new PermissionExplain(userDecision.allowed, userDecision.sourceType, userDecision.sourceName, userDecision.rule, List.copyOf(groups));
+        }
+
+        RuleDecision groupDecision = null;
+        for (String groupName : groups) {
+            RuleDecision candidate = evaluateGroup(snapshot, groupName, normalizedNode, new HashSet<>(), 0);
+            groupDecision = pickBetter(groupDecision, candidate);
+        }
+
+        if (groupDecision != null) {
+            return new PermissionExplain(groupDecision.allowed, groupDecision.sourceType, groupDecision.sourceName, groupDecision.rule, List.copyOf(groups));
+        }
+
+        return new PermissionExplain(null, "none", "", "", List.copyOf(groups));
+    }
+
     private List<String> resolvePlayerGroups(PermissionDataStore.PermissionState snapshot, String normalizedUuid, PermissionDataStore.UserEntry user) {
         Map<String, Long> groups = new LinkedHashMap<>();
 
@@ -471,7 +682,7 @@ public class PermissionAPI {
             return null;
         }
 
-        RuleDecision result = bestRuleMatch(group.permissions, permissionNode);
+        RuleDecision result = bestRuleMatch(group.permissions, permissionNode, "group", normalizedGroup);
 
         if (group.inherits != null) {
             for (String parentGroup : group.inherits) {
@@ -484,6 +695,10 @@ public class PermissionAPI {
     }
 
     private RuleDecision bestRuleMatch(List<String> rules, String permissionNode) {
+        return bestRuleMatch(rules, permissionNode, "", "");
+    }
+
+    private RuleDecision bestRuleMatch(List<String> rules, String permissionNode, String sourceType, String sourceName) {
         if (rules == null || rules.isEmpty()) {
             return null;
         }
@@ -491,7 +706,7 @@ public class PermissionAPI {
         RuleDecision best = null;
 
         for (String rawRule : rules) {
-            RuleDecision parsed = parseRule(rawRule, permissionNode);
+            RuleDecision parsed = parseRule(rawRule, permissionNode, sourceType, sourceName);
             best = pickBetter(best, parsed);
         }
 
@@ -521,6 +736,10 @@ public class PermissionAPI {
     }
 
     private RuleDecision parseRule(String rawRule, String requestedNode) {
+        return parseRule(rawRule, requestedNode, "", "");
+    }
+
+    private RuleDecision parseRule(String rawRule, String requestedNode, String sourceType, String sourceName) {
         if (rawRule == null) {
             return null;
         }
@@ -547,7 +766,7 @@ public class PermissionAPI {
         }
 
         int specificity = calculateSpecificity(pattern);
-        return new RuleDecision(allowed, specificity);
+        return new RuleDecision(allowed, specificity, trimmed, sourceType, sourceName);
     }
 
     private boolean matches(String pattern, String node) {
@@ -581,7 +800,7 @@ public class PermissionAPI {
         return score;
     }
 
-    private record RuleDecision(boolean allowed, int specificity) {
+    private record RuleDecision(boolean allowed, int specificity, String rule, String sourceType, String sourceName) {
     }
 
     public record PermissionMeta(String primaryGroup, String prefix, String suffix, List<String> groups) {
@@ -596,12 +815,36 @@ public class PermissionAPI {
     public record UserGroupsInfo(List<String> permanentGroups, List<TemporaryGroupInfo> temporaryGroups) {
     }
 
+    public record UserInfo(List<String> permissions, List<String> permanentGroups, List<TemporaryGroupInfo> temporaryGroups, PermissionMeta meta) {
+    }
+
+    public record PermissionExplain(Boolean allowed, String sourceType, String sourceName, String rule, List<String> groupsChecked) {
+    }
+
     private static String normalizeGroupName(String groupName) {
         if (groupName == null) {
             return null;
         }
         String normalized = groupName.trim().toLowerCase(Locale.ROOT);
         return normalized.isBlank() ? null : normalized;
+    }
+
+    private static String normalizePermissionRule(String permissionNode, boolean denied) {
+        if (permissionNode == null) {
+            return null;
+        }
+        String trimmed = permissionNode.trim().toLowerCase(Locale.ROOT);
+        if (trimmed.isBlank()) {
+            return null;
+        }
+        if (trimmed.startsWith("-")) {
+            trimmed = trimmed.substring(1).trim();
+            denied = true;
+        }
+        if (trimmed.isBlank() || trimmed.contains(" ")) {
+            return null;
+        }
+        return denied ? "-" + trimmed : trimmed;
     }
 
     private void saveLocked() {
@@ -613,4 +856,3 @@ public class PermissionAPI {
     }
 
 }
-

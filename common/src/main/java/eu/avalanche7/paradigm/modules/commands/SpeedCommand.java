@@ -7,7 +7,6 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 
 import java.lang.reflect.Field;
-import java.util.Locale;
 
 public class SpeedCommand implements ParadigmModule {
     private Services services;
@@ -69,6 +68,10 @@ public class SpeedCommand implements ParadigmModule {
         if (target == null) {
             return 0;
         }
+        if (!canTargetOther(actor, target)) {
+            send(actor, "utility.no_permission_others", "You do not have permission to affect other players.");
+            return 0;
+        }
         int clamped = Math.max(0, Math.min(level, 10));
         if (!setPlayerSpeed(target, clamped)) {
             send(actor, "utility.speed_fail", "Could not set speed for {player}.", "{player}", target.getName());
@@ -81,6 +84,13 @@ public class SpeedCommand implements ParadigmModule {
             send(actor, "utility.speed_set", "Set speed {level} for {player}.", "{level}", String.valueOf(clamped), "{player}", target.getName());
         }
         return 1;
+    }
+
+    private boolean canTargetOther(IPlayer actor, IPlayer target) {
+        if (actor == null || target == null || actor.getUUID() == null || actor.getUUID().equals(target.getUUID())) {
+            return true;
+        }
+        return services.getPermissionsHandler().hasPermission(actor, PermissionsHandler.SPEED_OTHERS_PERMISSION, PermissionsHandler.SPEED_OTHERS_PERMISSION_LEVEL);
     }
 
     private boolean setPlayerSpeed(IPlayer target, int level) {
@@ -99,7 +109,7 @@ public class SpeedCommand implements ParadigmModule {
         boolean walkSet = setSpeedValue(abilities, walkSpeed,
                 new String[]{"setWalkSpeed", "setWalkingSpeed"},
                 new String[]{"walkSpeed", "walkingSpeed"});
-        boolean movementAttributeSet = setMovementSpeedAttribute(target, walkSpeed);
+        boolean movementAttributeSet = services.getPlatformAdapter().setMovementSpeed(target, walkSpeed);
         boolean flySet = setSpeedValue(abilities, flySpeed,
                 new String[]{"setFlySpeed", "setFlyingSpeed"},
                 new String[]{"flySpeed", "flyingSpeed"});
@@ -109,17 +119,6 @@ public class SpeedCommand implements ParadigmModule {
         invokeNoArg(target.getOriginalPlayer(), "sendAbilitiesUpdate");
 
         return walkSet || movementAttributeSet || flySet;
-    }
-
-    private boolean setMovementSpeedAttribute(IPlayer target, float walkSpeed) {
-        if (target == null || target.getName() == null || target.getName().isBlank()) {
-            return false;
-        }
-        String value = String.format(Locale.US, "%.4f", walkSpeed);
-        services.getPlatformAdapter().executeCommandAsConsole(
-                "attribute " + target.getName() + " minecraft:generic.movement_speed base set " + value
-        );
-        return true;
     }
 
     private Object getAbilities(Object playerHandle) {
@@ -188,4 +187,3 @@ public class SpeedCommand implements ParadigmModule {
         services.getPlatformAdapter().sendSystemMessage(player, services.getMessageParser().parseMessage(decorated, player));
     }
 }
-
