@@ -3,6 +3,7 @@ package eu.avalanche7.paradigm.modules.chat;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandContext;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
@@ -10,6 +11,7 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 
+import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -157,20 +159,31 @@ public class PrivateMessages implements ParadigmModule {
             return 0;
         }
 
-        if (target.getUUID() != null && sender.getUUID() != null
-                && services.getPlayerDataStore().isIgnoring(target.getUUID(), sender.getUUID())) {
-            platform.sendSystemMessage(sender, services.getMessageParser().parseMessage("<color:#EF4444>That player is ignoring you.</color>", sender));
-            return 0;
-        }
-
         String message = ctx.getStringArgument("message");
         if (message == null || message.trim().isEmpty()) {
             platform.sendSystemMessage(sender, services.getLang().translate("pm.empty_message"));
             return 0;
         }
 
-        sendPrivateMessage(sender, target, message.trim());
-        return 1;
+        String senderUuid = sender.getUUID();
+        String targetUuid = target.getUUID();
+        String cleanMessage = message.trim();
+        return StorageCommandSupport.runForPlayer(services, sender, "pm.ignore_check", () ->
+                        targetUuid != null && senderUuid != null
+                                && services.getStorageService().players().listIgnoredPlayers(targetUuid).contains(senderUuid.toLowerCase(Locale.ROOT)),
+                (currentSender, blocked) -> {
+                    IPlayer currentTarget = targetUuid != null ? platform.getPlayerByUuid(targetUuid) : null;
+                    if (currentTarget == null) {
+                        platform.sendSystemMessage(currentSender, services.getLang().translate("pm.player_not_found"));
+                        return;
+                    }
+                    if (blocked) {
+                        platform.sendSystemMessage(currentSender, services.getLang().translate("pm.blocked_by_ignore"));
+                        return;
+                    }
+                    sendPrivateMessage(currentSender, currentTarget, cleanMessage);
+                },
+                "pm.error_send");
     }
 
     private int executeReplyCommand(ICommandContext ctx) {
@@ -204,14 +217,26 @@ public class PrivateMessages implements ParadigmModule {
             return 0;
         }
 
-        if (target.getUUID() != null && sender.getUUID() != null
-                && services.getPlayerDataStore().isIgnoring(target.getUUID(), sender.getUUID())) {
-            platform.sendSystemMessage(sender, services.getMessageParser().parseMessage("<color:#EF4444>That player is ignoring you.</color>", sender));
-            return 0;
-        }
-
-        sendPrivateMessage(sender, target, message.trim());
-        return 1;
+        String cleanMessage = message.trim();
+        String targetUuidFinal = target.getUUID();
+        String senderUuidFinal = sender.getUUID();
+        return StorageCommandSupport.runForPlayer(services, sender, "pm.reply_ignore_check", () ->
+                        targetUuidFinal != null && senderUuidFinal != null
+                                && services.getStorageService().players().listIgnoredPlayers(targetUuidFinal).contains(senderUuidFinal.toLowerCase(Locale.ROOT)),
+                (currentSender, blocked) -> {
+                    IPlayer currentTarget = targetUuidFinal != null ? platform.getPlayerByUuid(targetUuidFinal) : null;
+                    if (currentTarget == null) {
+                        clearConversationLinksByUuid(targetUuidFinal);
+                        platform.sendSystemMessage(currentSender, services.getLang().translate("pm.reply_target_offline"));
+                        return;
+                    }
+                    if (blocked) {
+                        platform.sendSystemMessage(currentSender, services.getLang().translate("pm.blocked_by_ignore"));
+                        return;
+                    }
+                    sendPrivateMessage(currentSender, currentTarget, cleanMessage);
+                },
+                "pm.error_send");
     }
 
     private IPlayer resolvePlayerArgument(ICommandContext ctx, String argumentName) {
@@ -309,7 +334,4 @@ public class PrivateMessages implements ParadigmModule {
         lastContactByUuid.entrySet().removeIf(entry -> playerUuid.equals(entry.getValue()));
     }
 }
-
-
-
 

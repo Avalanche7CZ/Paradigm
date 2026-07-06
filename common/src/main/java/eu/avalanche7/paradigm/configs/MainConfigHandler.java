@@ -204,5 +204,13 @@ public class MainConfigHandler extends BaseConfigHandler<MainConfigHandler.Confi
                 true,
                 "Enable or disable /heal command."
         );
+        public ConfigEntry<Boolean> moderationCommandsEnable = new ConfigEntry<>(
+                true,
+                "Enable or disable moderation commands (/kick, /ban, /mute, /warn, /jail)."
+        );
+        public ConfigEntry<Boolean> adminUtilityCommandsEnable = new ConfigEntry<>(
+                true,
+                "Enable or disable admin utility commands (/vanish, /god, /invsee, /repair, /sudo, /near, /whois, /top, /jump)."
+        );
     }
 }

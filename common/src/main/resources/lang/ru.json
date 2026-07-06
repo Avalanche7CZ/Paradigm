@@ -67,24 +67,64 @@
     "kick_cannot_self": "Вы не можете кикнуть сами себя. Используйте /groupchat leave.",
     "kick_success_target": "Вас кикнули из группы {group_name}.",
     "kick_success_owner": "Игрок {player_name} был кикнут из группы.",
-    "kick_success_notify": "Игрок {player_name} был кикнут из группы."
+    "kick_success_notify": "Игрок {player_name} был кикнут из группы.",
+    "cancel_request_none": "У вас нет ожидающего запроса в эту группу.",
+    "cancel_request_success": "Ваш запрос на вступление в {group_name} отменен.",
+    "invite_rate_limit": "Подождите {seconds}с перед отправкой следующего приглашения.",
+    "manage": {
+      "help": "Используйте /paradigm group list|add|remove|info|parent|user",
+      "list": "Группы: {groups}",
+      "add_ok": "Группа {group} создана.",
+      "add_fail": "Не удалось создать группу {group}.",
+      "remove_ok": "Группа {group} удалена.",
+      "remove_fail": "Не удалось удалить группу {group}.",
+      "not_found": "Группа {group} не найдена.",
+      "info_header": "Группа {group} | weight={weight}",
+      "info_parents": "Родители: {parents}",
+      "info_perms": "Perms: {perms}",
+      "parent_add_ok": "Родитель {parent} добавлен к {group}.",
+      "parent_add_fail": "Не удалось добавить родителя {parent} к {group}.",
+      "parent_remove_ok": "Родитель {parent} удален из {group}.",
+      "parent_remove_fail": "Не удалось удалить родителя {parent} из {group}.",
+      "user_invalid": "Игрок должен быть online-именем или UUID.",
+      "user_add_ok": "Группа {group} назначена.",
+      "user_add_temp_ok": "Группа {group} назначена до {until}.",
+      "user_add_fail": "Не удалось назначить группу {group}.",
+      "user_remove_ok": "Группа {group} удалена у игрока.",
+      "user_remove_fail": "Не удалось удалить группу {group} у игрока.",
+      "user_empty": "Группы не назначены.",
+      "user_list_perm": "Постоянные: {groups}",
+      "user_list_temp": "Временные: -",
+      "user_temp_line": "Временная {group} до {until}",
+      "duration_invalid": "Недопустимая длительность. Используйте days/weeks/months и amount > 0.",
+      "metadata_ok": "Поле {field} для {group} обновлено.",
+      "metadata_fail": "Не удалось обновить {field} для {group}.",
+      "perm_add_ok": "Permission {permission} добавлен к {group}.",
+      "perm_add_fail": "Не удалось добавить permission {permission} к {group}.",
+      "perm_remove_ok": "Permission {permission} удален из {group}.",
+      "perm_remove_fail": "Не удалось удалить permission {permission} из {group}.",
+      "user_perm_add_ok": "Permission {permission} добавлен игроку.",
+      "user_perm_add_fail": "Не удалось добавить permission {permission} игроку.",
+      "user_perm_remove_ok": "Permission {permission} удален у игрока.",
+      "user_perm_remove_fail": "Не удалось удалить permission {permission} у игрока.",
+      "permission_check_fail": "Не удалось проверить permission {permission}."
+    }
   },
-
   "mention": {
     "too_frequent_mention_everyone": "Вы слишком часто упоминаете всех. Пожалуйста, подождите некоторое время.",
     "no_permission_everyone": "У вас нет разрешения упоминать всех.",
     "too_frequent_mention_player": "Вы слишком часто упоминаете игроков. Пожалуйста, подождите некоторое время.",
     "no_permission_player": "У вас нет разрешения упоминать игроков."
   },
-
   "pm": {
     "player_not_found": "Этот игрок не в сети.",
     "cannot_message_self": "Вы не можете написать самому себе.",
     "empty_message": "Сообщение не может быть пустым.",
     "no_reply_target": "Некому отвечать.",
-    "reply_target_offline": "Ваш последний собеседник уже не в сети."
+    "reply_target_offline": "Ваш последний собеседник уже не в сети.",
+    "blocked_by_ignore": "Этот игрок игнорирует вас.",
+    "error_send": "Не удалось отправить сообщение. Попробуйте позже."
   },
-
   "home": {
     "location_unavailable": "Сейчас не удалось определить вашу позицию.",
     "sethome_success": "Точка дома {home} установлена.",
@@ -97,9 +137,13 @@
     "homes_list": "Ваши дома: {homes}",
     "back_missing": "Для /back нет сохраненной предыдущей позиции.",
     "back_teleported": "Телепортация назад выполнена.",
-    "teleport_failed": "Телепортация не удалась."
+    "teleport_failed": "Телепортация не удалась.",
+    "invalid_name": "Недопустимое имя дома.",
+    "limit_reached": "Достигнут лимит домов ({limit}).",
+    "error_save": "Не удалось сохранить дом. Попробуйте позже.",
+    "error_load": "Не удалось загрузить данные домов. Попробуйте позже.",
+    "error_delete": "Не удалось удалить дом. Попробуйте позже."
   },
-
   "tpa": {
     "player_not_found": "Этот игрок не в сети.",
     "cannot_target_self": "Вы не можете выбрать себя.",
@@ -116,9 +160,10 @@
     "denied_sender": "{player} отклонил ваш запрос на телепортацию.",
     "no_outgoing_request": "У вас нет исходящих запросов на телепортацию.",
     "cancelled_you": "Вы отменили запрос к {player}.",
-    "cancelled_target": "{player} отменил свой запрос на телепортацию."
+    "cancelled_target": "{player} отменил свой запрос на телепортацию.",
+    "blocked_by_ignore": "Этот игрок игнорирует вас.",
+    "error_request": "Не удалось обработать запрос телепортации. Попробуйте позже."
   },
-
   "warp": {
     "invalid_name": "Недопустимое имя варпа.",
     "location_unavailable": "Сейчас не удалось определить вашу позицию.",
@@ -129,6 +174,211 @@
     "teleported": "Телепортация на варп {warp} выполнена.",
     "delete_success": "Варп {warp} удален.",
     "list_empty": "Варпы не настроены.",
-    "list_header": "Варпы ({count}):"
+    "list_header": "Варпы ({count}):",
+    "error_save": "Не удалось сохранить варп. Попробуйте позже.",
+    "error_load": "Не удалось загрузить данные варпов. Попробуйте позже.",
+    "error_delete": "Не удалось удалить варп. Попробуйте позже."
+  },
+  "common": {
+    "state_on": "вкл",
+    "state_off": "выкл",
+    "available": "доступно",
+    "unavailable": "недоступно",
+    "success": "успех",
+    "failed": "ошибка"
+  },
+  "spawn": {
+    "not_set": "Спавн еще не установлен. Используйте /setspawn.",
+    "teleport_failed": "Телепортация на спавн не удалась.",
+    "teleported": "Телепортация на спавн выполнена.",
+    "location_unavailable": "Не удалось определить вашу текущую позицию.",
+    "set_success": "Спавн обновлен.",
+    "error_load": "Не удалось загрузить спавн. Попробуйте позже.",
+    "error_save": "Не удалось сохранить спавн. Попробуйте позже."
+  },
+  "seen": {
+    "online": "{player} сейчас в сети.",
+    "need_uuid": "Игрок офлайн. Для точного поиска используйте UUID.",
+    "unknown": "Нет данных /seen для этого игрока.",
+    "last_seen": "Последний раз в сети: {ago} назад.",
+    "error_load": "Не удалось загрузить данные /seen. Попробуйте позже."
+  },
+  "ignore": {
+    "self": "Вы не можете игнорировать самого себя.",
+    "already": "Вы уже игнорируете {player}.",
+    "added": "Теперь вы игнорируете {player}.",
+    "not_found": "Вы не игнорируете {player}.",
+    "removed": "Вы больше не игнорируете {player}.",
+    "error_save": "Не удалось обновить список игнорирования. Попробуйте позже."
+  },
+  "utility": {
+    "gamemode_invalid": "Недопустимый режим игры.",
+    "gamemode_set": "Режим {mode} установлен для {player}.",
+    "fly_failed": "Не удалось переключить полет для {player}.",
+    "fly_toggled": "Полет для {player}: {state}",
+    "clearinv_ok": "Инвентарь игрока {player} очищен.",
+    "clearinv_fail": "Не удалось очистить инвентарь игрока {player}.",
+    "time_set": "Время изменено на {state}.",
+    "time_fail": "Не удалось изменить время.",
+    "weather_set": "Погода изменена на {state}.",
+    "weather_fail": "Не удалось изменить погоду.",
+    "speed_cleared": "Скорость игрока {player} сброшена.",
+    "speed_fail": "Не удалось установить скорость игроку {player}.",
+    "speed_set": "Скорость {level} установлена игроку {player}.",
+    "feed_ok": "Игрок {player} накормлен.",
+    "feed_fail": "Не удалось восстановить голод игроку {player}.",
+    "heal_ok": "Игрок {player} исцелен.",
+    "heal_fail": "Не удалось восстановить HP игроку {player}.",
+    "no_permission_others": "У вас нет права воздействовать на других игроков."
+  },
+  "command_toggle": {
+    "list": "Состояния команд: {list}",
+    "status": "{command} сейчас {state}.",
+    "enabled": "Команда {command} включена.",
+    "disabled": "Команда {command} выключена.",
+    "protected": "Команда {command} защищена и не может быть выключена.",
+    "unknown": "Неизвестный ключ команды: {command}",
+    "reloaded": "Command toggles перезагружены из commands.json."
+  },
+  "storage": {
+    "common": {
+      "available": "доступно",
+      "unavailable": "недоступно",
+      "success": "успех",
+      "failed": "ошибка"
+    },
+    "error": {
+      "provider_unavailable": "Хранилище сейчас недоступно. Попробуйте позже.",
+      "operation_failed": "Операция хранилища не удалась. Попробуйте позже."
+    },
+    "status": {
+      "provider": "Провайдер хранилища: выбран={selected}, активен={active}.",
+      "identity": "Идентификатор сервера: networkId={networkId}, serverId={serverId}, serverName={serverName}.",
+      "target": "Цель: {target}.",
+      "migration_version": "Версия миграций: {version}.",
+      "repositories": "Репозитории: {state}.",
+      "sql_registered": "SQL-сервер зарегистрирован: {state}.",
+      "fallback": "Fallback: активен, причина={reason}.",
+      "last_test": "Последний тест: {state} - {message}.",
+      "dependency_mode": "Режим зависимостей: {mode}.",
+      "sqlite_driver": "SQLite driver: {state}.",
+      "mysql_driver": "MySQL/MariaDB driver: {state}."
+    },
+    "test": {
+      "started": "Тест хранилища запущен для провайдера {provider}.",
+      "failed": "Тест хранилища не удался: {message}.",
+      "provider": "Провайдер теста хранилища: {provider}.",
+      "config_valid": "Конфиг корректен: {state}.",
+      "result": "Подключение/результат: {state}.",
+      "migration_version": "Версия миграций: {version}.",
+      "message": "{message}"
+    },
+    "migrate": {
+      "started": "Миграция хранилища запущена: {from} -> {to}.",
+      "failed": "Миграция хранилища не удалась: {message}.",
+      "source_target": "Миграция source={source}, target={target}.",
+      "scope": "Scope: networkId={networkId}, serverId={serverId}.",
+      "count_players": "Мигрировано игроков: {count}.",
+      "count_homes": "Мигрировано домов: {count}.",
+      "count_warps": "Мигрировано варпов: {count}.",
+      "count_moderation": "Мигрировано записей модерации: {count}.",
+      "count_permissions": "Мигрировано групп/пользователей permissions: {groups}/{users}.",
+      "count_admin": "Мигрировано admin-состояний: {count}.",
+      "failures_skipped": "Ошибки/пропущено: {failures}/{skipped}.",
+      "final_status": "Итоговый статус: {state}.",
+      "message": "{message}",
+      "additional_messages": "Дополнительные сообщения миграции: {count}.",
+      "options": "Режим={mode}, конфликт={conflict}.",
+      "mode": "Режим={mode}, конфликт={conflict}.",
+      "backup": "JSON-бэкап: {path}.",
+      "conflicts": "Конфликты: {count}."
+    },
+    "libs": {
+      "status": {
+        "cached": "в кэше",
+        "downloaded": "загружено",
+        "missing": "отсутствует",
+        "not_needed": "не требуется",
+        "checksum_failed": "ошибка checksum",
+        "failed": "ошибка",
+        "loaded": "загружен"
+      },
+      "download": {
+        "started": "Загрузка runtime-библиотеки {library}.",
+        "success": "Runtime-библиотека {library} загружена.",
+        "failed": "Не удалось загрузить runtime-библиотеку: {message}."
+      },
+      "error": {
+        "checksum_failed": "Checksum runtime-библиотеки не совпал.",
+        "driver_load_failed": "Не удалось загрузить runtime JDBC driver.",
+        "offline_missing": "Runtime-библиотека отсутствует, а загрузка отключена.",
+        "insecure_repository": "Репозиторий runtime-библиотек должен использовать HTTPS."
+      },
+      "cache": {
+        "path": "Кэш runtime-библиотек: {path}."
+      },
+      "mode": {
+        "runtime_download": "runtime-download"
+      }
+    }
+  },
+  "admin": {
+    "player_not_found": "Игрок не найден.",
+    "player_only": "Эту команду может использовать только игрок.",
+    "no_permission_others": "У вас нет права воздействовать на других игроков.",
+    "error_state": "Не удалось обновить admin-состояние. Попробуйте позже.",
+    "god_ok": "God mode для {player}: {state}.",
+    "vanish_ok": "Vanish для {player}: {state}.",
+    "repair_ok": "Починено стаков предметов: {count} для {player}.",
+    "enchant_ok": "Наложено зачарование {enchantment} {level} на {player}.",
+    "near_none": "Нет игроков в радиусе {radius} блоков.",
+    "near_list": "Рядом: {players}",
+    "whois_header": "Whois: {player}",
+    "whois_uuid": "UUID: {uuid}",
+    "whois_world": "Мир: {world}",
+    "whois_pos": "Позиция: {x}, {y}, {z}",
+    "whois_health": "HP: {health}/{max}",
+    "whois_level": "Уровень XP: {level}",
+    "whois_groups": "Группы: {groups}",
+    "sudo_missing": "Команда отсутствует.",
+    "sudo_ok": "Команда выполнена от имени {player}.",
+    "top_fail": "Не удалось найти верхний блок на вашей позиции.",
+    "top_ok": "Телепортация на верхний блок выполнена.",
+    "jump_ok": "Прыжок вперед на {distance} блоков.",
+    "inspect_header": "{type} игрока {player}:",
+    "inspect_line": "#{slot}: {count}x {item}",
+    "inspect_empty": "Предметы не найдены.",
+    "inspect_more": "...и еще {count} стаков предметов."
+  },
+  "moderation": {
+    "player_not_found": "Игрок не найден.",
+    "duration_invalid": "Недопустимая длительность. Используйте значения вроде 30m, 2h, 7d.",
+    "error_save": "Не удалось сохранить данные модерации. Попробуйте позже.",
+    "error_load": "Не удалось загрузить данные модерации. Попробуйте позже.",
+    "kick_ok": "Игрок {player} кикнут.",
+    "ban_ok": "Игрок {player} забанен.",
+    "unban_ok": "Игрок {player} разбанен.",
+    "tempban_ok": "Игрок {player} временно забанен на {duration}.",
+    "mute_ok": "Игрок {player} замучен.",
+    "muted": "Вы получили мут. Причина: {reason}",
+    "tempmute_ok": "Игрок {player} замучен на {duration}.",
+    "tempmuted": "Вы получили мут на {duration}. Причина: {reason}",
+    "unmute_ok": "Мут игрока {player} снят.",
+    "unmuted": "Ваш мут снят.",
+    "muted_chat_blocked": "Вы в муте. Осталось: {duration}. Причина: {reason}",
+    "warn_ok": "Игрок {player} предупрежден.",
+    "warned": "Вы получили предупреждение. Причина: {reason}",
+    "setjail_fail": "Не удалось определить вашу позицию.",
+    "setjail_ok": "Позиция jail установлена.",
+    "jail_not_set": "Позиция jail не установлена. Сначала используйте /setjail.",
+    "jail_teleport_fail": "Не удалось телепортировать {player} в jail.",
+    "jail_ok": "Игрок {player} посажен в jail.",
+    "jailed": "Вы посажены в jail. Причина: {reason}",
+    "unjail_ok": "Игрок {player} выпущен из jail.",
+    "unjailed": "Вы выпущены из jail.",
+    "no_reason": "Причина не указана."
+  },
+  "reload": {
+    "customcommands_success": "Перезагружено custom commands из конфига: {count}."
   }
 }

@@ -2,9 +2,11 @@ package eu.avalanche7.paradigm.modules.commands;
 
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 
 import java.time.Duration;
@@ -70,19 +72,10 @@ public class SeenCommand implements ParadigmModule {
                                 return 0;
                             }
 
-                            Long lastSeen = services.getPlayerDataStore().getLastSeen(uuid.toString());
-                            if (lastSeen == null) {
-                                send(sender, "seen.unknown", "No seen data for that player.");
-                                return 0;
-                            }
-
-                            Duration d = Duration.ofMillis(Math.max(0L, System.currentTimeMillis() - lastSeen));
-                            long days = d.toDays();
-                            long hours = d.minusDays(days).toHours();
-                            long minutes = d.minusDays(days).minusHours(hours).toMinutes();
-                            String ago = days + "d " + hours + "h " + minutes + "m";
-                            send(sender, "seen.last_seen", "Last seen: {ago} ago.", "{ago}", ago);
-                            return 1;
+                            return StorageCommandSupport.runForPlayer(services, sender, "seen.lookup", () ->
+                                    services.getStorageService().players().getProfile(uuid.toString()).orElse(null),
+                                    (current, profile) -> sendSeenResult(current, profile),
+                                    "seen.error_load");
                         }));
         services.getPlatformAdapter().registerCommand(cmd);
     }
@@ -94,16 +87,48 @@ public class SeenCommand implements ParadigmModule {
             events.onPlayerJoin(event -> {
                 IPlayer player = event.getPlayer();
                 if (player != null) {
-                    services.getPlayerDataStore().setLastSeen(player, System.currentTimeMillis());
+                    updateSeenAsync(player);
                 }
             });
             events.onPlayerLeave(event -> {
                 IPlayer player = event.getPlayer();
                 if (player != null) {
-                    services.getPlayerDataStore().setLastSeen(player, System.currentTimeMillis());
+                    updateSeenAsync(player);
                 }
             });
         }
+    }
+
+    private void updateSeenAsync(IPlayer player) {
+        if (player == null || player.getUUID() == null || player.getUUID().isBlank()) {
+            return;
+        }
+        String uuid = player.getUUID();
+        String name = player.getName();
+        services.getStorageService().runAsync("seen.update", () -> {
+            long now = System.currentTimeMillis();
+            long firstSeen = services.getStorageService().players()
+                    .getProfile(uuid)
+                    .map(StoredPlayerProfile::firstSeenMs)
+                    .filter(value -> value > 0L)
+                    .orElse(now);
+            services.getStorageService().players().upsertProfile(new StoredPlayerProfile(uuid, name, firstSeen, now));
+            return null;
+        }, services.getTaskScheduler(), ignored -> {}, ignored -> {});
+    }
+
+    private void sendSeenResult(IPlayer sender, StoredPlayerProfile profile) {
+        if (profile == null || profile.lastSeenMs() <= 0L) {
+            send(sender, "seen.unknown", "No seen data for that player.");
+            return;
+        }
+
+        Duration d = Duration.ofMillis(Math.max(0L, System.currentTimeMillis() - profile.lastSeenMs()));
+        long days = d.toDays();
+        long hours = d.minusDays(days).toHours();
+        long minutes = d.minusDays(days).minusHours(hours).toMinutes();
+        String ago = days + "d " + hours + "h " + minutes + "m";
+        send(sender, "seen.last_seen", "Last seen: {ago} ago.", "{ago}", ago);
     }
 
     private UUID parseUuid(String input) {
@@ -132,5 +157,3 @@ public class SeenCommand implements ParadigmModule {
         services.getPlatformAdapter().sendSystemMessage(player, services.getMessageParser().parseMessage(decorated, player));
     }
 }
-
-

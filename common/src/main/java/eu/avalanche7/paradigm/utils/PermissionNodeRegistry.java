@@ -110,6 +110,7 @@ public class PermissionNodeRegistry {
                     changed++;
                 }
             }
+            removeCommandAliasNodesLocked();
             saveLocked();
             debugLogger.debugLog("[Permissions] Discovered " + discovered.size() + " command permission nodes.");
             return changed;
@@ -156,8 +157,8 @@ public class PermissionNodeRegistry {
         int max = Math.min(tokens.size(), MAX_COMMAND_DEPTH);
         for (int length = max; length >= 1; length--) {
             String path = String.join(".", tokens.subList(0, length));
-            candidates.add(path);
             candidates.add("command." + path);
+            candidates.add(path);
         }
         return candidates;
     }
@@ -202,7 +203,6 @@ public class PermissionNodeRegistry {
 
         String path = prefix.isBlank() ? cleanSegment : prefix + "." + cleanSegment;
         addDiscovered(discovered, "command." + path, SOURCE_COMMAND_TREE, "Brigadier command permission for /" + path.replace('.', ' '), -1);
-        addDiscovered(discovered, path, SOURCE_COMMAND_ALIAS, "Command path alias for /" + path.replace('.', ' '), -1);
 
         for (Object child : children(node)) {
             collectCommandNode(child, path, discovered, depth + 1);
@@ -282,6 +282,8 @@ public class PermissionNodeRegistry {
                 loaded.normalize();
                 synchronized (lock) {
                     this.state = loaded;
+                    removeCommandAliasNodesLocked();
+                    saveLocked();
                 }
             }
         } catch (Throwable t) {
@@ -317,6 +319,16 @@ public class PermissionNodeRegistry {
 
     private Path resolvePath() {
         return config != null ? config.resolveConfigPath(FILE_NAME) : null;
+    }
+
+    private void removeCommandAliasNodesLocked() {
+        if (state == null || state.nodes == null || state.nodes.isEmpty()) {
+            return;
+        }
+        state.nodes.entrySet().removeIf(entry -> {
+            DiscoveredPermission permission = entry.getValue();
+            return permission != null && SOURCE_COMMAND_ALIAS.equals(permission.source);
+        });
     }
 
     private static String normalizeNode(String node) {

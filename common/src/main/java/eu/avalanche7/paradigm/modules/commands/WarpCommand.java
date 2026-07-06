@@ -8,11 +8,16 @@ import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
+import eu.avalanche7.paradigm.storage.model.StoredLocation;
+import eu.avalanche7.paradigm.storage.model.StoredWarp;
 import eu.avalanche7.paradigm.utils.CommandCooldowns;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 public class WarpCommand implements ParadigmModule {
@@ -20,7 +25,7 @@ public class WarpCommand implements ParadigmModule {
 
     private Services services;
     private IPlatformAdapter platform;
-    private WarpStore warpStore;
+    private final Map<String, StoredWarp> warpCache = new ConcurrentHashMap<>();
 
     @Override
     public String getName() {
@@ -38,7 +43,6 @@ public class WarpCommand implements ParadigmModule {
     public void onLoad(Object event, Services services, Object modEventBus) {
         this.services = services;
         this.platform = services.getPlatformAdapter();
-        this.warpStore = new WarpStore(services.getLogger(), services.getDebugLogger(), platform.getConfig());
     }
 
     @Override
@@ -206,9 +210,23 @@ public class WarpCommand implements ParadigmModule {
         }
 
         String permission = WarpStore.defaultPermissionFor(WarpStore.normalizeWarpKey(warpName));
-        warpStore.upsert(warpName, location, permission);
-        send(player, "warp.set_success", "Warp {warp} has been set.", "{warp}", warpName);
-        return 1;
+        long now = System.currentTimeMillis();
+        StoredWarp warp = new StoredWarp(
+                warpName,
+                fromDataLocation(location),
+                permission,
+                "",
+                player.getName(),
+                now,
+                now
+        );
+        return StorageCommandSupport.runForPlayer(services, player, "warp.set", () -> {
+            services.getStorageService().warps().saveWarp(warp);
+            return services.getStorageService().warps().listWarps();
+        }, (current, warps) -> {
+            updateWarpCache(warps);
+            send(current, "warp.set_success", "Warp {warp} has been set.", "{warp}", warpName);
+        }, "warp.error_save");
     }
 
     private int executeWarp(IPlayer player, String warpNameInput) {
@@ -220,64 +238,73 @@ public class WarpCommand implements ParadigmModule {
             return 0;
         }
 
-        WarpStore.WarpEntry warp = warpStore.get(warpName);
-        if (warp == null || warp.getLocation() == null) {
-            send(player, "warp.not_found", "Warp {warp} was not found.", "{warp}", warpName);
-            return 0;
-        }
-
-        if (!canUseWarp(player, warp, warpName)) {
-            send(player, "warp.no_permission", "You do not have permission to use warp {warp}.", "{warp}", warpName);
-            return 0;
-        }
-
-        return CommandCooldowns.run(services, player, "warp", () -> teleportWarp(player, warp));
+        return StorageCommandSupport.runForPlayer(services, player, "warp.load", () ->
+                services.getStorageService().warps().getWarp(warpName).orElse(null),
+                (current, warp) -> {
+                    if (warp == null || warp.location() == null) {
+                        send(current, "warp.not_found", "Warp {warp} was not found.", "{warp}", warpName);
+                        return;
+                    }
+                    if (!canUseWarp(current, warp, warpName)) {
+                        send(current, "warp.no_permission", "You do not have permission to use warp {warp}.", "{warp}", warpName);
+                        return;
+                    }
+                    CommandCooldowns.run(services, current, "warp", () -> teleportWarp(current, warp));
+                },
+                "warp.error_load");
     }
 
-    private int teleportWarp(IPlayer player, WarpStore.WarpEntry warp) {
+    private int teleportWarp(IPlayer player, StoredWarp warp) {
         PlayerDataStore.StoredLocation previous = platform.getPlayerLocation(player).orElse(null);
-        if (!platform.teleportPlayer(player, warp.getLocation())) {
+        if (!platform.teleportPlayer(player, toDataLocation(warp.location()))) {
             send(player, "warp.teleport_failed", "Teleport failed.");
             return 0;
         }
         if (previous != null) {
-            services.getPlayerDataStore().setLastLocation(player, previous);
+            saveBackLocationAsync(player, previous, "warp.back_save");
         }
 
-        send(player, "warp.teleported", "Teleported to warp {warp}.", "{warp}", warp.getName());
+        send(player, "warp.teleported", "Teleported to warp {warp}.", "{warp}", warp.name());
         return 1;
     }
 
     private int executeWarps(IPlayer player) {
         if (player == null) return 0;
 
-        List<String> names = warpStore.listNames();
-        if (names.isEmpty()) {
+        return StorageCommandSupport.runForPlayer(services, player, "warp.list", () -> services.getStorageService().warps().listWarps(),
+                (current, warps) -> {
+                    updateWarpCache(warps);
+                    sendWarps(current, warps);
+                },
+                "warp.error_load");
+    }
+
+    private void sendWarps(IPlayer player, List<StoredWarp> warps) {
+        if (warps.isEmpty()) {
             send(player, "warp.list_empty", "No warps are set.");
-            return 1;
+            return;
         }
 
-        List<WarpStore.WarpEntry> visibleWarps = names.stream()
-                .map(warpStore::get)
-                .filter(warp -> warp != null && warp.getLocation() != null)
-                .filter(warp -> canUseWarp(player, warp, warp.getName()))
+        List<StoredWarp> visibleWarps = warps.stream()
+                .filter(warp -> warp != null && warp.location() != null)
+                .filter(warp -> canUseWarp(player, warp, warp.name()))
                 .toList();
 
         if (visibleWarps.isEmpty()) {
             send(player, "warp.list_empty", "No warps are set.");
-            return 1;
+            return;
         }
 
         send(player, "warp.list_header", "Warps ({count}):", "{count}", String.valueOf(visibleWarps.size()));
-        for (WarpStore.WarpEntry warp : visibleWarps) {
-            String warpName = warp.getName();
+        for (StoredWarp warp : visibleWarps) {
+            String warpName = warp.name();
 
-            String node = warp.getPermission() != null ? warp.getPermission() : WarpStore.defaultPermissionFor(WarpStore.normalizeWarpKey(warpName));
+            String node = warp.permission() != null ? warp.permission() : WarpStore.defaultPermissionFor(WarpStore.normalizeWarpKey(warpName));
             String hover = String.format("%s | %.1f %.1f %.1f | %s",
-                    warp.getLocation().getWorldId(),
-                    warp.getLocation().getX(),
-                    warp.getLocation().getY(),
-                    warp.getLocation().getZ(),
+                    warp.location().worldId(),
+                    warp.location().x(),
+                    warp.location().y(),
+                    warp.location().z(),
                     node != null ? node : "-");
 
             String safeWarp = safe(warpName);
@@ -294,7 +321,6 @@ public class WarpCommand implements ParadigmModule {
                             .onClickRunCommand("/warp " + safe(commandWarp)));
             platform.sendSystemMessage(player, line);
         }
-        return 1;
     }
 
     private int executeDelWarp(IPlayer player, String warpNameInput) {
@@ -306,13 +332,17 @@ public class WarpCommand implements ParadigmModule {
             return 0;
         }
 
-        if (!warpStore.delete(warpName)) {
-            send(player, "warp.not_found", "Warp {warp} was not found.", "{warp}", warpName);
-            return 0;
-        }
-
-        send(player, "warp.delete_success", "Warp {warp} has been deleted.", "{warp}", warpName);
-        return 1;
+        return StorageCommandSupport.runForPlayer(services, player, "warp.delete", () -> {
+            boolean deleted = services.getStorageService().warps().deleteWarp(warpName);
+            return new DeleteWarpResult(deleted, services.getStorageService().warps().listWarps());
+        }, (current, result) -> {
+            updateWarpCache(result.warps());
+            if (!result.deleted()) {
+                send(current, "warp.not_found", "Warp {warp} was not found.", "{warp}", warpName);
+                return;
+            }
+            send(current, "warp.delete_success", "Warp {warp} has been deleted.", "{warp}", warpName);
+        }, "warp.error_delete");
     }
 
     private int executeWarpInfo(IPlayer player, String warpNameInput) {
@@ -324,26 +354,31 @@ public class WarpCommand implements ParadigmModule {
             return 0;
         }
 
-        WarpStore.WarpEntry warp = warpStore.get(warpName);
-        if (warp == null || warp.getLocation() == null) {
+        return StorageCommandSupport.runForPlayer(services, player, "warp.info", () ->
+                services.getStorageService().warps().getWarp(warpName).orElse(null),
+                (current, warp) -> sendWarpInfo(current, warpName, warp),
+                "warp.error_load");
+    }
+
+    private void sendWarpInfo(IPlayer player, String warpName, StoredWarp warp) {
+        if (warp == null || warp.location() == null) {
             send(player, "warp.not_found", "Warp {warp} was not found.", "{warp}", warpName);
-            return 0;
+            return;
         }
 
-        String permission = warp.getPermission() != null ? warp.getPermission() : WarpStore.defaultPermissionFor(WarpStore.normalizeWarpKey(warpName));
+        String permission = warp.permission() != null ? warp.permission() : WarpStore.defaultPermissionFor(WarpStore.normalizeWarpKey(warpName));
         String details = "<color:#F59E0B><bold>[Warp]</bold></color> "
-                + "<color:#E5E7EB>" + safe(warp.getName()) + "</color>"
-                + " <color:#6B7280>|</color> <color:#93C5FD>" + safe(warp.getLocation().getWorldId()) + "</color>"
+                + "<color:#E5E7EB>" + safe(warp.name()) + "</color>"
+                + " <color:#6B7280>|</color> <color:#93C5FD>" + safe(warp.location().worldId()) + "</color>"
                 + " <color:#6B7280>|</color> <color:#E5E7EB>"
-                + String.format(Locale.US, "%.1f %.1f %.1f", warp.getLocation().getX(), warp.getLocation().getY(), warp.getLocation().getZ())
+                + String.format(Locale.US, "%.1f %.1f %.1f", warp.location().x(), warp.location().y(), warp.location().z())
                 + "</color>"
                 + " <color:#6B7280>|</color> <color:#A3E635>" + safe(permission) + "</color>";
         platform.sendSystemMessage(player, services.getMessageParser().parseMessage(details, player));
-        return 1;
     }
 
-    private boolean canUseWarp(IPlayer player, WarpStore.WarpEntry warp, String warpNameInput) {
-        String specific = warp.getPermission();
+    private boolean canUseWarp(IPlayer player, StoredWarp warp, String warpNameInput) {
+        String specific = warp.permission();
         if (specific == null || specific.isBlank()) {
             specific = WarpStore.defaultPermissionFor(WarpStore.normalizeWarpKey(warpNameInput));
         }
@@ -354,8 +389,19 @@ public class WarpCommand implements ParadigmModule {
 
     private List<String> warpSuggestions(String input) {
         String q = input != null ? input.trim().toLowerCase(Locale.ROOT) : "";
-        return warpStore.listNames().stream()
+        if (services != null && services.getStorageService() != null) {
+            try {
+                updateWarpCache(services.getStorageService().warps().listWarps());
+            } catch (Throwable t) {
+                if (services.getDebugLogger() != null) {
+                    services.getDebugLogger().debugLog("WarpCommand: failed to refresh warp suggestions: " + t);
+                }
+            }
+        }
+        return warpCache.values().stream()
+                .map(StoredWarp::name)
                 .filter(name -> q.isEmpty() || name.toLowerCase(Locale.ROOT).startsWith(q))
+                .sorted(String.CASE_INSENSITIVE_ORDER)
                 .toList();
     }
 
@@ -396,5 +442,39 @@ public class WarpCommand implements ParadigmModule {
                 .replace("'", "")
                 .replace("\"", "")
                 .replace("\n", " ");
+    }
+
+    private StoredLocation fromDataLocation(PlayerDataStore.StoredLocation location) {
+        return new StoredLocation(location.getWorldId(), location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+    }
+
+    private PlayerDataStore.StoredLocation toDataLocation(StoredLocation location) {
+        return new PlayerDataStore.StoredLocation(location.worldId(), location.x(), location.y(), location.z(), location.yaw(), location.pitch());
+    }
+
+    private void saveBackLocationAsync(IPlayer player, PlayerDataStore.StoredLocation location, String operation) {
+        if (player == null || location == null) {
+            return;
+        }
+        String uuid = player.getUUID();
+        services.getStorageService().runAsync(operation, () -> {
+            services.getStorageService().players().setBackLocation(uuid, fromDataLocation(location));
+            return null;
+        }, services.getTaskScheduler(), ignored -> {}, ignored -> {});
+    }
+
+    private void updateWarpCache(List<StoredWarp> warps) {
+        warpCache.clear();
+        for (StoredWarp warp : warps) {
+            if (warp != null && warp.name() != null) {
+                String key = WarpStore.normalizeWarpKey(warp.name());
+                if (key != null) {
+                    warpCache.put(key, warp);
+                }
+            }
+        }
+    }
+
+    private record DeleteWarpResult(boolean deleted, List<StoredWarp> warps) {
     }
 }

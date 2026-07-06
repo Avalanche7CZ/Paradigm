@@ -8,6 +8,8 @@ import eu.avalanche7.paradigm.platform.Interfaces.*;
 import eu.avalanche7.paradigm.modules.Announcements;
 import eu.avalanche7.paradigm.modules.CommandManager;
 import eu.avalanche7.paradigm.modules.Restart;
+import eu.avalanche7.paradigm.storage.StorageService;
+import eu.avalanche7.paradigm.storage.migration.StorageMigrationOptions;
 import eu.avalanche7.paradigm.utils.CommandToggleStore;
 import eu.avalanche7.paradigm.utils.PermissionAPI.PermissionAPI;
 import eu.avalanche7.paradigm.utils.PermissionNodeRegistry;
@@ -25,6 +27,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 public class Reload implements ParadigmModule {
     private static final Map<ParadigmModule, Boolean> LAST_HELP_STATE = new ConcurrentHashMap<>();
@@ -99,6 +102,7 @@ public class Reload implements ParadigmModule {
         ICommandBuilder paradigm = platform.createCommandBuilder()
                 .literal("paradigm")
                 .then(reload)
+                .then(buildStorageBranch(platform, services))
                 .then(buildCommandToggleBranch(platform, services));
 
         if (services.getPermissionsHandler().isInternalPermissionsEnabled()) {
@@ -325,6 +329,221 @@ public class Reload implements ParadigmModule {
                 PermissionsHandler.COMMAND_TOGGLE_PERMISSION,
                 PermissionsHandler.COMMAND_TOGGLE_PERMISSION_LEVEL
         );
+    }
+
+    private boolean hasStoragePermission(ICommandSource src, Services services) {
+        if (src == null) return false;
+        if (src.isConsole()) return true;
+        if (src.hasPermissionLevel(2)) return true;
+        IPlayer player = src.getPlayer();
+        return player != null && services.getPermissionsHandler().hasPermission(
+                player,
+                PermissionsHandler.STORAGE_MANAGE_PERMISSION,
+                PermissionsHandler.STORAGE_MANAGE_PERMISSION_LEVEL
+        );
+    }
+
+    private ICommandBuilder buildStorageBranch(IPlatformAdapter platform, Services services) {
+        return platform.createCommandBuilder()
+                .literal("storage")
+                .requires(src -> hasStoragePermission(src, services))
+                .executes(ctx -> {
+                    sendStorageStatus(ctx.getSource(), services);
+                    return 1;
+                })
+                .then(platform.createCommandBuilder()
+                        .literal("status")
+                        .executes(ctx -> {
+                            sendStorageStatus(ctx.getSource(), services);
+                            return 1;
+                        }))
+                .then(platform.createCommandBuilder()
+                        .literal("test")
+                        .executes(ctx -> {
+                            runStorageTest(ctx.getSource(), services);
+                            return 1;
+                        }))
+                .then(platform.createCommandBuilder()
+                        .literal("migrate")
+                        .then(platform.createCommandBuilder()
+                                .literal("json")
+                                .then(buildStorageMigrationTarget(platform, services, "json", "sql")))
+                        .then(platform.createCommandBuilder()
+                                .literal("sql")
+                                .then(buildStorageMigrationTarget(platform, services, "sql", "json"))));
+    }
+
+    private ICommandBuilder buildStorageMigrationTarget(IPlatformAdapter platform, Services services, String from, String to) {
+        ICommandBuilder target = platform.createCommandBuilder()
+                .literal(to)
+                .executes(ctx -> {
+                    runStorageMigration(ctx.getSource(), services, from, to, StorageMigrationOptions.defaults());
+                    return 1;
+                });
+
+        target.then(buildStorageMigrationPolicy(platform, services, from, to, "overwrite", false));
+        target.then(buildStorageMigrationPolicy(platform, services, from, to, "skip", false));
+        target.then(buildStorageMigrationPolicy(platform, services, from, to, "fail", false));
+        target.then(platform.createCommandBuilder()
+                .literal("dry-run")
+                .executes(ctx -> {
+                    runStorageMigration(ctx.getSource(), services, from, to,
+                            new StorageMigrationOptions(true, StorageMigrationOptions.ConflictPolicy.OVERWRITE, false));
+                    return 1;
+                })
+                .then(buildStorageMigrationPolicy(platform, services, from, to, "overwrite", true))
+                .then(buildStorageMigrationPolicy(platform, services, from, to, "skip", true))
+                .then(buildStorageMigrationPolicy(platform, services, from, to, "fail", true)));
+        return target;
+    }
+
+    private ICommandBuilder buildStorageMigrationPolicy(IPlatformAdapter platform, Services services, String from, String to, String policy, boolean dryRun) {
+        return platform.createCommandBuilder()
+                .literal(policy)
+                .executes(ctx -> {
+                    StorageMigrationOptions.ConflictPolicy conflictPolicy = StorageMigrationOptions.ConflictPolicy.parse(policy);
+                    runStorageMigration(ctx.getSource(), services, from, to,
+                            new StorageMigrationOptions(dryRun, conflictPolicy, !dryRun));
+                    return 1;
+                });
+    }
+
+    private void sendStorageStatus(ICommandSource source, Services services) {
+        StorageService storage = services.getStorageService();
+        if (storage == null) {
+            sendStorageLine(source, services, "storage.error.provider_unavailable", "Storage service is unavailable.");
+            return;
+        }
+        StorageService.StorageStatus status = storage.status();
+        sendStorageLine(source, services, "storage.status.provider", "Storage provider: selected={selected}, active={active}.",
+                "{selected}", status.selectedProvider(), "{active}", status.activeProvider());
+        sendStorageLine(source, services, "storage.status.identity", "Server identity: networkId={networkId}, serverId={serverId}, serverName={serverName}.",
+                "{networkId}", status.serverIdentity().networkId(),
+                "{serverId}", status.serverIdentity().serverId(),
+                "{serverName}", status.serverIdentity().serverName());
+        sendStorageLine(source, services, "storage.status.target", "Target: {target}.", "{target}", status.target());
+        sendStorageLine(source, services, "storage.status.dependency_mode", "Dependency mode: {mode}.", "{mode}", runtimeLibraryMode(services, status.dependencyMode()));
+        sendStorageLine(source, services, "storage.libs.cache.path", "Runtime library cache: {path}.", "{path}", status.runtimeLibraryCachePath());
+        sendStorageLine(source, services, "storage.status.sqlite_driver", "SQLite driver: {state}.", "{state}", libraryStateText(services, status.sqliteDriverState()));
+        sendStorageLine(source, services, "storage.status.mysql_driver", "MySQL/MariaDB driver: {state}.", "{state}", libraryStateText(services, status.mysqlDriverState()));
+        sendStorageLine(source, services, "storage.status.migration_version", "Migration version: {version}.", "{version}", String.valueOf(status.migrationVersion()));
+        sendStorageLine(source, services, "storage.status.repositories", "Repositories: {state}.",
+                "{state}", storageState(services, status.repositoriesAvailable()));
+        if (!"json".equalsIgnoreCase(status.activeProvider())) {
+            sendStorageLine(source, services, "storage.status.sql_registered", "SQL server registered: {state}.",
+                    "{state}", storageState(services, status.serverRegistered()));
+        }
+        if (status.fallbackActive()) {
+            sendStorageLine(source, services, "storage.status.fallback", "Fallback: active, reason={reason}.", "{reason}", status.fallbackReason());
+        }
+        if (status.lastTestResult() != null) {
+            sendStorageLine(source, services, "storage.status.last_test", "Last test: {state} - {message}.",
+                    "{state}", storageResult(services, status.lastTestResult().success()),
+                    "{message}", status.lastTestResult().message());
+        }
+    }
+
+    private void runStorageTest(ICommandSource source, Services services) {
+        StorageService storage = services.getStorageService();
+        if (storage == null) {
+            sendStorageLine(source, services, "storage.error.provider_unavailable", "Storage service is unavailable.");
+            return;
+        }
+        sendStorageLine(source, services, "storage.test.started", "Storage test started for provider {provider}.", "{provider}", storage.status().activeProvider());
+        storage.testAsync().whenComplete((result, throwable) -> services.getTaskScheduler().schedule(() -> {
+            if (throwable != null) {
+                sendStorageLine(source, services, "storage.test.failed", "Storage test failed: {message}.", "{message}", throwable.getMessage());
+                return;
+            }
+            sendStorageLine(source, services, "storage.test.provider", "Storage test provider: {provider}.", "{provider}", result.provider());
+            sendStorageLine(source, services, "storage.test.config_valid", "Config valid: {state}.", "{state}", storageState(services, result.configValid()));
+            sendStorageLine(source, services, "storage.test.result", "Connection/result: {state}.", "{state}", storageResult(services, result.success()));
+            sendStorageLine(source, services, "storage.status.sqlite_driver", "SQLite driver: {state}.", "{state}", libraryStateText(services, result.sqliteDriverState()));
+            sendStorageLine(source, services, "storage.status.mysql_driver", "MySQL/MariaDB driver: {state}.", "{state}", libraryStateText(services, result.mysqlDriverState()));
+            sendStorageLine(source, services, "storage.test.migration_version", "Migration version: {version}.", "{version}", String.valueOf(result.migrationVersion()));
+            sendStorageLine(source, services, "storage.test.message", "{message}", "{message}", result.message());
+        }, 0L, TimeUnit.MILLISECONDS));
+    }
+
+    private void runStorageMigration(ICommandSource source, Services services, String from, String to, StorageMigrationOptions options) {
+        StorageService storage = services.getStorageService();
+        if (storage == null) {
+            sendStorageLine(source, services, "storage.error.provider_unavailable", "Storage service is unavailable.");
+            return;
+        }
+        StorageMigrationOptions effectiveOptions = options != null ? options : StorageMigrationOptions.defaults();
+        sendStorageLine(source, services, "storage.migrate.started", "Storage migration started: {from} -> {to}.", "{from}", from, "{to}", to);
+        sendStorageLine(source, services, "storage.migrate.options", "Mode={mode}, conflict={conflict}.",
+                "{mode}", effectiveOptions.dryRun() ? "dry-run" : "write",
+                "{conflict}", effectiveOptions.conflictPolicy().configValue());
+        storage.migrateAsync(from, to, effectiveOptions).whenComplete((summary, throwable) -> services.getTaskScheduler().schedule(() -> {
+            if (throwable != null) {
+                sendStorageLine(source, services, "storage.migrate.failed", "Storage migration failed: {message}.", "{message}", throwable.getMessage());
+                return;
+            }
+            sendStorageLine(source, services, "storage.migrate.source_target", "Migration source={source}, target={target}.",
+                    "{source}", summary.sourceProvider(), "{target}", summary.targetProvider());
+            sendStorageLine(source, services, "storage.migrate.scope", "Scope: networkId={networkId}, serverId={serverId}.",
+                    "{networkId}", summary.networkId(), "{serverId}", summary.serverId());
+            sendStorageLine(source, services, "storage.migrate.mode", "Mode={mode}, conflict={conflict}.",
+                    "{mode}", summary.dryRun() ? "dry-run" : "write",
+                    "{conflict}", summary.conflictPolicy());
+            if (summary.jsonBackupPath() != null && !summary.jsonBackupPath().isBlank()) {
+                sendStorageLine(source, services, "storage.migrate.backup", "JSON backup: {path}.", "{path}", summary.jsonBackupPath());
+            }
+            sendStorageLine(source, services, "storage.migrate.count_players", "Players migrated: {count}.", "{count}", String.valueOf(summary.players()));
+            sendStorageLine(source, services, "storage.migrate.count_homes", "Homes migrated: {count}.", "{count}", String.valueOf(summary.homes()));
+            sendStorageLine(source, services, "storage.migrate.count_warps", "Warps migrated: {count}.", "{count}", String.valueOf(summary.warps()));
+            sendStorageLine(source, services, "storage.migrate.count_moderation", "Moderation records migrated: {count}.", "{count}", String.valueOf(summary.moderationRecords()));
+            sendStorageLine(source, services, "storage.migrate.count_permissions", "Permission groups/users migrated: {groups}/{users}.",
+                    "{groups}", String.valueOf(summary.permissionGroups()), "{users}", String.valueOf(summary.permissionUsers()));
+            sendStorageLine(source, services, "storage.migrate.count_admin", "Admin states migrated: {count}.", "{count}", String.valueOf(summary.adminStates()));
+            sendStorageLine(source, services, "storage.migrate.conflicts", "Conflicts: {count}.", "{count}", String.valueOf(summary.conflicts()));
+            sendStorageLine(source, services, "storage.migrate.failures_skipped", "Failures/skipped: {failures}/{skipped}.",
+                    "{failures}", String.valueOf(summary.failures()), "{skipped}", String.valueOf(summary.skipped()));
+            sendStorageLine(source, services, "storage.migrate.final_status", "Final status: {state}.", "{state}", storageResult(services, summary.success()));
+            summary.messages().stream().limit(5).forEach(message -> sendStorageLine(source, services, "storage.migrate.message", "{message}", "{message}", message));
+            if (summary.messages().size() > 5) {
+                sendStorageLine(source, services, "storage.migrate.additional_messages", "Additional migration messages: {count}.", "{count}", String.valueOf(summary.messages().size() - 5));
+            }
+        }, 0L, TimeUnit.MILLISECONDS));
+    }
+
+    private void sendStorageLine(ICommandSource source, Services services, String key, String fallback, String... placeholders) {
+        String message = rawText(services, key, fallback, placeholders);
+        IComponent component = services.getPlatformAdapter().createLiteralComponent("§b[Storage] §f" + message);
+        services.getPlatformAdapter().sendSuccess(source, component, false);
+    }
+
+    private String storageState(Services services, boolean state) {
+        return rawText(services, state ? "storage.common.available" : "storage.common.unavailable", state ? "available" : "unavailable");
+    }
+
+    private String storageResult(Services services, boolean state) {
+        return rawText(services, state ? "storage.common.success" : "storage.common.failed", state ? "success" : "failed");
+    }
+
+    private String libraryStateText(Services services, String state) {
+        String normalized = state != null && !state.isBlank() ? state : "missing";
+        return rawText(services, "storage.libs.status." + normalized, normalized);
+    }
+
+    private String runtimeLibraryMode(Services services, String mode) {
+        if ("runtime-download".equals(mode)) {
+            return rawText(services, "storage.libs.mode.runtime_download", "runtime-download");
+        }
+        return mode != null && !mode.isBlank() ? mode : "-";
+    }
+
+    private String rawText(Services services, String key, String fallback, String... placeholders) {
+        String raw = services.getLang().getTranslation(key);
+        if (raw == null || raw.equals(key)) {
+            raw = fallback;
+        }
+        for (int i = 0; i + 1 < placeholders.length; i += 2) {
+            raw = raw.replace(placeholders[i], placeholders[i + 1]);
+        }
+        return raw;
     }
 
     private ICommandBuilder buildPermissionHomeBranch(IPlatformAdapter platform, Services services) {
@@ -924,7 +1143,7 @@ public class Reload implements ParadigmModule {
 
         for (PermissionNodeRegistry.DiscoveredPermission node : nodes) {
             String name = node.node != null ? node.node : "";
-            String sourceName = node.source != null ? node.source : "manual";
+            String sourceName = permissionSourceLabel(node.source);
             sendUiLine(source, services, row(services)
                     .append(text(services, "- " + name, "E5E7EB"))
                     .append(space(services))
@@ -939,6 +1158,20 @@ public class Reload implements ParadigmModule {
                 .append(button(services, "[perms]", "/paradigm perms", true, "Back to permissions home", "94A3B8"))
                 .append(space(services))
                 .append(button(services, "[groups]", "/paradigm group list", true, "Open groups", "60A5FA")));
+    }
+
+    private String permissionSourceLabel(String source) {
+        if (source == null || source.isBlank()) {
+            return "manual";
+        }
+        return switch (source) {
+            case PermissionNodeRegistry.SOURCE_COMMAND_TREE -> "command";
+            case PermissionNodeRegistry.SOURCE_COMMAND_ALIAS -> "alias";
+            case PermissionNodeRegistry.SOURCE_FORGE_PERMISSION_API -> "Forge API";
+            case PermissionNodeRegistry.SOURCE_NEOFORGE_PERMISSION_API -> "NeoForge API";
+            case PermissionNodeRegistry.SOURCE_PARADIGM -> "Paradigm";
+            default -> source;
+        };
     }
 
     private int assignUserGroup(ICommandSource source, Services services, String playerInput, String group, int amount, String unit) {

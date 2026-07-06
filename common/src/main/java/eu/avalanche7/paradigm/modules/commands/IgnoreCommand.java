@@ -2,6 +2,7 @@ package eu.avalanche7.paradigm.modules.commands;
 
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
@@ -70,13 +71,19 @@ public class IgnoreCommand implements ParadigmModule {
                                 send(owner, "ignore.self", "You cannot ignore yourself.");
                                 return 0;
                             }
-                            boolean changed = services.getPlayerDataStore().addIgnoredPlayer(owner.getUUID(), target.getUUID());
-                            if (!changed) {
-                                send(owner, "ignore.already", "You already ignore {player}.", "{player}", target.getName());
-                                return 0;
-                            }
-                            send(owner, "ignore.added", "You now ignore {player}.", "{player}", target.getName());
-                            return 1;
+                            String ownerUuid = owner.getUUID();
+                            String targetUuid = target.getUUID();
+                            String targetName = target.getName();
+                            return StorageCommandSupport.runForPlayer(services, owner, "ignore.add", () ->
+                                    services.getStorageService().players().addIgnoredPlayer(ownerUuid, targetUuid),
+                                    (current, changed) -> {
+                                        if (!changed) {
+                                            send(current, "ignore.already", "You already ignore {player}.", "{player}", targetName);
+                                            return;
+                                        }
+                                        send(current, "ignore.added", "You now ignore {player}.", "{player}", targetName);
+                                    },
+                                    "ignore.error_save");
                         }));
         services.getPlatformAdapter().registerCommand(cmd);
     }
@@ -95,13 +102,19 @@ public class IgnoreCommand implements ParadigmModule {
                             if (owner == null || target == null) {
                                 return 0;
                             }
-                            boolean changed = services.getPlayerDataStore().removeIgnoredPlayer(owner.getUUID(), target.getUUID());
-                            if (!changed) {
-                                send(owner, "ignore.not_found", "You do not ignore {player}.", "{player}", target.getName());
-                                return 0;
-                            }
-                            send(owner, "ignore.removed", "You no longer ignore {player}.", "{player}", target.getName());
-                            return 1;
+                            String ownerUuid = owner.getUUID();
+                            String targetUuid = target.getUUID();
+                            String targetName = target.getName();
+                            return StorageCommandSupport.runForPlayer(services, owner, "ignore.remove", () ->
+                                    services.getStorageService().players().removeIgnoredPlayer(ownerUuid, targetUuid),
+                                    (current, changed) -> {
+                                        if (!changed) {
+                                            send(current, "ignore.not_found", "You do not ignore {player}.", "{player}", targetName);
+                                            return;
+                                        }
+                                        send(current, "ignore.removed", "You no longer ignore {player}.", "{player}", targetName);
+                                    },
+                                    "ignore.error_save");
                         }));
         services.getPlatformAdapter().registerCommand(cmd);
     }
@@ -121,4 +134,3 @@ public class IgnoreCommand implements ParadigmModule {
         services.getPlatformAdapter().sendSystemMessage(player, services.getMessageParser().parseMessage(decorated, player));
     }
 }
-

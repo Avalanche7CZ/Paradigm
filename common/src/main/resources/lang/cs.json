@@ -93,25 +93,38 @@
       "user_list_perm": "Trvalé: {groups}",
       "user_list_temp": "Dočasné: -",
       "user_temp_line": "Dočasné {group} do {until}",
-      "duration_invalid": "Neplatná doba. Použij days/weeks/months a amount > 0."
-    }
+      "duration_invalid": "Neplatná doba. Použij days/weeks/months a amount > 0.",
+      "metadata_ok": "Pole {field} pro {group} bylo aktualizováno.",
+      "metadata_fail": "Pole {field} pro {group} se nepodařilo aktualizovat.",
+      "perm_add_ok": "Permission {permission} byla přidána do {group}.",
+      "perm_add_fail": "Permission {permission} se nepodařilo přidat do {group}.",
+      "perm_remove_ok": "Permission {permission} byla odebrána z {group}.",
+      "perm_remove_fail": "Permission {permission} se nepodařilo odebrat z {group}.",
+      "user_perm_add_ok": "Permission {permission} byla přidána hráči.",
+      "user_perm_add_fail": "Permission {permission} se nepodařilo přidat hráči.",
+      "user_perm_remove_ok": "Permission {permission} byla hráči odebrána.",
+      "user_perm_remove_fail": "Permission {permission} se nepodařilo odebrat hráči.",
+      "permission_check_fail": "Permission {permission} se nepodařilo zkontrolovat."
+    },
+    "cancel_request_none": "Nemáš čekající žádost do této skupiny.",
+    "cancel_request_success": "Tvoje žádost o připojení ke skupině {group_name} byla zrušena.",
+    "invite_rate_limit": "Počkej prosím {seconds}s před odesláním další pozvánky."
   },
-
   "mention": {
     "too_frequent_mention_everyone": "Příliš často zmiňujete všechny. Počkejte chvíli.",
     "no_permission_everyone": "Nemáte oprávnění zmiňovat všechny.",
     "too_frequent_mention_player": "Příliš často zmiňujete hráče. Počkejte chvíli.",
     "no_permission_player": "Nemáte oprávnění zmiňovat hráče."
   },
-
   "pm": {
     "player_not_found": "Tento hráč není online.",
     "cannot_message_self": "Nemůžeš poslat zprávu sám sobě.",
     "empty_message": "Zpráva nemůže být prázdná.",
     "no_reply_target": "Nemáš komu odpovědět.",
-    "reply_target_offline": "Poslední hráč z konverzace už není online."
+    "reply_target_offline": "Poslední hráč z konverzace už není online.",
+    "blocked_by_ignore": "Tento hráč tě ignoruje.",
+    "error_send": "Zprávu se nepodařilo odeslat. Zkus to prosím později."
   },
-
   "home": {
     "location_unavailable": "Teď nejde načíst tvoje pozice.",
     "sethome_success": "Home {home} byl nastaven.",
@@ -124,9 +137,13 @@
     "homes_list": "Tvoje homes: {homes}",
     "back_missing": "Pro /back není uložená žádná předchozí pozice.",
     "back_teleported": "Teleport zpět na předchozí pozici proběhl.",
-    "teleport_failed": "Teleport selhal."
+    "teleport_failed": "Teleport selhal.",
+    "invalid_name": "Neplatný název home.",
+    "limit_reached": "Dosáhl jsi limitu homes ({limit}).",
+    "error_save": "Home se nepodařilo uložit. Zkus to prosím později.",
+    "error_load": "Data homes se nepodařilo načíst. Zkus to prosím později.",
+    "error_delete": "Home se nepodařilo smazat. Zkus to prosím později."
   },
-
   "tpa": {
     "player_not_found": "Tento hráč není online.",
     "cannot_target_self": "Nemůžeš cílit sám sebe.",
@@ -143,9 +160,10 @@
     "denied_sender": "{player} odmítl tvůj teleport request.",
     "no_outgoing_request": "Nemáš žádný odchozí teleport request.",
     "cancelled_you": "Zrušil jsi request hráči {player}.",
-    "cancelled_target": "{player} zrušil svůj teleport request."
+    "cancelled_target": "{player} zrušil svůj teleport request.",
+    "blocked_by_ignore": "Tento hráč tě ignoruje.",
+    "error_request": "Teleport request se nepodařilo zpracovat. Zkus to prosím později."
   },
-
   "warp": {
     "invalid_name": "Neplatný název warpu.",
     "location_unavailable": "Teď nejde načíst tvoje pozice.",
@@ -156,32 +174,35 @@
     "teleported": "Teleport na warp {warp} proběhl.",
     "delete_success": "Warp {warp} byl smazán.",
     "list_empty": "Žádné warpy nejsou nastavené.",
-    "list_header": "Warpy ({count}):"
+    "list_header": "Warpy ({count}):",
+    "error_save": "Warp se nepodařilo uložit. Zkus to prosím později.",
+    "error_load": "Data warpů se nepodařilo načíst. Zkus to prosím později.",
+    "error_delete": "Warp se nepodařilo smazat. Zkus to prosím později."
   },
-
   "spawn": {
     "not_set": "Spawn zatím není nastaven. Použij /setspawn.",
     "teleport_failed": "Teleport na spawn selhal.",
     "teleported": "Teleport na spawn proběhl.",
     "location_unavailable": "Nepodařilo se načíst tvoji aktuální pozici.",
-    "set_success": "Spawn byl aktualizován."
+    "set_success": "Spawn byl aktualizován.",
+    "error_load": "Spawn se nepodařilo načíst. Zkus to prosím později.",
+    "error_save": "Spawn se nepodařilo uložit. Zkus to prosím později."
   },
-
   "seen": {
     "online": "{player} je právě online.",
     "need_uuid": "Hráč je offline. Pro přesné hledání použij UUID.",
     "unknown": "Pro tohoto hráče nejsou data /seen.",
-    "last_seen": "Naposledy online: před {ago}."
+    "last_seen": "Naposledy online: před {ago}.",
+    "error_load": "Seen data se nepodařilo načíst. Zkus to prosím později."
   },
-
   "ignore": {
     "self": "Nemůžeš ignorovat sám sebe.",
     "already": "Hráče {player} už ignoruješ.",
     "added": "Nyní ignoruješ hráče {player}.",
     "not_found": "Hráče {player} neignoruješ.",
-    "removed": "Hráče {player} už neignoruješ."
+    "removed": "Hráče {player} už neignoruješ.",
+    "error_save": "Ignore list se nepodařilo aktualizovat. Zkus to prosím později."
   },
-
   "utility": {
     "gamemode_invalid": "Neplatný gamemode.",
     "gamemode_set": "Gamemode {mode} byl nastaven hráči {player}.",
@@ -191,14 +212,17 @@
     "time_set": "Čas byl změněn na {state}.",
     "weather_set": "Počasí bylo změněno na {state}.",
     "speed_cleared": "Speed hráče {player} byl zrušen.",
-    "speed_fail": "Nepodařilo se nastavit speed hráči {player}.",
+    "speed_fail": "Speed hráči {player} se nepodařilo nastavit.",
     "speed_set": "Speed {level} byl nastaven hráči {player}.",
     "feed_ok": "Hráč {player} byl nasycen.",
     "feed_fail": "Nepodařilo se obnovit hlad hráči {player}.",
     "heal_ok": "Hráč {player} byl vyléčen.",
-    "heal_fail": "Nepodařilo se obnovit plné HP hráči {player}."
+    "heal_fail": "Nepodařilo se obnovit plné HP hráči {player}.",
+    "clearinv_fail": "Inventář hráče {player} se nepodařilo vyčistit.",
+    "time_fail": "Čas se nepodařilo změnit.",
+    "weather_fail": "Počasí se nepodařilo změnit.",
+    "no_permission_others": "Nemáš oprávnění ovlivňovat jiné hráče."
   },
-
   "command_toggle": {
     "list": "Stavy příkazů: {list}",
     "status": "{command} je aktuálně {state}.",
@@ -207,5 +231,154 @@
     "protected": "Příkaz {command} je chráněný a nejde vypnout.",
     "unknown": "Neznámý klíč příkazu: {command}",
     "reloaded": "Command toggles byly načteny z commands.json."
+  },
+  "common": {
+    "state_on": "zapnuto",
+    "state_off": "vypnuto",
+    "available": "dostupné",
+    "unavailable": "nedostupné",
+    "success": "úspěch",
+    "failed": "selhalo"
+  },
+  "storage": {
+    "common": {
+      "available": "dostupné",
+      "unavailable": "nedostupné",
+      "success": "úspěch",
+      "failed": "selhalo"
+    },
+    "error": {
+      "provider_unavailable": "Storage je momentálně nedostupné. Zkus to prosím později.",
+      "operation_failed": "Storage operace selhala. Zkus to prosím později."
+    },
+    "status": {
+      "provider": "Storage provider: vybraný={selected}, aktivní={active}.",
+      "identity": "Identita serveru: networkId={networkId}, serverId={serverId}, serverName={serverName}.",
+      "target": "Cíl: {target}.",
+      "migration_version": "Verze migrací: {version}.",
+      "repositories": "Repositories: {state}.",
+      "sql_registered": "SQL server registrován: {state}.",
+      "fallback": "Fallback: aktivní, důvod={reason}.",
+      "last_test": "Poslední test: {state} - {message}.",
+      "dependency_mode": "Režim závislostí: {mode}.",
+      "sqlite_driver": "SQLite driver: {state}.",
+      "mysql_driver": "MySQL/MariaDB driver: {state}."
+    },
+    "test": {
+      "started": "Storage test spuštěn pro provider {provider}.",
+      "failed": "Storage test selhal: {message}.",
+      "provider": "Storage test provider: {provider}.",
+      "config_valid": "Config platný: {state}.",
+      "result": "Připojení/výsledek: {state}.",
+      "migration_version": "Verze migrací: {version}.",
+      "message": "{message}"
+    },
+    "migrate": {
+      "started": "Storage migrace spuštěna: {from} -> {to}.",
+      "failed": "Storage migrace selhala: {message}.",
+      "source_target": "Migrace zdroj={source}, cíl={target}.",
+      "scope": "Scope: networkId={networkId}, serverId={serverId}.",
+      "count_players": "Migrovaní hráči: {count}.",
+      "count_homes": "Migrované homes: {count}.",
+      "count_warps": "Migrované warpy: {count}.",
+      "count_moderation": "Migrované moderation záznamy: {count}.",
+      "count_permissions": "Migrované permission skupiny/uživatelé: {groups}/{users}.",
+      "count_admin": "Migrované admin stavy: {count}.",
+      "failures_skipped": "Selhání/přeskočeno: {failures}/{skipped}.",
+      "final_status": "Finální stav: {state}.",
+      "message": "{message}",
+      "additional_messages": "Další zprávy migrace: {count}.",
+      "options": "Režim={mode}, konflikt={conflict}.",
+      "mode": "Režim={mode}, konflikt={conflict}.",
+      "backup": "JSON záloha: {path}.",
+      "conflicts": "Konflikty: {count}."
+    },
+    "libs": {
+      "status": {
+        "cached": "v cache",
+        "downloaded": "staženo",
+        "missing": "chybí",
+        "not_needed": "není potřeba",
+        "checksum_failed": "checksum selhal",
+        "failed": "selhalo",
+        "loaded": "načteno"
+      },
+      "download": {
+        "started": "Stahuje se runtime knihovna {library}.",
+        "success": "Runtime knihovna {library} byla stažena.",
+        "failed": "Stažení runtime knihovny selhalo: {message}."
+      },
+      "error": {
+        "checksum_failed": "Checksum runtime knihovny selhal.",
+        "driver_load_failed": "Runtime JDBC driver se nepodařilo načíst.",
+        "offline_missing": "Runtime knihovna chybí a stahování je vypnuté.",
+        "insecure_repository": "Repository runtime knihoven musí používat HTTPS."
+      },
+      "cache": {
+        "path": "Cache runtime knihoven: {path}."
+      },
+      "mode": {
+        "runtime_download": "runtime-download"
+      }
+    }
+  },
+  "admin": {
+    "player_not_found": "Hráč nebyl nalezen.",
+    "player_only": "Tento příkaz může použít jen hráč.",
+    "no_permission_others": "Nemáš oprávnění ovlivňovat jiné hráče.",
+    "error_state": "Admin stav se nepodařilo aktualizovat. Zkus to prosím později.",
+    "god_ok": "God mode pro {player}: {state}.",
+    "vanish_ok": "Vanish pro {player}: {state}.",
+    "repair_ok": "Opraveno {count} stacků itemů pro {player}.",
+    "enchant_ok": "Aplikován enchant {enchantment} {level} hráči {player}.",
+    "near_none": "Žádní hráči v dosahu {radius} bloků.",
+    "near_list": "Blízko: {players}",
+    "whois_header": "Whois: {player}",
+    "whois_uuid": "UUID: {uuid}",
+    "whois_world": "Svět: {world}",
+    "whois_pos": "Pozice: {x}, {y}, {z}",
+    "whois_health": "HP: {health}/{max}",
+    "whois_level": "XP level: {level}",
+    "whois_groups": "Skupiny: {groups}",
+    "sudo_missing": "Chybí příkaz.",
+    "sudo_ok": "Příkaz byl spuštěn jako {player}.",
+    "top_fail": "Nepodařilo se najít horní blok na tvé pozici.",
+    "top_ok": "Teleport na horní blok proběhl.",
+    "jump_ok": "Skok o {distance} bloků dopředu.",
+    "inspect_header": "{type} hráče {player}:",
+    "inspect_line": "#{slot}: {count}x {item}",
+    "inspect_empty": "Nenalezeny žádné itemy.",
+    "inspect_more": "...a dalších {count} stacků itemů."
+  },
+  "moderation": {
+    "player_not_found": "Hráč nebyl nalezen.",
+    "duration_invalid": "Neplatná doba. Použij hodnoty jako 30m, 2h, 7d.",
+    "error_save": "Moderation data se nepodařilo uložit. Zkus to prosím později.",
+    "error_load": "Moderation data se nepodařilo načíst. Zkus to prosím později.",
+    "kick_ok": "Hráč {player} byl vyhozen.",
+    "ban_ok": "Hráč {player} byl zabanován.",
+    "unban_ok": "Hráč {player} byl odbanován.",
+    "tempban_ok": "Hráč {player} byl tempbanován na {duration}.",
+    "mute_ok": "Hráč {player} byl umlčen.",
+    "muted": "Byl jsi umlčen. Důvod: {reason}",
+    "tempmute_ok": "Hráč {player} byl umlčen na {duration}.",
+    "tempmuted": "Byl jsi umlčen na {duration}. Důvod: {reason}",
+    "unmute_ok": "Hráč {player} byl odmlčen.",
+    "unmuted": "Byl jsi odmlčen.",
+    "muted_chat_blocked": "Jsi umlčen. Zbývá: {duration}. Důvod: {reason}",
+    "warn_ok": "Hráč {player} byl varován.",
+    "warned": "Dostal jsi varování. Důvod: {reason}",
+    "setjail_fail": "Nepodařilo se načíst tvoji pozici.",
+    "setjail_ok": "Jail pozice byla nastavena.",
+    "jail_not_set": "Jail pozice není nastavena. Nejdřív použij /setjail.",
+    "jail_teleport_fail": "Hráče {player} se nepodařilo teleportovat do jailu.",
+    "jail_ok": "Hráč {player} byl uvězněn.",
+    "jailed": "Byl jsi uvězněn. Důvod: {reason}",
+    "unjail_ok": "Hráč {player} byl propuštěn z jailu.",
+    "unjailed": "Byl jsi propuštěn z jailu.",
+    "no_reason": "Důvod nebyl uveden."
+  },
+  "reload": {
+    "customcommands_success": "Načteno {count} custom commands z configu."
   }
 }

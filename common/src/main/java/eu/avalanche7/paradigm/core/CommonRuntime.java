@@ -2,11 +2,15 @@ package eu.avalanche7.paradigm.core;
 
 import eu.avalanche7.paradigm.ParadigmAPI;
 import eu.avalanche7.paradigm.configs.*;
+import eu.avalanche7.paradigm.data.AdminUtilityDataStore;
+import eu.avalanche7.paradigm.data.ModerationDataStore;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
+import eu.avalanche7.paradigm.data.WarpStore;
 import eu.avalanche7.paradigm.modules.*;
 import eu.avalanche7.paradigm.modules.chat.*;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.storage.StorageService;
 import eu.avalanche7.paradigm.utils.*;
 import eu.avalanche7.paradigm.webeditor.store.WebEditorStore;
 import org.slf4j.Logger;
@@ -50,9 +54,13 @@ public final class CommonRuntime {
         Placeholders placeholders = new Placeholders();
         TaskScheduler taskScheduler = new TaskScheduler(debugLogger);
         PlayerDataStore playerDataStore = new PlayerDataStore(logger, debugLogger, platformAdapter.getConfig());
+        ModerationDataStore moderationDataStore = new ModerationDataStore(logger, debugLogger, platformAdapter.getConfig());
+        AdminUtilityDataStore adminUtilityDataStore = new AdminUtilityDataStore(logger, platformAdapter.getConfig());
+        WarpStore warpStore = new WarpStore(logger, debugLogger, platformAdapter.getConfig());
+        StorageService storageService = new StorageService(logger, debugLogger, platformAdapter.getConfig(), playerDataStore, warpStore, moderationDataStore, adminUtilityDataStore);
         CommandToggleStore commandToggleStore = new CommandToggleStore(logger, debugLogger, platformAdapter.getConfig());
 
-        PermissionsHandler permissionsHandler = new PermissionsHandler(logger, cmConfig, debugLogger, platformAdapter, playerDataStore);
+        PermissionsHandler permissionsHandler = new PermissionsHandler(logger, cmConfig, debugLogger, platformAdapter, playerDataStore, storageService);
 
         MessageParser messageParser = new MessageParser(placeholders, platformAdapter);
         platformAdapter.provideMessageParser(messageParser);
@@ -79,6 +87,9 @@ public final class CommonRuntime {
                 placeholders,
                 taskScheduler,
                 playerDataStore,
+                moderationDataStore,
+                adminUtilityDataStore,
+                storageService,
                 commandToggleStore,
                 platformAdapter,
                 new WebEditorStore()
@@ -94,6 +105,7 @@ public final class CommonRuntime {
 
         // --- modules ---
         List<ParadigmModule> modules = new ArrayList<>();
+        modules.add(new StorageLifecycle());
         modules.add(new eu.avalanche7.paradigm.modules.commands.Help());
         modules.add(new Announcements());
         modules.add(new MOTD());
@@ -117,6 +129,22 @@ public final class CommonRuntime {
         modules.add(new eu.avalanche7.paradigm.modules.commands.SpeedCommand());
         modules.add(new eu.avalanche7.paradigm.modules.commands.FeedCommand());
         modules.add(new eu.avalanche7.paradigm.modules.commands.HealCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.moderation.KickCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.moderation.BanCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.moderation.TempBanCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.moderation.MuteCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.moderation.TempMuteCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.moderation.WarnCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.moderation.JailCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.admin.VanishCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.admin.GodCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.admin.InventoryInspectCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.admin.RepairCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.admin.EnchantCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.admin.SudoCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.admin.NearCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.admin.WhoisCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.admin.MovementUtilityCommand());
         modules.add(new eu.avalanche7.paradigm.modules.commands.Reload());
         modules.add(new eu.avalanche7.paradigm.modules.commands.editor());
 
@@ -215,6 +243,29 @@ public final class CommonRuntime {
         store.registerCommand("sun", true, false);
         store.registerCommand("rain", true, false);
         store.registerCommand("thunder", true, false);
+        store.registerCommand("kick", true, false);
+        store.registerCommand("ban", true, false);
+        store.registerCommand("unban", true, false);
+        store.registerCommand("pardon", true, false);
+        store.registerCommand("tempban", true, false);
+        store.registerCommand("mute", true, false);
+        store.registerCommand("tempmute", true, false);
+        store.registerCommand("unmute", true, false);
+        store.registerCommand("warn", true, false);
+        store.registerCommand("setjail", true, false);
+        store.registerCommand("jail", true, false);
+        store.registerCommand("unjail", true, false);
+        store.registerCommand("vanish", true, false);
+        store.registerCommand("god", true, false);
+        store.registerCommand("invsee", true, false);
+        store.registerCommand("endersee", true, false);
+        store.registerCommand("repair", true, false);
+        store.registerCommand("enchant", true, false);
+        store.registerCommand("sudo", true, false);
+        store.registerCommand("near", true, false);
+        store.registerCommand("whois", true, false);
+        store.registerCommand("top", true, false);
+        store.registerCommand("jump", true, false);
 
         store.registerCommand("tpa", true, false);
         store.registerCommand("tpahere", true, false);

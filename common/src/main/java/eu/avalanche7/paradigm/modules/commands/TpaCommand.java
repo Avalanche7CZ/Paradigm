@@ -3,11 +3,13 @@ package eu.avalanche7.paradigm.modules.commands;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
+import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandContext;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.storage.model.StoredLocation;
 import eu.avalanche7.paradigm.utils.CommandCooldowns;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 
@@ -173,14 +175,25 @@ public class TpaCommand implements ParadigmModule {
             send(requester, "tpa.cannot_target_self", "You cannot target yourself.");
             return 0;
         }
-        if (target.getUUID() != null && requester.getUUID() != null
-                && services.getPlayerDataStore().isIgnoring(target.getUUID(), requester.getUUID())) {
-            send(requester, "tpa.blocked_by_ignore", "That player is ignoring you.");
-            return 0;
-        }
-
         String commandKey = type == TeleportRequestService.RequestType.TPA ? "tpa" : "tpahere";
-        return CommandCooldowns.runCooldownOnly(services, requester, commandKey, () -> createTeleportRequest(requester, target, type));
+        String requesterUuid = requester.getUUID();
+        String targetUuid = target.getUUID();
+        return StorageCommandSupport.runForPlayer(services, requester, "tpa.ignore_check", () ->
+                        targetUuid != null && requesterUuid != null
+                                && services.getStorageService().players().listIgnoredPlayers(targetUuid).contains(requesterUuid.toLowerCase(Locale.ROOT)),
+                (currentRequester, blocked) -> {
+                    IPlayer currentTarget = targetUuid != null ? platform.getPlayerByUuid(targetUuid) : null;
+                    if (currentTarget == null) {
+                        send(currentRequester, "tpa.player_not_found", "That player is not online.");
+                        return;
+                    }
+                    if (blocked) {
+                        send(currentRequester, "tpa.blocked_by_ignore", "That player is ignoring you.");
+                        return;
+                    }
+                    CommandCooldowns.runCooldownOnly(services, currentRequester, commandKey, () -> createTeleportRequest(currentRequester, currentTarget, type));
+                },
+                "tpa.error_request");
     }
 
     private int createTeleportRequest(IPlayer requester, IPlayer target, TeleportRequestService.RequestType type) {
@@ -255,13 +268,13 @@ public class TpaCommand implements ParadigmModule {
             PlayerDataStore.StoredLocation previous = platform.getPlayerLocation(requester).orElse(null);
             if (!teleportPlayer(requester, accepter)) return 0;
             if (previous != null) {
-                services.getPlayerDataStore().setLastLocation(requester, previous);
+                saveBackLocationAsync(requester, previous);
             }
         } else {
             PlayerDataStore.StoredLocation previous = platform.getPlayerLocation(accepter).orElse(null);
             if (!teleportPlayer(accepter, requester)) return 0;
             if (previous != null) {
-                services.getPlayerDataStore().setLastLocation(accepter, previous);
+                saveBackLocationAsync(accepter, previous);
             }
         }
 
@@ -594,5 +607,20 @@ public class TpaCommand implements ParadigmModule {
             return "";
         }
         return value.replace("'", "").replace("\n", " ");
+    }
+
+    private StoredLocation fromDataLocation(PlayerDataStore.StoredLocation location) {
+        return new StoredLocation(location.getWorldId(), location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+    }
+
+    private void saveBackLocationAsync(IPlayer player, PlayerDataStore.StoredLocation location) {
+        if (player == null || location == null) {
+            return;
+        }
+        String uuid = player.getUUID();
+        services.getStorageService().runAsync("tpa.back_save", () -> {
+            services.getStorageService().players().setBackLocation(uuid, fromDataLocation(location));
+            return null;
+        }, services.getTaskScheduler(), ignored -> {}, ignored -> {});
     }
 }

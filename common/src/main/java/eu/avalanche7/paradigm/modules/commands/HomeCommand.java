@@ -8,10 +8,17 @@ import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
+import eu.avalanche7.paradigm.storage.model.StoredHome;
+import eu.avalanche7.paradigm.storage.model.StoredLocation;
+import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
 import eu.avalanche7.paradigm.utils.CommandCooldowns;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 public class HomeCommand implements ParadigmModule {
@@ -22,6 +29,7 @@ public class HomeCommand implements ParadigmModule {
 
     private Services services;
     private IPlatformAdapter platform;
+    private final Map<String, List<String>> homeSuggestionCache = new ConcurrentHashMap<>();
 
     @Override
     public String getName() {
@@ -67,7 +75,16 @@ public class HomeCommand implements ParadigmModule {
                     return;
                 }
                 services.getPlatformAdapter().getPlayerLocation(player)
-                        .ifPresent(location -> services.getPlayerDataStore().setLastLocation(player, location));
+                        .ifPresent(location -> services.getStorageService().runAsync(
+                                "home.death_back_save",
+                                () -> {
+                                    services.getStorageService().players().setBackLocation(player.getUUID(), fromDataLocation(location));
+                                    return null;
+                                },
+                                services.getTaskScheduler(),
+                                ignored -> {},
+                                ignored -> {}
+                        ));
             });
         }
     }
@@ -210,27 +227,42 @@ public class HomeCommand implements ParadigmModule {
             send(player, "home.invalid_name", "Invalid home name. Use letters, numbers, _ or -.");
             return 0;
         }
-        int homeLimit = resolveHomeLimit(player);
-        boolean alreadyExists = services.getPlayerDataStore().getHome(player, normalized) != null;
-        int homeCount = services.getPlayerDataStore().getHomeNames(player).size();
-        if (!alreadyExists && homeCount >= homeLimit) {
-            sendWithPlaceholders(player, "home.limit_reached", "You have reached your home limit ({count}/{limit}).",
-                    "{count}", String.valueOf(homeCount),
-                    "{limit}", String.valueOf(homeLimit));
+        String homeKey = PlayerDataStore.normalizeHomeKey(normalized);
+        if (homeKey == null) {
+            send(player, "home.invalid_name", "Invalid home name. Use letters, numbers, _ or -.");
             return 0;
         }
-
-        // Ensure playerdata.json exists even if location capture fails.
-        services.getPlayerDataStore().ensureExists(player);
         PlayerDataStore.StoredLocation location = platform.getPlayerLocation(player).orElse(null);
         if (location == null) {
             send(player, "home.location_unavailable", "Unable to read your location right now.");
             return 0;
         }
 
-        services.getPlayerDataStore().setHome(player, normalized, location);
-        send(player, "home.sethome_success", "Home {home} has been set.", "{home}", normalized);
-        return 1;
+        int homeLimit = resolveHomeLimit(player);
+        String playerUuid = player.getUUID();
+        String playerName = player.getName();
+        return StorageCommandSupport.runForPlayer(services, player, "home.sethome", () -> {
+            boolean alreadyExists = services.getStorageService().players().getHome(playerUuid, homeKey).isPresent();
+            List<StoredHome> homes = services.getStorageService().players().listHomes(playerUuid);
+            int homeCount = homes.size();
+            if (!alreadyExists && homeCount >= homeLimit) {
+                return new SetHomeResult(false, homeCount, List.copyOf(homes), null);
+            }
+            long now = System.currentTimeMillis();
+            services.getStorageService().players().upsertProfile(new StoredPlayerProfile(playerUuid, playerName, now, now));
+            services.getStorageService().players().saveHome(new StoredHome(playerUuid, homeKey, fromDataLocation(location), now, now));
+            List<StoredHome> updatedHomes = services.getStorageService().players().listHomes(playerUuid);
+            return new SetHomeResult(true, updatedHomes.size(), List.copyOf(updatedHomes), null);
+        }, (current, result) -> {
+            updateHomeCache(playerUuid, result.homes());
+            if (!result.saved()) {
+                sendWithPlaceholders(current, "home.limit_reached", "You have reached your home limit ({count}/{limit}).",
+                        "{count}", String.valueOf(result.count()),
+                        "{limit}", String.valueOf(homeLimit));
+                return;
+            }
+            send(current, "home.sethome_success", "Home {home} has been set.", "{home}", normalized);
+        }, "home.error_save");
     }
 
     private int executeHome(IPlayer player, String homeName) {
@@ -241,13 +273,18 @@ public class HomeCommand implements ParadigmModule {
             send(player, "home.invalid_name", "Invalid home name. Use letters, numbers, _ or -.");
             return 0;
         }
-        PlayerDataStore.HomeEntry home = services.getPlayerDataStore().getHome(player, normalized);
-        if (home == null || home.getLocation() == null) {
-            send(player, "home.home_not_found", "Home {home} was not found.", "{home}", normalized);
-            return 0;
-        }
-
-        return CommandCooldowns.run(services, player, "home", () -> teleportHome(player, normalized, home.getLocation()));
+        String homeKey = PlayerDataStore.normalizeHomeKey(normalized);
+        String playerUuid = player.getUUID();
+        return StorageCommandSupport.runForPlayer(services, player, "home.load", () ->
+                homeKey != null ? services.getStorageService().players().getHome(playerUuid, homeKey).orElse(null) : null,
+                (current, home) -> {
+                    if (home == null || home.location() == null) {
+                        send(current, "home.home_not_found", "Home {home} was not found.", "{home}", normalized);
+                        return;
+                    }
+                    CommandCooldowns.run(services, current, "home", () -> teleportHome(current, normalized, toDataLocation(home.location())));
+                },
+                "home.error_load");
     }
 
     private int teleportHome(IPlayer player, String normalized, PlayerDataStore.StoredLocation destination) {
@@ -257,7 +294,7 @@ public class HomeCommand implements ParadigmModule {
             return 0;
         }
         if (current != null) {
-            services.getPlayerDataStore().setLastLocation(player, current);
+            saveBackLocationAsync(player, current, "home.back_save");
         }
 
         send(player, "home.teleported", "Teleported to home {home}.", "{home}", normalized);
@@ -272,32 +309,49 @@ public class HomeCommand implements ParadigmModule {
             send(player, "home.invalid_name", "Invalid home name. Use letters, numbers, _ or -.");
             return 0;
         }
-        boolean deleted = services.getPlayerDataStore().deleteHome(player, normalized);
-        if (!deleted) {
-            send(player, "home.delhome_missing", "Home {home} does not exist.", "{home}", normalized);
-            return 0;
-        }
-
-        send(player, "home.delhome_success", "Home {home} has been deleted.", "{home}", normalized);
-        return 1;
+        String homeKey = PlayerDataStore.normalizeHomeKey(normalized);
+        String playerUuid = player.getUUID();
+        return StorageCommandSupport.runForPlayer(services, player, "home.delete", () -> {
+            boolean deleted = homeKey != null && services.getStorageService().players().deleteHome(playerUuid, homeKey);
+            List<StoredHome> homes = services.getStorageService().players().listHomes(playerUuid);
+            return new DeleteHomeResult(deleted, List.copyOf(homes));
+        }, (current, result) -> {
+            updateHomeCache(playerUuid, result.homes());
+            if (!result.deleted()) {
+                send(current, "home.delhome_missing", "Home {home} does not exist.", "{home}", normalized);
+                return;
+            }
+            send(current, "home.delhome_success", "Home {home} has been deleted.", "{home}", normalized);
+        }, "home.error_delete");
     }
 
     private int executeHomes(IPlayer player) {
         if (player == null) return 0;
 
-        List<String> homes = services.getPlayerDataStore().getHomeNames(player);
+        String playerUuid = player.getUUID();
+        return StorageCommandSupport.runForPlayer(services, player, "home.list", () -> services.getStorageService().players().listHomes(playerUuid).stream()
+                        .sorted(Comparator.comparing(StoredHome::name, String.CASE_INSENSITIVE_ORDER))
+                        .toList(),
+                (current, homes) -> {
+                    updateHomeCache(playerUuid, homes);
+                    sendHomes(current, homes);
+                },
+                "home.error_load");
+    }
+
+    private void sendHomes(IPlayer player, List<StoredHome> homes) {
         if (homes.isEmpty()) {
             send(player, "home.homes_empty", "You do not have any homes yet.");
-            return 1;
+            return;
         }
 
         send(player, "home.homes_header", "Homes ({count}):", "{count}", String.valueOf(homes.size()));
-        for (String homeName : homes) {
-            PlayerDataStore.HomeEntry home = services.getPlayerDataStore().getHome(player, homeName);
+        for (StoredHome home : homes) {
+            String homeName = home.name();
             String hoverText = "Click to teleport";
-            if (home != null && home.getLocation() != null) {
-                PlayerDataStore.StoredLocation loc = home.getLocation();
-                hoverText = String.format("%s | %.1f %.1f %.1f", loc.getWorldId(), loc.getX(), loc.getY(), loc.getZ());
+            if (home != null && home.location() != null) {
+                StoredLocation loc = home.location();
+                hoverText = String.format("%s | %.1f %.1f %.1f", loc.worldId(), loc.x(), loc.y(), loc.z());
             }
 
             String safeHome = safe(homeName);
@@ -310,19 +364,23 @@ public class HomeCommand implements ParadigmModule {
                             .onClickRunCommand("/home " + safeHome));
             platform.sendSystemMessage(player, line);
         }
-        return 1;
     }
 
     private int executeBack(IPlayer player) {
         if (player == null) return 0;
 
-        PlayerDataStore.StoredLocation last = services.getPlayerDataStore().getLastLocation(player);
-        if (last == null) {
-            send(player, "home.back_missing", "No previous location saved for /back.");
-            return 0;
-        }
-
-        return CommandCooldowns.run(services, player, "back", () -> teleportBack(player, last));
+        String playerUuid = player.getUUID();
+        return StorageCommandSupport.runForPlayer(services, player, "home.back_load", () ->
+                services.getStorageService().players().getBackLocation(playerUuid).orElse(null),
+                (current, storedLast) -> {
+                    if (storedLast == null) {
+                        send(current, "home.back_missing", "No previous location saved for /back.");
+                        return;
+                    }
+                    PlayerDataStore.StoredLocation last = toDataLocation(storedLast);
+                    CommandCooldowns.run(services, current, "back", () -> teleportBack(current, last));
+                },
+                "home.error_load");
     }
 
     private int teleportBack(IPlayer player, PlayerDataStore.StoredLocation last) {
@@ -333,7 +391,7 @@ public class HomeCommand implements ParadigmModule {
         }
 
         if (now != null) {
-            services.getPlayerDataStore().setLastLocation(player, now);
+            saveBackLocationAsync(player, now, "home.back_swap_save");
         }
 
         send(player, "home.back_teleported", "Teleported back to your previous location.");
@@ -342,7 +400,19 @@ public class HomeCommand implements ParadigmModule {
 
     private List<String> homeSuggestions(IPlayer player) {
         if (player == null) return List.of();
-        return services.getPlayerDataStore().getHomeNames(player);
+        String uuid = player.getUUID();
+        if (uuid == null || uuid.isBlank() || services == null || services.getStorageService() == null) {
+            return List.of();
+        }
+        try {
+            List<StoredHome> homes = services.getStorageService().players().listHomes(uuid);
+            updateHomeCache(uuid, homes);
+        } catch (Throwable t) {
+            if (services.getDebugLogger() != null) {
+                services.getDebugLogger().debugLog("HomeCommand: failed to refresh home suggestions: " + t);
+            }
+        }
+        return homeSuggestionCache.getOrDefault(uuid, List.of());
     }
 
     private int resolveHomeLimit(IPlayer player) {
@@ -397,5 +467,40 @@ public class HomeCommand implements ParadigmModule {
                 .replace("'", "")
                 .replace("\"", "")
                 .replace("\n", " ");
+    }
+
+    private StoredLocation fromDataLocation(PlayerDataStore.StoredLocation location) {
+        return new StoredLocation(location.getWorldId(), location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+    }
+
+    private PlayerDataStore.StoredLocation toDataLocation(StoredLocation location) {
+        return new PlayerDataStore.StoredLocation(location.worldId(), location.x(), location.y(), location.z(), location.yaw(), location.pitch());
+    }
+
+    private void updateHomeCache(String uuid, List<StoredHome> homes) {
+        if (uuid == null) {
+            return;
+        }
+        homeSuggestionCache.put(uuid, homes.stream()
+                .map(StoredHome::name)
+                .sorted(String.CASE_INSENSITIVE_ORDER)
+                .toList());
+    }
+
+    private void saveBackLocationAsync(IPlayer player, PlayerDataStore.StoredLocation location, String operation) {
+        if (player == null || location == null) {
+            return;
+        }
+        String uuid = player.getUUID();
+        services.getStorageService().runAsync(operation, () -> {
+            services.getStorageService().players().setBackLocation(uuid, fromDataLocation(location));
+            return null;
+        }, services.getTaskScheduler(), ignored -> {}, ignored -> {});
+    }
+
+    private record SetHomeResult(boolean saved, int count, List<StoredHome> homes, String message) {
+    }
+
+    private record DeleteHomeResult(boolean deleted, List<StoredHome> homes) {
     }
 }

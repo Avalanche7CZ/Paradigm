@@ -1,8 +1,11 @@
 package eu.avalanche7.paradigm.core;
 
 import eu.avalanche7.paradigm.configs.*;
+import eu.avalanche7.paradigm.data.AdminUtilityDataStore;
+import eu.avalanche7.paradigm.data.ModerationDataStore;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.storage.StorageService;
 import eu.avalanche7.paradigm.utils.*;
 import org.slf4j.Logger;
 import eu.avalanche7.paradigm.webeditor.store.WebEditorStore;
@@ -27,6 +30,9 @@ public class Services {
     private final Placeholders placeholdersInstance;
     private final TaskScheduler taskSchedulerInstance;
     private final PlayerDataStore playerDataStoreInstance;
+    private final ModerationDataStore moderationDataStoreInstance;
+    private final AdminUtilityDataStore adminUtilityDataStoreInstance;
+    private final StorageService storageServiceInstance;
     private final GroupChatManager groupChatManagerInstance;
     private final CommandToggleStore commandToggleStoreInstance;
     private final IPlatformAdapter platformAdapter;
@@ -51,6 +57,9 @@ public class Services {
             Placeholders placeholders,
             TaskScheduler taskScheduler,
             PlayerDataStore playerDataStore,
+            ModerationDataStore moderationDataStore,
+            AdminUtilityDataStore adminUtilityDataStore,
+            StorageService storageService,
             CommandToggleStore commandToggleStore,
             IPlatformAdapter platformAdapter,
             WebEditorStore webEditorStore
@@ -71,6 +80,9 @@ public class Services {
         this.placeholdersInstance = placeholders;
         this.taskSchedulerInstance = taskScheduler;
         this.playerDataStoreInstance = playerDataStore;
+        this.moderationDataStoreInstance = moderationDataStore;
+        this.adminUtilityDataStoreInstance = adminUtilityDataStore;
+        this.storageServiceInstance = storageService;
         this.commandToggleStoreInstance = commandToggleStore;
         this.platformAdapter = platformAdapter;
         this.webEditorStore = webEditorStore != null ? webEditorStore : new WebEditorStore();
@@ -135,6 +147,18 @@ public class Services {
 
     public PlayerDataStore getPlayerDataStore() {
         return playerDataStoreInstance;
+    }
+
+    public ModerationDataStore getModerationDataStore() {
+        return moderationDataStoreInstance;
+    }
+
+    public AdminUtilityDataStore getAdminUtilityDataStore() {
+        return adminUtilityDataStoreInstance;
+    }
+
+    public StorageService getStorageService() {
+        return storageServiceInstance;
     }
 
     public CommandToggleStore getCommandToggleStore() {

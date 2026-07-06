@@ -2,6 +2,10 @@ package eu.avalanche7.paradigm.utils.PermissionAPI;
 
 import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.storage.model.StoredPermissionGroup;
+import eu.avalanche7.paradigm.storage.model.StoredPermissionNode;
+import eu.avalanche7.paradigm.storage.model.StoredUserPermissionData;
+import eu.avalanche7.paradigm.storage.repository.PermissionRepository;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 import org.slf4j.Logger;
 
@@ -14,6 +18,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -28,6 +33,8 @@ public class PermissionAPI {
     private final PermissionDataStore dataStore;
     private final PlayerDataStore playerDataStore;
     private final ReadWriteLock stateLock = new ReentrantReadWriteLock();
+    private volatile PermissionRepository permissionRepository;
+    private volatile BiConsumer<String, Runnable> asyncPersistenceExecutor;
 
     private PermissionDataStore.PermissionState state = PermissionDataStore.PermissionState.createDefault();
 
@@ -38,19 +45,35 @@ public class PermissionAPI {
         this.playerDataStore = playerDataStore;
     }
 
+    public void setPermissionRepository(PermissionRepository permissionRepository) {
+        this.permissionRepository = permissionRepository;
+    }
+
+    public void setAsyncPersistenceExecutor(BiConsumer<String, Runnable> asyncPersistenceExecutor) {
+        this.asyncPersistenceExecutor = asyncPersistenceExecutor;
+    }
+
     public void initialize() {
         reload();
     }
 
     public void reload() {
-        PermissionDataStore.PermissionState loaded = dataStore.load();
+        PermissionDataStore.PermissionState loaded;
+        PermissionRepository repository = this.permissionRepository;
+        try {
+            loaded = repository != null ? loadFromRepository(repository) : dataStore.load();
+        } catch (Throwable t) {
+            logger.warn("Paradigm: Failed to reload internal permissions from storage, keeping last known cache. {}", t.getMessage());
+            debugLogger.debugLog("[PermissionAPI] repository reload failed: " + t);
+            return;
+        }
         stateLock.writeLock().lock();
         try {
             this.state = loaded;
         } finally {
             stateLock.writeLock().unlock();
         }
-        logger.info("Paradigm: Internal PermissionAPI loaded (groups={}, users={}).", loaded.groups.size(), loaded.users.size());
+        logger.info("Paradigm: Internal PermissionAPI loaded (groups={}, users={}, source={}).", loaded.groups.size(), loaded.users.size(), repository != null ? "repository" : "json");
     }
 
     public boolean createGroup(String groupName) {
@@ -847,12 +870,233 @@ public class PermissionAPI {
         return denied ? "-" + trimmed : trimmed;
     }
 
+    private PermissionDataStore.PermissionState loadFromRepository(PermissionRepository repository) {
+        PermissionDataStore.PermissionState loaded = new PermissionDataStore.PermissionState();
+        loaded.groups = new LinkedHashMap<>();
+        loaded.users = new LinkedHashMap<>();
+
+        for (StoredPermissionGroup group : repository.listGroups()) {
+            if (group == null) {
+                continue;
+            }
+            String groupName = normalizeGroupName(group.name());
+            if (groupName == null) {
+                continue;
+            }
+            PermissionDataStore.GroupEntry entry = new PermissionDataStore.GroupEntry();
+            entry.description = group.description() != null ? group.description() : "";
+            entry.prefix = group.prefix() != null ? group.prefix() : "";
+            entry.suffix = group.suffix() != null ? group.suffix() : "";
+            entry.weight = group.weight();
+            entry.inherits = new ArrayList<>();
+            for (String parent : group.parents()) {
+                String normalizedParent = normalizeGroupName(parent);
+                if (normalizedParent != null && !entry.inherits.contains(normalizedParent)) {
+                    entry.inherits.add(normalizedParent);
+                }
+            }
+            entry.permissions = new ArrayList<>();
+            for (StoredPermissionNode node : group.permissions()) {
+                String rule = nodeToRule(node);
+                if (rule != null && !entry.permissions.contains(rule)) {
+                    entry.permissions.add(rule);
+                }
+            }
+            entry.normalize();
+            loaded.groups.put(groupName, entry);
+        }
+
+        if (loaded.groups.isEmpty()) {
+            loaded = PermissionDataStore.PermissionState.createDefault();
+            saveStateToRepository(repository, loaded);
+            return loaded;
+        }
+
+        long now = System.currentTimeMillis();
+        for (StoredUserPermissionData userData : repository.listUsers()) {
+            if (userData == null) {
+                continue;
+            }
+            String uuid = normalizeUuid(userData.uuid());
+            if (uuid == null) {
+                continue;
+            }
+            PermissionDataStore.UserEntry entry = new PermissionDataStore.UserEntry();
+            for (StoredUserPermissionData.GroupAssignment group : userData.groups()) {
+                if (group == null) {
+                    continue;
+                }
+                String groupName = normalizeGroupName(group.groupName());
+                if (groupName == null) {
+                    continue;
+                }
+                if (group.expiresAtMs() != null && group.expiresAtMs() > now) {
+                    playerDataStore.setTemporaryGroup(uuid, groupName, group.expiresAtMs(), group.assignedAtMs(), group.assignedBy());
+                } else if (group.expiresAtMs() == null && !entry.groups.contains(groupName)) {
+                    entry.groups.add(groupName);
+                }
+            }
+            for (StoredPermissionNode node : userData.permissions()) {
+                String rule = nodeToRule(node);
+                if (rule != null && !entry.permissions.contains(rule)) {
+                    entry.permissions.add(rule);
+                }
+            }
+            entry.normalize();
+            loaded.users.put(uuid, entry);
+        }
+
+        loaded.normalize();
+        return loaded;
+    }
+
+    private void saveStateToRepository(PermissionRepository repository, PermissionDataStore.PermissionState snapshot) {
+        snapshot.normalize();
+
+        Set<String> desiredGroups = new LinkedHashSet<>(snapshot.groups.keySet());
+        for (StoredPermissionGroup existing : repository.listGroups()) {
+            String existingName = existing != null ? normalizeGroupName(existing.name()) : null;
+            if (existingName != null && !desiredGroups.contains(existingName)) {
+                repository.deleteGroup(existingName);
+            }
+        }
+
+        for (Map.Entry<String, PermissionDataStore.GroupEntry> groupEntry : snapshot.groups.entrySet()) {
+            String groupName = normalizeGroupName(groupEntry.getKey());
+            PermissionDataStore.GroupEntry entry = groupEntry.getValue();
+            if (groupName == null || entry == null) {
+                continue;
+            }
+            entry.normalize();
+            List<StoredPermissionNode> permissions = new ArrayList<>();
+            for (String rule : entry.permissions) {
+                StoredPermissionNode node = ruleToNode(rule);
+                if (node != null) {
+                    permissions.add(node);
+                }
+            }
+            repository.saveGroup(new StoredPermissionGroup(
+                    groupName,
+                    entry.description != null ? entry.description : "",
+                    entry.prefix != null ? entry.prefix : "",
+                    entry.suffix != null ? entry.suffix : "",
+                    entry.weight,
+                    entry.inherits != null ? List.copyOf(entry.inherits) : List.of(),
+                    permissions
+            ));
+        }
+
+        for (Map.Entry<String, PermissionDataStore.UserEntry> userEntry : snapshot.users.entrySet()) {
+            String uuid = normalizeUuid(userEntry.getKey());
+            PermissionDataStore.UserEntry entry = userEntry.getValue();
+            if (uuid == null || entry == null) {
+                continue;
+            }
+            entry.normalize();
+            List<StoredUserPermissionData.GroupAssignment> groups = new ArrayList<>();
+            for (String group : entry.groups) {
+                String groupName = normalizeGroupName(group);
+                if (groupName != null) {
+                    groups.add(new StoredUserPermissionData.GroupAssignment(groupName, null, "", 0L));
+                }
+            }
+            for (PlayerDataStore.TemporaryGroupEntry temp : playerDataStore.getTemporaryGroups(uuid)) {
+                if (temp == null || temp.getGroup() == null || temp.getGroup().isBlank()) {
+                    continue;
+                }
+                groups.add(new StoredUserPermissionData.GroupAssignment(temp.getGroup(), temp.getExpiresAtMs(), temp.getAssignedBy(), temp.getAssignedAtMs()));
+            }
+
+            List<StoredPermissionNode> permissions = new ArrayList<>();
+            for (String rule : entry.permissions) {
+                StoredPermissionNode node = ruleToNode(rule);
+                if (node != null) {
+                    permissions.add(node);
+                }
+            }
+            repository.saveUser(new StoredUserPermissionData(uuid, "", groups, permissions));
+        }
+    }
+
+    private static String normalizeUuid(String uuid) {
+        if (uuid == null) {
+            return null;
+        }
+        String normalized = uuid.trim().toLowerCase(Locale.ROOT);
+        return normalized.isBlank() ? null : normalized;
+    }
+
+    private static String nodeToRule(StoredPermissionNode node) {
+        if (node == null) {
+            return null;
+        }
+        return normalizePermissionRule(node.permission(), node.denied());
+    }
+
+    private static StoredPermissionNode ruleToNode(String rule) {
+        String allowRule = normalizePermissionRule(rule, false);
+        if (allowRule == null) {
+            return null;
+        }
+        boolean denied = allowRule.startsWith("-");
+        String permission = denied ? allowRule.substring(1) : allowRule;
+        return new StoredPermissionNode(permission, denied, null, null);
+    }
+
     private void saveLocked() {
         if (state == null) {
             return;
         }
         state.normalize();
-        dataStore.save(state);
+        PermissionRepository repository = this.permissionRepository;
+        PermissionDataStore.PermissionState snapshot = copyState(state);
+        try {
+            if (repository != null) {
+                BiConsumer<String, Runnable> executor = this.asyncPersistenceExecutor;
+                if (executor != null) {
+                    executor.accept("permissions.save", () -> saveStateToRepository(repository, snapshot));
+                } else {
+                    saveStateToRepository(repository, snapshot);
+                }
+            } else {
+                dataStore.save(snapshot);
+            }
+        } catch (Throwable t) {
+            logger.warn("Paradigm: Failed to save internal permissions to storage: {}", t.getMessage());
+            debugLogger.debugLog("[PermissionAPI] save failed: " + t);
+        }
+    }
+
+    private static PermissionDataStore.PermissionState copyState(PermissionDataStore.PermissionState source) {
+        PermissionDataStore.PermissionState copy = new PermissionDataStore.PermissionState();
+        copy.version = source.version;
+        copy.defaultGroup = source.defaultGroup;
+        copy.groups = new LinkedHashMap<>();
+        for (Map.Entry<String, PermissionDataStore.GroupEntry> entry : source.groups.entrySet()) {
+            PermissionDataStore.GroupEntry groupCopy = new PermissionDataStore.GroupEntry();
+            PermissionDataStore.GroupEntry group = entry.getValue();
+            if (group != null) {
+                groupCopy.description = group.description;
+                groupCopy.prefix = group.prefix;
+                groupCopy.suffix = group.suffix;
+                groupCopy.weight = group.weight;
+                groupCopy.permissions = group.permissions != null ? new ArrayList<>(group.permissions) : new ArrayList<>();
+                groupCopy.inherits = group.inherits != null ? new ArrayList<>(group.inherits) : new ArrayList<>();
+            }
+            copy.groups.put(entry.getKey(), groupCopy);
+        }
+        copy.users = new LinkedHashMap<>();
+        for (Map.Entry<String, PermissionDataStore.UserEntry> entry : source.users.entrySet()) {
+            PermissionDataStore.UserEntry userCopy = new PermissionDataStore.UserEntry();
+            PermissionDataStore.UserEntry user = entry.getValue();
+            if (user != null) {
+                userCopy.permissions = user.permissions != null ? new ArrayList<>(user.permissions) : new ArrayList<>();
+                userCopy.groups = user.groups != null ? new ArrayList<>(user.groups) : new ArrayList<>();
+            }
+            copy.users.put(entry.getKey(), userCopy);
+        }
+        copy.normalize();
+        return copy;
     }
 
 }

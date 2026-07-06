@@ -6,6 +6,7 @@ import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.storage.StorageService;
 import eu.avalanche7.paradigm.utils.PermissionAPI.PermissionAPI;
 import eu.avalanche7.paradigm.utils.PermissionAPI.PermissionDataStore;
 import org.slf4j.Logger;
@@ -23,6 +24,7 @@ public class PermissionsHandler {
     private final CMConfig cmConfig;
     private final DebugLogger debugLogger;
     private final IPlatformAdapter platform;
+    private final StorageService storageService;
     private final Set<UUID> discoveryWarmedUsers = ConcurrentHashMap.newKeySet();
     private final PermissionAPI internalPermissionApi;
     private final PermissionNodeRegistry permissionNodeRegistry;
@@ -35,6 +37,7 @@ public class PermissionsHandler {
     public static final String GROUPCHAT_PERMISSION = "paradigm.groupchat";
     public static final String RELOAD_PERMISSION = "paradigm.reload";
     public static final String COMMAND_TOGGLE_PERMISSION = "paradigm.command.toggle";
+    public static final String STORAGE_MANAGE_PERMISSION = "paradigm.storage.manage";
     public static final String GROUP_MANAGE_PERMISSION = "paradigm.group.manage";
     public static final String EDITOR_PERMISSION = "paradigm.editor";
     public static final String PRIVATE_MESSAGE_PERMISSION = "paradigm.msg";
@@ -76,6 +79,29 @@ public class PermissionsHandler {
     public static final String WARP_DELETE_PERMISSION = "paradigm.warp.delete";
     public static final String WARP_LIST_PERMISSION = "paradigm.warps";
     public static final String WARP_INFO_PERMISSION = "paradigm.warp.info";
+    public static final String KICK_PERMISSION = "paradigm.kick";
+    public static final String BAN_PERMISSION = "paradigm.ban";
+    public static final String TEMPBAN_PERMISSION = "paradigm.tempban";
+    public static final String MUTE_PERMISSION = "paradigm.mute";
+    public static final String TEMPMUTE_PERMISSION = "paradigm.tempmute";
+    public static final String WARN_PERMISSION = "paradigm.warn";
+    public static final String JAIL_PERMISSION = "paradigm.jail";
+    public static final String JAIL_MANAGE_PERMISSION = "paradigm.jail.manage";
+    public static final String VANISH_PERMISSION = "paradigm.vanish";
+    public static final String VANISH_OTHERS_PERMISSION = "paradigm.vanish.others";
+    public static final String GOD_PERMISSION = "paradigm.god";
+    public static final String GOD_OTHERS_PERMISSION = "paradigm.god.others";
+    public static final String INVSEE_PERMISSION = "paradigm.invsee";
+    public static final String ENDERSEE_PERMISSION = "paradigm.endersee";
+    public static final String REPAIR_PERMISSION = "paradigm.repair";
+    public static final String REPAIR_OTHERS_PERMISSION = "paradigm.repair.others";
+    public static final String ENCHANT_PERMISSION = "paradigm.enchant";
+    public static final String ENCHANT_OTHERS_PERMISSION = "paradigm.enchant.others";
+    public static final String SUDO_PERMISSION = "paradigm.sudo";
+    public static final String NEAR_PERMISSION = "paradigm.near";
+    public static final String WHOIS_PERMISSION = "paradigm.whois";
+    public static final String TOP_PERMISSION = "paradigm.top";
+    public static final String JUMP_PERMISSION = "paradigm.jump";
 
     public static final int MENTION_EVERYONE_PERMISSION_LEVEL = 2;
     public static final int MENTION_PLAYER_PERMISSION_LEVEL = 0;
@@ -83,6 +109,7 @@ public class PermissionsHandler {
     public static final int RESTART_MANAGE_PERMISSION_LEVEL = 2;
     public static final int RELOAD_PERMISSION_LEVEL = 2;
     public static final int COMMAND_TOGGLE_PERMISSION_LEVEL = 2;
+    public static final int STORAGE_MANAGE_PERMISSION_LEVEL = 2;
     public static final int GROUP_MANAGE_PERMISSION_LEVEL = 2;
     public static final int EDITOR_PERMISSION_LEVEL = 2;
     public static final int PRIVATE_MESSAGE_PERMISSION_LEVEL = 0;
@@ -122,18 +149,46 @@ public class PermissionsHandler {
     public static final int WARP_DELETE_PERMISSION_LEVEL = 2;
     public static final int WARP_LIST_PERMISSION_LEVEL = 0;
     public static final int WARP_INFO_PERMISSION_LEVEL = 0;
+    public static final int KICK_PERMISSION_LEVEL = 2;
+    public static final int BAN_PERMISSION_LEVEL = 2;
+    public static final int TEMPBAN_PERMISSION_LEVEL = 2;
+    public static final int MUTE_PERMISSION_LEVEL = 2;
+    public static final int TEMPMUTE_PERMISSION_LEVEL = 2;
+    public static final int WARN_PERMISSION_LEVEL = 2;
+    public static final int JAIL_PERMISSION_LEVEL = 2;
+    public static final int JAIL_MANAGE_PERMISSION_LEVEL = 2;
+    public static final int VANISH_PERMISSION_LEVEL = 2;
+    public static final int VANISH_OTHERS_PERMISSION_LEVEL = 2;
+    public static final int GOD_PERMISSION_LEVEL = 2;
+    public static final int GOD_OTHERS_PERMISSION_LEVEL = 2;
+    public static final int INVSEE_PERMISSION_LEVEL = 2;
+    public static final int ENDERSEE_PERMISSION_LEVEL = 2;
+    public static final int REPAIR_PERMISSION_LEVEL = 2;
+    public static final int REPAIR_OTHERS_PERMISSION_LEVEL = 2;
+    public static final int ENCHANT_PERMISSION_LEVEL = 2;
+    public static final int ENCHANT_OTHERS_PERMISSION_LEVEL = 2;
+    public static final int SUDO_PERMISSION_LEVEL = 2;
+    public static final int NEAR_PERMISSION_LEVEL = 2;
+    public static final int WHOIS_PERMISSION_LEVEL = 2;
+    public static final int TOP_PERMISSION_LEVEL = 2;
+    public static final int JUMP_PERMISSION_LEVEL = 2;
 
-    public PermissionsHandler(Logger logger, CMConfig cmConfig, DebugLogger debugLogger, IPlatformAdapter platform, PlayerDataStore playerDataStore) {
+    public PermissionsHandler(Logger logger, CMConfig cmConfig, DebugLogger debugLogger, IPlatformAdapter platform, PlayerDataStore playerDataStore, StorageService storageService) {
         this.logger = logger;
         this.cmConfig = cmConfig;
         this.debugLogger = debugLogger;
         this.platform = platform;
+        this.storageService = storageService;
         this.internalPermissionApi = new PermissionAPI(
                 logger,
                 debugLogger,
                 new PermissionDataStore(logger, debugLogger, platform != null ? platform.getConfig() : null),
                 playerDataStore
         );
+        if (storageService != null && storageService.isSqlActive()) {
+            this.internalPermissionApi.setPermissionRepository(storageService.permissions());
+            this.internalPermissionApi.setAsyncPersistenceExecutor(storageService::runStorageAsync);
+        }
         this.permissionNodeRegistry = new PermissionNodeRegistry(logger, debugLogger, platform != null ? platform.getConfig() : null);
         Placeholders.setPermissionMetaResolver(this::resolvePermissionMeta);
     }
@@ -297,7 +352,11 @@ public class PermissionsHandler {
 
     public void refreshCustomCommandPermissions() {
         if (isInternalPermissionsEnabled()) {
-            internalPermissionApi.reload();
+            if (storageService != null && storageService.isSqlActive()) {
+                storageService.runStorageAsync("permissions.reload", internalPermissionApi::reload);
+            } else {
+                internalPermissionApi.reload();
+            }
         }
         registerPermissionsWithLuckPerms();
     }
@@ -681,6 +740,7 @@ public class PermissionsHandler {
         if (permission.equals(GROUPCHAT_PERMISSION)) return 2;
         if (permission.equals(RELOAD_PERMISSION)) return RELOAD_PERMISSION_LEVEL;
         if (permission.equals(COMMAND_TOGGLE_PERMISSION)) return COMMAND_TOGGLE_PERMISSION_LEVEL;
+        if (permission.equals(STORAGE_MANAGE_PERMISSION)) return STORAGE_MANAGE_PERMISSION_LEVEL;
         if (permission.equals(GROUP_MANAGE_PERMISSION)) return GROUP_MANAGE_PERMISSION_LEVEL;
         if (permission.equals(EDITOR_PERMISSION)) return EDITOR_PERMISSION_LEVEL;
         if (permission.equals(PRIVATE_MESSAGE_PERMISSION)) return PRIVATE_MESSAGE_PERMISSION_LEVEL;
@@ -720,6 +780,29 @@ public class PermissionsHandler {
         if (permission.equals(WARP_DELETE_PERMISSION)) return WARP_DELETE_PERMISSION_LEVEL;
         if (permission.equals(WARP_LIST_PERMISSION)) return WARP_LIST_PERMISSION_LEVEL;
         if (permission.equals(WARP_INFO_PERMISSION)) return WARP_INFO_PERMISSION_LEVEL;
+        if (permission.equals(KICK_PERMISSION)) return KICK_PERMISSION_LEVEL;
+        if (permission.equals(BAN_PERMISSION)) return BAN_PERMISSION_LEVEL;
+        if (permission.equals(TEMPBAN_PERMISSION)) return TEMPBAN_PERMISSION_LEVEL;
+        if (permission.equals(MUTE_PERMISSION)) return MUTE_PERMISSION_LEVEL;
+        if (permission.equals(TEMPMUTE_PERMISSION)) return TEMPMUTE_PERMISSION_LEVEL;
+        if (permission.equals(WARN_PERMISSION)) return WARN_PERMISSION_LEVEL;
+        if (permission.equals(JAIL_PERMISSION)) return JAIL_PERMISSION_LEVEL;
+        if (permission.equals(JAIL_MANAGE_PERMISSION)) return JAIL_MANAGE_PERMISSION_LEVEL;
+        if (permission.equals(VANISH_PERMISSION)) return VANISH_PERMISSION_LEVEL;
+        if (permission.equals(VANISH_OTHERS_PERMISSION)) return VANISH_OTHERS_PERMISSION_LEVEL;
+        if (permission.equals(GOD_PERMISSION)) return GOD_PERMISSION_LEVEL;
+        if (permission.equals(GOD_OTHERS_PERMISSION)) return GOD_OTHERS_PERMISSION_LEVEL;
+        if (permission.equals(INVSEE_PERMISSION)) return INVSEE_PERMISSION_LEVEL;
+        if (permission.equals(ENDERSEE_PERMISSION)) return ENDERSEE_PERMISSION_LEVEL;
+        if (permission.equals(REPAIR_PERMISSION)) return REPAIR_PERMISSION_LEVEL;
+        if (permission.equals(REPAIR_OTHERS_PERMISSION)) return REPAIR_OTHERS_PERMISSION_LEVEL;
+        if (permission.equals(ENCHANT_PERMISSION)) return ENCHANT_PERMISSION_LEVEL;
+        if (permission.equals(ENCHANT_OTHERS_PERMISSION)) return ENCHANT_OTHERS_PERMISSION_LEVEL;
+        if (permission.equals(SUDO_PERMISSION)) return SUDO_PERMISSION_LEVEL;
+        if (permission.equals(NEAR_PERMISSION)) return NEAR_PERMISSION_LEVEL;
+        if (permission.equals(WHOIS_PERMISSION)) return WHOIS_PERMISSION_LEVEL;
+        if (permission.equals(TOP_PERMISSION)) return TOP_PERMISSION_LEVEL;
+        if (permission.equals(JUMP_PERMISSION)) return JUMP_PERMISSION_LEVEL;
 
         return -1;
     }
@@ -735,6 +818,7 @@ public class PermissionsHandler {
         nodes.put(GROUPCHAT_PERMISSION, "Allows using /groupchat commands (create, invite, join, etc.).");
         nodes.put(RELOAD_PERMISSION, "Allows using /paradigm reload and /customcommandsreload commands.");
         nodes.put(COMMAND_TOGGLE_PERMISSION, "Allows enabling/disabling Paradigm commands at runtime via /paradigm command.");
+        nodes.put(STORAGE_MANAGE_PERMISSION, "Allows viewing and testing Paradigm storage providers with /paradigm storage.");
         nodes.put(GROUP_MANAGE_PERMISSION, "Allows managing internal permission groups via /paradigm group.");
         nodes.put(EDITOR_PERMISSION, "Allows using /paradigm editor and /paradigm apply.");
         nodes.put(PRIVATE_MESSAGE_PERMISSION, "Allows sending private messages with /msg.");
@@ -776,6 +860,29 @@ public class PermissionsHandler {
         nodes.put(WARP_DELETE_PERMISSION, "Allows deleting global warps with /delwarp.");
         nodes.put(WARP_LIST_PERMISSION, "Allows listing global warps with /warps.");
         nodes.put(WARP_INFO_PERMISSION, "Allows viewing warp details with /warpinfo.");
+        nodes.put(KICK_PERMISSION, "Allows kicking online players with /kick.");
+        nodes.put(BAN_PERMISSION, "Allows banning and unbanning players with /ban and /unban.");
+        nodes.put(TEMPBAN_PERMISSION, "Allows temporary bans with /tempban.");
+        nodes.put(MUTE_PERMISSION, "Allows muting and unmuting players with /mute and /unmute.");
+        nodes.put(TEMPMUTE_PERMISSION, "Allows temporary mutes with /tempmute.");
+        nodes.put(WARN_PERMISSION, "Allows warning players with /warn.");
+        nodes.put(JAIL_PERMISSION, "Allows jailing and unjailing players with /jail and /unjail.");
+        nodes.put(JAIL_MANAGE_PERMISSION, "Allows setting the jail location with /setjail.");
+        nodes.put(VANISH_PERMISSION, "Allows toggling vanish mode.");
+        nodes.put(VANISH_OTHERS_PERMISSION, "Allows toggling vanish mode for other players.");
+        nodes.put(GOD_PERMISSION, "Allows toggling god mode.");
+        nodes.put(GOD_OTHERS_PERMISSION, "Allows toggling god mode for other players.");
+        nodes.put(INVSEE_PERMISSION, "Allows inspecting player inventories with /invsee.");
+        nodes.put(ENDERSEE_PERMISSION, "Allows inspecting player ender chests with /endersee.");
+        nodes.put(REPAIR_PERMISSION, "Allows repairing held items with /repair.");
+        nodes.put(REPAIR_OTHERS_PERMISSION, "Allows repairing another player's items.");
+        nodes.put(ENCHANT_PERMISSION, "Allows enchanting own held item with /enchant.");
+        nodes.put(ENCHANT_OTHERS_PERMISSION, "Allows enchanting another player's held item.");
+        nodes.put(SUDO_PERMISSION, "Allows running commands as another player with /sudo.");
+        nodes.put(NEAR_PERMISSION, "Allows listing nearby players with /near.");
+        nodes.put(WHOIS_PERMISSION, "Allows viewing player diagnostics with /whois.");
+        nodes.put(TOP_PERMISSION, "Allows teleporting to the highest safe block with /top.");
+        nodes.put(JUMP_PERMISSION, "Allows short forward teleporting with /jump.");
 
         if (cmConfig != null && cmConfig.getLoadedCommands() != null) {
             for (CustomCommand cmd : cmConfig.getLoadedCommands()) {

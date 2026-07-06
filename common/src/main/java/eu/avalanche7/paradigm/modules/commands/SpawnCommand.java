@@ -1,11 +1,12 @@
 package eu.avalanche7.paradigm.modules.commands;
 
-import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
+import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.storage.model.StoredLocation;
 import eu.avalanche7.paradigm.utils.CommandCooldowns;
 import eu.avalanche7.paradigm.utils.PermissionsHandler;
 
@@ -67,22 +68,18 @@ public class SpawnCommand implements ParadigmModule {
                         return 0;
                     }
 
-                    String world = services.getMainConfig().spawnWorld.value;
-                    if (world == null || world.isBlank()) {
-                        send(player, "spawn.not_set", "Spawn is not set yet. Use /setspawn.");
-                        return 0;
-                    }
-
                     PlayerDataStore.StoredLocation previous = services.getPlatformAdapter().getPlayerLocation(player).orElse(null);
-                    PlayerDataStore.StoredLocation location = new PlayerDataStore.StoredLocation(
-                            world,
-                            services.getMainConfig().spawnX.value,
-                            services.getMainConfig().spawnY.value,
-                            services.getMainConfig().spawnZ.value,
-                            services.getMainConfig().spawnYaw.value,
-                            services.getMainConfig().spawnPitch.value
-                    );
-                    return CommandCooldowns.run(services, player, "spawn", () -> teleportSpawn(player, previous, location));
+                    return StorageCommandSupport.runForPlayer(services, player, "spawn.load", () ->
+                            services.getStorageService().warps().getGlobalSpawn().orElse(null),
+                            (current, storedSpawn) -> {
+                                if (storedSpawn == null) {
+                                    send(current, "spawn.not_set", "Spawn is not set yet. Use /setspawn.");
+                                    return;
+                                }
+                                PlayerDataStore.StoredLocation location = toDataLocation(storedSpawn);
+                                CommandCooldowns.run(services, current, "spawn", () -> teleportSpawn(current, previous, location));
+                            },
+                            "spawn.error_load");
                 });
         services.getPlatformAdapter().registerCommand(cmd);
     }
@@ -93,7 +90,7 @@ public class SpawnCommand implements ParadigmModule {
                         return 0;
                     }
                     if (previous != null) {
-                        services.getPlayerDataStore().setLastLocation(player, previous);
+                        saveBackLocationAsync(player, previous);
                     }
                     send(player, "spawn.teleported", "Teleported to spawn.");
                     return 1;
@@ -117,17 +114,11 @@ public class SpawnCommand implements ParadigmModule {
                         return 0;
                     }
 
-                    MainConfigHandler.Config cfg = services.getMainConfig();
-                    cfg.spawnWorld.value = location.getWorldId();
-                    cfg.spawnX.value = location.getX();
-                    cfg.spawnY.value = location.getY();
-                    cfg.spawnZ.value = location.getZ();
-                    cfg.spawnYaw.value = location.getYaw();
-                    cfg.spawnPitch.value = location.getPitch();
-                    MainConfigHandler.persistConfig();
-
-                    send(player, "spawn.set_success", "Spawn has been updated.");
-                    return 1;
+                    StoredLocation storedLocation = fromDataLocation(location);
+                    return StorageCommandSupport.runForPlayer(services, player, "spawn.set", () -> {
+                        services.getStorageService().warps().setGlobalSpawn(storedLocation);
+                        return true;
+                    }, (current, ignored) -> send(current, "spawn.set_success", "Spawn has been updated."), "spawn.error_save");
                 });
         services.getPlatformAdapter().registerCommand(cmd);
     }
@@ -145,5 +136,24 @@ public class SpawnCommand implements ParadigmModule {
         }
         String decorated = "<color:#22D3EE><bold>[Utility]</bold></color> <color:#E5E7EB>" + raw + "</color>";
         services.getPlatformAdapter().sendSystemMessage(player, services.getMessageParser().parseMessage(decorated, player));
+    }
+
+    private StoredLocation fromDataLocation(PlayerDataStore.StoredLocation location) {
+        return new StoredLocation(location.getWorldId(), location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+    }
+
+    private PlayerDataStore.StoredLocation toDataLocation(StoredLocation location) {
+        return new PlayerDataStore.StoredLocation(location.worldId(), location.x(), location.y(), location.z(), location.yaw(), location.pitch());
+    }
+
+    private void saveBackLocationAsync(IPlayer player, PlayerDataStore.StoredLocation location) {
+        if (player == null || location == null) {
+            return;
+        }
+        String uuid = player.getUUID();
+        services.getStorageService().runAsync("spawn.back_save", () -> {
+            services.getStorageService().players().setBackLocation(uuid, fromDataLocation(location));
+            return null;
+        }, services.getTaskScheduler(), ignored -> {}, ignored -> {});
     }
 }

@@ -272,6 +272,139 @@ public class PlayerDataStore {
         }
     }
 
+    public PlayerEntry getPlayerEntry(String playerUuid) {
+        String uuid = normalizePlayerKey(playerUuid);
+        if (uuid == null) {
+            return null;
+        }
+        synchronized (lock) {
+            migrateLegacyIfNeededLocked();
+            return getOrCreateEntryByUuidLocked(uuid, "");
+        }
+    }
+
+    public List<PlayerEntry> listPlayerEntries() {
+        synchronized (lock) {
+            migrateLegacyIfNeededLocked();
+            Map<String, PlayerEntry> result = new LinkedHashMap<>();
+
+            Path directory = config != null ? config.resolveConfigPath(PLAYERDATA_DIR) : null;
+            if (directory != null && Files.isDirectory(directory)) {
+                try (var paths = Files.list(directory)) {
+                    paths.filter(path -> path.getFileName() != null && path.getFileName().toString().endsWith(".json"))
+                            .forEach(path -> {
+                                String fileName = path.getFileName().toString();
+                                String uuid = normalizePlayerKey(fileName.substring(0, fileName.length() - ".json".length()));
+                                if (uuid == null) {
+                                    return;
+                                }
+                                PlayerEntry entry = getOrCreateEntryByUuidLocked(uuid, "");
+                                entry.normalize(uuid);
+                                result.put(uuid, entry);
+                            });
+                } catch (Exception e) {
+                    logger.warn("Paradigm: Failed to list playerdata entries: {}", e.getMessage());
+                    debugLogger.debugLog("PlayerDataStore: list failed", e);
+                }
+            }
+
+            for (Map.Entry<String, PlayerEntry> entry : cache.entrySet()) {
+                String uuid = normalizePlayerKey(entry.getKey());
+                if (uuid != null && entry.getValue() != null) {
+                    entry.getValue().normalize(uuid);
+                    result.putIfAbsent(uuid, entry.getValue());
+                }
+            }
+
+            return new ArrayList<>(result.values());
+        }
+    }
+
+    public void savePlayerEntry(PlayerEntry entry) {
+        if (entry == null || entry.getUuid() == null || entry.getUuid().isBlank()) {
+            return;
+        }
+        synchronized (lock) {
+            entry.normalize(entry.getUuid());
+            cache.put(entry.getUuid(), entry);
+            saveEntryLocked(entry);
+        }
+    }
+
+    public void upsertProfile(String playerUuid, String playerName, long firstSeenMs, long lastSeenMs) {
+        String uuid = normalizePlayerKey(playerUuid);
+        if (uuid == null) {
+            return;
+        }
+        synchronized (lock) {
+            PlayerEntry entry = getOrCreateEntryByUuidLocked(uuid, playerName != null ? playerName : "");
+            if (playerName != null && !playerName.isBlank()) {
+                entry.setName(playerName);
+            }
+            if (firstSeenMs > 0L && entry.getFirstSeenMs() <= 0L) {
+                entry.setFirstSeenMs(firstSeenMs);
+            }
+            if (lastSeenMs > 0L) {
+                entry.setLastSeenMs(lastSeenMs);
+            }
+            saveEntryLocked(entry);
+        }
+    }
+
+    public HomeEntry setHome(String playerUuid, String playerName, String homeName, StoredLocation location) {
+        String uuid = normalizePlayerKey(playerUuid);
+        String key = normalizeHomeKey(homeName);
+        if (uuid == null || key == null || location == null) {
+            return null;
+        }
+        synchronized (lock) {
+            PlayerEntry entry = getOrCreateEntryByUuidLocked(uuid, playerName != null ? playerName : "");
+            HomeEntry home = new HomeEntry(homeName.trim(), location);
+            entry.getHomes().put(key, home);
+            saveEntryLocked(entry);
+            return home;
+        }
+    }
+
+    public HomeEntry getHome(String playerUuid, String homeName) {
+        String uuid = normalizePlayerKey(playerUuid);
+        String key = normalizeHomeKey(homeName);
+        if (uuid == null || key == null) {
+            return null;
+        }
+        synchronized (lock) {
+            return getOrCreateEntryByUuidLocked(uuid, "").getHomes().get(key);
+        }
+    }
+
+    public boolean deleteHome(String playerUuid, String homeName) {
+        String uuid = normalizePlayerKey(playerUuid);
+        String key = normalizeHomeKey(homeName);
+        if (uuid == null || key == null) {
+            return false;
+        }
+        synchronized (lock) {
+            PlayerEntry entry = getOrCreateEntryByUuidLocked(uuid, "");
+            boolean changed = entry.getHomes().remove(key) != null;
+            if (changed) {
+                saveEntryLocked(entry);
+            }
+            return changed;
+        }
+    }
+
+    public void setLastLocation(String playerUuid, String playerName, StoredLocation location) {
+        String uuid = normalizePlayerKey(playerUuid);
+        if (uuid == null || location == null) {
+            return;
+        }
+        synchronized (lock) {
+            PlayerEntry entry = getOrCreateEntryByUuidLocked(uuid, playerName != null ? playerName : "");
+            entry.setLastLocation(location);
+            saveEntryLocked(entry);
+        }
+    }
+
     private PlayerEntry getOrCreateEntry(IPlayer player) {
         if (player == null || player.getUUID() == null || player.getUUID().isBlank()) {
             return new PlayerEntry();
@@ -431,6 +564,7 @@ public class PlayerDataStore {
         private String name;
         private Map<String, HomeEntry> homes = new LinkedHashMap<>();
         private StoredLocation lastLocation;
+        private long firstSeenMs;
         private long lastSeenMs;
         private Set<String> ignoredPlayers = new LinkedHashSet<>();
         private List<TemporaryGroupEntry> tempGroups = new ArrayList<>();
@@ -465,6 +599,14 @@ public class PlayerDataStore {
 
         public long getLastSeenMs() {
             return lastSeenMs;
+        }
+
+        public long getFirstSeenMs() {
+            return firstSeenMs;
+        }
+
+        public void setFirstSeenMs(long firstSeenMs) {
+            this.firstSeenMs = firstSeenMs;
         }
 
         public void setLastSeenMs(long lastSeenMs) {
@@ -529,6 +671,12 @@ public class PlayerDataStore {
 
             if (lastSeenMs < 0L) {
                 lastSeenMs = 0L;
+            }
+            if (firstSeenMs < 0L) {
+                firstSeenMs = 0L;
+            }
+            if (firstSeenMs == 0L && lastSeenMs > 0L) {
+                firstSeenMs = lastSeenMs;
             }
 
             Set<String> seenGroups = new LinkedHashSet<>();
@@ -680,6 +828,4 @@ public class PlayerDataStore {
         }
     }
 }
-
-
 

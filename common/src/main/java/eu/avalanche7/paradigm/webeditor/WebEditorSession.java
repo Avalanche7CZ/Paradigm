@@ -57,6 +57,10 @@ public class WebEditorSession {
     public static final String BYTEBIN_BASE_URL = "https://bytebin.avalanche7.eu/";
     private static final String BYTESOCKS_HOST = "bytesocks.avalanche7.eu";
     private static final String USER_AGENT = "paradigm/editor";
+    private static final int BYTEBIN_UPLOAD_ATTEMPTS = 3;
+    private static final long BYTEBIN_UPLOAD_RETRY_DELAY_MS = 1000L;
+    private static final int SOCKET_CONNECT_ATTEMPTS = 3;
+    private static final long SOCKET_CONNECT_RETRY_DELAY_MS = 750L;
 
     private final Services services;
     private final ICommandSource owner;
@@ -100,15 +104,7 @@ public class WebEditorSession {
         WebEditorRequest request = this.initialRequest;
         this.initialRequest = null;
 
-        try {
-            WebEditorSocket socket = new WebEditorSocket(this.services, this.owner);
-            BytesocksClient client = new BytesocksClient(BYTESOCKS_HOST, USER_AGENT);
-            socket.initialize(client);
-            socket.appendDetailToRequest(request);
-            this.services.getWebEditorStore().sockets().putSocket(socket.getChannelId(), socket);
-        } catch (Exception e) {
-            try { services.getLogger().warn("Paradigm WebEditor: Unable to establish live editor socket: {}", e.toString()); } catch (Throwable ignored) {}
-        }
+        appendLiveSocketDetails(request);
 
         String id = uploadRequestData(request);
         if (id == null) {
@@ -147,125 +143,186 @@ public class WebEditorSession {
             } catch (Throwable ignored) {}
         }
 
-        HttpURLConnection conn = null;
-        try {
-            conn = (HttpURLConnection) URI.create(BYTEBIN_POST_URL).toURL().openConnection();
-            conn.setRequestMethod("POST");
-            conn.setDoOutput(true);
-            conn.setConnectTimeout(8000);
-            conn.setReadTimeout(10000);
-            conn.setRequestProperty("User-Agent", USER_AGENT);
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setRequestProperty("Content-Encoding", "gzip");
-            conn.setRequestProperty("X-Bytebin-Bucket", "editor");
-            conn.setFixedLengthStreamingMode(gz.length);
-
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(gz);
-            }
-
-            int code = conn.getResponseCode();
-            if (code < 200 || code >= 300) {
-                try { services.getLogger().warn("Paradigm WebEditor: Bytebin POST failed with status {}", code); } catch (Throwable ignored) {}
-                logErrorStreamSafely(this.services, conn);
-                return null;
-            }
-
-            String location = conn.getHeaderField("Location");
-            String key;
-            if (location != null && !location.isEmpty()) {
-                key = normalizeKey(location);
-            } else {
-                try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
-                    StringBuilder sb = new StringBuilder();
-                    String line;
-                    while ((line = br.readLine()) != null) sb.append(line);
-                    String body = sb.toString().trim();
-                    key = parseKeyFromResponse(body);
-                    if (key == null || key.isEmpty()) {
-                        try { services.getLogger().warn("Paradigm WebEditor: Unable to parse Bytebin response: {}", body); } catch (Throwable ignored) {}
-                        return null;
-                    }
-                    key = normalizeKey(key);
-                }
-            }
-
-            if (debugEnabled()) {
-                try {
-                    services.getLogger().info("Paradigm WebEditor: Uploaded initial payload to Bytebin: key={}, url={}{}",
-                        key, BYTEBIN_BASE_URL, key);
-                } catch (Throwable ignored) {}
-                boolean accessible = verifyBytebinObjectAccessible(key);
-                try { services.getLogger().info("Paradigm WebEditor: Verified uploaded key accessibility: {} (key={})", accessible, key); } catch (Throwable ignored) {}
-                boolean contentMatch = verifyBytebinContentMatches(key, json);
-                try { services.getLogger().info("Paradigm WebEditor: Verified uploaded content integrity: {} (key={}, sha1={})", contentMatch, key, sha1Hex(json)); } catch (Throwable ignored) {}
-            }
-            return key;
-        } catch (Exception e) {
-            try { services.getLogger().warn("Paradigm WebEditor: Failed to upload editor data: {}", e.toString()); } catch (Throwable ignored) {}
+        String key = uploadGzippedPayload(this.services, gz, "initial", 10000);
+        if (key == null) {
             return null;
-        } finally {
-            if (conn != null) conn.disconnect();
         }
+
+        if (debugEnabled()) {
+            try {
+                services.getLogger().info("Paradigm WebEditor: Uploaded initial payload to Bytebin: key={}, url={}{}",
+                    key, BYTEBIN_BASE_URL, key);
+            } catch (Throwable ignored) {}
+            boolean accessible = verifyBytebinObjectAccessible(key);
+            try { services.getLogger().info("Paradigm WebEditor: Verified uploaded key accessibility: {} (key={})", accessible, key); } catch (Throwable ignored) {}
+            boolean contentMatch = verifyBytebinContentMatches(key, json);
+            try { services.getLogger().info("Paradigm WebEditor: Verified uploaded content integrity: {} (key={}, sha1={})", contentMatch, key, sha1Hex(json)); } catch (Throwable ignored) {}
+        }
+        return key;
     }
 
     public static String uploadPayload(Services services, JsonObject payload) {
         byte[] json = new com.google.gson.Gson().toJson(payload).getBytes(StandardCharsets.UTF_8);
         byte[] gz = gzip(json);
-        HttpURLConnection conn = null;
+        String key = uploadGzippedPayload(services, gz, "follow-up", 8000);
+        if (key == null) {
+            return null;
+        }
+
+        try { services.getLogger().info("Paradigm WebEditor: Uploaded follow-up payload to Bytebin: key={}, url={}{}", key, BYTEBIN_BASE_URL, key); } catch (Throwable ignored) {}
         try {
-            conn = (HttpURLConnection) URI.create(BYTEBIN_POST_URL).toURL().openConnection();
-            conn.setRequestMethod("POST");
-            conn.setDoOutput(true);
-            conn.setConnectTimeout(8000);
-            conn.setReadTimeout(8000);
-            conn.setRequestProperty("User-Agent", USER_AGENT);
-            conn.setRequestProperty("Content-Type", "application/json");
-            conn.setRequestProperty("Content-Encoding", "gzip");
-            conn.setRequestProperty("X-Bytebin-Bucket", "editor");
-            conn.setFixedLengthStreamingMode(gz.length);
-            try (OutputStream os = conn.getOutputStream()) {
-                os.write(gz);
+            boolean dbg = MainConfigHandler.getConfig().debugEnable.value;
+            if (dbg) {
+                boolean accessible = verifyBytebinObjectAccessible(key);
+                try { services.getLogger().info("Paradigm WebEditor: Verified follow-up key accessibility: {} (key={})", accessible, key); } catch (Throwable ignored) {}
+                boolean contentMatch = verifyBytebinContentMatches(key, json);
+                try { services.getLogger().info("Paradigm WebEditor: Verified follow-up content integrity: {} (key={}, sha1={})", contentMatch, key, sha1Hex(json)); } catch (Throwable ignored) {}
             }
-            int code = conn.getResponseCode();
-            if (code < 200 || code >= 300) {
-                try { services.getLogger().warn("Paradigm WebEditor: Bytebin POST failed with status {}", code); } catch (Throwable ignored) {}
-                logErrorStreamSafely(services, conn);
+        } catch (Throwable ignored) {}
+        return key;
+    }
+
+    private void appendLiveSocketDetails(WebEditorRequest request) {
+        Exception lastException = null;
+        for (int attempt = 1; attempt <= SOCKET_CONNECT_ATTEMPTS; attempt++) {
+            try {
+                WebEditorSocket socket = new WebEditorSocket(this.services, this.owner);
+                BytesocksClient client = new BytesocksClient(BYTESOCKS_HOST, USER_AGENT);
+                socket.initialize(client);
+                socket.appendDetailToRequest(request);
+                this.services.getWebEditorStore().sockets().putSocket(socket.getChannelId(), socket);
+                return;
+            } catch (Exception e) {
+                lastException = e;
+                if (attempt >= SOCKET_CONNECT_ATTEMPTS) {
+                    break;
+                }
+                try {
+                    services.getLogger().warn("Paradigm WebEditor: Live socket attempt {}/{} failed: {}. Retrying in {}ms",
+                        attempt, SOCKET_CONNECT_ATTEMPTS, e.toString(), SOCKET_CONNECT_RETRY_DELAY_MS);
+                } catch (Throwable ignored) {}
+                if (!sleepBeforeRetry(SOCKET_CONNECT_RETRY_DELAY_MS)) {
+                    return;
+                }
+            }
+        }
+        if (lastException != null) {
+            try {
+                services.getLogger().warn("Paradigm WebEditor: Unable to establish live editor socket after {} attempts: {}",
+                    SOCKET_CONNECT_ATTEMPTS, lastException.toString());
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    private static String uploadGzippedPayload(Services services, byte[] gz, String label, int readTimeoutMs) {
+        String lastFailure = null;
+        int attemptsMade = 0;
+        for (int attempt = 1; attempt <= BYTEBIN_UPLOAD_ATTEMPTS; attempt++) {
+            attemptsMade = attempt;
+            HttpURLConnection conn = null;
+            try {
+                conn = openBytebinPostConnection(gz.length, readTimeoutMs);
+                try (OutputStream os = conn.getOutputStream()) {
+                    os.write(gz);
+                }
+
+                int code = conn.getResponseCode();
+                if (code < 200 || code >= 300) {
+                    lastFailure = "HTTP " + code;
+                    try {
+                        services.getLogger().warn("Paradigm WebEditor: Bytebin {} upload attempt {}/{} failed with status {}",
+                            label, attempt, BYTEBIN_UPLOAD_ATTEMPTS, code);
+                    } catch (Throwable ignored) {}
+                    logErrorStreamSafely(services, conn);
+                    if (!shouldRetryBytebinStatus(code) || attempt >= BYTEBIN_UPLOAD_ATTEMPTS) {
+                        break;
+                    }
+                } else {
+                    String key = readBytebinKey(services, conn);
+                    if (key != null && !key.isEmpty()) {
+                        return key;
+                    }
+                    lastFailure = "missing upload key";
+                    if (attempt >= BYTEBIN_UPLOAD_ATTEMPTS) {
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                lastFailure = e.toString();
+                if (attempt >= BYTEBIN_UPLOAD_ATTEMPTS) {
+                    break;
+                }
+                try {
+                    services.getLogger().warn("Paradigm WebEditor: Bytebin {} upload attempt {}/{} failed: {}",
+                        label, attempt, BYTEBIN_UPLOAD_ATTEMPTS, e.toString());
+                } catch (Throwable ignored) {}
+            } finally {
+                if (conn != null) conn.disconnect();
+            }
+
+            if (attempt < BYTEBIN_UPLOAD_ATTEMPTS) {
+                try {
+                    services.getLogger().info("Paradigm WebEditor: Retrying Bytebin {} upload in {}ms", label, BYTEBIN_UPLOAD_RETRY_DELAY_MS);
+                } catch (Throwable ignored) {}
+                if (!sleepBeforeRetry(BYTEBIN_UPLOAD_RETRY_DELAY_MS)) {
+                    lastFailure = "interrupted before retry";
+                    break;
+                }
+            }
+        }
+
+        try {
+            services.getLogger().warn("Paradigm WebEditor: Failed to upload {} payload after {} attempt(s): {}",
+                label, attemptsMade, lastFailure == null ? "unknown error" : lastFailure);
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
+    private static HttpURLConnection openBytebinPostConnection(int gzLength, int readTimeoutMs) throws Exception {
+        HttpURLConnection conn = (HttpURLConnection) URI.create(BYTEBIN_POST_URL).toURL().openConnection();
+        conn.setRequestMethod("POST");
+        conn.setDoOutput(true);
+        conn.setConnectTimeout(8000);
+        conn.setReadTimeout(readTimeoutMs);
+        conn.setRequestProperty("User-Agent", USER_AGENT);
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setRequestProperty("Content-Encoding", "gzip");
+        conn.setRequestProperty("X-Bytebin-Bucket", "editor");
+        conn.setFixedLengthStreamingMode(gzLength);
+        return conn;
+    }
+
+    private static String readBytebinKey(Services services, HttpURLConnection conn) throws Exception {
+        String location = conn.getHeaderField("Location");
+        if (location != null && !location.isEmpty()) {
+            return normalizeKey(location);
+        }
+
+        try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = br.readLine()) != null) sb.append(line);
+            String body = sb.toString().trim();
+            String key = parseKeyFromResponse(body);
+            if (key == null || key.isEmpty()) {
+                try { services.getLogger().warn("Paradigm WebEditor: Unable to parse Bytebin response: {}", body); } catch (Throwable ignored) {}
                 return null;
             }
+            return normalizeKey(key);
+        }
+    }
 
-            String location = conn.getHeaderField("Location");
-            String key;
-            if (location != null && !location.isEmpty()) {
-                key = normalizeKey(location);
-            } else {
-                try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
-                    StringBuilder sb = new StringBuilder();
-                    String line;
-                    while ((line = br.readLine()) != null) sb.append(line);
-                    String body = sb.toString().trim();
-                    String id = parseKeyFromResponse(body);
-                    if (id == null || id.isEmpty()) return null;
-                    key = normalizeKey(id);
-                }
-            }
+    private static boolean shouldRetryBytebinStatus(int code) {
+        return code == 408 || code == 429 || code >= 500;
+    }
 
-            try { services.getLogger().info("Paradigm WebEditor: Uploaded follow-up payload to Bytebin: key={}, url={}{}", key, BYTEBIN_BASE_URL, key); } catch (Throwable ignored) {}
-            try {
-                boolean dbg = MainConfigHandler.getConfig().debugEnable.value;
-                if (dbg) {
-                    boolean accessible = verifyBytebinObjectAccessible(key);
-                    try { services.getLogger().info("Paradigm WebEditor: Verified follow-up key accessibility: {} (key={})", accessible, key); } catch (Throwable ignored) {}
-                    boolean contentMatch = verifyBytebinContentMatches(key, json);
-                    try { services.getLogger().info("Paradigm WebEditor: Verified follow-up content integrity: {} (key={}, sha1={})", contentMatch, key, sha1Hex(json)); } catch (Throwable ignored) {}
-                }
-            } catch (Throwable ignored) {}
-            return key;
-        } catch (Exception e) {
-            try { services.getLogger().warn("Paradigm WebEditor: Failed to upload payload: {}", e.toString()); } catch (Throwable ignored) {}
-            return null;
-        } finally {
-            if (conn != null) conn.disconnect();
+    private static boolean sleepBeforeRetry(long delayMs) {
+        try {
+            Thread.sleep(delayMs);
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
         }
     }
 

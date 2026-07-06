@@ -68,7 +68,7 @@
     "kick_success_target": "You have been kicked from {group_name}.",
     "kick_success_owner": "Kicked {player_name} from the group.",
     "kick_success_notify": "{player_name} was kicked from the group.",
-    "cancel_request_none": "You don't have a pending request to that group.",
+    "cancel_request_none": "You do not have a pending request to that group.",
     "cancel_request_success": "Your join request to {group_name} has been cancelled.",
     "invite_rate_limit": "Please wait {seconds}s before sending another invite.",
     "manage": {
@@ -96,25 +96,35 @@
       "user_list_perm": "Permanent: {groups}",
       "user_list_temp": "Temporary: -",
       "user_temp_line": "Temporary {group} until {until}",
-      "duration_invalid": "Invalid duration. Use days/weeks/months with amount > 0."
+      "duration_invalid": "Invalid duration. Use days/weeks/months with amount > 0.",
+      "metadata_ok": "Updated {field} for {group}.",
+      "metadata_fail": "Could not update {field} for {group}.",
+      "perm_add_ok": "Added permission {permission} to {group}.",
+      "perm_add_fail": "Could not add permission {permission} to {group}.",
+      "perm_remove_ok": "Removed permission {permission} from {group}.",
+      "perm_remove_fail": "Could not remove permission {permission} from {group}.",
+      "user_perm_add_ok": "Added permission {permission} to player.",
+      "user_perm_add_fail": "Could not add permission {permission} to player.",
+      "user_perm_remove_ok": "Removed permission {permission} from player.",
+      "user_perm_remove_fail": "Could not remove permission {permission} from player.",
+      "permission_check_fail": "Could not check permission {permission}."
     }
   },
-
   "mention": {
     "too_frequent_mention_everyone": "You are mentioning everyone too frequently. Please wait a while.",
     "no_permission_everyone": "You do not have permission to mention everyone.",
     "too_frequent_mention_player": "You are mentioning players too frequently. Please wait a while.",
     "no_permission_player": "You do not have permission to mention players."
   },
-
   "pm": {
     "player_not_found": "That player is not online.",
     "cannot_message_self": "You cannot message yourself.",
     "empty_message": "Message cannot be empty.",
     "no_reply_target": "No recent conversation to reply to.",
-    "reply_target_offline": "Your last conversation partner is no longer online."
+    "reply_target_offline": "Your last conversation partner is no longer online.",
+    "blocked_by_ignore": "That player is ignoring you.",
+    "error_send": "Could not send your message. Please try again later."
   },
-
   "home": {
     "location_unavailable": "Unable to read your location right now.",
     "sethome_success": "Home {home} has been set.",
@@ -127,9 +137,13 @@
     "homes_list": "Your homes: {homes}",
     "back_missing": "No previous location saved for /back.",
     "back_teleported": "Teleported back to your previous location.",
-    "teleport_failed": "Teleport failed."
+    "teleport_failed": "Teleport failed.",
+    "invalid_name": "Invalid home name.",
+    "limit_reached": "You have reached your home limit ({limit}).",
+    "error_save": "Could not save your home. Please try again later.",
+    "error_load": "Could not load your home data. Please try again later.",
+    "error_delete": "Could not delete your home. Please try again later."
   },
-
   "tpa": {
     "player_not_found": "That player is not online.",
     "cannot_target_self": "You cannot target yourself.",
@@ -146,9 +160,10 @@
     "denied_sender": "{player} denied your teleport request.",
     "no_outgoing_request": "You have no outgoing teleport request.",
     "cancelled_you": "Cancelled request to {player}.",
-    "cancelled_target": "{player} cancelled their teleport request."
+    "cancelled_target": "{player} cancelled their teleport request.",
+    "blocked_by_ignore": "That player is ignoring you.",
+    "error_request": "Could not process the teleport request. Please try again later."
   },
-
   "warp": {
     "invalid_name": "Invalid warp name.",
     "location_unavailable": "Unable to read your location right now.",
@@ -159,32 +174,35 @@
     "teleported": "Teleported to warp {warp}.",
     "delete_success": "Warp {warp} has been deleted.",
     "list_empty": "No warps are set.",
-    "list_header": "Warps ({count}):"
+    "list_header": "Warps ({count}):",
+    "error_save": "Could not save the warp. Please try again later.",
+    "error_load": "Could not load warp data. Please try again later.",
+    "error_delete": "Could not delete the warp. Please try again later."
   },
-
   "spawn": {
     "not_set": "Spawn is not set yet. Use /setspawn.",
     "teleport_failed": "Teleport to spawn failed.",
     "teleported": "Teleported to spawn.",
     "location_unavailable": "Unable to read your current location.",
-    "set_success": "Spawn has been updated."
+    "set_success": "Spawn has been updated.",
+    "error_load": "Could not load spawn. Please try again later.",
+    "error_save": "Could not save spawn. Please try again later."
   },
-
   "seen": {
     "online": "{player} is online right now.",
     "need_uuid": "Player is offline. Use UUID for exact lookup.",
     "unknown": "No seen data for that player.",
-    "last_seen": "Last seen: {ago} ago."
+    "last_seen": "Last seen: {ago} ago.",
+    "error_load": "Could not load seen data. Please try again later."
   },
-
   "ignore": {
     "self": "You cannot ignore yourself.",
     "already": "You already ignore {player}.",
     "added": "You now ignore {player}.",
     "not_found": "You do not ignore {player}.",
-    "removed": "You no longer ignore {player}."
+    "removed": "You no longer ignore {player}.",
+    "error_save": "Could not update ignore list. Please try again later."
   },
-
   "utility": {
     "gamemode_invalid": "Invalid gamemode.",
     "gamemode_set": "Set gamemode {mode} for {player}.",
@@ -198,9 +216,13 @@
     "feed_ok": "Fed {player}.",
     "feed_fail": "Could not restore food for {player}.",
     "heal_ok": "Healed {player}.",
-    "heal_fail": "Could not restore full HP for {player}."
+    "heal_fail": "Could not restore full HP for {player}.",
+    "clearinv_fail": "Could not clear inventory for {player}.",
+    "speed_fail": "Could not set speed for {player}.",
+    "time_fail": "Could not change time.",
+    "weather_fail": "Could not change weather.",
+    "no_permission_others": "You do not have permission to affect other players."
   },
-
   "command_toggle": {
     "list": "Command states: {list}",
     "status": "{command} is currently {state}.",
@@ -209,5 +231,154 @@
     "protected": "Command {command} is protected and cannot be disabled.",
     "unknown": "Unknown command key: {command}",
     "reloaded": "Command toggles reloaded from commands.json."
+  },
+  "common": {
+    "state_on": "on",
+    "state_off": "off",
+    "available": "available",
+    "unavailable": "unavailable",
+    "success": "success",
+    "failed": "failed"
+  },
+  "storage": {
+    "common": {
+      "available": "available",
+      "unavailable": "unavailable",
+      "success": "success",
+      "failed": "failed"
+    },
+    "error": {
+      "provider_unavailable": "Storage is currently unavailable. Please try again later.",
+      "operation_failed": "Storage operation failed. Please try again later."
+    },
+    "status": {
+      "provider": "Storage provider: selected={selected}, active={active}.",
+      "identity": "Server identity: networkId={networkId}, serverId={serverId}, serverName={serverName}.",
+      "target": "Target: {target}.",
+      "migration_version": "Migration version: {version}.",
+      "repositories": "Repositories: {state}.",
+      "sql_registered": "SQL server registered: {state}.",
+      "fallback": "Fallback: active, reason={reason}.",
+      "last_test": "Last test: {state} - {message}.",
+      "dependency_mode": "Dependency mode: {mode}.",
+      "sqlite_driver": "SQLite driver: {state}.",
+      "mysql_driver": "MySQL/MariaDB driver: {state}."
+    },
+    "test": {
+      "started": "Storage test started for provider {provider}.",
+      "failed": "Storage test failed: {message}.",
+      "provider": "Storage test provider: {provider}.",
+      "config_valid": "Config valid: {state}.",
+      "result": "Connection/result: {state}.",
+      "migration_version": "Migration version: {version}.",
+      "message": "{message}"
+    },
+    "migrate": {
+      "started": "Storage migration started: {from} -> {to}.",
+      "failed": "Storage migration failed: {message}.",
+      "source_target": "Migration source={source}, target={target}.",
+      "scope": "Scope: networkId={networkId}, serverId={serverId}.",
+      "count_players": "Players migrated: {count}.",
+      "count_homes": "Homes migrated: {count}.",
+      "count_warps": "Warps migrated: {count}.",
+      "count_moderation": "Moderation records migrated: {count}.",
+      "count_permissions": "Permission groups/users migrated: {groups}/{users}.",
+      "count_admin": "Admin states migrated: {count}.",
+      "failures_skipped": "Failures/skipped: {failures}/{skipped}.",
+      "final_status": "Final status: {state}.",
+      "message": "{message}",
+      "additional_messages": "Additional migration messages: {count}.",
+      "options": "Mode={mode}, conflict={conflict}.",
+      "mode": "Mode={mode}, conflict={conflict}.",
+      "backup": "JSON backup: {path}.",
+      "conflicts": "Conflicts: {count}."
+    },
+    "libs": {
+      "status": {
+        "cached": "cached",
+        "downloaded": "downloaded",
+        "missing": "missing",
+        "not_needed": "not needed",
+        "checksum_failed": "checksum failed",
+        "failed": "failed",
+        "loaded": "loaded"
+      },
+      "download": {
+        "started": "Downloading runtime library {library}.",
+        "success": "Runtime library {library} downloaded.",
+        "failed": "Runtime library download failed: {message}."
+      },
+      "error": {
+        "checksum_failed": "Runtime library checksum failed.",
+        "driver_load_failed": "Runtime JDBC driver failed to load.",
+        "offline_missing": "Runtime library is missing and downloads are disabled.",
+        "insecure_repository": "Runtime library repository must use HTTPS."
+      },
+      "cache": {
+        "path": "Runtime library cache: {path}."
+      },
+      "mode": {
+        "runtime_download": "runtime-download"
+      }
+    }
+  },
+  "admin": {
+    "player_not_found": "Player not found.",
+    "player_only": "This command can only be used by a player.",
+    "no_permission_others": "You do not have permission to affect other players.",
+    "error_state": "Could not update admin state. Please try again later.",
+    "god_ok": "God mode for {player}: {state}.",
+    "vanish_ok": "Vanish for {player}: {state}.",
+    "repair_ok": "Repaired {count} item stack(s) for {player}.",
+    "enchant_ok": "Applied {enchantment} {level} to {player}.",
+    "near_none": "No players within {radius} blocks.",
+    "near_list": "Nearby: {players}",
+    "whois_header": "Whois: {player}",
+    "whois_uuid": "UUID: {uuid}",
+    "whois_world": "World: {world}",
+    "whois_pos": "Position: {x}, {y}, {z}",
+    "whois_health": "Health: {health}/{max}",
+    "whois_level": "XP level: {level}",
+    "whois_groups": "Groups: {groups}",
+    "sudo_missing": "Command is missing.",
+    "sudo_ok": "Executed command as {player}.",
+    "top_fail": "Could not find top block at your position.",
+    "top_ok": "Teleported to top block.",
+    "jump_ok": "Jumped {distance} blocks forward.",
+    "inspect_header": "{type} for {player}:",
+    "inspect_line": "#{slot}: {count}x {item}",
+    "inspect_empty": "No items found.",
+    "inspect_more": "...and {count} more item stacks."
+  },
+  "moderation": {
+    "player_not_found": "Player not found.",
+    "duration_invalid": "Invalid duration. Use values like 30m, 2h, 7d.",
+    "error_save": "Could not save moderation data. Please try again later.",
+    "error_load": "Could not load moderation data. Please try again later.",
+    "kick_ok": "Kicked {player}.",
+    "ban_ok": "Banned {player}.",
+    "unban_ok": "Unbanned {player}.",
+    "tempban_ok": "Temp-banned {player} for {duration}.",
+    "mute_ok": "Muted {player}.",
+    "muted": "You were muted. Reason: {reason}",
+    "tempmute_ok": "Muted {player} for {duration}.",
+    "tempmuted": "You were muted for {duration}. Reason: {reason}",
+    "unmute_ok": "Unmuted {player}.",
+    "unmuted": "You were unmuted.",
+    "muted_chat_blocked": "You are muted. Remaining: {duration}. Reason: {reason}",
+    "warn_ok": "Warned {player}.",
+    "warned": "You were warned. Reason: {reason}",
+    "setjail_fail": "Could not read your location.",
+    "setjail_ok": "Jail location set.",
+    "jail_not_set": "Jail location is not set. Use /setjail first.",
+    "jail_teleport_fail": "Could not teleport {player} to jail.",
+    "jail_ok": "Jailed {player}.",
+    "jailed": "You were jailed. Reason: {reason}",
+    "unjail_ok": "Unjailed {player}.",
+    "unjailed": "You were unjailed.",
+    "no_reason": "No reason provided."
+  },
+  "reload": {
+    "customcommands_success": "Reloaded {count} custom commands from config."
   }
 }

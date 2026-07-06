@@ -1,5 +1,9 @@
 allprojects {
     group = 'eu.avalanche7'
+
+    repositories {
+        mavenCentral()
+    }
 }
 
 def consolidatedJarsDir = layout.projectDirectory.dir("release-jars")
@@ -57,9 +61,10 @@ task collectOutputs {
 
             def libsDir = file("${subproject.projectDir}/build/libs")
             if (!libsDir.exists()) return
+            def currentVersion = subproject.version.toString()
 
             libsDir.listFiles({ dir, name ->
-                name.endsWith('.jar') && !name.contains('sources') && name.startsWith('Paradigm')
+                name.endsWith("${currentVersion}.jar") && !name.contains('sources') && name.startsWith('Paradigm')
             } as FilenameFilter).each { jar ->
                 copy {
                     from jar

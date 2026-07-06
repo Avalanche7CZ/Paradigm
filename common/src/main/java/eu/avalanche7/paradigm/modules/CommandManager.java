@@ -52,7 +52,11 @@ public class CommandManager implements ParadigmModule {
                         || (src.getPlayer() != null && services.getPermissionsHandler().hasPermission(src.getPlayer(), eu.avalanche7.paradigm.utils.PermissionsHandler.RELOAD_PERMISSION)))
                 .executes(ctx -> {
                     int count = reloadCustomCommands(services);
-                    IComponent message = services.getMessageParser().parseMessage("&aReloaded " + count + " custom commands from config.", null);
+                    String raw = services.getLang().getTranslation("reload.customcommands_success");
+                    if (raw == null || raw.equals("reload.customcommands_success")) {
+                        raw = "Reloaded {count} custom commands from config.";
+                    }
+                    IComponent message = services.getMessageParser().parseMessage("&a" + raw.replace("{count}", String.valueOf(count)), null);
                     platform.sendSuccess(ctx.getSource(), message, false);
                     return 1;
                 });
