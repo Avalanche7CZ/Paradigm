@@ -7,7 +7,7 @@ import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import eu.avalanche7.paradigm.utils.PermissionsHandler;
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 import java.text.DecimalFormat;
 import java.text.ParseException;

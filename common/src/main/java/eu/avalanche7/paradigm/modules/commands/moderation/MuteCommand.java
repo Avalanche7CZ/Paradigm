@@ -7,8 +7,9 @@ import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.identity.ServerScope;
-import eu.avalanche7.paradigm.storage.model.StoredPunishment;
-import eu.avalanche7.paradigm.utils.PermissionsHandler;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 public class MuteCommand extends AbstractModerationCommand {
     @Override
@@ -34,7 +35,8 @@ public class MuteCommand extends AbstractModerationCommand {
             if (event == null || event.isCancelled() || event.getPlayer() == null) {
                 return;
             }
-            StoredPunishment mute = ModerationRuntimeCache.getMute(event.getPlayer().getUUID());
+            PunishmentRecord mute = services.getPunishmentService().activeFor(event.getPlayer().getUUID(), null).stream()
+                    .filter(record -> record.type() == PunishmentType.MUTE).findFirst().orElse(null);
             if (mute == null) {
                 return;
             }
@@ -43,16 +45,6 @@ public class MuteCommand extends AbstractModerationCommand {
                     "{duration}", DurationParser.describeRemaining(mute.expiresAtMs() != null ? mute.expiresAtMs() : 0L),
                     "{reason}", mute.reason() != null && !mute.reason().isBlank() ? mute.reason() : reason(null));
         });
-        if (services.getStorageService() != null) {
-            services.getStorageService().runAsync(
-                    "moderation.mute_cache_load",
-                    () -> services.getStorageService().moderation().listPunishments(),
-                    services.getTaskScheduler(),
-                    ModerationRuntimeCache::replaceMutes,
-                    failure -> {
-                    }
-            );
-        }
     }
 
     private void registerMute() {
@@ -86,25 +78,11 @@ public class MuteCommand extends AbstractModerationCommand {
         String reason = reason(rawReason);
         String targetUuid = target.getUUID();
         String targetName = target.getName();
-        StoredPunishment punishment = new StoredPunishment(
-                0L,
-                "mute",
-                ServerScope.SERVER,
-                null,
-                targetUuid,
-                targetName,
-                reason,
-                actorName(source),
-                System.currentTimeMillis(),
-                null,
-                true
-        );
         return StorageCommandSupport.runForSource(services, source, "moderation.mute", () -> {
-            services.getStorageService().moderation().addPunishment(punishment);
-            return punishment;
+            return services.getPunishmentService().create(PunishmentType.MUTE, ServerScope.SERVER, targetUuid, targetName,
+                    null, reason, actorUuid(source), actorName(source), null);
         }, saved -> {
-            ModerationRuntimeCache.putMute(saved);
-            send(source, "moderation.mute_ok", "Muted {player}.", "{player}", targetName);
+            send(source, "moderation.mute_ok", "Muted {player}. ID: {id}.", "{player}", targetName, "{id}", saved.punishmentId());
             IPlayer currentTarget = services.getPlatformAdapter().getPlayerByUuid(targetUuid);
             if (currentTarget != null) {
                 send(currentTarget, "moderation.muted", "You were muted. Reason: {reason}", "{reason}", reason);
@@ -120,13 +98,9 @@ public class MuteCommand extends AbstractModerationCommand {
         String targetUuid = target.getUUID();
         String targetName = target.getName();
         return StorageCommandSupport.runForSource(services, source, "moderation.unmute", () -> {
-            boolean changed = services.getStorageService().moderation().deactivateActivePunishments("mute", targetUuid, null);
-            changed = services.getStorageService().moderation().deactivateActivePunishments("tempmute", targetUuid, null) || changed;
-            return changed;
+            java.util.List<PunishmentRecord> matches = services.getPunishmentService().activeFor(targetUuid, null).stream().filter(record -> record.type() == PunishmentType.MUTE).toList();
+            return matches.size() == 1 && services.getPunishmentService().revoke(matches.get(0).punishmentId(), actorUuid(source), actorName(source), reason(null));
         }, changed -> {
-            if (changed) {
-                ModerationRuntimeCache.removeMute(targetUuid);
-            }
             send(source, "moderation.unmute_ok", changed ? "Unmuted {player}." : "{player} was not muted.", "{player}", targetName);
             IPlayer currentTarget = services.getPlatformAdapter().getPlayerByUuid(targetUuid);
             if (changed && currentTarget != null) {

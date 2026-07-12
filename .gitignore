@@ -26,3 +26,4 @@ ForgeAnnoucements-1.0.0/plugin.yml
 scripts/release-secrets.local.env
 
 /scripts
+/common/src/test

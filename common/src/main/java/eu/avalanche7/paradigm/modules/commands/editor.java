@@ -1,18 +1,23 @@
 package eu.avalanche7.paradigm.modules.commands;
 
 import com.google.gson.JsonObject;
+import eu.avalanche7.paradigm.modules.audit.AuditActionType;
+import eu.avalanche7.paradigm.modules.audit.AuditResult;
+import eu.avalanche7.paradigm.modules.audit.AuditSource;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.dashboard.LocalDashboardModule;
 import eu.avalanche7.paradigm.platform.Interfaces.*;
-import eu.avalanche7.paradigm.utils.PermissionsHandler;
-import eu.avalanche7.paradigm.webeditor.EditorApplier;
-import eu.avalanche7.paradigm.webeditor.WebEditorSession;
-import eu.avalanche7.paradigm.webeditor.socket.WebEditorSocket;
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
+import eu.avalanche7.paradigm.modules.webeditor.EditorApplier;
+import eu.avalanche7.paradigm.modules.webeditor.WebEditorSession;
+import eu.avalanche7.paradigm.modules.webeditor.socket.WebEditorSocket;
 
 import java.security.PublicKey;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 public class editor implements ParadigmModule {
@@ -100,6 +105,7 @@ public class editor implements ParadigmModule {
                 WebEditorSession session = WebEditorSession.of(services, payload, source);
                 String id = session.open();
                 if (id == null || id.isEmpty()) {
+                    auditWebEditor(source, AuditResult.FAILED, "WebEditor session failed.", Map.of("reason", "empty_session_id"));
                     try { services.getLogger().warn("Paradigm WebEditor: session.open() returned null or empty id for {}", source.getSourceName()); } catch (Throwable ignored) {}
                     if (server != null) {
                         try {
@@ -116,6 +122,7 @@ public class editor implements ParadigmModule {
                 }
                 String baseUrl = getEditorBaseUrl(services);
                 String url = baseUrl + id;
+                auditWebEditor(source, AuditResult.SUCCESS, "WebEditor session opened.", Map.of("session", "created"));
                 if (server != null) {
                     try {
                         var m = server.getClass().getMethod("execute", Runnable.class);
@@ -141,6 +148,7 @@ public class editor implements ParadigmModule {
                     platform.sendSuccess(source, message, false);
                 }
             } catch (Exception e) {
+                auditWebEditor(source, AuditResult.FAILED, "WebEditor session failed.", Map.of("error", e.getClass().getSimpleName()));
                 try { services.getLogger().warn("Paradigm WebEditor: Error opening editor for {}: {}", source.getSourceName(), e.toString()); } catch (Throwable ignored) {}
                 if (server != null) {
                     try {
@@ -168,6 +176,17 @@ public class editor implements ParadigmModule {
             }
         } catch (Throwable ignored) {}
         return "https://paradigm.avalanche7.eu/editor/";
+    }
+
+    private void auditWebEditor(ICommandSource source, AuditResult result, String message, Map<String, String> details) {
+        try {
+            LocalDashboardModule dashboard = LocalDashboardModule.current();
+            if (dashboard == null || dashboard.audit() == null) {
+                return;
+            }
+            dashboard.audit().recordCommand(source, AuditSource.WEBEDITOR, AuditActionType.WEBEDITOR_SESSION, result, message, details);
+        } catch (Throwable ignored) {
+        }
     }
 
     private int trustEditor(ICommandSource source, Services services, String nonce) {
@@ -199,7 +218,7 @@ public class editor implements ParadigmModule {
                     } catch (Throwable ignored) {}
 
                     s.clearAttempt(nonce);
-                    String hash = eu.avalanche7.paradigm.webeditor.store.WebEditorKeystore.hash(pk.getEncoded());
+                    String hash = eu.avalanche7.paradigm.modules.webeditor.store.WebEditorKeystore.hash(pk.getEncoded());
                     if (changed) {
                         platform.sendSuccess(source, platform.createLiteralComponent("Trusted web editor (" + hash + "). The editor should now be connected."), false);
                     } else {

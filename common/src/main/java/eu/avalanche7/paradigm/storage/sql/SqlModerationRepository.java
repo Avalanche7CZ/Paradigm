@@ -6,18 +6,98 @@ import eu.avalanche7.paradigm.storage.model.StoredJailState;
 import eu.avalanche7.paradigm.storage.model.StoredPunishment;
 import eu.avalanche7.paradigm.storage.model.StoredWarning;
 import eu.avalanche7.paradigm.storage.repository.ModerationRepository;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Map;
 
 public class SqlModerationRepository extends SqlRepositorySupport implements ModerationRepository {
     private static final String JAIL_LOCATION_KEY = "jail_location";
+    private static final Gson GSON = new Gson();
 
     public SqlModerationRepository(SqlExecutor sql, StorageContext context) {
         super(sql, context);
+    }
+
+    @Override
+    public PunishmentRecord addPunishmentRecord(PunishmentRecord punishment) {
+        if (punishment == null) return null;
+        sql.update("INSERT INTO moderation_punishment_ledger(punishment_id, punishment_type, scope, network_id, server_id, subject_uuid, subject_name, subject_ip_hash, subject_ip_address, reason, actor_uuid, actor_name, created_at_ms, starts_at_ms, expires_at_ms, revoked_at_ms, revoked_by_uuid, revoked_by_name, revoke_reason, updated_at_ms, metadata_json) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", ps -> {
+            ps.setString(1, punishment.punishmentId());
+            ps.setString(2, punishment.type().name());
+            ps.setString(3, punishment.scope().name());
+            ps.setString(4, punishment.networkId());
+            bindNullableString(ps, 5, punishment.serverId());
+            bindNullableString(ps, 6, punishment.subjectUuid());
+            bindNullableString(ps, 7, punishment.subjectName());
+            bindNullableString(ps, 8, punishment.subjectIpHash());
+            bindNullableString(ps, 9, punishment.subjectIpAddress());
+            bindNullableString(ps, 10, punishment.reason());
+            bindNullableString(ps, 11, punishment.actorUuid());
+            bindNullableString(ps, 12, punishment.actorName());
+            ps.setLong(13, punishment.createdAtMs());
+            ps.setLong(14, punishment.startsAtMs());
+            bindNullableLong(ps, 15, punishment.expiresAtMs());
+            bindNullableLong(ps, 16, punishment.revokedAtMs());
+            bindNullableString(ps, 17, punishment.revokedByUuid());
+            bindNullableString(ps, 18, punishment.revokedByName());
+            bindNullableString(ps, 19, punishment.revokeReason());
+            ps.setLong(20, punishment.updatedAtMs());
+            ps.setString(21, GSON.toJson(punishment.metadata()));
+        });
+        return punishment;
+    }
+
+    @Override
+    public Optional<PunishmentRecord> findPunishmentRecord(String punishmentId) {
+        return sql.query("SELECT * FROM moderation_punishment_ledger WHERE punishment_id = ?", ps -> ps.setString(1, punishmentId), rs -> rs.next() ? Optional.of(readPunishmentRecord(rs)) : Optional.empty());
+    }
+
+    @Override
+    public boolean revokePunishmentRecord(String punishmentId, long revokedAtMs, String actorUuid, String actorName, String reason) {
+        return sql.update("UPDATE moderation_punishment_ledger SET revoked_at_ms = ?, revoked_by_uuid = ?, revoked_by_name = ?, revoke_reason = ?, updated_at_ms = ? WHERE punishment_id = ? AND revoked_at_ms IS NULL", ps -> {
+            ps.setLong(1, revokedAtMs);
+            bindNullableString(ps, 2, actorUuid);
+            bindNullableString(ps, 3, actorName);
+            bindNullableString(ps, 4, reason);
+            ps.setLong(5, revokedAtMs);
+            ps.setString(6, punishmentId);
+        }) > 0;
+    }
+
+    @Override
+    public List<PunishmentRecord> listPunishmentRecords(String subjectUuid, int offset, int limit) {
+        int safeLimit = Math.max(1, Math.min(limit, 500));
+        int safeOffset = Math.max(0, offset);
+        String query = subjectUuid == null || subjectUuid.isBlank()
+                ? "SELECT * FROM moderation_punishment_ledger WHERE (network_id = ? OR network_id IS NULL) AND (scope = 'GLOBAL' OR server_id = ?) ORDER BY created_at_ms DESC LIMIT ? OFFSET ?"
+                : "SELECT * FROM moderation_punishment_ledger WHERE LOWER(subject_uuid) = ? AND (network_id = ? OR network_id IS NULL) AND (scope = 'GLOBAL' OR server_id = ?) ORDER BY created_at_ms DESC LIMIT ? OFFSET ?";
+        return sql.query(query, ps -> {
+            int index = 1;
+            if (subjectUuid != null && !subjectUuid.isBlank()) ps.setString(index++, subjectUuid.toLowerCase(Locale.ROOT));
+            ps.setString(index++, networkId());
+            ps.setString(index++, serverId());
+            ps.setInt(index++, safeLimit);
+            ps.setInt(index, safeOffset);
+        }, rs -> { List<PunishmentRecord> result = new ArrayList<>(); while (rs.next()) result.add(readPunishmentRecord(rs)); return result; });
+    }
+
+    @Override
+    public List<PunishmentRecord> listActivePunishmentRecords(long updatedAfterMs) {
+        long now = System.currentTimeMillis();
+        return sql.query("SELECT * FROM moderation_punishment_ledger WHERE revoked_at_ms IS NULL AND starts_at_ms <= ? AND (expires_at_ms IS NULL OR expires_at_ms > ?) AND (network_id = ? OR network_id IS NULL) AND (scope = 'GLOBAL' OR server_id = ?)", ps -> {
+            ps.setLong(1, now);
+            ps.setLong(2, now);
+            ps.setString(3, networkId());
+            ps.setString(4, serverId());
+        }, rs -> { List<PunishmentRecord> result = new ArrayList<>(); while (rs.next()) result.add(readPunishmentRecord(rs)); return result; });
     }
 
     @Override
@@ -254,6 +334,19 @@ public class SqlModerationRepository extends SqlRepositorySupport implements Mod
         );
     }
 
+    private PunishmentRecord readPunishmentRecord(java.sql.ResultSet rs) throws java.sql.SQLException {
+        String metadata = rs.getString("metadata_json");
+        Map<String, String> metadataMap = metadata == null || metadata.isBlank() ? Map.of()
+                : GSON.fromJson(metadata, new TypeToken<Map<String, String>>() { }.getType());
+        return new PunishmentRecord(rs.getString("punishment_id"), PunishmentType.valueOf(rs.getString("punishment_type")),
+                ServerScope.valueOf(rs.getString("scope")), rs.getString("network_id"), rs.getString("server_id"),
+                rs.getString("subject_uuid"), rs.getString("subject_name"), rs.getString("subject_ip_hash"),
+                rs.getString("subject_ip_address"), rs.getString("reason"), rs.getString("actor_uuid"),
+                rs.getString("actor_name"), rs.getLong("created_at_ms"), rs.getLong("starts_at_ms"),
+                nullableLong(rs, "expires_at_ms"), nullableLong(rs, "revoked_at_ms"), rs.getString("revoked_by_uuid"),
+                rs.getString("revoked_by_name"), rs.getString("revoke_reason"), rs.getLong("updated_at_ms"), metadataMap);
+    }
+
     private StoredJailState readJail(java.sql.ResultSet rs) throws java.sql.SQLException {
         long expires = rs.getLong("expires_at_ms");
         boolean expiresWasNull = rs.wasNull();
@@ -266,6 +359,21 @@ public class SqlModerationRepository extends SqlRepositorySupport implements Mod
         } else {
             ps.setNull(index, Types.VARCHAR);
         }
+    }
+
+    private String networkId() { return context != null ? context.networkId() : "default"; }
+
+    private static void bindNullableString(java.sql.PreparedStatement ps, int index, String value) throws java.sql.SQLException {
+        if (value == null) ps.setNull(index, Types.VARCHAR); else ps.setString(index, value);
+    }
+
+    private static void bindNullableLong(java.sql.PreparedStatement ps, int index, Long value) throws java.sql.SQLException {
+        if (value == null) ps.setNull(index, Types.BIGINT); else ps.setLong(index, value);
+    }
+
+    private static Long nullableLong(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
+        long value = rs.getLong(column);
+        return rs.wasNull() ? null : value;
     }
 
     private static String encodeLocation(eu.avalanche7.paradigm.storage.model.StoredLocation location) {

@@ -7,8 +7,8 @@ import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.identity.ServerScope;
-import eu.avalanche7.paradigm.storage.model.StoredPunishment;
-import eu.avalanche7.paradigm.utils.PermissionsHandler;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 import java.util.List;
 
@@ -50,26 +50,12 @@ public class TempMuteCommand extends AbstractModerationCommand {
         String reason = reason(rawReason);
         String targetUuid = target.getUUID();
         String targetName = target.getName();
-        StoredPunishment punishment = new StoredPunishment(
-                0L,
-                "tempmute",
-                ServerScope.SERVER,
-                null,
-                targetUuid,
-                targetName,
-                reason,
-                actorName(source),
-                System.currentTimeMillis(),
-                expiresAt,
-                true
-        );
         return StorageCommandSupport.runForSource(services, source, "moderation.tempmute", () -> {
-            services.getStorageService().moderation().addPunishment(punishment);
-            return punishment;
+            return services.getPunishmentService().create(PunishmentType.MUTE, ServerScope.SERVER, targetUuid, targetName,
+                    null, reason, actorUuid(source), actorName(source), expiresAt);
         }, saved -> {
-            ModerationRuntimeCache.putMute(saved);
-            send(source, "moderation.tempmute_ok", "Muted {player} for {duration}.",
-                    "{player}", targetName, "{duration}", DurationParser.describeRemaining(expiresAt));
+            send(source, "moderation.tempmute_ok", "Muted {player} for {duration}. ID: {id}.",
+                    "{player}", targetName, "{duration}", DurationParser.describeRemaining(expiresAt), "{id}", saved.punishmentId());
             IPlayer currentTarget = services.getPlatformAdapter().getPlayerByUuid(targetUuid);
             if (currentTarget != null) {
                 send(currentTarget, "moderation.tempmuted", "You were muted for {duration}. Reason: {reason}",

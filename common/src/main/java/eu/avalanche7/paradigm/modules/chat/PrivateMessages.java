@@ -9,7 +9,7 @@ import eu.avalanche7.paradigm.platform.Interfaces.ICommandContext;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.utils.PermissionsHandler;
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;

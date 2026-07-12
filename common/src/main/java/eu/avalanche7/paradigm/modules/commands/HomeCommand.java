@@ -13,7 +13,7 @@ import eu.avalanche7.paradigm.storage.model.StoredHome;
 import eu.avalanche7.paradigm.storage.model.StoredLocation;
 import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
 import eu.avalanche7.paradigm.utils.CommandCooldowns;
-import eu.avalanche7.paradigm.utils.PermissionsHandler;
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 import java.util.Comparator;
 import java.util.List;

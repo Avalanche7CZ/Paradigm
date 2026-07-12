@@ -21,7 +21,7 @@ if (!project.hasProperty('mapping_channel')) { project.ext.mapping_channel = 'of
 if (!project.hasProperty('mapping_version')) { project.ext.mapping_version = '1.20.1' }
 if (!project.hasProperty('java_version')) { project.ext.java_version = '17' }
 
-// If root defines a global mod_version, use it everywhere in this subproject
+
 def globalModVersion = rootProject.findProperty('mod_version')
 if (globalModVersion != null && !globalModVersion.toString().isBlank()) {
     project.ext.mod_version = globalModVersion.toString()
@@ -177,7 +177,7 @@ tasks.register('mergeCommonForDevRun', Copy) {
     from(project(':common').sourceSets.main.output.classesDirs)
     from(project(':common').sourceSets.main.output.resourcesDir)
     into(layout.buildDirectory.dir("classes/java/main"))
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
 
 
@@ -250,6 +250,7 @@ tasks.named('jar', Jar).configure {
 
     // Include common module classes/resources directly in the Forge jar (single-jar distribution).
     dependsOn(project(":common").tasks.named("jar"))
+    dependsOn(tasks.named('mergeCommonForDevRun'))
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from(layout.buildDirectory.file("classes/java/main/paradigm.refmap.json"))
     from({ zipTree(project(":common").tasks.named("jar").get().archiveFile.get().asFile) }) {

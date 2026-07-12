@@ -8,11 +8,12 @@ import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.data.WarpStore;
 import eu.avalanche7.paradigm.modules.*;
 import eu.avalanche7.paradigm.modules.chat.*;
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.storage.StorageService;
 import eu.avalanche7.paradigm.utils.*;
-import eu.avalanche7.paradigm.webeditor.store.WebEditorStore;
+import eu.avalanche7.paradigm.modules.webeditor.store.WebEditorStore;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
@@ -43,6 +44,7 @@ public final class CommonRuntime {
         MentionConfigHandler.init(platformConfig, bootstrapDebugLogger);
         RestartConfigHandler.init(platformConfig, bootstrapDebugLogger);
         ChatConfigHandler.init(platformConfig, bootstrapDebugLogger);
+        ModerationConfigHandler.init(platformConfig, bootstrapDebugLogger);
         CooldownConfigHandler.init(platformConfig, bootstrapDebugLogger);
         EmojiConfigHandler.init(platformConfig, bootstrapDebugLogger);
 
@@ -95,12 +97,15 @@ public final class CommonRuntime {
                 new WebEditorStore()
         );
 
+        services.getPunishmentService();
+
         registerDefaultCommandToggles(commandToggleStore);
 
         UpdateChecker.registerInGameNotifier(services);
 
         groupChatManager.setServices(services);
         registerExternalCommandGuard(services);
+        registerPunishmentGuard(services);
 
 
         // --- modules ---
@@ -132,6 +137,7 @@ public final class CommonRuntime {
         modules.add(new eu.avalanche7.paradigm.modules.commands.moderation.KickCommand());
         modules.add(new eu.avalanche7.paradigm.modules.commands.moderation.BanCommand());
         modules.add(new eu.avalanche7.paradigm.modules.commands.moderation.TempBanCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.moderation.IpBanCommand());
         modules.add(new eu.avalanche7.paradigm.modules.commands.moderation.MuteCommand());
         modules.add(new eu.avalanche7.paradigm.modules.commands.moderation.TempMuteCommand());
         modules.add(new eu.avalanche7.paradigm.modules.commands.moderation.WarnCommand());
@@ -145,6 +151,7 @@ public final class CommonRuntime {
         modules.add(new eu.avalanche7.paradigm.modules.commands.admin.NearCommand());
         modules.add(new eu.avalanche7.paradigm.modules.commands.admin.WhoisCommand());
         modules.add(new eu.avalanche7.paradigm.modules.commands.admin.MovementUtilityCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.dashboard.LocalDashboardModule());
         modules.add(new eu.avalanche7.paradigm.modules.commands.Reload());
         modules.add(new eu.avalanche7.paradigm.modules.commands.editor());
 
@@ -202,6 +209,13 @@ public final class CommonRuntime {
         });
     }
 
+    private static void registerPunishmentGuard(Services services) {
+        if (services == null || services.getPlatformAdapter() == null || services.getPlatformAdapter().getEventSystem() == null) return;
+        services.getPlatformAdapter().getEventSystem().onPlayerJoin(event -> {
+            if (event != null && event.getPlayer() != null) services.getPunishmentService().enforcePlayer(event.getPlayer());
+        });
+    }
+
     private static void registerDefaultCommandToggles(CommandToggleStore store) {
         if (store == null) {
             return;
@@ -248,6 +262,9 @@ public final class CommonRuntime {
         store.registerCommand("unban", true, false);
         store.registerCommand("pardon", true, false);
         store.registerCommand("tempban", true, false);
+        store.registerCommand("ipban", true, false);
+        store.registerCommand("tempipban", true, false);
+        store.registerCommand("unipban", true, false);
         store.registerCommand("mute", true, false);
         store.registerCommand("tempmute", true, false);
         store.registerCommand("unmute", true, false);
@@ -283,5 +300,6 @@ public final class CommonRuntime {
         store.registerCommand("paradigm.apply", true, false, "apply");
         store.registerCommand("paradigm.help", true, false, "help");
         store.registerCommand("paradigm.command", true, true, "command", "commands");
+        store.registerCommand("paradigm.dashboard", true, true, "dashboard");
     }
 }

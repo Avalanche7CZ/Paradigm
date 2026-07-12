@@ -1,5 +1,6 @@
 package eu.avalanche7.paradigm.storage.migration;
 
+import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
 import eu.avalanche7.paradigm.storage.StorageProvider;
 import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
 import eu.avalanche7.paradigm.storage.model.StoredAdminState;
@@ -123,6 +124,30 @@ public class StorageMigrationService {
     }
 
     private void copyModeration(StorageProvider source, StorageProvider target, Counter counter) {
+        List<PunishmentRecord> ledger = new ArrayList<>();
+        for (int offset = 0; ; offset += 500) {
+            List<PunishmentRecord> page = source.moderation().listPunishmentRecords(null, offset, 500);
+            ledger.addAll(page);
+            if (page.size() < 500) break;
+        }
+        for (PunishmentRecord punishment : ledger) {
+            if (punishment == null || punishment.punishmentId() == null) {
+                counter.skipped++;
+                continue;
+            }
+            if (transfer(counter, "punishment " + punishment.punishmentId(),
+                    () -> target.moderation().findPunishmentRecord(punishment.punishmentId()).isPresent(),
+                    () -> target.moderation().addPunishmentRecord(punishment))) {
+                counter.moderationRecords++;
+            }
+        }
+
+        // Repositories with a ledger expose legacy records through that ledger. Copying both
+        // representations would create duplicate punishment history in the target provider.
+        if (!ledger.isEmpty()) {
+            copyJailState(source, target, counter);
+            return;
+        }
         for (StoredPunishment punishment : source.moderation().listPunishments()) {
             if (punishment == null) {
                 counter.skipped++;
@@ -145,6 +170,10 @@ public class StorageMigrationService {
                 counter.moderationRecords++;
             }
         }
+        copyJailState(source, target, counter);
+    }
+
+    private void copyJailState(StorageProvider source, StorageProvider target, Counter counter) {
         source.moderation().getJailLocation().ifPresent(location ->
                 transfer(counter, "jail location",
                         () -> target.moderation().getJailLocation().isPresent(),

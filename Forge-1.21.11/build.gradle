@@ -183,7 +183,7 @@ tasks.register('mergeCommonForDevRun', Copy) {
     from(project(':common').sourceSets.main.output.classesDirs)
     from(project(':common').sourceSets.main.output.resourcesDir)
     into(layout.buildDirectory.dir("classes/java/main"))
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
 
 
@@ -268,6 +268,7 @@ tasks.named('jar', Jar).configure {
 
     // Include common module classes/resources directly in the Forge jar (single-jar distribution).
     dependsOn(project(":common").tasks.named("jar"))
+    dependsOn(tasks.named('mergeCommonForDevRun'))
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from(layout.buildDirectory.file("classes/java/main/paradigm.refmap.json"))
     from({ zipTree(project(":common").tasks.named("jar").get().archiveFile.get().asFile) }) {
@@ -291,4 +292,3 @@ tasks.named('jar', Jar).configure {
     }
 
 }
-

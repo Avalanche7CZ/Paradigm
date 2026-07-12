@@ -3,7 +3,7 @@ package eu.avalanche7.paradigm.platform;
 import eu.avalanche7.paradigm.Paradigm;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.utils.PermissionNodeRegistry;
+import eu.avalanche7.paradigm.modules.permissions.PermissionNodeRegistry;
 import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.server.permission.handler.IPermissionHandler;

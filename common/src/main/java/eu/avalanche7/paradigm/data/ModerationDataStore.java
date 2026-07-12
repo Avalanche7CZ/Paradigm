@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.utils.DebugLogger;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
 import org.slf4j.Logger;
 
 import java.io.Reader;
@@ -243,6 +244,39 @@ public class ModerationDataStore {
         }
     }
 
+    public PunishmentRecord addPunishmentRecord(PunishmentRecord record) {
+        if (record == null) return null;
+        synchronized (lock) {
+            for (PunishmentRecord existing : state.punishments) {
+                if (existing != null && existing.punishmentId().equals(record.punishmentId())) return existing;
+            }
+            state.punishments.add(record);
+            saveLocked();
+            return record;
+        }
+    }
+
+    public List<PunishmentRecord> punishmentRecords() {
+        synchronized (lock) {
+            return new ArrayList<>(state.punishments);
+        }
+    }
+
+    public boolean replacePunishmentRecord(PunishmentRecord record) {
+        if (record == null) return false;
+        synchronized (lock) {
+            for (int i = 0; i < state.punishments.size(); i++) {
+                PunishmentRecord current = state.punishments.get(i);
+                if (current != null && current.punishmentId().equals(record.punishmentId())) {
+                    state.punishments.set(i, record);
+                    saveLocked();
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
     public void setJailLocation(PlayerDataStore.StoredLocation location) {
         if (location == null || location.getWorldId() == null || location.getWorldId().isBlank()) return;
         synchronized (lock) {
@@ -403,6 +437,7 @@ public class ModerationDataStore {
         public Map<String, BanEntry> bans = new LinkedHashMap<>();
         public Map<String, JailEntry> jails = new LinkedHashMap<>();
         public List<WarnEntry> warnings = new ArrayList<>();
+        public List<PunishmentRecord> punishments = new ArrayList<>();
         public PlayerDataStore.StoredLocation jailLocation;
 
         void normalize() {
@@ -411,6 +446,7 @@ public class ModerationDataStore {
             if (bans == null) bans = new LinkedHashMap<>();
             if (jails == null) jails = new LinkedHashMap<>();
             if (warnings == null) warnings = new ArrayList<>();
+            if (punishments == null) punishments = new ArrayList<>();
         }
     }
 

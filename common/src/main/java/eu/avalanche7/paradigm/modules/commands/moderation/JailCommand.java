@@ -9,8 +9,11 @@ import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.model.StoredJailState;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
+import eu.avalanche7.paradigm.storage.identity.ServerScope;
 import eu.avalanche7.paradigm.storage.model.StoredLocation;
-import eu.avalanche7.paradigm.utils.PermissionsHandler;
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 import java.util.List;
 import java.util.Optional;
@@ -171,9 +174,10 @@ public class JailCommand extends AbstractModerationCommand {
                     );
                     StorageCommandSupport.runForSource(services, source, "moderation.jail_save", () -> {
                         services.getStorageService().moderation().setJailState(jailState);
-                        return true;
-                    }, ignored -> {
-                        send(source, "moderation.jail_ok", "Jailed {player}.", "{player}", targetName);
+                        return services.getPunishmentService().create(PunishmentType.JAIL, ServerScope.SERVER, targetUuid, targetName,
+                                null, reason, actorUuid(source), actorName(source), finalExpiresAt > 0L ? finalExpiresAt : null);
+                    }, punishment -> {
+                        send(source, "moderation.jail_ok", "Jailed {player}. ID: {id}.", "{player}", targetName, "{id}", punishment.punishmentId());
                         IPlayer jailedPlayer = services.getPlatformAdapter().getPlayerByUuid(targetUuid);
                         if (jailedPlayer != null) {
                             send(jailedPlayer, "moderation.jailed", "You were jailed. Reason: {reason}", "{reason}", reason);
@@ -191,7 +195,13 @@ public class JailCommand extends AbstractModerationCommand {
         String targetUuid = target.getUUID();
         String targetName = target.getName();
         return StorageCommandSupport.runForSource(services, source, "moderation.unjail", () ->
-                        services.getStorageService().moderation().clearJailState(targetUuid),
+                        {
+                            java.util.List<PunishmentRecord> matches = services.getPunishmentService().activeFor(targetUuid, null).stream()
+                                    .filter(record -> record.type() == PunishmentType.JAIL).toList();
+                            if (matches.size() != 1) return false;
+                            boolean revoked = services.getPunishmentService().revoke(matches.get(0).punishmentId(), actorUuid(source), actorName(source), reason(null));
+                            return services.getStorageService().moderation().clearJailState(targetUuid) && revoked;
+                        },
                 changed -> {
                     send(source, "moderation.unjail_ok", changed ? "Unjailed {player}." : "{player} was not jailed.", "{player}", targetName);
                     IPlayer currentTarget = services.getPlatformAdapter().getPlayerByUuid(targetUuid);

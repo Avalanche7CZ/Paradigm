@@ -15,7 +15,7 @@ public class StorageConfig {
     private static final String FILE_NAME = "paradigm/storage.json";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 
-    public String provider = "json";
+    public String provider = "sqlite";
     public Boolean fallbackToJsonOnSqlFailure = true;
     public String networkId = "default";
     public String serverId = "default";
@@ -31,7 +31,7 @@ public class StorageConfig {
             return defaults.normalized(logger);
         }
         if (!Files.exists(path)) {
-            defaults.save(path, logger);
+            defaults.normalized(logger).save(path, logger);
             return defaults;
         }
         try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
@@ -41,10 +41,10 @@ public class StorageConfig {
             return merged;
         } catch (Throwable t) {
             if (logger != null) {
-                logger.warn("Paradigm storage: failed to load storage.json, using JSON provider. {}", t.getMessage());
+                logger.warn("Paradigm storage: failed to load storage.json, using safe defaults. {}", t.getMessage());
             }
-            defaults.save(path, logger);
-            return defaults;
+            defaults.normalized(logger).save(path, logger);
+            return defaults.normalized(logger);
         }
     }
 
@@ -71,7 +71,7 @@ public class StorageConfig {
 
     public String maskedTarget() {
         if (StorageProviderType.parse(provider) == StorageProviderType.SQLITE) {
-            return "sqlite:" + (sqlite != null ? sqlite.path : "config/paradigm/paradigm.db");
+            return "sqlite:" + (sqlite != null ? sqlite.path : "config/paradigm/data/paradigm.db");
         }
         if (sql == null) {
             return "sql:<not configured>";
@@ -81,8 +81,13 @@ public class StorageConfig {
                 + " ssl=" + sql.ssl;
     }
 
+    public void persist(IConfig platformConfig, Logger logger) {
+        if (platformConfig == null) throw new IllegalArgumentException("Platform configuration is unavailable.");
+        normalized(logger).save(platformConfig.resolveConfigPath(FILE_NAME), logger);
+    }
+
     private StorageConfig normalized(Logger logger) {
-        if (provider == null || provider.isBlank()) provider = "json";
+        if (provider == null || provider.isBlank()) provider = "sqlite";
         if (StorageProviderType.parse(provider) == null) {
             if (logger != null) logger.warn("Paradigm storage: invalid provider '{}', writing json fallback to storage.json.", provider);
             provider = "json";
@@ -134,11 +139,11 @@ public class StorageConfig {
     }
 
     public static class SqliteConfig {
-        public String path = "config/paradigm/paradigm.db";
+        public String path = "config/paradigm/data/paradigm.db";
 
         void normalize() {
             if (path == null || path.isBlank()) {
-                path = "config/paradigm/paradigm.db";
+                path = "config/paradigm/data/paradigm.db";
             }
         }
     }

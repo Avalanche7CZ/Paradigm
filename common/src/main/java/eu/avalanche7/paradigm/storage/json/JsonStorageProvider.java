@@ -1,5 +1,7 @@
 package eu.avalanche7.paradigm.storage.json;
 
+import eu.avalanche7.paradigm.modules.audit.AuditRepository;
+import eu.avalanche7.paradigm.modules.audit.JsonAuditRepository;
 import eu.avalanche7.paradigm.data.AdminUtilityDataStore;
 import eu.avalanche7.paradigm.data.ModerationDataStore;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
@@ -25,6 +27,7 @@ public class JsonStorageProvider implements StorageProvider {
     private final ModerationRepository moderation;
     private final AdminStateRepository adminState;
     private final ServerRepository servers;
+    private final AuditRepository audit;
 
     public JsonStorageProvider(
             Logger logger,
@@ -42,6 +45,7 @@ public class JsonStorageProvider implements StorageProvider {
         this.moderation = new JsonModerationRepository(moderationDataStore, context);
         this.adminState = new JsonAdminStateRepository(adminUtilityDataStore, context);
         this.servers = new JsonServerRepository(context);
+        this.audit = new JsonAuditRepository(config, logger);
     }
 
     @Override public StorageProviderType type() { return StorageProviderType.JSON; }
@@ -53,6 +57,7 @@ public class JsonStorageProvider implements StorageProvider {
     @Override public ModerationRepository moderation() { return moderation; }
     @Override public AdminStateRepository adminState() { return adminState; }
     @Override public ServerRepository servers() { return servers; }
+    @Override public AuditRepository audit() { return audit; }
     @Override public StorageService.StorageTestResult test() {
         return new StorageService.StorageTestResult(true, "json", true, "JSON provider is available.", 0, "not_needed", "not_needed");
     }

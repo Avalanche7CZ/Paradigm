@@ -25,11 +25,18 @@ public class PlayerManagerMixin {
     @Unique
     private static final ThreadLocal<Boolean> SUPPRESS_JOIN_BROADCAST = new ThreadLocal<>();
 
-    @Inject(method = "onPlayerConnect", at = @At("HEAD"))
+    @Inject(method = "onPlayerConnect", at = @At("HEAD"), cancellable = true)
     private void paradigm$decideJoinSuppression(ClientConnection connection, ServerPlayerEntity player, ConnectedClientData clientData, CallbackInfo ci) {
         Services services = ParadigmAPI.getServices();
         if (services == null) {
             SUPPRESS_JOIN_BROADCAST.set(Boolean.FALSE);
+            return;
+        }
+        var blocked = services.getPunishmentService().loginBlock(player.getUuid().toString(), String.valueOf(connection.getAddress()));
+        if (blocked.isPresent()) {
+            Object reason = services.getPunishmentService().banScreen().format(blocked.get()).getOriginalText();
+            connection.disconnect(reason instanceof Text ? (Text) reason : Text.literal(String.valueOf(reason)));
+            ci.cancel();
             return;
         }
         ChatConfigHandler.Config chatConfig = services.getChatConfig();

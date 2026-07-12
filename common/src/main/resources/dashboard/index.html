@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Paradigm Dashboard</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand"><div class="brand-mark">P</div><strong>Paradigm</strong></div>
+    <nav id="navigation">
+      <span class="nav-heading">Server</span>
+      <button data-page-target="overview">Overview</button>
+      <button data-page-target="servers">Servers</button>
+      <button data-page-target="storage">Storage</button>
+      <button data-page-target="audit">Audit</button>
+      <span class="nav-heading">Configuration</span>
+      <button data-page-target="general">General</button>
+      <button data-page-target="teleports">Teleports</button>
+      <button data-page-target="chat">Chat</button>
+      <button data-page-target="announcements">Announcements</button>
+      <button data-page-target="restart">Restart</button>
+      <button data-page-target="motd">MOTD Editor</button>
+      <button data-page-target="customCommands">Custom Commands</button>
+      <button data-page-target="commands">Command Settings</button>
+      <button data-page-target="cooldowns">Cooldowns</button>
+      <button data-page-target="dashboard">Dashboard</button>
+      <span class="nav-heading">Administration</span>
+      <button data-page-target="permissions">Permission Editor</button>
+      <button data-page-target="moderation">Moderation</button>
+      <span class="nav-heading">Advanced</span>
+      <button data-page-target="storageConfig">Storage Configuration</button>
+    </nav>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <button id="nav-toggle" class="icon-button" title="Toggle navigation" aria-label="Toggle navigation">&#9776;</button>
+      <div><h1 id="page-title">Overview</h1><p id="page-subtitle">Server administration at a glance.</p></div>
+      <div class="session"><span id="session-state">Checking session...</span><button id="reload-config">Reload Config</button><button id="logout-btn">Logout</button></div>
+    </header>
+
+    <section id="login-panel" class="login-wrap hidden">
+      <div class="login-card">
+        <h2>Dashboard Login</h2>
+        <p>Use <code>/paradigm dashboard open</code>. The link signs you in automatically and expires after one use.</p>
+        <div class="form-row"><input id="login-token" autocomplete="one-time-code" placeholder="One-time code"><button id="login-btn">Login</button></div>
+        <p id="login-message" class="message"></p>
+      </div>
+    </section>
+
+    <section id="app-panel" class="hidden">
+      <div id="notice" class="notice hidden" role="status"></div>
+      <div id="warnings" class="warnings"></div>
+
+      <section data-page="overview" class="page"><div class="page-toolbar"><div><strong>Server Overview</strong><span>Runtime state and common actions.</span></div><button data-refresh="overview">Refresh</button></div><div id="overview-grid" class="metric-grid"></div><div id="overview-activity" class="split-grid"></div></section>
+
+      <section data-page="servers" class="page"><div class="page-toolbar"><div><strong>Known Servers</strong><span>Local server and observed network heartbeats.</span></div><button data-refresh="servers">Refresh</button></div><div id="servers-table" class="data-surface"></div></section>
+
+      <section data-page="storage" class="page"><div class="page-toolbar"><div><strong>Storage Runtime</strong><span>Configured provider, active provider, and fallback state.</span></div><button id="storage-test-btn">Test Connection</button></div><div id="storage-grid" class="metric-grid"></div><div class="editor-section"><h2>Migration Dry Run</h2><p>Preview counts and conflicts. No data is changed.</p><div class="compact-form"><label>Source<select id="migration-source"><option>json</option><option>sql</option></select></label><label>Target<select id="migration-target"><option>sql</option><option>json</option></select></label><label>Conflict policy<select id="migration-policy"><option>overwrite</option><option>skip</option><option>fail</option></select></label><button id="migration-dry-run-btn">Run Dry Run</button></div><div id="migration-result" class="result-box"></div></div></section>
+
+      <section data-page="audit" class="page"><div class="page-toolbar"><div><strong>Audit Log</strong><span>Immutable administrative activity.</span></div><button data-refresh="audit">Refresh</button></div><div class="filter-bar"><input id="audit-actor" placeholder="Actor"><input id="audit-type" placeholder="Action type"><input id="audit-target" placeholder="Target"><select id="audit-result"><option value="">All results</option><option>SUCCESS</option><option>FAILED</option><option>DENIED</option></select><select id="audit-source"><option value="">All sources</option><option>COMMAND</option><option>DASHBOARD</option></select><label>From<input id="audit-from" type="date"></label><label>To<input id="audit-to" type="date"></label></div><div id="audit-table" class="data-surface"></div><div id="audit-pagination" class="pagination"></div></section>
+
+      <section data-page="general" class="page config-page" data-categories="modules,command_groups,admin_utilities"><div class="page-toolbar"><div><strong>General Configuration</strong><span>Modules, command families, and administration features.</span></div><button class="advanced-toggle">Advanced details</button></div><div id="general-fields" class="config-sections"></div></section>
+      <section data-page="teleports" class="page config-page" data-categories="teleports"><div class="page-toolbar"><div><strong>Teleports</strong><span>Homes, warps, spawn, back, and teleport requests.</span></div><button class="advanced-toggle">Advanced details</button></div><div id="teleport-fields" class="config-sections"></div></section>
+
+      <section data-page="chat" class="page"><div class="page-toolbar"><div><strong>Chat Editor</strong><span>Chat behavior and field-specific formatting previews.</span></div><button class="advanced-toggle">Advanced details</button></div><div id="chat-fields" class="config-sections"></div></section>
+
+      <section data-page="announcements" class="page"><div class="page-toolbar"><div><strong>Announcements</strong><span>Channels, schedule, ordering, and formatted messages.</span></div><button class="advanced-toggle">Advanced details</button></div><div id="announcement-settings" class="config-sections"></div><div id="announcement-editor" class="editor-section"></div></section>
+
+      <section data-page="restart" class="page"><div class="page-toolbar"><div><strong>Restart Schedule</strong><span>Scheduling, warnings, and player-facing messages.</span></div><button class="advanced-toggle">Advanced details</button></div><div id="restart-settings" class="config-sections"></div><div id="restart-warnings" class="editor-section"></div><div id="restart-preview" class="notice-inline"></div></section>
+
+      <section data-page="motd" class="page"><div class="page-toolbar"><div><strong>MOTD Editor</strong><span>Join message, server-list presentation, and player-count hover.</span></div><div><select id="motd-template"><option value="">Choose template</option><option value="minimal">Minimal</option><option value="welcome">Centered welcome</option><option value="info">Server info</option><option value="maintenance">Maintenance</option><option value="blank">Blank</option></select><button id="motd-template-apply">Apply</button></div></div><div class="editor-section motd-join-editor"><h2>Join MOTD</h2><div class="format-toolbar" data-editor-target="motd"><button data-wrap="bold">B</button><button data-wrap="italic">I</button><button data-wrap="underline">U</button><button data-wrap="strikethrough">S</button><button data-wrap="color:#55FFFF">Color</button><button data-wrap="gradient:#22D3EE:#A78BFA">Gradient</button><button data-wrap="rainbow">Rainbow</button></div><div id="motd-placeholders" class="token-list"></div><div id="motd-lines" class="reorder-list"></div><button id="motd-add-line">Add Line</button><div id="motd-join-preview"></div></div><div id="motd-settings" class="config-sections"></div></section>
+
+      <section data-page="customCommands" class="page"><div class="page-toolbar"><div><strong>Custom Commands</strong><span>Create and edit structured command definitions.</span></div><div><input id="custom-command-search" placeholder="Search commands"><button id="custom-command-new">New Command</button><button id="custom-command-reload">Reload Definitions</button></div></div><div class="master-detail"><aside><div id="custom-command-list" class="selection-list"></div></aside><div id="custom-command-editor" class="detail-editor empty-detail">Select a command or create one.</div></div></section>
+
+      <section data-page="commands" class="page config-page" data-categories="commands"><div class="page-toolbar"><div><strong>Command Settings</strong><span>Search and enable built-in command roots.</span></div><input id="command-search" placeholder="Search commands"></div><div id="command-fields" class="config-sections"></div></section>
+      <section data-page="cooldowns" class="page config-page" data-categories="cooldowns"><div class="page-toolbar"><div><strong>Cooldowns and Warmups</strong><span>Command timing in seconds.</span></div><input id="cooldown-search" placeholder="Search command timing"></div><div id="cooldown-fields" class="config-sections"></div></section>
+      <section data-page="dashboard" class="page config-page" data-categories="dashboard"><div class="page-toolbar"><div><strong>Dashboard Configuration</strong><span>Sessions, bind behavior, and request limits.</span></div><button class="advanced-toggle">Advanced details</button></div><div id="dashboard-fields" class="config-sections"></div></section>
+
+      <section data-page="permissions" class="page"><div class="page-toolbar"><div><strong>Permission Editor</strong><span id="permissions-summary">Groups, users, and discovered nodes.</span></div><button data-refresh="permissions">Refresh</button></div><div class="segmented" id="permission-tabs"><button data-permission-view="groups">Groups</button><button data-permission-view="users">Users</button><button data-permission-view="nodes">Node Search</button></div><div class="master-detail permission-workspace"><aside><input id="permissions-search" placeholder="Search"><div id="permission-target-list" class="selection-list"></div><div id="permission-list-pagination" class="pagination"></div></aside><div id="permission-editor" class="detail-editor empty-detail">Select a group or user.</div></div><datalist id="known-permission-nodes"></datalist></section>
+
+      <section data-page="moderation" class="page"><div class="page-toolbar"><div><strong>Moderation</strong><span>Player history, active state, and actions.</span></div><button data-refresh="moderation">Refresh</button></div><div class="master-detail"><aside><input id="moderation-search" placeholder="Player name or UUID"><button id="moderation-find">Find Player</button><div id="moderation-results" class="selection-list"></div></aside><div id="moderation-editor" class="detail-editor empty-detail">Search for a player to review or moderate.</div></div></section>
+
+      <section data-page="storageConfig" class="page config-page" data-categories="storage"><div class="page-toolbar"><div><strong>Storage Configuration</strong><span>Provider targets and masked connection state. Switching providers never migrates data automatically.</span></div><button class="advanced-toggle">Advanced details</button></div><div id="storage-config-fields" class="config-sections"></div><div class="notice-inline">Provider changes require a restart. Run a migration dry run from Storage before changing the active data source.</div></section>
+
+      <div id="save-bar" class="save-bar hidden"><strong><span id="unsaved-count">0</span> unsaved changes</strong><span id="apply-state"></span><button id="discard-changes">Discard</button><button id="save-changes">Save Current Page</button></div>
+    </section>
+  </main>
+
+  <div id="confirm-modal" class="modal-backdrop hidden"><div class="modal"><h2 id="confirm-title">Confirm</h2><p id="confirm-message"></p><div class="button-row"><button id="confirm-cancel">Cancel</button><button id="confirm-accept" class="danger">Confirm</button></div></div></div>
+  <script src="/app.js"></script>
+</body>
+</html>

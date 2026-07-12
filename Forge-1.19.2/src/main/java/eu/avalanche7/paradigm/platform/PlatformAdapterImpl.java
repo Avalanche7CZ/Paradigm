@@ -1,5 +1,7 @@
 package eu.avalanche7.paradigm.platform;
 
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
+
 import com.mojang.brigadier.CommandDispatcher;
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.platform.Interfaces.*;
@@ -113,6 +115,14 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         } catch (IllegalArgumentException e) {
             return null;
         }
+    }
+
+    @Override
+    public boolean disconnectPlayer(IPlayer player, IComponent reason) {
+        if (!(player != null && player.getOriginalPlayer() instanceof ServerPlayer nativePlayer)) return false;
+        Object component = reason != null ? reason.getOriginalText() : null;
+        nativePlayer.connection.disconnect(component instanceof net.minecraft.network.chat.Component nativeComponent ? nativeComponent : net.minecraft.network.chat.Component.literal(reason != null ? reason.getRawText() : "Disconnected"));
+        return true;
     }
 
     @Override
@@ -500,6 +510,9 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public String getLoaderName() { return "Forge"; }
+
+    @Override
     public Object createStyleWithClickEvent(Object baseStyle, String action, String value) {
         if (baseStyle instanceof net.minecraft.network.chat.Style s) {
             net.minecraft.network.chat.ClickEvent.Action act;
@@ -570,6 +583,9 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
                 return;
             }
 
+            if (!CommandPriority.shouldRegisterRoot(normalizedRoot)) {
+                return;
+            }
             boolean shouldOwnRoot = CommandPriority.shouldOwnRoot(normalizedRoot);
             boolean firstParadigmRegistrationForRoot = shouldOwnRoot && ownedRootsRegisteredThisCycle.add(normalizedRoot);
             if (firstParadigmRegistrationForRoot) {

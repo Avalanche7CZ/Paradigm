@@ -12,7 +12,7 @@ import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
 import eu.avalanche7.paradigm.storage.model.StoredLocation;
 import eu.avalanche7.paradigm.storage.model.StoredWarp;
 import eu.avalanche7.paradigm.utils.CommandCooldowns;
-import eu.avalanche7.paradigm.utils.PermissionsHandler;
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 import java.util.List;
 import java.util.Locale;

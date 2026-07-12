@@ -1,5 +1,6 @@
 package eu.avalanche7.paradigm.storage;
 
+import eu.avalanche7.paradigm.modules.audit.AuditRepository;
 import eu.avalanche7.paradigm.data.AdminUtilityDataStore;
 import eu.avalanche7.paradigm.data.ModerationDataStore;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
@@ -57,6 +58,7 @@ public class StorageService implements AutoCloseable {
     private StorageProviderType selectedProviderType;
     private boolean fallbackActive;
     private String fallbackReason = "";
+    private boolean fallbackDataPresent;
     private StorageTestResult lastTestResult;
 
     public StorageService(
@@ -90,6 +92,7 @@ public class StorageService implements AutoCloseable {
         if (selectedProviderType == StorageProviderType.JSON) {
             activeProvider = jsonProvider;
             activeProvider.initialize();
+            fallbackDataPresent = fallbackMarkerExists();
             return;
         }
 
@@ -100,6 +103,7 @@ public class StorageService implements AutoCloseable {
                 case JSON -> jsonProvider;
             };
             activeProvider.initialize();
+            fallbackDataPresent = fallbackMarkerExists();
         } catch (Throwable t) {
             fallbackReason = t.getMessage() != null ? t.getMessage() : t.toString();
             lastTestResult = new StorageTestResult(false, selectedProviderType.configValue(), false, fallbackReason, 0,
@@ -112,6 +116,8 @@ public class StorageService implements AutoCloseable {
                 fallbackActive = true;
                 activeProvider = jsonProvider;
                 activeProvider.initialize();
+                fallbackDataPresent = true;
+                markFallbackData();
                 if (logger != null) {
                     logger.warn("Paradigm storage: falling back to JSON provider.");
                 }
@@ -129,14 +135,20 @@ public class StorageService implements AutoCloseable {
         return new StorageStatus(
                 selectedProviderType != null ? selectedProviderType.configValue() : "json",
                 provider != null ? provider.type().configValue() : "unavailable",
+                selectedProviderType != null ? selectedProviderType.configValue() : "json",
+                fallbackActive && provider != null && provider.type() == StorageProviderType.JSON ? "json_fallback" : (provider != null ? provider.type().configValue() : "unavailable"),
                 provider != null ? provider.displayName() : "unavailable",
                 context.serverIdentity(),
                 config.maskedTarget(),
+                dataLocation(provider),
                 provider != null ? provider.migrationVersion() : 0,
                 provider != null,
                 provider instanceof SqlStorageProvider sqlProvider && sqlProvider.serverRegistered(),
                 fallbackActive,
                 fallbackReason,
+                fallbackDataPresent,
+                fallbackWarning(provider),
+                migrationRecommendation(provider),
                 lastTestResult,
                 "runtime-download",
                 runtimeLibraryManager.cacheDirectory().toString(),
@@ -177,6 +189,30 @@ public class StorageService implements AutoCloseable {
             }
             lastTestResult = result;
             return result;
+        }, executor);
+    }
+
+    public CompletableFuture<StorageTestResult> testConfigurationAsync(StorageConfig candidate) {
+        return CompletableFuture.supplyAsync(() -> {
+            StorageConfig effective = candidate != null ? candidate : config;
+            StorageProviderType type = effective.providerType(logger);
+            if (type == StorageProviderType.JSON) {
+                return new StorageTestResult(true, "json", true, "JSON storage configuration is valid.", 0, "not-needed", "not-needed");
+            }
+            StorageProvider provider = null;
+            try {
+                provider = type == StorageProviderType.SQLITE
+                        ? new SqliteStorageProvider(effective, context, identityService, logger, runtimeJdbcDriverProvider)
+                        : new MysqlStorageProvider(effective, context, identityService, logger, runtimeJdbcDriverProvider);
+                provider.initialize();
+                return withDriverStates(provider.test());
+            } catch (Throwable t) {
+                return new StorageTestResult(false, type.configValue(), false, t.getMessage() != null ? t.getMessage() : "Storage connection failed.", 0,
+                        stateKey(runtimeJdbcDriverProvider.inspect(RuntimeLibrary.SQLITE, type == StorageProviderType.SQLITE)),
+                        stateKey(runtimeJdbcDriverProvider.inspect(RuntimeLibrary.MARIADB, type == StorageProviderType.MYSQL)));
+            } finally {
+                if (provider != null) provider.close();
+            }
         }, executor);
     }
 
@@ -364,6 +400,7 @@ public class StorageService implements AutoCloseable {
     public ModerationRepository moderation() { return requireProvider().moderation(); }
     public AdminStateRepository adminState() { return requireProvider().adminState(); }
     public ServerRepository servers() { return requireProvider().servers(); }
+    public AuditRepository audit() { return requireProvider().audit(); }
     public StorageContext context() { return context; }
     public StorageConfig config() { return config; }
 
@@ -377,6 +414,62 @@ public class StorageService implements AutoCloseable {
             throw new StorageException("Storage provider is unavailable: " + fallbackReason);
         }
         return activeProvider;
+    }
+
+    private String dataLocation(StorageProvider provider) {
+        StorageProviderType activeType = provider != null ? provider.type() : null;
+        StorageProviderType configured = selectedProviderType != null ? selectedProviderType : config.providerType(logger);
+        if (activeType == StorageProviderType.JSON) {
+            return platformConfig != null ? platformConfig.resolveConfigPath("paradigm").toString() : "config/paradigm";
+        }
+        if (configured == StorageProviderType.SQLITE || activeType == StorageProviderType.SQLITE) {
+            return config.sqlite != null ? config.sqlite.path : "config/paradigm/data/paradigm.db";
+        }
+        return config.maskedTarget();
+    }
+
+    private String fallbackWarning(StorageProvider provider) {
+        if (fallbackActive) {
+            return "Configured data provider is " + (selectedProviderType != null ? selectedProviderType.configValue() : "unknown")
+                    + " but active data provider is JSON fallback. New runtime data is being written to fallback JSON files.";
+        }
+        if (fallbackDataPresent && provider != null && provider.type() != StorageProviderType.JSON) {
+            return "Previous JSON fallback data may exist. Run an explicit migration/sync before assuming SQL contains every fallback write.";
+        }
+        return "";
+    }
+
+    private String migrationRecommendation(StorageProvider provider) {
+        if (selectedProviderType == StorageProviderType.JSON && provider != null && provider.type() == StorageProviderType.JSON) {
+            return "SQLite is recommended for new installs. Existing JSON installs are preserved; run a dry-run migration before switching.";
+        }
+        if (fallbackActive) {
+            return "Fix the configured SQL/SQLite provider, then run an explicit migration dry-run if fallback JSON received new data.";
+        }
+        return "";
+    }
+
+    private boolean fallbackMarkerExists() {
+        try {
+            return platformConfig != null && Files.exists(platformConfig.resolveConfigPath("paradigm/data/json-fallback-active.marker"));
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private void markFallbackData() {
+        try {
+            if (platformConfig == null) {
+                return;
+            }
+            Path marker = platformConfig.resolveConfigPath("paradigm/data/json-fallback-active.marker");
+            Files.createDirectories(marker.getParent());
+            Files.writeString(marker, "JSON fallback was activated at " + System.currentTimeMillis() + System.lineSeparator());
+        } catch (Throwable t) {
+            if (debugLogger != null) {
+                debugLogger.debugLog("Failed to write fallback marker: " + t.getMessage());
+            }
+        }
     }
 
     @Override
@@ -419,14 +512,20 @@ public class StorageService implements AutoCloseable {
     public record StorageStatus(
             String selectedProvider,
             String activeProvider,
+            String configuredDataProvider,
+            String activeDataProvider,
             String displayName,
             ServerIdentity serverIdentity,
             String target,
+            String dataLocation,
             int migrationVersion,
             boolean repositoriesAvailable,
             boolean serverRegistered,
             boolean fallbackActive,
             String fallbackReason,
+            boolean fallbackDataPresent,
+            String fallbackWarning,
+            String migrationRecommendation,
             StorageTestResult lastTestResult,
             String dependencyMode,
             String runtimeLibraryCachePath,

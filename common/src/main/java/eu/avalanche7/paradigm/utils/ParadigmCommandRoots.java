@@ -58,6 +58,15 @@ public final class ParadigmCommandRoots {
         roots.add("clearinv");
         roots.add("ci");
 
+        // Paradigm moderation owns these vanilla/mod-conflicting roots while enabled.
+        roots.add("ban");
+        roots.add("tempban");
+        roots.add("unban");
+        roots.add("pardon");
+        roots.add("ipban");
+        roots.add("tempipban");
+        roots.add("unipban");
+
         // Messaging commands and aliases
         roots.add("msg");
         roots.add("tell");

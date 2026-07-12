@@ -1,5 +1,7 @@
 package eu.avalanche7.paradigm.storage.sql;
 
+import eu.avalanche7.paradigm.modules.audit.AuditRepository;
+import eu.avalanche7.paradigm.modules.audit.SqlAuditRepository;
 import eu.avalanche7.paradigm.storage.StorageConfig;
 import eu.avalanche7.paradigm.storage.StorageProvider;
 import eu.avalanche7.paradigm.storage.StorageProviderType;
@@ -31,6 +33,7 @@ public class SqlStorageProvider implements StorageProvider {
     private ModerationRepository moderation;
     private AdminStateRepository adminState;
     private ServerRepository servers;
+    private AuditRepository audit;
     private boolean serverRegistered;
 
     public SqlStorageProvider(
@@ -61,6 +64,7 @@ public class SqlStorageProvider implements StorageProvider {
         this.moderation = new SqlModerationRepository(executor, context);
         this.adminState = new SqlAdminStateRepository(executor, context);
         this.servers = new SqlServerRepository(executor);
+        this.audit = new SqlAuditRepository(executor);
         if (identityService != null) {
             serverRegistered = identityService.registerWith(servers);
         }
@@ -77,6 +81,7 @@ public class SqlStorageProvider implements StorageProvider {
     @Override public ModerationRepository moderation() { return moderation; }
     @Override public AdminStateRepository adminState() { return adminState; }
     @Override public ServerRepository servers() { return servers; }
+    @Override public AuditRepository audit() { return audit; }
 
     @Override
     public StorageService.StorageTestResult test() {

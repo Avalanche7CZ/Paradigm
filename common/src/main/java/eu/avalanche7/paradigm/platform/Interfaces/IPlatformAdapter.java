@@ -147,6 +147,17 @@ public interface IPlatformAdapter {
     IComponent wrap(Object text);
     IComponent createComponentFromLiteral(String text);
     String getMinecraftVersion();
+    String getLoaderName();
+
+    default String getPlayerRemoteAddress(IPlayer player) {
+        Object original = player != null ? player.getOriginalPlayer() : null;
+        Object handler = firstNonNull(readField(original, "networkHandler"), readField(original, "connection"));
+        Object connection = firstNonNull(readField(handler, "connection"), handler);
+        Object address = firstNonNull(invokeReturning(connection, "getRemoteAddress"), invokeReturning(connection, "getAddress"));
+        return address != null ? String.valueOf(address) : null;
+    }
+
+    boolean disconnectPlayer(IPlayer player, IComponent reason);
 
     Object createStyleWithClickEvent(Object baseStyle, String action, String value);
     Object createStyleWithHoverEvent(Object baseStyle, Object hoverText);
@@ -531,6 +542,21 @@ public interface IPlatformAdapter {
             Field field = target.getClass().getDeclaredField(name);
             field.setAccessible(true);
             return field.get(target);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private static Object firstNonNull(Object first, Object second) {
+        return first != null ? first : second;
+    }
+
+    private static Object invokeReturning(Object target, String name) {
+        if (target == null) return null;
+        try {
+            java.lang.reflect.Method method = target.getClass().getMethod(name);
+            method.setAccessible(true);
+            return method.invoke(target);
         } catch (Throwable ignored) {
             return null;
         }

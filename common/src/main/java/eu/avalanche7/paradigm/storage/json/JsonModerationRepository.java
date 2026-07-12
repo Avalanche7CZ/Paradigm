@@ -8,11 +8,16 @@ import eu.avalanche7.paradigm.storage.model.StoredLocation;
 import eu.avalanche7.paradigm.storage.model.StoredPunishment;
 import eu.avalanche7.paradigm.storage.model.StoredWarning;
 import eu.avalanche7.paradigm.storage.repository.ModerationRepository;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentIds;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Map;
+import java.util.Comparator;
 
 public class JsonModerationRepository implements ModerationRepository {
     private final ModerationDataStore store;
@@ -21,6 +26,63 @@ public class JsonModerationRepository implements ModerationRepository {
     public JsonModerationRepository(ModerationDataStore store, StorageContext context) {
         this.store = store;
         this.context = context;
+    }
+
+    @Override
+    public PunishmentRecord addPunishmentRecord(PunishmentRecord punishment) {
+        ensureLegacyLedger();
+        return store != null ? store.addPunishmentRecord(punishment) : null;
+    }
+
+    @Override
+    public Optional<PunishmentRecord> findPunishmentRecord(String punishmentId) {
+        ensureLegacyLedger();
+        return store == null ? Optional.empty() : store.punishmentRecords().stream()
+                .filter(record -> record != null && record.punishmentId().equalsIgnoreCase(punishmentId)).findFirst();
+    }
+
+    @Override
+    public boolean revokePunishmentRecord(String punishmentId, long revokedAtMs, String actorUuid, String actorName, String reason) {
+        Optional<PunishmentRecord> current = findPunishmentRecord(punishmentId);
+        return current.isPresent() && current.get().revokedAtMs() == null
+                && store.replacePunishmentRecord(current.get().revoked(revokedAtMs, actorUuid, actorName, reason));
+    }
+
+    @Override
+    public List<PunishmentRecord> listPunishmentRecords(String subjectUuid, int offset, int limit) {
+        ensureLegacyLedger();
+        if (store == null) return List.of();
+        String uuid = subjectUuid != null ? subjectUuid.trim().toLowerCase(Locale.ROOT) : null;
+        return store.punishmentRecords().stream()
+                .filter(record -> record != null && (uuid == null || (record.subjectUuid() != null && record.subjectUuid().equalsIgnoreCase(uuid))))
+                .sorted(Comparator.comparingLong(PunishmentRecord::createdAtMs).reversed())
+                .skip(Math.max(0, offset)).limit(Math.max(1, Math.min(limit, 500))).toList();
+    }
+
+    @Override
+    public List<PunishmentRecord> listActivePunishmentRecords(long updatedAfterMs) {
+        ensureLegacyLedger();
+        long now = System.currentTimeMillis();
+        return store == null ? List.of() : store.punishmentRecords().stream()
+                .filter(record -> record != null && record.updatedAtMs() > updatedAfterMs && record.activeAt(now)
+                        && record.appliesTo(networkId(), serverId())).toList();
+    }
+
+    private void ensureLegacyLedger() {
+        if (store == null || !store.punishmentRecords().isEmpty()) return;
+        for (ModerationDataStore.MuteEntry entry : store.activeMutes()) addLegacy("mute", ServerScope.SERVER, entry.uuid, entry.name, entry.reason, entry.actor, entry.createdAtMs, entry.expiresAtMs > 0L ? entry.expiresAtMs : null);
+        for (ModerationDataStore.TempBanEntry entry : store.activeTempBans()) addLegacy("tempban", ServerScope.GLOBAL, null, entry.name, entry.reason, entry.actor, entry.createdAtMs, entry.expiresAtMs > 0L ? entry.expiresAtMs : null);
+        for (ModerationDataStore.BanEntry entry : store.activeBans()) addLegacy("ban", ServerScope.GLOBAL, null, entry.name, entry.reason, entry.actor, entry.createdAtMs, null);
+        for (ModerationDataStore.WarnEntry entry : store.warnings()) addLegacy("warn", ServerScope.GLOBAL, entry.uuid, entry.name, entry.reason, entry.actor, entry.createdAtMs, null);
+        for (ModerationDataStore.JailEntry entry : store.activeJails()) addLegacy("jail", ServerScope.SERVER, entry.uuid, entry.name, entry.reason, entry.actor, entry.createdAtMs, entry.expiresAtMs > 0L ? entry.expiresAtMs : null);
+    }
+
+    private void addLegacy(String type, ServerScope scope, String uuid, String name, String reason, String actor, long createdAt, Long expiresAt) {
+        long created = createdAt > 0L ? createdAt : 1L;
+        String source = type + '|' + scope + '|' + uuid + '|' + name + '|' + created;
+        store.addPunishmentRecord(new PunishmentRecord(PunishmentIds.legacy(source), PunishmentType.fromLegacy(type), scope,
+                networkId(), scope == ServerScope.SERVER ? serverId() : null, uuid, name, null, null, reason,
+                null, actor, created, created, expiresAt, null, null, null, null, created, Map.of("legacy", "json")));
     }
 
     @Override
@@ -180,5 +242,9 @@ public class JsonModerationRepository implements ModerationRepository {
 
     private String serverId() {
         return context != null ? context.serverId() : "default";
+    }
+
+    private String networkId() {
+        return context != null ? context.networkId() : "default";
     }
 }

@@ -1,5 +1,6 @@
 package eu.avalanche7.paradigm.utils;
 
+import eu.avalanche7.paradigm.ParadigmAPI;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
 
 import java.lang.reflect.Field;
@@ -26,11 +27,51 @@ public final class CommandPriority {
             return false;
         }
         try {
-            return Boolean.TRUE.equals(MainConfigHandler.getConfig().forceCommandPriorityEnable.value)
-                    && ParadigmCommandRoots.isOwnedRoot(normalized);
+            boolean forceEnabled = Boolean.TRUE.equals(MainConfigHandler.getConfig().forceCommandPriorityEnable.value);
+            var services = ParadigmAPI.getServices();
+            boolean commandEnabled = services == null || services.getCommandToggleStore() == null
+                    || services.getCommandToggleStore().isEnabled(normalized);
+            return shouldOwnRoot(normalized, forceEnabled, commandEnabled);
         } catch (Throwable ignored) {
             return false;
         }
+    }
+
+    /** Pure policy used by adapters and regression tests: disabled commands never own roots. */
+    public static boolean shouldOwnRoot(String rootLiteral, boolean forcePriorityEnabled, boolean commandEnabled) {
+        return forcePriorityEnabled && commandEnabled && ParadigmCommandRoots.isOwnedRoot(rootLiteral);
+    }
+
+    /**
+     * Returns whether a command builder for this root should be added to the
+     * dispatcher at all.  Ownership and registration are deliberately
+     * separate: when priority replacement is disabled we still register the
+     * Paradigm command normally, but a disabled owned command must not merge
+     * into (or reserve) an existing vanilla/mod root.
+     */
+    public static boolean shouldRegisterRoot(String rootLiteral) {
+        String normalized = normalizeRoot(rootLiteral);
+        if (normalized == null) {
+            return false;
+        }
+        try {
+            boolean forceEnabled = Boolean.TRUE.equals(MainConfigHandler.getConfig().forceCommandPriorityEnable.value);
+            var services = ParadigmAPI.getServices();
+            boolean commandEnabled = services == null || services.getCommandToggleStore() == null
+                    || services.getCommandToggleStore().isEnabled(normalized);
+            return shouldRegisterRoot(normalized, forceEnabled, commandEnabled);
+        } catch (Throwable ignored) {
+            // If command state cannot be read, keep normal registration.  The
+            // fail-closed policy applies to root replacement, not availability.
+            return true;
+        }
+    }
+
+    public static boolean shouldRegisterRoot(String rootLiteral, boolean forcePriorityEnabled, boolean commandEnabled) {
+        // The command toggle controls registration independently of priority
+        // replacement.  A disabled owned root must never be merged into a
+        // dispatcher, even when priority mode itself is off.
+        return !ParadigmCommandRoots.isOwnedRoot(rootLiteral) || commandEnabled;
     }
 
     public static boolean hasRootLiteral(Object dispatcher, String rootLiteral) {

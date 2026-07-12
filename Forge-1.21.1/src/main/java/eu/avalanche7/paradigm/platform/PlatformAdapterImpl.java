@@ -1,5 +1,7 @@
 package eu.avalanche7.paradigm.platform;
 
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
+
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.platform.Interfaces.*;
 import eu.avalanche7.paradigm.utils.*;
@@ -119,6 +121,14 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         } catch (IllegalArgumentException e) {
             return null;
         }
+    }
+
+    @Override
+    public boolean disconnectPlayer(IPlayer player, IComponent reason) {
+        if (!(player != null && player.getOriginalPlayer() instanceof ServerPlayer nativePlayer)) return false;
+        Object component = reason != null ? reason.getOriginalText() : null;
+        nativePlayer.connection.disconnect(component instanceof net.minecraft.network.chat.Component nativeComponent ? nativeComponent : net.minecraft.network.chat.Component.literal(reason != null ? reason.getRawText() : "Disconnected"));
+        return true;
     }
 
     @Nullable
@@ -600,6 +610,9 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             return;
         }
 
+        if (!CommandPriority.shouldRegisterRoot(normalizedRoot)) {
+            return;
+        }
         boolean shouldOwnRoot = CommandPriority.shouldOwnRoot(normalizedRoot);
         boolean firstParadigmRegistrationForRoot = shouldOwnRoot && ownedRootsRegisteredThisCycle.add(normalizedRoot);
         if (firstParadigmRegistrationForRoot) {
@@ -641,6 +654,9 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     public String getMinecraftVersion() {
         return net.minecraft.SharedConstants.getCurrentVersion().getName();
     }
+
+    @Override
+    public String getLoaderName() { return "Forge"; }
 
     @Override
     public void executeCommandAs(ICommandSource source, String command) {

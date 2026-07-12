@@ -1,5 +1,8 @@
 package eu.avalanche7.paradigm.storage.migration;
 
+import eu.avalanche7.paradigm.modules.moderation.PunishmentIds;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
 import eu.avalanche7.paradigm.storage.StorageProvider;
 import eu.avalanche7.paradigm.storage.StorageProviderType;
 import eu.avalanche7.paradigm.storage.StorageService;
@@ -92,6 +95,23 @@ class StorageMigrationServiceTest {
         assertEquals(1, summary.warps());
     }
 
+    @Test
+    void migratesUnifiedPunishmentLedgerByStableId() {
+        FakeProvider source = new FakeProvider();
+        FakeProvider target = new FakeProvider();
+        String id = PunishmentIds.create();
+        source.moderation.addPunishmentRecord(new PunishmentRecord(id, PunishmentType.BAN, ServerScope.GLOBAL,
+                "network", null, UUID, "Player", null, null, "Reason", null, "Staff",
+                10L, 10L, null, null, null, null, null, 10L, Map.of()));
+
+        StorageMigrationService.MigrationSummary summary = new StorageMigrationService(null)
+                .migrate(source, target, IDENTITY);
+
+        assertTrue(summary.success());
+        assertEquals(1, summary.moderationRecords());
+        assertEquals(id, target.moderation.findPunishmentRecord(id).orElseThrow().punishmentId());
+    }
+
     private static FakeProvider providerWithCoreData() {
         FakeProvider provider = new FakeProvider();
         provider.players.upsertProfile(new StoredPlayerProfile(UUID, "Player", 1L, 2L));
@@ -181,6 +201,22 @@ class StorageMigrationServiceTest {
     }
 
     private static class FakeModerationRepository implements ModerationRepository {
+        private final Map<String, PunishmentRecord> ledger = new LinkedHashMap<>();
+        @Override public PunishmentRecord addPunishmentRecord(PunishmentRecord punishment) { ledger.put(punishment.punishmentId(), punishment); return punishment; }
+        @Override public Optional<PunishmentRecord> findPunishmentRecord(String punishmentId) { return Optional.ofNullable(ledger.get(punishmentId)); }
+        @Override public boolean revokePunishmentRecord(String punishmentId, long revokedAtMs, String actorUuid, String actorName, String reason) {
+            PunishmentRecord current = ledger.get(punishmentId);
+            if (current == null || current.revokedAtMs() != null) return false;
+            ledger.put(punishmentId, current.revoked(revokedAtMs, actorUuid, actorName, reason));
+            return true;
+        }
+        @Override public List<PunishmentRecord> listPunishmentRecords(String subjectUuid, int offset, int limit) {
+            return ledger.values().stream().filter(record -> subjectUuid == null || subjectUuid.equals(record.subjectUuid()))
+                    .skip(offset).limit(limit).toList();
+        }
+        @Override public List<PunishmentRecord> listActivePunishmentRecords(long updatedAfterMs) {
+            return ledger.values().stream().filter(record -> record.activeAt(System.currentTimeMillis())).toList();
+        }
         @Override public long addPunishment(StoredPunishment punishment) { return 0; }
         @Override public boolean deactivatePunishment(long id) { return false; }
         @Override public boolean deactivateActivePunishments(String type, String uuid, String name) { return false; }

@@ -5,11 +5,18 @@ import eu.avalanche7.paradigm.storage.model.StoredJailState;
 import eu.avalanche7.paradigm.storage.model.StoredLocation;
 import eu.avalanche7.paradigm.storage.model.StoredPunishment;
 import eu.avalanche7.paradigm.storage.model.StoredWarning;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
 
 import java.util.List;
 import java.util.Optional;
 
 public interface ModerationRepository {
+    default PunishmentRecord addPunishmentRecord(PunishmentRecord punishment) { throw new UnsupportedOperationException("Punishment ledger is unavailable."); }
+    default Optional<PunishmentRecord> findPunishmentRecord(String punishmentId) { return Optional.empty(); }
+    default boolean revokePunishmentRecord(String punishmentId, long revokedAtMs, String actorUuid, String actorName, String reason) { return false; }
+    default List<PunishmentRecord> listPunishmentRecords(String subjectUuid, int offset, int limit) { return List.of(); }
+    default List<PunishmentRecord> listActivePunishmentRecords(long updatedAfterMs) { return List.of(); }
+
     long addPunishment(StoredPunishment punishment);
     boolean deactivatePunishment(long id);
     boolean deactivateActivePunishments(String type, String uuid, String name);

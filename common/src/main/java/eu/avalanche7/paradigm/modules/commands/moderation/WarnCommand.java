@@ -5,8 +5,9 @@ import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.storage.model.StoredWarning;
-import eu.avalanche7.paradigm.utils.PermissionsHandler;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
+import eu.avalanche7.paradigm.storage.identity.ServerScope;
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 public class WarnCommand extends AbstractModerationCommand {
     @Override
@@ -36,19 +37,11 @@ public class WarnCommand extends AbstractModerationCommand {
         String reason = reason(rawReason);
         String targetUuid = target.getUUID();
         String targetName = target.getName();
-        StoredWarning warning = new StoredWarning(
-                0L,
-                targetUuid,
-                targetName,
-                reason,
-                actorName(source),
-                System.currentTimeMillis()
-        );
         return StorageCommandSupport.runForSource(services, source, "moderation.warn", () -> {
-            services.getStorageService().moderation().addWarning(warning);
-            return true;
-        }, ignored -> {
-            send(source, "moderation.warn_ok", "Warned {player}.", "{player}", targetName);
+            return services.getPunishmentService().create(PunishmentType.WARN, ServerScope.GLOBAL, targetUuid, targetName,
+                    null, reason, actorUuid(source), actorName(source), null);
+        }, warning -> {
+            send(source, "moderation.warn_ok", "Warned {player}. ID: {id}.", "{player}", targetName, "{id}", warning.punishmentId());
             IPlayer currentTarget = services.getPlatformAdapter().getPlayerByUuid(targetUuid);
             if (currentTarget != null) {
                 send(currentTarget, "moderation.warned", "You were warned. Reason: {reason}", "{reason}", reason);

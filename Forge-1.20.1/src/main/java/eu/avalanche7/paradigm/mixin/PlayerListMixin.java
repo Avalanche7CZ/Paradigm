@@ -17,6 +17,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(PlayerList.class)
 public abstract class PlayerListMixin {
 
+    @Inject(method = {"placeNewPlayer", "m_11261_"}, at = @At("HEAD"), cancellable = true, remap = false)
+    private void paradigm$rejectPunishedConnection(net.minecraft.network.Connection connection, ServerPlayer player, CallbackInfo ci) {
+        Services services = Paradigm.getServices();
+        if (services == null) return;
+        var blocked = services.getPunishmentService().loginBlock(player.getUUID().toString(), String.valueOf(connection.getRemoteAddress()));
+        if (blocked.isEmpty()) return;
+        IComponent formatted = services.getPunishmentService().banScreen().format(blocked.get());
+        connection.disconnect(formatted instanceof MinecraftComponent component ? component.getHandle() : Component.literal(formatted.getRawText()));
+        ci.cancel();
+    }
+
     static {
         System.out.println("[Paradigm-Mixin] PlayerListMixin loaded!");
     }

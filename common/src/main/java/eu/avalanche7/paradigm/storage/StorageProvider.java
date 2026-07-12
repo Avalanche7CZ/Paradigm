@@ -1,5 +1,6 @@
 package eu.avalanche7.paradigm.storage;
 
+import eu.avalanche7.paradigm.modules.audit.AuditRepository;
 import eu.avalanche7.paradigm.storage.repository.AdminStateRepository;
 import eu.avalanche7.paradigm.storage.repository.ModerationRepository;
 import eu.avalanche7.paradigm.storage.repository.PermissionRepository;
@@ -18,6 +19,14 @@ public interface StorageProvider extends AutoCloseable {
     ModerationRepository moderation();
     AdminStateRepository adminState();
     ServerRepository servers();
+    default AuditRepository audit() {
+        return new AuditRepository() {
+            @Override public void append(eu.avalanche7.paradigm.modules.audit.AuditEntry entry) {}
+            @Override public java.util.List<eu.avalanche7.paradigm.modules.audit.AuditEntry> recent(int limit) { return java.util.List.of(); }
+            @Override public java.util.List<eu.avalanche7.paradigm.modules.audit.AuditEntry> byActor(String actor, int limit) { return java.util.List.of(); }
+            @Override public java.util.List<eu.avalanche7.paradigm.modules.audit.AuditEntry> byType(String type, int limit) { return java.util.List.of(); }
+        };
+    }
 
     StorageService.StorageTestResult test();
     int migrationVersion();

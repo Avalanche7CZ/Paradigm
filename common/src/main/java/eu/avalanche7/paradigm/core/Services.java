@@ -8,7 +8,14 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.storage.StorageService;
 import eu.avalanche7.paradigm.utils.*;
 import org.slf4j.Logger;
-import eu.avalanche7.paradigm.webeditor.store.WebEditorStore;
+import eu.avalanche7.paradigm.modules.webeditor.store.WebEditorStore;
+import eu.avalanche7.paradigm.modules.audit.AuditService;
+import eu.avalanche7.paradigm.modules.permissions.PermissionAdminService;
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
+import eu.avalanche7.paradigm.modules.dashboard.customcommands.CustomCommandAdminService;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentService;
+
+import java.util.concurrent.ForkJoinPool;
 
 public class Services {
 
@@ -38,6 +45,10 @@ public class Services {
     private final IPlatformAdapter platformAdapter;
 
     private final WebEditorStore webEditorStore;
+    private volatile AuditService auditService;
+    private volatile PermissionAdminService permissionAdminService;
+    private volatile CustomCommandAdminService customCommandAdminService;
+    private volatile PunishmentService punishmentService;
 
 
     public Services(
@@ -205,5 +216,41 @@ public class Services {
 
     public WebEditorStore getWebEditorStore() {
         return webEditorStore;
+    }
+
+    public AuditService getAuditService() {
+        AuditService current = auditService;
+        if (current != null) return current;
+        synchronized (this) {
+            if (auditService == null) auditService = new AuditService(this, ForkJoinPool.commonPool());
+            return auditService;
+        }
+    }
+
+    public PermissionAdminService getPermissionAdminService() {
+        PermissionAdminService current = permissionAdminService;
+        if (current != null) return current;
+        synchronized (this) {
+            if (permissionAdminService == null) permissionAdminService = new PermissionAdminService(this, getAuditService());
+            return permissionAdminService;
+        }
+    }
+
+    public PunishmentService getPunishmentService() {
+        PunishmentService current = punishmentService;
+        if (current != null) return current;
+        synchronized (this) {
+            if (punishmentService == null) punishmentService = new PunishmentService(this, getAuditService());
+            return punishmentService;
+        }
+    }
+
+    public CustomCommandAdminService getCustomCommandAdminService() {
+        CustomCommandAdminService current = customCommandAdminService;
+        if (current != null) return current;
+        synchronized (this) {
+            if (customCommandAdminService == null) customCommandAdminService = new CustomCommandAdminService(this);
+            return customCommandAdminService;
+        }
     }
 }

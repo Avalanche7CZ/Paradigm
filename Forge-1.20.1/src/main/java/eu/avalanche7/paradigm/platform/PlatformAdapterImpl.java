@@ -1,7 +1,8 @@
 package eu.avalanche7.paradigm.platform;
 
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
+
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.tree.CommandNode;
 import com.mojang.brigadier.tree.LiteralCommandNode;
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.platform.Interfaces.*;
@@ -120,6 +121,14 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         } catch (IllegalArgumentException e) {
             return null;
         }
+    }
+
+    @Override
+    public boolean disconnectPlayer(IPlayer player, IComponent reason) {
+        if (!(player != null && player.getOriginalPlayer() instanceof ServerPlayer nativePlayer)) return false;
+        Object component = reason != null ? reason.getOriginalText() : null;
+        nativePlayer.connection.disconnect(component instanceof net.minecraft.network.chat.Component nativeComponent ? nativeComponent : net.minecraft.network.chat.Component.literal(reason != null ? reason.getRawText() : "Disconnected"));
+        return true;
     }
 
     @Nullable
@@ -607,15 +616,18 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             return;
         }
 
-        boolean shouldOwnRoot = shouldOverrideRootLiteral(normalizedRoot);
+        if (!CommandPriority.shouldRegisterRoot(normalizedRoot)) {
+            return;
+        }
+        boolean shouldOwnRoot = CommandPriority.shouldOwnRoot(normalizedRoot);
         boolean firstParadigmRegistrationForRoot = shouldOwnRoot && !ownedRootsRegisteredThisCycle.contains(normalizedRoot);
         boolean strictIdentityVerification = firstParadigmRegistrationForRoot;
 
         if (firstParadigmRegistrationForRoot) {
-            boolean hadExistingRoot = hasRootLiteral(dispatcher, normalizedRoot);
+            boolean hadExistingRoot = CommandPriority.hasRootLiteral(dispatcher, normalizedRoot);
             if (hadExistingRoot) {
                 LOGGER.info("[Paradigm] Overriding existing command root: /{}", normalizedRoot);
-                boolean removed = unregisterRootLiteral(dispatcher, normalizedRoot);
+                boolean removed = CommandPriority.unregisterRootLiteral(dispatcher, normalizedRoot);
                 if (!removed) {
                     LOGGER.warn("[Paradigm] Failed to remove existing command root before override: /{}", normalizedRoot);
                 }
@@ -627,7 +639,10 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
         if (shouldOwnRoot) {
             ownedRootsRegisteredThisCycle.add(normalizedRoot);
-            verifyCommandOwnership(dispatcher, normalizedRoot, registeredNode, strictIdentityVerification);
+            if (strictIdentityVerification
+                    && !CommandPriority.isOwnedByExpectedNode(dispatcher, normalizedRoot, registeredNode)) {
+                LOGGER.warn("[Paradigm] Command root /{} still points to non-Paradigm logic after registration.", normalizedRoot);
+            }
         }
     }
 
@@ -639,94 +654,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             return server.getCommands().getDispatcher();
         }
         return null;
-    }
-
-    private boolean shouldOverrideRootLiteral(String rootLiteral) {
-        if (rootLiteral == null || rootLiteral.isBlank()) {
-            return false;
-        }
-        try {
-            if (!eu.avalanche7.paradigm.configs.MainConfigHandler.getConfig().forceCommandPriorityEnable.value) {
-                return false;
-            }
-            return ParadigmCommandRoots.isOwnedRoot(rootLiteral);
-        } catch (Throwable ignored) {
-            return false;
-        }
-    }
-
-    private boolean hasRootLiteral(CommandDispatcher<CommandSourceStack> dispatcher, String rootLiteral) {
-        if (dispatcher == null || rootLiteral == null || rootLiteral.isBlank()) {
-            return false;
-        }
-        try {
-            return dispatcher.getRoot().getChild(rootLiteral) != null;
-        } catch (Throwable ignored) {
-            return false;
-        }
-    }
-
-    private void verifyCommandOwnership(
-            CommandDispatcher<CommandSourceStack> dispatcher,
-            String rootLiteral,
-            LiteralCommandNode<CommandSourceStack> expectedNode,
-            boolean strictIdentityVerification
-    ) {
-        if (dispatcher == null || rootLiteral == null || rootLiteral.isBlank()) {
-            return;
-        }
-        CommandNode<CommandSourceStack> actualNode;
-        try {
-            actualNode = dispatcher.getRoot().getChild(rootLiteral);
-        } catch (Throwable t) {
-            LOGGER.warn("[Paradigm] Could not verify ownership for /{}: {}", rootLiteral, t.toString());
-            return;
-        }
-
-        if (actualNode == null) {
-            LOGGER.warn("[Paradigm] Command root registration failed, /{} is missing after register.", rootLiteral);
-            return;
-        }
-
-        if (strictIdentityVerification && expectedNode != null && actualNode != expectedNode) {
-            LOGGER.warn("[Paradigm] Command root /{} still points to non-Paradigm logic after registration.", rootLiteral);
-        }
-    }
-
-    private boolean unregisterRootLiteral(CommandDispatcher<CommandSourceStack> dispatcher, String rootLiteral) {
-        if (dispatcher == null || rootLiteral == null || rootLiteral.isBlank()) {
-            return false;
-        }
-        try {
-            Object rootNode = dispatcher.getRoot();
-            Class<?> nodeClass = com.mojang.brigadier.tree.CommandNode.class;
-
-            java.lang.reflect.Field childrenField = nodeClass.getDeclaredField("children");
-            java.lang.reflect.Field literalsField = nodeClass.getDeclaredField("literals");
-            java.lang.reflect.Field argumentsField = nodeClass.getDeclaredField("arguments");
-
-            childrenField.setAccessible(true);
-            literalsField.setAccessible(true);
-            argumentsField.setAccessible(true);
-
-            Object children = childrenField.get(rootNode);
-            Object literals = literalsField.get(rootNode);
-            Object arguments = argumentsField.get(rootNode);
-            boolean removed = false;
-
-            if (children instanceof java.util.Map<?, ?> map) {
-                removed |= ((java.util.Map<?, ?>) map).remove(rootLiteral) != null;
-            }
-            if (literals instanceof java.util.Map<?, ?> map) {
-                removed |= ((java.util.Map<?, ?>) map).remove(rootLiteral) != null;
-            }
-            if (arguments instanceof java.util.Map<?, ?> map) {
-                removed |= ((java.util.Map<?, ?>) map).remove(rootLiteral) != null;
-            }
-            return removed;
-        } catch (Throwable ignored) {
-            return false;
-        }
     }
 
     private boolean tryGracefulStop(MinecraftServer server) {
@@ -781,6 +708,9 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     public String getMinecraftVersion() {
         return net.minecraft.SharedConstants.getCurrentVersion().getName();
     }
+
+    @Override
+    public String getLoaderName() { return "Forge"; }
 
     @Override
     public void executeCommandAs(ICommandSource source, String command) {

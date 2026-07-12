@@ -212,6 +212,11 @@ public class Help implements ParadigmModule {
                 "/heal [player]",
                 "runtime player stats"
         ));
+        m.put("Punishments", new HelpEntry(
+                "Create scoped punishments, inspect player history, and revoke exact punishment records.",
+                "/ban, /tempban, /ipban, /tempipban, /unban, /unipban, /history, /paradigm punishment info|revoke|history",
+                "moderation punishment ledger"
+        ));
         m.put("Reload", new HelpEntry(
                 "Reload configs and manage clickable command toggles without full restart.",
                 "/paradigm reload [config], /paradigm command list|search|enable|disable",

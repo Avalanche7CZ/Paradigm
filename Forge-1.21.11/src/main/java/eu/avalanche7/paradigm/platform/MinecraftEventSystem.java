@@ -16,7 +16,7 @@ import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.server.ServerLifecycleHooks;
 import net.minecraftforge.server.permission.events.PermissionGatherEvent;
 import net.minecraftforge.server.permission.nodes.PermissionNode;
-import eu.avalanche7.paradigm.utils.PermissionNodeRegistry;
+import eu.avalanche7.paradigm.modules.permissions.PermissionNodeRegistry;
 
 import java.util.concurrent.CopyOnWriteArrayList;
 

@@ -32,15 +32,7 @@ public class MinecraftPlayer implements IPlayer {
     @Override
     public String getWorldId() {
         try {
-            Object world;
-            try {
-                world = player.getClass().getMethod("getServerWorld").invoke(player);
-            } catch (Throwable ignored) {
-                world = player.getClass().getMethod("getWorld").invoke(player);
-            }
-            Object key = world.getClass().getMethod("getRegistryKey").invoke(world);
-            Object value = key.getClass().getMethod("getValue").invoke(key);
-            return value != null ? value.toString() : null;
+            return player.getWorld().getRegistryKey().getValue().toString();
         } catch (Throwable t) {
             return null;
         }

@@ -100,11 +100,14 @@ public class SqlMigrationRunner implements MigrationRunner {
                 case 1 -> "initial";
                 case 2 -> "moderation";
                 case 3 -> "permissions";
+                case 4 -> "audit";
+                case 5 -> "permission_assignments";
+                case 6 -> "punishment_ledger";
                 default -> "migration";
             } + ".sql";
             String sql = resourceText(resource);
             if (sql == null) {
-                if (version > 3) break;
+                if (version > 4) break;
                 continue;
             }
             migrations.add(new Migration(version, resource, sql));

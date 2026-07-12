@@ -1,5 +1,7 @@
 package eu.avalanche7.paradigm.platform;
 
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
+
 import com.mojang.brigadier.CommandDispatcher;
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
@@ -122,6 +124,14 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         } catch (IllegalArgumentException e) {
             return null;
         }
+    }
+
+    @Override
+    public boolean disconnectPlayer(IPlayer player, IComponent reason) {
+        if (!(player != null && player.getOriginalPlayer() instanceof ServerPlayerEntity nativePlayer)) return false;
+        Object text = reason != null ? reason.getOriginalText() : null;
+        nativePlayer.networkHandler.disconnect(text instanceof net.minecraft.text.Text nativeText ? nativeText : net.minecraft.text.Text.literal(reason != null ? reason.getRawText() : "Disconnected"));
+        return true;
     }
 
     @Override
@@ -660,6 +670,9 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
                 return;
             }
 
+            if (!CommandPriority.shouldRegisterRoot(normalizedRoot)) {
+                return;
+            }
             boolean shouldOwnRoot = CommandPriority.shouldOwnRoot(normalizedRoot);
             boolean firstParadigmRegistrationForRoot = shouldOwnRoot && ownedRootsRegisteredThisCycle.add(normalizedRoot);
             if (firstParadigmRegistrationForRoot) {
@@ -714,6 +727,9 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     public String getMinecraftVersion() {
         return net.minecraft.SharedConstants.getGameVersion().getName();
     }
+
+    @Override
+    public String getLoaderName() { return "Fabric"; }
 
     @Override
     public void teleportPlayer(IPlayer player, double x, double y, double z) {
