@@ -27,6 +27,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -452,10 +453,15 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public boolean enchantMainHand(IPlayer player, String enchantmentId, int level) {
-        if (!(player instanceof MinecraftPlayer mp) || server == null || enchantmentId == null || enchantmentId.isBlank()) return false;
-        return server.getCommands().performPrefixedCommand(
-                server.createCommandSourceStack().withPermission(4),
-                "enchant " + mp.getHandle().getGameProfile().getName() + " " + enchantmentId + " " + level) > 0;
+        if (!(player instanceof MinecraftPlayer mp) || enchantmentId == null || enchantmentId.isBlank()) return false;
+        ResourceLocation id = ResourceLocation.tryParse(enchantmentId);
+        if (id == null) return false;
+        Enchantment enchantment = ForgeRegistries.ENCHANTMENTS.getValue(id);
+        if (enchantment == null) return false;
+        ItemStack stack = mp.getHandle().getMainHandItem();
+        if (stack.isEmpty()) return false;
+        stack.enchant(enchantment, level);
+        return true;
     }
 
     @Override

@@ -43,13 +43,14 @@ public class EnchantCommand extends AbstractAdminCommand {
             return 0;
         }
         int clamped = Math.max(1, Math.min(level, 255));
-        if (!services.getPlatformAdapter().enchantMainHand(target, enchantment, clamped)) {
+        String normalizedEnchantment = EnchantmentIds.normalize(enchantment);
+        if (!services.getPlatformAdapter().enchantMainHand(target, normalizedEnchantment, clamped)) {
             send(source, "admin.enchant_fail", "Could not apply {enchantment} to {player}.",
-                    "{enchantment}", enchantment, "{player}", target.getName());
+                    "{enchantment}", normalizedEnchantment, "{player}", target.getName());
             return 0;
         }
         send(source, "admin.enchant_ok", "Applied {enchantment} {level} to {player}.",
-                "{enchantment}", enchantment, "{level}", String.valueOf(clamped), "{player}", target.getName());
+                "{enchantment}", normalizedEnchantment, "{level}", String.valueOf(clamped), "{player}", target.getName());
         return 1;
     }
 }

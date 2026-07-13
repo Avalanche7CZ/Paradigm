@@ -553,12 +553,16 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public boolean enchantMainHand(IPlayer player, String enchantmentId, int level) {
         if (!(player instanceof MinecraftPlayer mp) || server == null || enchantmentId == null || enchantmentId.isBlank()) return false;
-        String command = "enchant " + mp.getHandle().getGameProfile().getName() + " " + enchantmentId + " " + level;
-        try {
-            return server.getCommands().getDispatcher().execute(command, server.createCommandSourceStack().withPermission(4)) > 0;
-        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException ignored) {
-            return false;
-        }
+        ResourceLocation id = ResourceLocation.tryParse(enchantmentId);
+        if (id == null) return false;
+        ItemStack stack = mp.getHandle().getMainHandItem();
+        if (stack.isEmpty()) return false;
+        var enchantment = server.registryAccess()
+                .registryOrThrow(Registries.ENCHANTMENT)
+                .getHolder(ResourceKey.create(Registries.ENCHANTMENT, id));
+        if (enchantment.isEmpty()) return false;
+        stack.enchant(enchantment.get(), level);
+        return true;
     }
 
     @Override
