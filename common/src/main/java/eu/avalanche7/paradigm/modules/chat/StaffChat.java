@@ -63,7 +63,7 @@ public class StaffChat implements ParadigmModule {
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         ICommandBuilder cmd = platform.createCommandBuilder()
                 .literal("sc")
-                .requires(source -> source.getPlayer() != null &&
+                .requires(source -> services.getCommandToggleStore().isEnabled("sc") && source.getPlayer() != null &&
                         services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.STAFF_CHAT_PERMISSION))
                 .executes(ctx -> {
                     IPlayer player = ctx.getSource().requirePlayer();
@@ -98,7 +98,7 @@ public class StaffChat implements ParadigmModule {
                 if (player == null) return;
                 if (!isEnabled(this.services)) return;
 
-                if (staffChatEnabledMap.getOrDefault(player.getUUID(), false)) {
+                if (ChatRoute.resolve(staffChatEnabledMap.getOrDefault(player.getUUID(), false), false) == ChatRoute.STAFF) {
                     sendStaffChatMessage(player, event.getMessage());
                     event.setCancelled(true);
                 }
@@ -149,4 +149,3 @@ public class StaffChat implements ParadigmModule {
         }
     }
 }
-

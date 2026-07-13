@@ -86,9 +86,6 @@ public class editor implements ParadigmModule {
     private int openEditor(ICommandSource source, Services services) {
         IPlatformAdapter platform = services.getPlatformAdapter();
 
-        Object serverObj = services.getMinecraftServer();
-        final Object server = serverObj;
-
         try {
             services.getWebEditorStore().keyPair();
         } catch (Throwable ignored) {}
@@ -107,59 +104,24 @@ public class editor implements ParadigmModule {
                 if (id == null || id.isEmpty()) {
                     auditWebEditor(source, AuditResult.FAILED, "WebEditor session failed.", Map.of("reason", "empty_session_id"));
                     try { services.getLogger().warn("Paradigm WebEditor: session.open() returned null or empty id for {}", source.getSourceName()); } catch (Throwable ignored) {}
-                    if (server != null) {
-                        try {
-                            var m = server.getClass().getMethod("execute", Runnable.class);
-                            m.invoke(server, (Runnable) () -> platform.sendFailure(source, platform.createLiteralComponent("Failed to create web editor session.")));
-                        } catch (Throwable ignored) {
-                            platform.sendFailure(source, platform.createLiteralComponent("Failed to create web editor session."));
-                        }
-                    } else {
-                        platform.sendFailure(source, platform.createLiteralComponent("Failed to create web editor session."));
-                    }
+                    platform.executeOnServerThread(() -> platform.sendFailure(source, platform.createLiteralComponent("Failed to create web editor session.")));
                     try { services.getLogger().warn("Paradigm WebEditor: Failed to create web editor session for {}", source.getSourceName()); } catch (Throwable ignored) {}
                     return;
                 }
                 String baseUrl = getEditorBaseUrl(services);
                 String url = baseUrl + id;
                 auditWebEditor(source, AuditResult.SUCCESS, "WebEditor session opened.", Map.of("session", "created"));
-                if (server != null) {
-                    try {
-                        var m = server.getClass().getMethod("execute", Runnable.class);
-                        m.invoke(server, (Runnable) () -> {
-                            IComponent link = platform.createComponentFromLiteral(url)
-                                    .onClickOpenUrl(url)
-                                    .onHoverText("Click to open the Web Editor in your browser");
-                            IComponent message = parseUi(services, "<color:#22C55E><bold>[WebEditor]</bold></color> <color:white>Session ready:</color> ").append(link);
-                            platform.sendSuccess(source, message, false);
-                        });
-                    } catch (Throwable ignored) {
-                        IComponent link = platform.createComponentFromLiteral(url)
-                                .onClickOpenUrl(url)
-                                .onHoverText("Click to open the Web Editor in your browser");
-                        IComponent message = parseUi(services, "<color:#22C55E><bold>[WebEditor]</bold></color> <color:white>Session ready:</color> ").append(link);
-                        platform.sendSuccess(source, message, false);
-                    }
-                } else {
+                platform.executeOnServerThread(() -> {
                     IComponent link = platform.createComponentFromLiteral(url)
                             .onClickOpenUrl(url)
                             .onHoverText("Click to open the Web Editor in your browser");
                     IComponent message = parseUi(services, "<color:#22C55E><bold>[WebEditor]</bold></color> <color:white>Session ready:</color> ").append(link);
                     platform.sendSuccess(source, message, false);
-                }
+                });
             } catch (Exception e) {
                 auditWebEditor(source, AuditResult.FAILED, "WebEditor session failed.", Map.of("error", e.getClass().getSimpleName()));
                 try { services.getLogger().warn("Paradigm WebEditor: Error opening editor for {}: {}", source.getSourceName(), e.toString()); } catch (Throwable ignored) {}
-                if (server != null) {
-                    try {
-                        var m = server.getClass().getMethod("execute", Runnable.class);
-                        m.invoke(server, (Runnable) () -> platform.sendFailure(source, platform.createLiteralComponent("Error opening editor: " + e.getMessage())));
-                    } catch (Throwable ignored) {
-                        platform.sendFailure(source, platform.createLiteralComponent("Error opening editor: " + e.getMessage()));
-                    }
-                } else {
-                    platform.sendFailure(source, platform.createLiteralComponent("Error opening editor: " + e.getMessage()));
-                }
+                platform.executeOnServerThread(() -> platform.sendFailure(source, platform.createLiteralComponent("Error opening editor: " + e.getMessage())));
             }
         });
         return 1;

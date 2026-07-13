@@ -6,8 +6,6 @@ import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
-import java.lang.reflect.Field;
-
 public class FlyCommand implements ParadigmModule {
     private Services services;
 
@@ -63,7 +61,7 @@ public class FlyCommand implements ParadigmModule {
     }
 
     private int toggleFly(IPlayer actor, IPlayer target) {
-        if (actor == null || target == null || target.getOriginalPlayer() == null) {
+        if (actor == null || target == null) {
             return 0;
         }
         if (!canTargetOther(actor, target)) {
@@ -71,30 +69,11 @@ public class FlyCommand implements ParadigmModule {
             return 0;
         }
 
-        Object abilities = getAbilities(target.getOriginalPlayer());
-        if (abilities == null) {
+        Boolean next = services.getPlatformAdapter().toggleFlight(target);
+        if (next == null) {
             send(actor, "utility.fly_failed", "Could not toggle fly for {player}.", "{player}", target.getName());
             return 0;
         }
-
-        boolean currentlyAllowed = readBooleanField(abilities, "mayfly", "mayFly", "allowFlying");
-        boolean next = !currentlyAllowed;
-
-        boolean mayflySet = writeBooleanField(abilities, next, "mayfly", "mayFly", "allowFlying");
-        boolean flyingSet = writeBooleanField(abilities, next && readBooleanField(abilities, "flying", "isFlying"), "flying", "isFlying");
-        if (!next) {
-            // Always force-stop flying when disabling fly mode.
-            flyingSet = writeBooleanField(abilities, false, "flying", "isFlying") || flyingSet;
-        }
-        if (!mayflySet && !flyingSet) {
-            send(actor, "utility.fly_failed", "Could not toggle fly for {player}.", "{player}", target.getName());
-            return 0;
-        }
-
-        invokeNoArg(target.getOriginalPlayer(), "onUpdateAbilities");
-        invokeNoArg(target.getOriginalPlayer(), "updateAbilities");
-        invokeNoArg(target.getOriginalPlayer(), "sendAbilitiesUpdate");
-
         send(actor, "utility.fly_toggled", "Fly for {player}: {state}", "{player}", target.getName(), "{state}", next ? "on" : "off");
         return 1;
     }
@@ -104,65 +83,6 @@ public class FlyCommand implements ParadigmModule {
             return true;
         }
         return services.getPermissionsHandler().hasPermission(actor, PermissionsHandler.FLY_OTHERS_PERMISSION, PermissionsHandler.FLY_OTHERS_PERMISSION_LEVEL);
-    }
-
-    private Object getAbilities(Object playerHandle) {
-        if (playerHandle == null) {
-            return null;
-        }
-        Object abilities = invokeNoArg(playerHandle, "getAbilities");
-        if (abilities != null) {
-            return abilities;
-        }
-        return readField(playerHandle, "abilities");
-    }
-
-    private Object invokeNoArg(Object target, String methodName) {
-        try {
-            var method = target.getClass().getMethod(methodName);
-            return method.invoke(target);
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
-
-    private Object readField(Object target, String fieldName) {
-        try {
-            Field field = target.getClass().getDeclaredField(fieldName);
-            field.setAccessible(true);
-            return field.get(target);
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
-
-    private boolean readBooleanField(Object target, String... fieldNames) {
-        for (String fieldName : fieldNames) {
-            try {
-                Field field = target.getClass().getDeclaredField(fieldName);
-                field.setAccessible(true);
-                Object value = field.get(target);
-                if (value instanceof Boolean b) {
-                    return b;
-                }
-            } catch (Throwable ignored) {
-            }
-        }
-        return false;
-    }
-
-    private boolean writeBooleanField(Object target, boolean value, String... fieldNames) {
-        boolean changed = false;
-        for (String fieldName : fieldNames) {
-            try {
-                Field field = target.getClass().getDeclaredField(fieldName);
-                field.setAccessible(true);
-                field.setBoolean(target, value);
-                changed = true;
-            } catch (Throwable ignored) {
-            }
-        }
-        return changed;
     }
 
     private void send(IPlayer player, String key, String fallback, String... placeholders) {

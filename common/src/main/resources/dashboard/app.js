@@ -1167,6 +1167,30 @@ async function loadPermissions() {
   } catch (error) { renderError('permission-target-list', error.message); }
 }
 
+async function runLuckPermsMigration() {
+  const direction = $('luckperms-direction').value;
+  const mode = $('luckperms-mode').value;
+  let confirmed = false;
+  if (mode === 'replace') {
+    confirmed = await confirmAction(`Replace ${direction === 'import' ? 'Paradigm' : 'LuckPerms'} permission data? This is destructive.`, true);
+    if (!confirmed) return;
+  }
+  const report = $('luckperms-report');
+  report.textContent = 'Migration running...';
+  try {
+    const result = await api('/api/permissions/migrate/luckperms', {
+      method: 'POST',
+      body: JSON.stringify({ direction, mode, confirmed })
+    });
+    report.textContent = `Groups: ${result.groups}\nUsers: ${result.users}\nPermissions: ${result.permissions}\nMemberships: ${result.memberships}\nParents: ${result.parents}\nMetadata: ${result.metadata}\nConflicts: ${result.conflicts}\nSkipped: ${result.skipped}${(result.details || []).length ? `\n\n${result.details.join('\n')}` : ''}`;
+    notice(`LuckPerms ${direction} ${mode} completed.`);
+    await loadPermissions();
+  } catch (error) {
+    report.textContent = error.message;
+    notice(error.message, true);
+  }
+}
+
 function renderPermissionTargetList() {
   const root = $('permission-target-list');
   const items = state.permissionData[state.permissionView] || [];
@@ -1568,6 +1592,7 @@ function bindEvents() {
   $('cooldown-search').addEventListener('input', renderConfiguration);
   document.querySelectorAll('[data-permission-view]').forEach(button => button.addEventListener('click', () => { state.permissionView = button.dataset.permissionView; state.permissionPage = 1; state.selectedPermissionTarget = null; loadPermissions(); $('permission-editor').className = 'detail-editor empty-detail'; $('permission-editor').textContent = state.permissionView === 'nodes' ? 'Select a permission node.' : `Select a ${state.permissionView === 'groups' ? 'group' : 'user'}.`; }));
   $('permissions-search').addEventListener('input', debounce(() => { state.permissionPage = 1; loadPermissions(); }, 250));
+  $('luckperms-migrate').addEventListener('click', runLuckPermsMigration);
   $('moderation-find').addEventListener('click', () => loadModerationPlayer($('moderation-search').value.trim()));
   $('moderation-search').addEventListener('keydown', event => { if (event.key === 'Enter') loadModerationPlayer(event.target.value.trim()); });
   ['audit-actor','audit-type','audit-target','audit-result','audit-source','audit-from','audit-to'].forEach(id => $(id).addEventListener('input', debounce(() => { state.auditPage = 1; loadAudit(); }, 250)));

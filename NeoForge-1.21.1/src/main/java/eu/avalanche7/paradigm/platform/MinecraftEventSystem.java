@@ -74,6 +74,7 @@ public class MinecraftEventSystem implements IEventSystem {
             } catch (Exception e) {
                 System.err.println("Error in chat event listener: " + e.getMessage());
             }
+            if (evt.cancelled) break;
         }
         return new DispatchResult(evt.msg, evt.cancelled);
     }
@@ -230,7 +231,7 @@ public class MinecraftEventSystem implements IEventSystem {
         }
     }
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void onServerChat(ServerChatEvent event) {
         ServerPlayer sp = event.getPlayer();
         String raw = event.getMessage().getString();

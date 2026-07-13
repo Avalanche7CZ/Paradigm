@@ -68,7 +68,7 @@ public class FeedCommand implements ParadigmModule {
             send(actor, "utility.no_permission_others", "You do not have permission to affect other players.");
             return 0;
         }
-        if (!feedToMax(target)) {
+        if (!services.getPlatformAdapter().feedPlayer(target)) {
             send(actor, "utility.feed_fail", "Could not restore food for {player}.", "{player}", target.getName());
             return 0;
         }
@@ -81,51 +81,6 @@ public class FeedCommand implements ParadigmModule {
             return true;
         }
         return services.getPermissionsHandler().hasPermission(actor, PermissionsHandler.FEED_OTHERS_PERMISSION, PermissionsHandler.FEED_OTHERS_PERMISSION_LEVEL);
-    }
-
-    private boolean feedToMax(IPlayer target) {
-        Object player = target.getOriginalPlayer();
-        if (player == null) {
-            return false;
-        }
-
-        Object foodData = invokeNoArg(player, "getFoodData", "getHungerManager", "getFoodStats");
-        if (foodData == null) {
-            return false;
-        }
-
-        boolean foodSet = invoke(foodData, "setFoodLevel", new Class<?>[]{int.class}, 20)
-                || invoke(foodData, "setFood", new Class<?>[]{int.class}, 20);
-        boolean saturationSet = invoke(foodData, "setSaturation", new Class<?>[]{float.class}, 20.0f)
-                || invoke(foodData, "setSaturationLevel", new Class<?>[]{float.class}, 20.0f)
-                || invoke(foodData, "setSaturationAmount", new Class<?>[]{float.class}, 20.0f);
-
-        // Optional cleanup; ignore failures on older/newer mappings.
-        invoke(foodData, "setExhaustion", new Class<?>[]{float.class}, 0.0f);
-        invoke(foodData, "setExhaustionLevel", new Class<?>[]{float.class}, 0.0f);
-
-        return foodSet || saturationSet;
-    }
-
-    private Object invokeNoArg(Object target, String... methods) {
-        for (String method : methods) {
-            try {
-                var m = target.getClass().getMethod(method);
-                return m.invoke(target);
-            } catch (Throwable ignored) {
-            }
-        }
-        return null;
-    }
-
-    private boolean invoke(Object target, String method, Class<?>[] signature, Object... args) {
-        try {
-            var m = target.getClass().getMethod(method, signature);
-            m.invoke(target, args);
-            return true;
-        } catch (Throwable ignored) {
-            return false;
-        }
     }
 
     private void send(IPlayer player, String key, String fallback, String... placeholders) {

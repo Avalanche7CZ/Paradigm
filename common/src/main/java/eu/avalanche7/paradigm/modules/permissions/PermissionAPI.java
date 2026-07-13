@@ -676,6 +676,34 @@ public class PermissionAPI {
         }
     }
 
+    /** UUIDs which have direct permission or group state in the internal cache. */
+    public List<UUID> listUserIds() {
+        stateLock.readLock().lock();
+        try {
+            List<UUID> result = new ArrayList<>();
+            for (String raw : state.users.keySet()) {
+                try {
+                    result.add(UUID.fromString(raw));
+                } catch (IllegalArgumentException ignored) {
+                }
+            }
+            return List.copyOf(result);
+        } finally {
+            stateLock.readLock().unlock();
+        }
+    }
+
+    /** Destructive replace-mode reset. Callers must enforce explicit confirmation. */
+    public void resetForMigration() {
+        stateLock.writeLock().lock();
+        try {
+            state = PermissionDataStore.PermissionState.createDefault();
+            saveLocked();
+        } finally {
+            stateLock.writeLock().unlock();
+        }
+    }
+
     public GroupInfo getGroupInfo(String groupName) {
         String normalized = normalizeGroupName(groupName);
         if (normalized == null) {

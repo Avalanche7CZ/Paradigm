@@ -3,6 +3,7 @@ package eu.avalanche7.paradigm.platform;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 import eu.avalanche7.paradigm.data.CustomCommand;
+import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.platform.Interfaces.*;
 import eu.avalanche7.paradigm.utils.*;
 import net.minecraft.advancements.*;
@@ -628,6 +629,11 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public Object getCommandDispatcher() {
+        return commandDispatcher;
+    }
+
+    @Override
     public ICommandBuilder createCommandBuilder() {
         return new ForgeCommandBuilder();
     }
@@ -659,6 +665,13 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     public String getLoaderName() { return "Forge"; }
 
     @Override
+    public void executeOnServerThread(Runnable task) {
+        if (task == null) return;
+        if (server != null) server.execute(task);
+        else task.run();
+    }
+
+    @Override
     public void executeCommandAs(ICommandSource source, String command) {
         if (server == null || command == null) return;
         Object orig = source != null ? source.getOriginalSource() : null;
@@ -679,7 +692,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public boolean setGameMode(IPlayer player, String mode) {
         if (!(player instanceof MinecraftPlayer mp)) {
-            return IPlatformAdapter.super.setGameMode(player, mode);
+            return false;
         }
         GameType gameType = toGameType(mode);
         return gameType != null && mp.getHandle().setGameMode(gameType);
@@ -695,6 +708,156 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             return false;
         }
         attribute.setBaseValue(baseValue);
+        return true;
+    }
+
+    @Override
+    public boolean healPlayer(IPlayer player) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        ServerPlayer handle = mp.getHandle();
+        handle.setHealth(handle.getMaxHealth());
+        return true;
+    }
+
+    @Override
+    public boolean feedPlayer(IPlayer player) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        var food = mp.getHandle().getFoodData();
+        food.setFoodLevel(20);
+        food.setSaturation(20.0f);
+        food.setExhaustion(0.0f);
+        return true;
+    }
+
+    @Override
+    public Boolean toggleFlight(IPlayer player) {
+        if (!(player instanceof MinecraftPlayer mp)) return null;
+        ServerPlayer handle = mp.getHandle();
+        var abilities = handle.getAbilities();
+        boolean enabled = !abilities.mayfly;
+        abilities.mayfly = enabled;
+        if (!enabled) abilities.flying = false;
+        handle.onUpdateAbilities();
+        return enabled;
+    }
+
+    @Override
+    public boolean setPlayerSpeed(IPlayer player, float walkSpeed, float flySpeed, double movementBaseValue) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        ServerPlayer handle = mp.getHandle();
+        handle.getAbilities().setWalkingSpeed(walkSpeed);
+        handle.getAbilities().setFlyingSpeed(flySpeed);
+        boolean movement = setMovementSpeed(player, movementBaseValue);
+        handle.onUpdateAbilities();
+        return movement;
+    }
+
+    @Override
+    public boolean clearPlayerInventory(IPlayer player) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        mp.getHandle().getInventory().clearContent();
+        mp.getHandle().containerMenu.broadcastChanges();
+        return true;
+    }
+
+    @Override
+    public boolean setPlayerInvulnerable(IPlayer player, boolean enabled) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        mp.getHandle().setInvulnerable(enabled);
+        return true;
+    }
+
+    @Override
+    public boolean setPlayerVanished(IPlayer player, boolean enabled) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        mp.getHandle().setInvisible(enabled);
+        mp.getHandle().setSilent(enabled);
+        return true;
+    }
+
+    @Override
+    public List<InventoryItem> inspectPlayerInventory(IPlayer player, boolean enderChest) {
+        if (!(player instanceof MinecraftPlayer mp)) return List.of();
+        net.minecraft.world.Container inventory = enderChest ? mp.getHandle().getEnderChestInventory() : mp.getHandle().getInventory();
+        List<InventoryItem> result = new ArrayList<>();
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            if (!stack.isEmpty()) result.add(new InventoryItem(slot, stack.getCount(), stack.getHoverName().getString()));
+        }
+        return result;
+    }
+
+    @Override
+    public int repairPlayerItems(IPlayer player, boolean all) {
+        if (!(player instanceof MinecraftPlayer mp)) return 0;
+        if (!all) {
+            ItemStack stack = mp.getHandle().getMainHandItem();
+            if (stack.isEmpty() || !stack.isDamageableItem() || stack.getDamageValue() == 0) return 0;
+            stack.setDamageValue(0);
+            return 1;
+        }
+        int changed = 0;
+        var inventory = mp.getHandle().getInventory();
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            if (!stack.isEmpty() && stack.isDamageableItem() && stack.getDamageValue() > 0) {
+                stack.setDamageValue(0);
+                changed++;
+            }
+        }
+        return changed;
+    }
+
+    @Override
+    public boolean enchantMainHand(IPlayer player, String enchantmentId, int level) {
+        if (!(player instanceof MinecraftPlayer mp) || server == null || enchantmentId == null || enchantmentId.isBlank()) return false;
+        String command = "enchant " + mp.getHandle().getGameProfile().getName() + " " + enchantmentId + " " + level;
+        try {
+            return server.getCommands().getDispatcher().execute(command, server.createCommandSourceStack().withPermission(4)) > 0;
+        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException ignored) {
+            return false;
+        }
+    }
+
+    @Override
+    public Integer getHighestBlockY(IPlayer player) {
+        if (!(player instanceof MinecraftPlayer mp)) return null;
+        ServerPlayer handle = mp.getHandle();
+        return handle.serverLevel().getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                (int) Math.floor(handle.getX()), (int) Math.floor(handle.getZ()));
+    }
+
+    @Override
+    public boolean jumpPlayerForward(IPlayer player, int distance) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        ServerPlayer handle = mp.getHandle();
+        var look = handle.getLookAngle();
+        handle.teleportTo(handle.getX() + look.x * distance, handle.getY() + look.y * distance, handle.getZ() + look.z * distance);
+        return true;
+    }
+
+    @Override
+    public boolean setTimeOfDay(long timeOfDay) {
+        if (server == null) return false;
+        boolean changed = false;
+        for (ServerLevel level : server.getAllLevels()) {
+            level.setDayTime(timeOfDay);
+            changed = true;
+        }
+        return changed;
+    }
+
+    @Override
+    public boolean setWeather(String weather) {
+        if (server == null || weather == null) return false;
+        String normalized = weather.trim().toLowerCase(Locale.ROOT);
+        if (!Set.of("clear", "sun", "rain", "thunder").contains(normalized)) return false;
+        boolean raining = normalized.equals("rain") || normalized.equals("thunder");
+        boolean thundering = normalized.equals("thunder");
+        int clearTime = raining ? 0 : 6000;
+        for (ServerLevel level : server.getAllLevels()) {
+            level.setWeatherParameters(clearTime, 6000, raining, thundering);
+        }
         return true;
     }
 
@@ -731,6 +894,29 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         ServerPlayer sp = mp.getHandle();
         if (sp == null) return;
         sp.teleportTo(x, y, z);
+    }
+
+    @Override
+    public boolean teleportPlayer(IPlayer player, PlayerDataStore.StoredLocation location) {
+        if (!(player instanceof MinecraftPlayer mp) || location == null || server == null) return false;
+        for (ServerLevel level : server.getAllLevels()) {
+            if (level.dimension().location().toString().equalsIgnoreCase(location.getWorldId())) {
+                mp.getHandle().teleportTo(level, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
+                return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public String getPlayerRemoteAddress(IPlayer player) {
+        if (!(player instanceof MinecraftPlayer mp) || mp.getHandle().connection == null) return null;
+        return String.valueOf(mp.getHandle().connection.getRemoteAddress());
+    }
+
+    @Override
+    public void refreshPlayerCommandTree(IPlayer player) {
+        if (server != null && player instanceof MinecraftPlayer mp) server.getCommands().sendCommands(mp.getHandle());
     }
 
     @Override

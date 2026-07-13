@@ -8,6 +8,7 @@ import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.data.WarpStore;
 import eu.avalanche7.paradigm.modules.*;
 import eu.avalanche7.paradigm.modules.chat.*;
+import eu.avalanche7.paradigm.modules.commands.shared.CommandCatalog;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
@@ -221,85 +222,9 @@ public final class CommonRuntime {
             return;
         }
 
-        store.registerCommand("msg", true, false, "tell", "w", "whisper");
-        store.registerCommand("reply", true, false, "r");
-        store.registerCommand("mention", true, false);
-        store.registerCommand("restart", true, false);
-        store.registerCommand("customcommands", true, false);
-
-        store.registerCommand("sethome", true, false);
-        store.registerCommand("home", true, false);
-        store.registerCommand("delhome", true, false);
-        store.registerCommand("homes", true, false);
-        store.registerCommand("back", true, false);
-        store.registerCommand("spawn", true, false);
-        store.registerCommand("setspawn", true, false);
-        store.registerCommand("seen", true, false);
-        store.registerCommand("ignore", true, false);
-        store.registerCommand("unignore", true, false);
-        store.registerCommand("speed", true, false);
-        store.registerCommand("feed", true, false);
-        store.registerCommand("heal", true, false);
-        store.registerCommand("socialspy", true, false);
-        store.registerCommand("gamemode", true, false);
-        store.registerCommand("gmc", true, false);
-        store.registerCommand("creative", true, false);
-        store.registerCommand("gms", true, false);
-        store.registerCommand("survival", true, false);
-        store.registerCommand("gma", true, false);
-        store.registerCommand("adventure", true, false);
-        store.registerCommand("gmsp", true, false);
-        store.registerCommand("spectator", true, false);
-        store.registerCommand("fly", true, false);
-        store.registerCommand("clearinv", true, false, "ci");
-        store.registerCommand("day", true, false);
-        store.registerCommand("night", true, false);
-        store.registerCommand("sun", true, false);
-        store.registerCommand("rain", true, false);
-        store.registerCommand("thunder", true, false);
-        store.registerCommand("kick", true, false);
-        store.registerCommand("ban", true, false);
-        store.registerCommand("unban", true, false);
-        store.registerCommand("pardon", true, false);
-        store.registerCommand("tempban", true, false);
-        store.registerCommand("ipban", true, false);
-        store.registerCommand("tempipban", true, false);
-        store.registerCommand("unipban", true, false);
-        store.registerCommand("mute", true, false);
-        store.registerCommand("tempmute", true, false);
-        store.registerCommand("unmute", true, false);
-        store.registerCommand("warn", true, false);
-        store.registerCommand("setjail", true, false);
-        store.registerCommand("jail", true, false);
-        store.registerCommand("unjail", true, false);
-        store.registerCommand("vanish", true, false);
-        store.registerCommand("god", true, false);
-        store.registerCommand("invsee", true, false);
-        store.registerCommand("endersee", true, false);
-        store.registerCommand("repair", true, false);
-        store.registerCommand("enchant", true, false);
-        store.registerCommand("sudo", true, false);
-        store.registerCommand("near", true, false);
-        store.registerCommand("whois", true, false);
-        store.registerCommand("top", true, false);
-        store.registerCommand("jump", true, false);
-
-        store.registerCommand("tpa", true, false);
-        store.registerCommand("tpahere", true, false);
-        store.registerCommand("tpaccept", true, false);
-        store.registerCommand("tpdeny", true, false);
-        store.registerCommand("tpcancel", true, false);
-
-        store.registerCommand("warp", true, false);
-        store.registerCommand("warps", true, false);
-        store.registerCommand("setwarp", true, false);
-        store.registerCommand("delwarp", true, false);
-        store.registerCommand("warpinfo", true, false);
-
-        store.registerCommand("paradigm.editor", true, false, "editor");
-        store.registerCommand("paradigm.apply", true, false, "apply");
-        store.registerCommand("paradigm.help", true, false, "help");
-        store.registerCommand("paradigm.command", true, true, "command", "commands");
-        store.registerCommand("paradigm.dashboard", true, true, "dashboard");
+        for (CommandCatalog.Entry entry : CommandCatalog.entries()) {
+            store.registerCommand(entry.id(), entry.defaultEnabled(), entry.protectedCommand(),
+                    entry.roots().toArray(String[]::new));
+        }
     }
 }

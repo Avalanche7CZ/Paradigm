@@ -48,4 +48,9 @@ public class NeoForgeCommandContext implements ICommandContext {
     public Object getOriginalContext() {
         return ctx;
     }
+
+    @Override
+    public String getInput() {
+        return ctx.getInput();
+    }
 }

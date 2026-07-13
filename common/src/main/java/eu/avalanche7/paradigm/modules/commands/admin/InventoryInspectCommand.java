@@ -1,13 +1,10 @@
 package eu.avalanche7.paradigm.modules.commands.admin;
 
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.commands.shared.PlayerReflection;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-
-import java.util.List;
 
 public class InventoryInspectCommand extends AbstractAdminCommand {
     private static final int MAX_LINES = 20;
@@ -49,21 +46,17 @@ public class InventoryInspectCommand extends AbstractAdminCommand {
             send(source, "admin.player_not_found", "Player not found.");
             return 0;
         }
-        List<Object> stacks = ender ? PlayerReflection.enderStacks(target) : PlayerReflection.inventoryStacks(target, true);
+        var stacks = services.getPlatformAdapter().inspectPlayerInventory(target, ender);
         send(source, "admin.inspect_header", "{type} for {player}:", "{type}", ender ? "Ender chest" : "Inventory", "{player}", target.getName());
         int shown = 0;
-        int slot = 0;
-        for (Object stack : stacks) {
-            if (!PlayerReflection.isEmptyStack(stack)) {
-                shown++;
-                if (shown <= MAX_LINES) {
-                    send(source, "admin.inspect_line", "#{slot}: {count}x {item}",
-                            "{slot}", String.valueOf(slot),
-                            "{count}", String.valueOf(PlayerReflection.stackCount(stack)),
-                            "{item}", PlayerReflection.stackName(stack));
-                }
+        for (var stack : stacks) {
+            shown++;
+            if (shown <= MAX_LINES) {
+                send(source, "admin.inspect_line", "#{slot}: {count}x {item}",
+                        "{slot}", String.valueOf(stack.slot()),
+                        "{count}", String.valueOf(stack.count()),
+                        "{item}", stack.displayName());
             }
-            slot++;
         }
         if (shown == 0) {
             send(source, "admin.inspect_empty", "No items found.");

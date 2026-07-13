@@ -6,6 +6,7 @@ import eu.avalanche7.paradigm.modules.dashboard.DashboardResponse;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardService;
 import eu.avalanche7.paradigm.modules.permissions.PermissionMutationRequest;
 import eu.avalanche7.paradigm.modules.permissions.PermissionMutationResult;
+import eu.avalanche7.paradigm.modules.permissions.migration.LuckPermsMigrationService;
 
 public class PermissionsApiHandler {
     private final DashboardService dashboard;
@@ -56,6 +57,36 @@ public class PermissionsApiHandler {
             return DashboardResponse.apiError(statusFor(mutationResult.code()), mutationResult.code(), mutationResult.message());
         }
         return DashboardResponse.apiOk(result);
+    }
+
+    public DashboardResponse migrateLuckPerms(DashboardRequestContext ctx) throws Exception {
+        LuckPermsMigrationRequest request = DashboardJson.fromJson(ctx.bodyReader(), LuckPermsMigrationRequest.class);
+        if (request == null) return DashboardResponse.apiError(400, "invalid_request", "Migration request is required.");
+        LuckPermsMigrationService.Direction direction;
+        LuckPermsMigrationService.Mode mode;
+        try {
+            direction = LuckPermsMigrationService.Direction.valueOf(text(request.direction).toUpperCase(java.util.Locale.ROOT));
+            mode = LuckPermsMigrationService.Mode.valueOf(text(request.mode).replace('-', '_').toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException invalid) {
+            return DashboardResponse.apiError(400, "invalid_request", "Direction or migration mode is invalid.");
+        }
+        var report = new LuckPermsMigrationService(dashboard.services())
+                .migrate(direction, mode, Boolean.TRUE.equals(request.confirmed)).get();
+        if (!report.ok()) {
+            String message = report.details().isEmpty() ? "LuckPerms migration failed." : report.details().get(0);
+            return DashboardResponse.apiError(400, "migration_failed", message);
+        }
+        return DashboardResponse.apiOk(report, report.details());
+    }
+
+    private static String text(String value) {
+        return value != null ? value.trim() : "";
+    }
+
+    private static final class LuckPermsMigrationRequest {
+        String direction;
+        String mode;
+        Boolean confirmed;
     }
 
     private static int statusFor(String code) {

@@ -1,7 +1,6 @@
 package eu.avalanche7.paradigm.modules.commands.admin;
 
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.commands.shared.PlayerReflection;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
@@ -48,7 +47,7 @@ public class NearCommand extends AbstractAdminCommand {
             if (!sameWorld(actor, player)) {
                 continue;
             }
-            double distanceSq = PlayerReflection.distanceSquared(actor, player);
+            double distanceSq = distanceSquared(actor, player);
             if (distanceSq <= maxDistanceSq) {
                 nearby.add(new Entry(player.getName(), Math.sqrt(distanceSq)));
             }
@@ -73,6 +72,17 @@ public class NearCommand extends AbstractAdminCommand {
         String aw = a.getWorldId();
         String bw = b.getWorldId();
         return aw == null || bw == null || aw.equalsIgnoreCase(bw);
+    }
+
+    private double distanceSquared(IPlayer a, IPlayer b) {
+        if (a.getX() == null || a.getY() == null || a.getZ() == null
+                || b.getX() == null || b.getY() == null || b.getZ() == null) {
+            return Double.MAX_VALUE;
+        }
+        double dx = a.getX() - b.getX();
+        double dy = a.getY() - b.getY();
+        double dz = a.getZ() - b.getZ();
+        return dx * dx + dy * dy + dz * dz;
     }
 
     private record Entry(String name, double distance) {

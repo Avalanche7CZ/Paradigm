@@ -58,6 +58,7 @@ public class ServerPlayNetworkHandlerMixin {
             } catch (Exception e) {
                 System.err.println("Error in chat event listener: " + e.getMessage());
             }
+            if (event.isCancelled()) break;
         }
 
         Services services = ParadigmAPI.getServices();

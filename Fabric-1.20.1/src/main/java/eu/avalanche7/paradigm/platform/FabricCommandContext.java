@@ -67,4 +67,9 @@ public class FabricCommandContext implements ICommandContext {
     public Object getOriginalContext() {
         return context;
     }
+
+    @Override
+    public String getInput() {
+        return context.getInput();
+    }
 }

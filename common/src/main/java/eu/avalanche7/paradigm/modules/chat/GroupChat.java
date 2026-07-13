@@ -67,7 +67,7 @@ public class GroupChat implements ParadigmModule {
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         ICommandBuilder cmd = platform.createCommandBuilder()
                 .literal("groupchat")
-                .requires(source -> source.getPlayer() != null &&
+                .requires(source -> services.getCommandToggleStore().isEnabled("groupchat") && source.getPlayer() != null &&
                         services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.GROUPCHAT_PERMISSION))
                 .executes(ctx -> {
                     IPlayer player = ctx.getSource().requirePlayer();
@@ -249,6 +249,7 @@ public class GroupChat implements ParadigmModule {
         IEventSystem events = services.getPlatformAdapter().getEventSystem();
         if (events != null) {
             events.onPlayerChat(event -> {
+                if (event.isCancelled()) return;
                 IPlayer player = event.getPlayer();
                 if (player == null) return;
                 if (!isEnabled(this.services)) return;
@@ -269,7 +270,7 @@ public class GroupChat implements ParadigmModule {
             return true;
         }
 
-        if (groupChatManager.isGroupChatToggled(player)) {
+        if (ChatRoute.resolve(false, groupChatManager.isGroupChatToggled(player)) == ChatRoute.GROUP) {
             PlayerGroupData data = groupChatManager.getPlayerData(player);
             String groupName = data.getCurrentGroup();
 

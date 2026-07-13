@@ -1136,6 +1136,17 @@ public class PermissionsHandler {
         return internalPermissionApi.listGroups();
     }
 
+    public java.util.List<UUID> listPermissionUsers() {
+        return isInternalPermissionsEnabled() ? internalPermissionApi.listUserIds() : java.util.List.of();
+    }
+
+    public boolean resetInternalPermissionsForMigration() {
+        if (!isInternalPermissionsEnabled()) return false;
+        internalPermissionApi.resetForMigration();
+        if (platform != null) platform.refreshAllPlayerCommandTrees();
+        return true;
+    }
+
     public PermissionAPI.GroupInfo getPermissionGroupInfo(String groupName) {
         if (!isInternalPermissionsEnabled()) return null;
         return internalPermissionApi.getGroupInfo(groupName);

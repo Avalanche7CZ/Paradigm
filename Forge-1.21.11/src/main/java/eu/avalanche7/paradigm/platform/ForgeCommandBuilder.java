@@ -7,6 +7,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandContext;
+import eu.avalanche7.paradigm.modules.commands.shared.CommandExecutionGuard;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -66,25 +67,11 @@ public class ForgeCommandBuilder implements ICommandBuilder {
         if (currentBuilder instanceof LiteralArgumentBuilder<?> lit) {
             @SuppressWarnings("unchecked")
             LiteralArgumentBuilder<CommandSourceStack> builder = (LiteralArgumentBuilder<CommandSourceStack>) lit;
-            this.currentBuilder = builder.executes(ctx -> {
-                try {
-                    return executor.execute(new ForgeCommandContext(ctx));
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    return 0;
-                }
-            });
+            this.currentBuilder = builder.executes(ctx -> CommandExecutionGuard.execute(executor, new ForgeCommandContext(ctx)));
         } else if (currentBuilder instanceof RequiredArgumentBuilder<?, ?> req) {
             @SuppressWarnings("unchecked")
             RequiredArgumentBuilder<CommandSourceStack, ?> builder = (RequiredArgumentBuilder<CommandSourceStack, ?>) req;
-            this.currentBuilder = builder.executes(ctx -> {
-                try {
-                    return executor.execute(new ForgeCommandContext(ctx));
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    return 0;
-                }
-            });
+            this.currentBuilder = builder.executes(ctx -> CommandExecutionGuard.execute(executor, new ForgeCommandContext(ctx)));
         }
         return this;
     }

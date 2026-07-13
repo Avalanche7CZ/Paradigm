@@ -6,17 +6,14 @@ import eu.avalanche7.paradigm.utils.CommandPriority;
 import eu.avalanche7.paradigm.utils.MessageParser;
 import org.jetbrains.annotations.Nullable;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public interface IPlatformAdapter {
     enum BossBarColor { PINK, BLUE, RED, GREEN, YELLOW, PURPLE, WHITE }
     enum BossBarOverlay { PROGRESS, NOTCHED_6, NOTCHED_10, NOTCHED_12, NOTCHED_20 }
+    record InventoryItem(int slot, int count, String displayName) { }
 
     void provideMessageParser(MessageParser messageParser);
     Object getMinecraftServer();
@@ -49,79 +46,39 @@ public interface IPlatformAdapter {
     void executeCommandAs(ICommandSource source, String command);
     void executeCommandAsConsole(String command);
 
+    default void executeOnServerThread(Runnable task) {
+        if (task != null) task.run();
+    }
+
     default boolean unregisterCommandRoot(String rootLiteral) {
-        Object server = getMinecraftServer();
-        Object commands = firstObject(server, "getCommands", "getCommandManager", "commands", "commandManager");
-        Object dispatcher = firstObject(commands, "getDispatcher", "dispatcher");
+        Object dispatcher = getCommandDispatcher();
         return dispatcher != null && CommandPriority.unregisterRootLiteral(dispatcher, rootLiteral);
     }
 
+    default Object getCommandDispatcher() {
+        return null;
+    }
+
     default ICommandSource createCommandSourceForPlayer(IPlayer player) {
-        if (player == null || player.getOriginalPlayer() == null) {
-            return null;
-        }
-        Object source = firstObject(player.getOriginalPlayer(), "createCommandSourceStack", "getCommandSource", "getCommandSourceStack");
-        return source != null ? wrapCommandSource(source) : null;
+        return null;
     }
 
-    default boolean setGameMode(IPlayer player, String mode) {
-        String normalized = normalizeGameMode(mode);
-        if (player == null || player.getOriginalPlayer() == null || normalized == null) {
-            return false;
-        }
-
-        Object handle = player.getOriginalPlayer();
-        if (invokeGameModeMethod(handle, normalized, "setGameMode", "changeGameMode")) {
-            return true;
-        }
-
-        Object interactionManager = firstObject(handle, "interactionManager", "gameMode");
-        return invokeGameModeMethod(interactionManager, normalized, "changeGameMode", "changeGameModeForPlayer", "setGameMode");
-    }
-
-    default boolean setMovementSpeed(IPlayer player, double baseValue) {
-        if (player == null || player.getOriginalPlayer() == null || baseValue < 0.0 || Double.isNaN(baseValue) || Double.isInfinite(baseValue)) {
-            return false;
-        }
-        Object handle = player.getOriginalPlayer();
-        Object attribute = invokeAttributeLookup(handle, "getAttribute", "minecraft:generic.movement_speed");
-        if (attribute == null) {
-            return false;
-        }
-        return invokeWithArgs(attribute, "setBaseValue", new Class<?>[]{double.class}, baseValue);
-    }
-
-    default boolean setTimeOfDay(long timeOfDay) {
-        boolean changed = false;
-        for (Object world : serverWorlds()) {
-            changed |= invokeWithArgs(world, "setDayTime", new Class<?>[]{long.class}, timeOfDay);
-            changed |= invokeWithArgs(world, "setTimeOfDay", new Class<?>[]{long.class}, timeOfDay);
-        }
-        return changed;
-    }
-
-    default boolean setWeather(String weather) {
-        String normalized = weather != null ? weather.trim().toLowerCase(Locale.ROOT) : "";
-        int clearTime = switch (normalized) {
-            case "clear", "sun" -> 6000;
-            default -> 0;
-        };
-        int weatherTime = 6000;
-        boolean raining = "rain".equals(normalized) || "thunder".equals(normalized);
-        boolean thundering = "thunder".equals(normalized);
-
-        if (!"clear".equals(normalized) && !"sun".equals(normalized) && !"rain".equals(normalized) && !"thunder".equals(normalized)) {
-            return false;
-        }
-
-        boolean changed = false;
-        for (Object world : serverWorlds()) {
-            changed |= invokeWithArgs(world, "setWeatherParameters",
-                    new Class<?>[]{int.class, int.class, boolean.class, boolean.class},
-                    clearTime, weatherTime, raining, thundering);
-        }
-        return changed;
-    }
+    boolean setGameMode(IPlayer player, String mode);
+    boolean setMovementSpeed(IPlayer player, double baseValue);
+    boolean setTimeOfDay(long timeOfDay);
+    boolean setWeather(String weather);
+    boolean healPlayer(IPlayer player);
+    boolean feedPlayer(IPlayer player);
+    Boolean toggleFlight(IPlayer player);
+    boolean setPlayerSpeed(IPlayer player, float walkSpeed, float flySpeed, double movementBaseValue);
+    boolean clearPlayerInventory(IPlayer player);
+    boolean setPlayerInvulnerable(IPlayer player, boolean enabled);
+    boolean setPlayerVanished(IPlayer player, boolean enabled);
+    List<InventoryItem> inspectPlayerInventory(IPlayer player, boolean enderChest);
+    int repairPlayerItems(IPlayer player, boolean all);
+    boolean enchantMainHand(IPlayer player, String enchantmentId, int level);
+    Integer getHighestBlockY(IPlayer player);
+    boolean jumpPlayerForward(IPlayer player, int distance);
 
     String replacePlaceholders(String text, @Nullable IPlayer player);
     boolean hasPermissionForCustomCommand(ICommandSource source, CustomCommand command);
@@ -150,11 +107,7 @@ public interface IPlatformAdapter {
     String getLoaderName();
 
     default String getPlayerRemoteAddress(IPlayer player) {
-        Object original = player != null ? player.getOriginalPlayer() : null;
-        Object handler = firstNonNull(readField(original, "networkHandler"), readField(original, "connection"));
-        Object connection = firstNonNull(readField(handler, "connection"), handler);
-        Object address = firstNonNull(invokeReturning(connection, "getRemoteAddress"), invokeReturning(connection, "getAddress"));
-        return address != null ? String.valueOf(address) : null;
+        return null;
     }
 
     boolean disconnectPlayer(IPlayer player, IComponent reason);
@@ -169,38 +122,6 @@ public interface IPlatformAdapter {
     void registerCommand(ICommandBuilder builder);
 
     default void refreshPlayerCommandTree(@Nullable IPlayer player) {
-        if (player == null || player.getOriginalPlayer() == null) {
-            return;
-        }
-
-        Object handle = player.getOriginalPlayer();
-        Object server = firstObject(handle, "getServer", "server");
-        if (server == null) {
-            server = getMinecraftServer();
-        }
-        if (server == null) {
-            return;
-        }
-
-        Object commands = firstObject(server, "getCommands", "getCommandManager", "commands", "commandManager");
-        if (commands == null) {
-            return;
-        }
-
-        if (invokeSingleArgMethod(commands, "sendCommands", handle)) return;
-        if (invokeSingleArgMethod(commands, "sendCommandTree", handle)) return;
-        if (invokeSingleArgMethod(commands, "send", handle)) return;
-
-        Object dispatcher = firstObject(commands, "getDispatcher", "dispatcher");
-        if (dispatcher == null) {
-            Object playerManager = firstObject(server, "getPlayerManager", "getPlayerList", "playerManager", "playerList");
-            if (invokeSingleArgMethod(playerManager, "sendCommands", handle)) return;
-            if (invokeSingleArgMethod(playerManager, "sendCommandTree", handle)) return;
-            invokeSingleArgMethod(playerManager, "send", handle);
-            return;
-        }
-        if (invokeSingleArgMethod(dispatcher, "sendCommands", handle)) return;
-        invokeSingleArgMethod(dispatcher, "sendCommandTree", handle);
     }
 
     default void refreshAllPlayerCommandTrees() {
@@ -232,14 +153,6 @@ public interface IPlatformAdapter {
         Float yaw = player.getYaw();
         Float pitch = player.getPitch();
 
-        Object handle = player.getOriginalPlayer();
-        if (worldId == null) worldId = extractWorldId(handle);
-        if (x == null) x = invokeDouble(handle, "getX");
-        if (y == null) y = invokeDouble(handle, "getY");
-        if (z == null) z = invokeDouble(handle, "getZ");
-        if (yaw == null) yaw = firstFloat(handle, "getYRot", "getYaw");
-        if (pitch == null) pitch = firstFloat(handle, "getXRot", "getPitch");
-
         if (worldId == null || x == null || y == null || z == null) {
             return Optional.empty();
         }
@@ -248,326 +161,7 @@ public interface IPlatformAdapter {
     }
 
     default boolean teleportPlayer(IPlayer player, PlayerDataStore.StoredLocation location) {
-        if (player == null || location == null || location.getWorldId() == null || location.getWorldId().isBlank()) {
-            return false;
-        }
-
-        Optional<PlayerDataStore.StoredLocation> current = getPlayerLocation(player);
-        if (current.isPresent() && sameWorld(current.get().getWorldId(), location.getWorldId())) {
-            teleportPlayer(player, location.getX(), location.getY(), location.getZ());
-            applyRotation(player, location.getYaw(), location.getPitch());
-            return true;
-        }
-
-        if (!isKnownWorld(this, location.getWorldId()) || !isOnline(this, player)) {
-            return false;
-        }
-
-        String command = String.format(
-                Locale.US,
-                "execute in %s run tp %s %.3f %.3f %.3f %.2f %.2f",
-                location.getWorldId(),
-                player.getName(),
-                location.getX(),
-                location.getY(),
-                location.getZ(),
-                location.getYaw(),
-                location.getPitch()
-        );
-        executeCommandAsConsole(command);
-        return true;
-    }
-
-    private static boolean isKnownWorld(IPlatformAdapter platform, String worldId) {
-        try {
-            List<String> worlds = platform.getWorldNames();
-            if (worlds == null || worlds.isEmpty()) {
-                return false;
-            }
-            for (String world : worlds) {
-                if (sameWorld(world, worldId)) {
-                    return true;
-                }
-            }
-        } catch (Throwable ignored) {
-        }
         return false;
-    }
-
-    private static boolean isOnline(IPlatformAdapter platform, IPlayer player) {
-        try {
-            String uuid = player.getUUID();
-            if (uuid != null && platform.getPlayerByUuid(uuid) != null) {
-                return true;
-            }
-            String name = player.getName();
-            return name != null && platform.getPlayerByName(name) != null;
-        } catch (Throwable ignored) {
-            return false;
-        }
-    }
-
-    private static boolean sameWorld(String a, String b) {
-        if (a == null || b == null) {
-            return false;
-        }
-        return a.trim().equalsIgnoreCase(b.trim());
-    }
-
-    private static void applyRotation(IPlayer player, float yaw, float pitch) {
-        if (player == null || player.getOriginalPlayer() == null) {
-            return;
-        }
-        Object handle = player.getOriginalPlayer();
-        invokeWithArgs(handle, "setYaw", new Class<?>[]{float.class}, yaw);
-        invokeWithArgs(handle, "setPitch", new Class<?>[]{float.class}, pitch);
-    }
-
-    private static String normalizeGameMode(String mode) {
-        if (mode == null) {
-            return null;
-        }
-        return switch (mode.trim().toLowerCase(Locale.ROOT)) {
-            case "0", "s", "survival" -> "SURVIVAL";
-            case "1", "c", "creative" -> "CREATIVE";
-            case "2", "a", "adventure" -> "ADVENTURE";
-            case "3", "sp", "spectator" -> "SPECTATOR";
-            default -> null;
-        };
-    }
-
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private static boolean invokeGameModeMethod(Object target, String normalizedMode, String... methodNames) {
-        if (target == null || normalizedMode == null) {
-            return false;
-        }
-        for (String methodName : methodNames) {
-            for (Method method : target.getClass().getMethods()) {
-                if (!method.getName().equals(methodName) || method.getParameterCount() != 1) {
-                    continue;
-                }
-                Class<?> parameterType = method.getParameterTypes()[0];
-                if (!Enum.class.isAssignableFrom(parameterType)) {
-                    continue;
-                }
-                try {
-                    Object gameMode = Enum.valueOf((Class<? extends Enum>) parameterType.asSubclass(Enum.class), normalizedMode);
-                    method.setAccessible(true);
-                    method.invoke(target, gameMode);
-                    return true;
-                } catch (Throwable ignored) {
-                }
-            }
-        }
-        return false;
-    }
-
-    private static String extractWorldId(Object handle) {
-        Object level = firstObject(handle,
-                "serverLevel",
-                "getServerWorld",
-                "getCommandSenderWorld",
-                "level",
-                "level()",
-                "getLevel",
-                "getLevel()",
-                "level",
-                "getWorld",
-                "getWorld()",
-                "world",
-                "getEntityWorld"
-        );
-        if (level == null) {
-            return null;
-        }
-
-        Object key = firstObject(level, "dimension", "getRegistryKey", "dimensionKey");
-        if (key == null) {
-            key = firstObject(level, "dimension", "dimension()", "getDimension", "registryKey");
-        }
-        if (key != null) {
-            Object id = firstObject(key, "location", "getValue", "value");
-            if (id == null) {
-                id = firstObject(key, "location", "location()", "getPath");
-            }
-            if (id != null) {
-                return sanitizeWorldId(id.toString());
-            }
-            String parsed = sanitizeWorldId(key.toString());
-            if (parsed != null) {
-                return parsed;
-            }
-        }
-        return sanitizeWorldId(level.toString());
-    }
-
-    private static Object firstObject(Object target, String... names) {
-        if (target == null) {
-            return null;
-        }
-        for (String name : names) {
-            String cleaned = name.endsWith("()") ? name.substring(0, name.length() - 2) : name;
-            Object value = invokeNoArg(target, cleaned);
-            if (value != null) {
-                return value;
-            }
-            value = readField(target, cleaned);
-            if (value != null) {
-                return value;
-            }
-        }
-        return null;
-    }
-
-    private List<Object> serverWorlds() {
-        Object server = getMinecraftServer();
-        if (server == null) {
-            return List.of();
-        }
-        Object worlds = firstObject(server, "getAllLevels", "getWorlds", "getLevels", "levels", "worlds");
-        if (worlds instanceof Iterable<?> iterable) {
-            java.util.ArrayList<Object> result = new java.util.ArrayList<>();
-            for (Object world : iterable) {
-                if (world != null) {
-                    result.add(world);
-                }
-            }
-            return result;
-        }
-        return List.of();
-    }
-
-    private static Double invokeDouble(Object target, String name) {
-        Object value = invokeNoArg(target, name);
-        if (value instanceof Number n) {
-            return n.doubleValue();
-        }
-        return null;
-    }
-
-    private static Float firstFloat(Object target, String... names) {
-        for (String name : names) {
-            Object value = invokeNoArg(target, name);
-            if (value instanceof Number n) {
-                return n.floatValue();
-            }
-        }
-        return null;
-    }
-
-    private static Object invokeNoArg(Object target, String name) {
-        try {
-            Method method = target.getClass().getMethod(name);
-            method.setAccessible(true);
-            return method.invoke(target);
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
-
-    private static boolean invokeSingleArgMethod(Object target, String name, Object arg) {
-        if (target == null || name == null || arg == null) {
-            return false;
-        }
-        try {
-            Class<?> argClass = arg.getClass();
-            for (Method method : target.getClass().getMethods()) {
-                if (!method.getName().equals(name) || method.getParameterCount() != 1) {
-                    continue;
-                }
-                Class<?> param = method.getParameterTypes()[0];
-                if (!param.isAssignableFrom(argClass)) {
-                    continue;
-                }
-                method.setAccessible(true);
-                method.invoke(target, arg);
-                return true;
-            }
-        } catch (Throwable ignored) {
-        }
-        return false;
-    }
-
-    private static boolean invokeWithArgs(Object target, String name, Class<?>[] signature, Object... args) {
-        try {
-            Method method = target.getClass().getMethod(name, signature);
-            method.setAccessible(true);
-            method.invoke(target, args);
-            return true;
-        } catch (Throwable ignored) {
-            return false;
-        }
-    }
-
-    private static Object invokeAttributeLookup(Object target, String name, String attributeId) {
-        if (target == null || name == null || attributeId == null) {
-            return null;
-        }
-        try {
-            for (Method method : target.getClass().getMethods()) {
-                if (!method.getName().equals(name) || method.getParameterCount() != 1) {
-                    continue;
-                }
-                Object arg = createAttributeArgument(method.getParameterTypes()[0], attributeId);
-                if (arg == null) {
-                    continue;
-                }
-                method.setAccessible(true);
-                return method.invoke(target, arg);
-            }
-        } catch (Throwable ignored) {
-        }
-        return null;
-    }
-
-    private static Object createAttributeArgument(Class<?> parameterType, String attributeId) {
-        try {
-            if ("net.minecraft.resources.ResourceLocation".equals(parameterType.getName())) {
-                return parameterType.getMethod("tryParse", String.class).invoke(null, attributeId);
-            }
-            if ("net.minecraft.util.Identifier".equals(parameterType.getName())) {
-                try {
-                    return parameterType.getMethod("of", String.class).invoke(null, attributeId);
-                } catch (NoSuchMethodException ignored) {
-                    return parameterType.getConstructor(String.class).newInstance(attributeId);
-                }
-            }
-        } catch (Throwable ignored) {
-        }
-        return null;
-    }
-
-    private static Object readField(Object target, String name) {
-        try {
-            Field field = target.getClass().getDeclaredField(name);
-            field.setAccessible(true);
-            return field.get(target);
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
-
-    private static Object firstNonNull(Object first, Object second) {
-        return first != null ? first : second;
-    }
-
-    private static Object invokeReturning(Object target, String name) {
-        if (target == null) return null;
-        try {
-            java.lang.reflect.Method method = target.getClass().getMethod(name);
-            method.setAccessible(true);
-            return method.invoke(target);
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
-
-    private static String sanitizeWorldId(String raw) {
-        if (raw == null || raw.isBlank()) {
-            return null;
-        }
-        Matcher matcher = Pattern.compile("([a-z0-9_.-]+:[a-z0-9_./-]+)").matcher(raw.toLowerCase(Locale.ROOT));
-        return matcher.find() ? matcher.group(1) : null;
     }
 
     default int getMaxPlayers() {

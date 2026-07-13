@@ -1,7 +1,6 @@
 package eu.avalanche7.paradigm.modules.commands.admin;
 
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.commands.shared.PlayerReflection;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
@@ -91,10 +90,7 @@ public class VanishCommand extends AbstractAdminCommand {
     }
 
     private void applyVanish(IPlayer target, boolean enabled) {
-        Object handle = target != null ? target.getOriginalPlayer() : null;
-        PlayerReflection.invokeBooleanMethod(handle, enabled, "setInvisible", "setInvisibleTo");
-        PlayerReflection.invokeBooleanMethod(handle, enabled, "setSilent");
-        PlayerReflection.writeBooleanField(handle, enabled, "invisible", "isInvisible");
+        services.getPlatformAdapter().setPlayerVanished(target, enabled);
     }
 
     private String stateText(boolean enabled) {

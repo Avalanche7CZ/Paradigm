@@ -1,7 +1,6 @@
 package eu.avalanche7.paradigm.modules.commands.admin;
 
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.commands.shared.PlayerReflection;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
@@ -41,16 +40,7 @@ public class RepairCommand extends AbstractAdminCommand {
             send(source, "admin.no_permission_others", "You do not have permission to affect other players.");
             return 0;
         }
-        int changed = 0;
-        if (all) {
-            for (Object stack : PlayerReflection.inventoryStacks(target, true)) {
-                if (PlayerReflection.repairStack(stack)) {
-                    changed++;
-                }
-            }
-        } else if (PlayerReflection.repairStack(PlayerReflection.mainHandItem(target))) {
-            changed = 1;
-        }
+        int changed = services.getPlatformAdapter().repairPlayerItems(target, all);
         send(source, "admin.repair_ok", "Repaired {count} item stack(s) for {player}.",
                 "{count}", String.valueOf(changed), "{player}", target.getName());
         return changed > 0 ? 1 : 0;

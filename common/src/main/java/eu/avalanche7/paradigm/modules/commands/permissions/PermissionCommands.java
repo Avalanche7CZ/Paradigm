@@ -14,6 +14,8 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.modules.permissions.PermissionAPI;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
+import eu.avalanche7.paradigm.modules.permissions.migration.LuckPermsMigrationReport;
+import eu.avalanche7.paradigm.modules.permissions.migration.LuckPermsMigrationService;
 
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -56,7 +58,55 @@ public final class PermissionCommands {
                 .requires(source -> hasGroupManagePermission(source, services))
                 .then(platform.createCommandBuilder().literal("check").then(buildPermissionCheckArguments(platform, services)))
                 .then(platform.createCommandBuilder().literal("explain").then(buildPermissionCheckArguments(platform, services)))
-                .then(buildPermissionNodesBranch(platform, services));
+                .then(buildPermissionNodesBranch(platform, services))
+                .then(buildLuckPermsMigrationBranch(platform, services));
+    }
+
+    private static ICommandBuilder buildLuckPermsMigrationBranch(IPlatformAdapter platform, Services services) {
+        ICommandBuilder luckPerms = platform.createCommandBuilder().literal("luckperms");
+        for (LuckPermsMigrationService.Direction direction : LuckPermsMigrationService.Direction.values()) {
+            ICommandBuilder directionBranch = platform.createCommandBuilder().literal(direction.name().toLowerCase(Locale.ROOT))
+                    .then(platform.createCommandBuilder().literal("dry-run")
+                            .executes(ctx -> startMigration(ctx.getSource(), platform, services, direction, LuckPermsMigrationService.Mode.DRY_RUN, false)))
+                    .then(platform.createCommandBuilder().literal("merge")
+                            .executes(ctx -> startMigration(ctx.getSource(), platform, services, direction, LuckPermsMigrationService.Mode.MERGE, false)))
+                    .then(platform.createCommandBuilder().literal("replace")
+                            .then(platform.createCommandBuilder().literal("confirm")
+                                    .executes(ctx -> startMigration(ctx.getSource(), platform, services, direction, LuckPermsMigrationService.Mode.REPLACE, true))));
+            luckPerms.then(directionBranch);
+        }
+        return platform.createCommandBuilder().literal("migrate").then(luckPerms);
+    }
+
+    private static int startMigration(ICommandSource source, IPlatformAdapter platform, Services services,
+                                      LuckPermsMigrationService.Direction direction, LuckPermsMigrationService.Mode mode,
+                                      boolean confirmed) {
+        platform.sendSuccess(source, platform.createLiteralComponent("LuckPerms migration started: "
+                + direction.name().toLowerCase(Locale.ROOT) + " " + mode.name().toLowerCase(Locale.ROOT).replace('_', '-')), false);
+        new LuckPermsMigrationService(services).migrate(direction, mode, confirmed).whenComplete((report, failure) -> {
+            Runnable feedback = () -> {
+                if (failure != null) {
+                    platform.sendFailure(source, platform.createLiteralComponent("LuckPerms migration failed. Check the server log."));
+                    services.getLogger().error("LuckPerms migration failed", failure);
+                    return;
+                }
+                sendMigrationReport(source, platform, report);
+            };
+            platform.executeOnServerThread(feedback);
+        });
+        return 1;
+    }
+
+    private static void sendMigrationReport(ICommandSource source, IPlatformAdapter platform, LuckPermsMigrationReport report) {
+        String summary = "LuckPerms migration " + (report.ok() ? "complete" : "failed")
+                + (report.dryRun() ? " (dry-run)" : "") + ": groups=" + report.groups()
+                + ", users=" + report.users() + ", permissions=" + report.permissions()
+                + ", memberships=" + report.memberships() + ", parents=" + report.parents()
+                + ", conflicts=" + report.conflicts() + ", skipped=" + report.skipped();
+        if (report.ok()) platform.sendSuccess(source, platform.createLiteralComponent(summary), false);
+        else platform.sendFailure(source, platform.createLiteralComponent(summary));
+        report.details().stream().limit(10).forEach(detail ->
+                platform.sendSuccess(source, platform.createLiteralComponent(" - " + detail), false));
     }
 
     private static ICommandBuilder buildPermissionCheckArguments(IPlatformAdapter platform, Services services) {

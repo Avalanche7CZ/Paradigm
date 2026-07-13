@@ -48,8 +48,9 @@ public class CommandManager implements ParadigmModule {
         registerLoadedCustomCommands();
         ICommandBuilder reload = platform.createCommandBuilder()
                 .literal("customcommandsreload")
-                .requires(src -> src.hasPermissionLevel(2)
-                        || (src.getPlayer() != null && services.getPermissionsHandler().hasPermission(src.getPlayer(), eu.avalanche7.paradigm.modules.permissions.PermissionsHandler.RELOAD_PERMISSION)))
+                .requires(src -> services.getCommandToggleStore().isEnabled("customcommands")
+                        && (src.hasPermissionLevel(2)
+                        || (src.getPlayer() != null && services.getPermissionsHandler().hasPermission(src.getPlayer(), eu.avalanche7.paradigm.modules.permissions.PermissionsHandler.RELOAD_PERMISSION))))
                 .executes(ctx -> {
                     int count = reloadCustomCommands(services);
                     String raw = services.getLang().getTranslation("reload.customcommands_success");

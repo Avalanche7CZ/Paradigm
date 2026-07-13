@@ -16,6 +16,7 @@ import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.server.ServerLifecycleHooks;
 import net.minecraftforge.server.permission.events.PermissionGatherEvent;
 import net.minecraftforge.server.permission.nodes.PermissionNode;
+import net.minecraftforge.eventbus.api.listener.Priority;
 import eu.avalanche7.paradigm.modules.permissions.PermissionNodeRegistry;
 
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -31,13 +32,14 @@ public class MinecraftEventSystem implements IEventSystem {
     /** Called from PlatformAdapterImpl constructor to register on Forge 61.x buses directly. */
     public void register() {
         // Chat - CancellableEventBus: Predicate returning true = cancel
-        ServerChatEvent.BUS.addListener((ServerChatEvent event) -> {
+        ServerChatEvent.BUS.addListener(Priority.HIGHEST, (ServerChatEvent event) -> {
             MinecraftChatEvent chatEvent = new MinecraftChatEvent(event);
             if (!chatListeners.isEmpty()) {
                 for (ChatEventListener listener : chatListeners) {
                     try { listener.onPlayerChat(chatEvent); } catch (Exception e) {
                         System.err.println("Error in chat event listener: " + e.getMessage());
                     }
+                    if (chatEvent.isCancelled()) break;
                 }
             }
             if (chatEvent.isCancelled()) return true; // cancel the Forge event

@@ -27,3 +27,4 @@ scripts/release-secrets.local.env
 
 /scripts
 /common/src/test
+/docs

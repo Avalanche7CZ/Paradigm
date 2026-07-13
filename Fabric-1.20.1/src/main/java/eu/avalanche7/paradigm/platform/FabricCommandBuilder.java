@@ -7,6 +7,7 @@ import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.builder.RequiredArgumentBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandContext;
+import eu.avalanche7.paradigm.modules.commands.shared.CommandExecutionGuard;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import net.minecraft.command.CommandSource;
 import net.minecraft.command.argument.EntityArgumentType;
@@ -66,25 +67,11 @@ public class FabricCommandBuilder implements ICommandBuilder {
         if (currentBuilder instanceof LiteralArgumentBuilder<?> lit) {
             @SuppressWarnings("unchecked")
             LiteralArgumentBuilder<ServerCommandSource> builder = (LiteralArgumentBuilder<ServerCommandSource>) lit;
-            this.currentBuilder = builder.executes(ctx -> {
-                try {
-                    return executor.execute(new FabricCommandContext(ctx));
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    return 0;
-                }
-            });
+            this.currentBuilder = builder.executes(ctx -> CommandExecutionGuard.execute(executor, new FabricCommandContext(ctx)));
         } else if (currentBuilder instanceof RequiredArgumentBuilder<?, ?> req) {
             @SuppressWarnings("unchecked")
             RequiredArgumentBuilder<ServerCommandSource, ?> builder = (RequiredArgumentBuilder<ServerCommandSource, ?>) req;
-            this.currentBuilder = builder.executes(ctx -> {
-                try {
-                    return executor.execute(new FabricCommandContext(ctx));
-                } catch (Exception e) {
-                    e.printStackTrace();
-                    return 0;
-                }
-            });
+            this.currentBuilder = builder.executes(ctx -> CommandExecutionGuard.execute(executor, new FabricCommandContext(ctx)));
         }
         return this;
     }

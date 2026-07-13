@@ -6,8 +6,6 @@ import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
-import java.lang.reflect.Field;
-
 public class SpeedCommand implements ParadigmModule {
     private Services services;
 
@@ -94,82 +92,12 @@ public class SpeedCommand implements ParadigmModule {
     }
 
     private boolean setPlayerSpeed(IPlayer target, int level) {
-        if (target == null || target.getOriginalPlayer() == null) {
+        if (target == null) {
             return false;
         }
-
-        Object abilities = getAbilities(target.getOriginalPlayer());
-        if (abilities == null) {
-            return false;
-        }
-
         float walkSpeed = level <= 0 ? 0.1f : (0.1f * level);
         float flySpeed = level <= 0 ? 0.05f : (0.05f * level);
-
-        boolean walkSet = setSpeedValue(abilities, walkSpeed,
-                new String[]{"setWalkSpeed", "setWalkingSpeed"},
-                new String[]{"walkSpeed", "walkingSpeed"});
-        boolean movementAttributeSet = services.getPlatformAdapter().setMovementSpeed(target, walkSpeed);
-        boolean flySet = setSpeedValue(abilities, flySpeed,
-                new String[]{"setFlySpeed", "setFlyingSpeed"},
-                new String[]{"flySpeed", "flyingSpeed"});
-
-        invokeNoArg(target.getOriginalPlayer(), "onUpdateAbilities");
-        invokeNoArg(target.getOriginalPlayer(), "updateAbilities");
-        invokeNoArg(target.getOriginalPlayer(), "sendAbilitiesUpdate");
-
-        return walkSet || movementAttributeSet || flySet;
-    }
-
-    private Object getAbilities(Object playerHandle) {
-        Object abilities = invokeNoArg(playerHandle, "getAbilities");
-        if (abilities != null) {
-            return abilities;
-        }
-        return readField(playerHandle, "abilities");
-    }
-
-    private boolean setSpeedValue(Object abilities, float value, String[] methodNames, String[] fieldNames) {
-        boolean changed = false;
-        for (String methodName : methodNames) {
-            try {
-                var method = abilities.getClass().getMethod(methodName, float.class);
-                method.invoke(abilities, value);
-                changed = true;
-                break;
-            } catch (Throwable ignored) {
-            }
-        }
-
-        for (String fieldName : fieldNames) {
-            try {
-                Field field = abilities.getClass().getDeclaredField(fieldName);
-                field.setAccessible(true);
-                field.setFloat(abilities, value);
-                changed = true;
-            } catch (Throwable ignored) {
-            }
-        }
-        return changed;
-    }
-
-    private Object invokeNoArg(Object target, String methodName) {
-        try {
-            var method = target.getClass().getMethod(methodName);
-            return method.invoke(target);
-        } catch (Throwable ignored) {
-            return null;
-        }
-    }
-
-    private Object readField(Object target, String fieldName) {
-        try {
-            Field field = target.getClass().getDeclaredField(fieldName);
-            field.setAccessible(true);
-            return field.get(target);
-        } catch (Throwable ignored) {
-            return null;
-        }
+        return services.getPlatformAdapter().setPlayerSpeed(target, walkSpeed, flySpeed, walkSpeed);
     }
 
     private void send(IPlayer player, String key, String fallback, String... placeholders) {

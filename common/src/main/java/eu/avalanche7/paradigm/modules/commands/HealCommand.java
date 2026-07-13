@@ -68,7 +68,7 @@ public class HealCommand implements ParadigmModule {
             send(actor, "utility.no_permission_others", "You do not have permission to affect other players.");
             return 0;
         }
-        if (!healToMaxHealth(target)) {
+        if (!services.getPlatformAdapter().healPlayer(target)) {
             send(actor, "utility.heal_fail", "Could not restore full HP for {player}.", "{player}", target.getName());
             return 0;
         }
@@ -81,53 +81,6 @@ public class HealCommand implements ParadigmModule {
             return true;
         }
         return services.getPermissionsHandler().hasPermission(actor, PermissionsHandler.HEAL_OTHERS_PERMISSION, PermissionsHandler.HEAL_OTHERS_PERMISSION_LEVEL);
-    }
-
-    private boolean healToMaxHealth(IPlayer target) {
-        if (target == null) {
-            return false;
-        }
-
-        Float maxHealth = null;
-        if (target.getMaxHealth() != null) {
-            maxHealth = target.getMaxHealth().floatValue();
-        }
-
-        Object original = target.getOriginalPlayer();
-        if (original == null) {
-            return false;
-        }
-
-        if (maxHealth == null || maxHealth <= 0.0f) {
-            maxHealth = invokeFloatNoArg(original, "getMaxHealth");
-        }
-        if (maxHealth == null || maxHealth <= 0.0f) {
-            return false;
-        }
-
-        return invokeSetHealth(original, maxHealth);
-    }
-
-    private Float invokeFloatNoArg(Object handle, String method) {
-        try {
-            var m = handle.getClass().getMethod(method);
-            Object value = m.invoke(handle);
-            if (value instanceof Number n) {
-                return n.floatValue();
-            }
-        } catch (Throwable ignored) {
-        }
-        return null;
-    }
-
-    private boolean invokeSetHealth(Object handle, float health) {
-        try {
-            var m = handle.getClass().getMethod("setHealth", float.class);
-            m.invoke(handle, health);
-            return true;
-        } catch (Throwable ignored) {
-            return false;
-        }
     }
 
     private void send(IPlayer player, String key, String fallback, String... placeholders) {

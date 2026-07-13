@@ -1,7 +1,6 @@
 package eu.avalanche7.paradigm.modules.commands.admin;
 
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.commands.shared.PlayerReflection;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
@@ -91,9 +90,7 @@ public class GodCommand extends AbstractAdminCommand {
     }
 
     private void applyGod(IPlayer target, boolean enabled) {
-        Object handle = target != null ? target.getOriginalPlayer() : null;
-        PlayerReflection.invokeBooleanMethod(handle, enabled, "setInvulnerable");
-        PlayerReflection.writeBooleanField(handle, enabled, "invulnerable");
+        services.getPlatformAdapter().setPlayerInvulnerable(target, enabled);
     }
 
     private String stateText(boolean enabled) {

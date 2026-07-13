@@ -76,4 +76,9 @@ public interface ICommandContext {
     }
 
     Object getOriginalContext();
+
+    /** Complete Brigadier input, used only for diagnostics. */
+    default String getInput() {
+        return "";
+    }
 }

@@ -91,7 +91,7 @@ public class MinecraftEventSystem implements IEventSystem {
         }
     }
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void onServerChat(ServerChatEvent event) {
         if (chatListeners.isEmpty()) return;
 
@@ -102,6 +102,7 @@ public class MinecraftEventSystem implements IEventSystem {
                 listener.onPlayerChat(chatEvent);
             } catch (Exception ignored) {
             }
+            if (chatEvent.isCancelled()) break;
         }
 
         if (!chatEvent.isCancelled() && chatEvent.isModified()) {
