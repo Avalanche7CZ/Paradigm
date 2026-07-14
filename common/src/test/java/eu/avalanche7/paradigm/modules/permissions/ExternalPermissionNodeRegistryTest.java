@@ -29,4 +29,28 @@ class ExternalPermissionNodeRegistryTest {
         duplicate.close();
         assertFalse(registry.knownNodes().containsKey("paradigm_realms.realm.use"));
     }
+
+    @Test
+    void externalProtectNodesAppearInTheSharedCommandAndDashboardDiscoveryQuery() {
+        PermissionNodeRegistry registry = new PermissionNodeRegistry(
+                LoggerFactory.getLogger("protect-node-test"), null, null);
+        PermissionNodeRegistry.ExternalRegistration first = registry.registerExternalNode(
+                "paradigmprotect", "paradigmprotect.rollback", "Plan and confirm safe rollback operations.",
+                3, "Rollback", "rollback");
+        PermissionNodeRegistry.ExternalRegistration second = registry.registerExternalNode(
+                "paradigmprotect", "paradigmprotect.rollback", "Plan and confirm safe rollback operations.",
+                3, "Rollback", "rollback");
+
+        assertEquals(PermissionNodeRegistry.ExternalRegistrationStatus.REGISTERED, first.status());
+        assertEquals(PermissionNodeRegistry.ExternalRegistrationStatus.ALREADY_REGISTERED, second.status());
+        assertTrue(registry.listNodes("protect", 20).stream()
+                .anyMatch(node -> "paradigmprotect.rollback".equals(node.node)));
+        first.close();
+        assertTrue(registry.listNodes("protect", 20).stream()
+                .anyMatch(node -> "paradigmprotect.rollback".equals(node.node)));
+
+        second.close();
+        assertFalse(registry.listNodes("protect", 20).stream()
+                .anyMatch(node -> "paradigmprotect.rollback".equals(node.node)));
+    }
 }

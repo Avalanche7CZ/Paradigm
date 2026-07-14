@@ -3,6 +3,9 @@ package eu.avalanche7.paradigm.api.internal;
 import eu.avalanche7.paradigm.api.MessageResult;
 import eu.avalanche7.paradigm.api.PermissionContext;
 import eu.avalanche7.paradigm.api.PermissionDecision;
+import eu.avalanche7.paradigm.api.PermissionNodeDefinition;
+import eu.avalanche7.paradigm.api.Registration;
+import eu.avalanche7.paradigm.api.RegistrationStatus;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
@@ -21,6 +24,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ParadigmApiProviderTest {
     private static final UUID PLAYER = UUID.fromString("00000000-0000-0000-0000-000000000042");
@@ -51,6 +55,37 @@ class ParadigmApiProviderTest {
             PermissionContext context = PermissionContext.of("server", "survival");
             assertEquals(PermissionDecision.DENY, provider.permissions().check(PLAYER, "realms.denied", context));
             assertFalse(provider.permissions().hasPermission(PLAYER, "realms.denied", 4, context));
+        }
+    }
+
+    @Test
+    void permissionNodeRegistrationsRemainVisibleUntilTheirApiHandlesClose(@TempDir Path tempDir) {
+        IConfig config = config(tempDir);
+        MainConfigHandler.init(config, new DebugLogger(null));
+        IPlatformAdapter platform = platform(config, null, false);
+        PermissionsHandler handler = new PermissionsHandler(LoggerFactory.getLogger("permission-node-api-lifecycle-test"), null,
+                new DebugLogger(MainConfigHandler.getConfig()), platform, null, null);
+        handler.initialize();
+
+        try (ParadigmApiProvider provider = new ParadigmApiProvider(services(platform, handler), "test")) {
+            PermissionNodeDefinition definition = new PermissionNodeDefinition("paradigmprotect.rollback",
+                    "Plan and confirm safe rollback operations.", 3, java.util.Optional.of("Rollback"),
+                    java.util.Optional.of("rollback"));
+            Registration first = provider.permissions().registerPermissionNode("paradigmprotect", definition);
+            Registration second = provider.permissions().registerPermissionNode("paradigmprotect", definition);
+
+            assertEquals(RegistrationStatus.REGISTERED, first.status());
+            assertEquals(RegistrationStatus.ALREADY_REGISTERED, second.status());
+            assertTrue(handler.listDiscoveredPermissionNodes("protect", 20).stream()
+                    .anyMatch(node -> "paradigmprotect.rollback".equals(node.node)));
+
+            first.close();
+            assertTrue(handler.listDiscoveredPermissionNodes("protect", 20).stream()
+                    .anyMatch(node -> "paradigmprotect.rollback".equals(node.node)));
+
+            second.close();
+            assertFalse(handler.listDiscoveredPermissionNodes("protect", 20).stream()
+                    .anyMatch(node -> "paradigmprotect.rollback".equals(node.node)));
         }
     }
 

@@ -1265,7 +1265,7 @@ async function loadPermissions() {
     state.permissionData[state.permissionView] = data[state.permissionView] || [];
     if (state.permissionView === 'nodes') $('known-permission-nodes').innerHTML = state.permissionData.nodes.map(node => `<option value="${attr(node.node)}"></option>`).join('');
     state.permissionData.total = data.total ?? state.permissionData[state.permissionView].length;
-    $('permissions-summary').textContent = `${summary.groups} groups · ${summary.users} permission subjects · ${summary.nodes} nodes`;
+    $('permissions-summary').textContent = `${summary.groups} groups · ${summary.users} configured permission subjects · ${summary.nodes} nodes`;
     document.querySelectorAll('[data-permission-view]').forEach(button => button.classList.toggle('active', button.dataset.permissionView === state.permissionView));
     renderPermissionTargetList();
     if (state.selectedPermissionTarget) renderPermissionEditor();

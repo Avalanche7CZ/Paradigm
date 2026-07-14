@@ -255,7 +255,7 @@ public final class PermissionPanelRenderer {
 
         if (nodes.isEmpty()) {
             sendUiLine(source, services, text(services,
-                    translation(services, "permission.panel.no_discovered_nodes", "No discovered nodes yet. They appear after command registration or Forge/NeoForge PermissionAPI registration."), "FBBF24"));
+                    translation(services, "permission.panel.no_discovered_nodes", "No discovered nodes yet. They appear after command registration or companion API permission-node registration."), "FBBF24"));
             return;
         }
 

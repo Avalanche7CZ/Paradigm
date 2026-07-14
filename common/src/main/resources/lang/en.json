@@ -174,7 +174,7 @@
       "on": "on",
       "off": "off",
       "search": "search",
-      "no_discovered_nodes": "No discovered nodes yet. They appear after command registration or Forge/NeoForge PermissionAPI registration.",
+      "no_discovered_nodes": "No discovered nodes yet. They appear after command registration or companion API permission-node registration.",
       "source_manual": "manual",
       "source_command": "command",
       "source_alias": "alias",
