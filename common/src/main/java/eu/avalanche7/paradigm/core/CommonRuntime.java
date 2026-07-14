@@ -1,6 +1,8 @@
 package eu.avalanche7.paradigm.core;
 
 import eu.avalanche7.paradigm.ParadigmAPI;
+import eu.avalanche7.paradigm.api.internal.ApiProviderRegistry;
+import eu.avalanche7.paradigm.api.internal.ParadigmApiProvider;
 import eu.avalanche7.paradigm.configs.*;
 import eu.avalanche7.paradigm.data.AdminUtilityDataStore;
 import eu.avalanche7.paradigm.data.ModerationDataStore;
@@ -48,6 +50,7 @@ public final class CommonRuntime {
         ModerationConfigHandler.init(platformConfig, bootstrapDebugLogger);
         CooldownConfigHandler.init(platformConfig, bootstrapDebugLogger);
         EmojiConfigHandler.init(platformConfig, bootstrapDebugLogger);
+        TablistConfigHandler.init(platformConfig, bootstrapDebugLogger);
 
         // --- utilities ---
         DebugLogger debugLogger = new DebugLogger(MainConfigHandler.getConfig());
@@ -115,6 +118,7 @@ public final class CommonRuntime {
         modules.add(new eu.avalanche7.paradigm.modules.commands.Help());
         modules.add(new Announcements());
         modules.add(new MOTD());
+        modules.add(new eu.avalanche7.paradigm.modules.tab.Tablist());
         modules.add(new Mentions());
         modules.add(new Restart());
         modules.add(new StaffChat());
@@ -177,6 +181,7 @@ public final class CommonRuntime {
                 return modVersion != null ? modVersion : "unknown";
             }
         });
+        ApiProviderRegistry.install(new ParadigmApiProvider(runtime.services(), modVersion));
     }
 
     public record Runtime(List<ParadigmModule> modules, Services services, PermissionsHandler permissionsHandler) {

@@ -74,7 +74,7 @@ public final class EditorApplier {
             try { respCt = conn.getHeaderField("Content-Type"); } catch (Throwable ignored) {}
             try { respCe = conn.getHeaderField("Content-Encoding"); } catch (Throwable ignored) {}
             conn.disconnect();
-            throw new Exception("Bytebin GET failed: url=" + url + ", HTTP " + status + (msg != null ? " (" + msg + ")" : "") + (respCt != null ? ", contentType=" + respCt : "") + (respCe != null ? ", contentEncoding=" + respCe : "") + (errBody != null && !errBody.isEmpty() ? ", body=" + errBody : ""));
+            throw new Exception("Bytebin GET failed: HTTP " + status + (msg != null ? " (" + msg + ")" : "") + (respCt != null ? ", contentType=" + respCt : "") + (respCe != null ? ", contentEncoding=" + respCe : "") + (errBody != null && !errBody.isEmpty() ? ", body=" + errBody : ""));
         }
         try (BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
             StringBuilder sb = new StringBuilder();
@@ -82,7 +82,7 @@ public final class EditorApplier {
             while ((line = br.readLine()) != null) sb.append(line);
             String body = sb.toString();
             JsonObject obj = GSON.fromJson(body, JsonObject.class);
-            if (obj == null) throw new Exception("Bytebin response was empty or invalid JSON. url=" + url);
+            if (obj == null) throw new Exception("Bytebin response was empty or invalid JSON.");
             return obj;
         } finally {
             conn.disconnect();

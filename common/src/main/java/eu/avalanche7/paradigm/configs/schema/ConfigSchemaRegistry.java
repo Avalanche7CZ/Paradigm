@@ -10,6 +10,8 @@ import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.configs.MentionConfigHandler;
 import eu.avalanche7.paradigm.configs.RestartConfigHandler;
 import eu.avalanche7.paradigm.configs.ModerationConfigHandler;
+import eu.avalanche7.paradigm.configs.TablistConfigHandler;
+import com.google.gson.Gson;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardConfig;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPermission;
@@ -41,6 +43,7 @@ public class ConfigSchemaRegistry {
                 new ConfigCategory("announcements", "Announcements", "Announcement channels, intervals, messages, and display settings."),
                 new ConfigCategory("restart", "Restart", "Scheduled restart timing and warning messages."),
                 new ConfigCategory("motd", "MOTD", "Join MOTD and server-list MOTD text/icon settings."),
+                new ConfigCategory("tablist", "Tablist", "Header, footer, player formatting, sorting, and world overrides."),
                 new ConfigCategory("moderation", "Moderation", "Punishment cache and formatted ban-screen settings."),
                 new ConfigCategory("storage", "Storage", "Read-only data provider status and masked storage settings."),
                 new ConfigCategory("dashboard", "Dashboard", "Local dashboard settings from dashboard.json."),
@@ -55,6 +58,7 @@ public class ConfigSchemaRegistry {
         addAnnouncementFields(fields);
         addRestartFields(fields);
         addMotdFields(fields);
+        addTablistFields(fields);
         addModerationFields(fields);
         addCommandFields(fields);
         addCooldownFields(fields);
@@ -171,6 +175,45 @@ public class ConfigSchemaRegistry {
                     currentFirst.playerCount.showActualCount, defaultPlayerCount.showActualCount, "motd.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.SAFE,
                     null, null, null, List.of(), null, true, false, true, "", true, false));
         }
+    }
+
+    private void addTablistFields(List<ConfigField> fields) {
+        TablistConfigHandler.Config current = TablistConfigHandler.getConfig();
+        TablistConfigHandler.Config defaults = new TablistConfigHandler.Config();
+        addConfigEntries(fields, "tablist", "tablist", TablistConfigHandler.Config.class, current, defaults,
+                "tablist.json", ConfigReloadBehavior.LIVE);
+        fields.removeIf(field -> List.of("tablist.header", "tablist.footer", "tablist.sorting", "tablist.refreshInterval").contains(field.key()));
+        fields.add(stringListField("tablist.header", "tablist", "Header", current.header.description,
+                current.header.value, defaults.header.value, "tablist.json", true, ConfigReloadBehavior.LIVE));
+        fields.add(stringListField("tablist.footer", "tablist", "Footer", current.footer.description,
+                current.footer.value, defaults.footer.value, "tablist.json", true, ConfigReloadBehavior.LIVE));
+        fields.add(stringListField("tablist.sorting", "tablist", "Sorting", current.sorting.description,
+                current.sorting.value, defaults.sorting.value, "tablist.json", false, ConfigReloadBehavior.LIVE));
+        fields.add(simpleField("tablist.refreshInterval", "tablist", "Refresh Interval",
+                current.refreshInterval.description, ConfigFieldType.INTEGER, current.refreshInterval.value,
+                defaults.refreshInterval.value, "tablist.json", ConfigReloadBehavior.LIVE, ConfigRiskLevel.SAFE,
+                1.0, 3600.0, 1.0, List.of(), null, true, true, false, "seconds", true, false));
+        fields.add(stringListField("tablist.perWorldOverrides", "tablist", "Per-world Overrides",
+                "Structured world-specific header, footer, player format, and ping overrides.",
+                encodeWorldOverrides(current.perWorldOverrides), encodeWorldOverrides(defaults.perWorldOverrides),
+                "tablist.json", false, ConfigReloadBehavior.LIVE));
+    }
+
+    private static List<String> encodeWorldOverrides(Map<String, TablistConfigHandler.WorldOverride> overrides) {
+        if (overrides == null || overrides.isEmpty()) return List.of();
+        Gson gson = new Gson();
+        return overrides.entrySet().stream().map(entry -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("world", entry.getKey());
+            TablistConfigHandler.WorldOverride value = entry.getValue();
+            if (value != null) {
+                row.put("header", value.header);
+                row.put("footer", value.footer);
+                row.put("playerFormat", value.playerFormat);
+                row.put("showPing", value.showPing);
+            }
+            return gson.toJson(row);
+        }).toList();
     }
 
     private void addModerationFields(List<ConfigField> fields) {

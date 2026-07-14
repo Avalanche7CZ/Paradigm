@@ -52,7 +52,6 @@ import java.util.zip.GZIPOutputStream;
 
 public class WebEditorSession {
 
-    private static final String WEB_EDITOR_URL_PATTERN = "https://paradigm.avalanche7.eu/editor/";
     private static final String BYTEBIN_POST_URL = "https://bytebin.avalanche7.eu/post";
     public static final String BYTEBIN_BASE_URL = "https://bytebin.avalanche7.eu/";
     private static final String BYTESOCKS_HOST = "bytesocks.avalanche7.eu";
@@ -113,23 +112,8 @@ public class WebEditorSession {
 
         this.services.getWebEditorStore().sessions().addNewSession(id, request);
 
-        String baseUrl = getEditorBaseUrl();
-        String url = baseUrl + id;
-        try {
-            services.getLogger().info("Paradigm WebEditor session created: {}", url);
-        } catch (Throwable ignored) {
-        }
+        try { services.getLogger().info("Paradigm WebEditor session created."); } catch (Throwable ignored) {}
         return id;
-    }
-
-    private String getEditorBaseUrl() {
-        try {
-            boolean useTestUrl = MainConfigHandler.getConfig().webEditorTestUrl.value;
-            if (useTestUrl) {
-                return "http://localhost:8083/editor/";
-            }
-        } catch (Throwable ignored) {}
-        return WEB_EDITOR_URL_PATTERN;
     }
 
     private String uploadRequestData(WebEditorRequest request) {
@@ -150,18 +134,18 @@ public class WebEditorSession {
 
         if (debugEnabled()) {
             try {
-                services.getLogger().info("Paradigm WebEditor: Uploaded initial payload to Bytebin: key={}, url={}{}",
-                    key, BYTEBIN_BASE_URL, key);
+                services.getLogger().info("Paradigm WebEditor: Uploaded initial payload to Bytebin.");
             } catch (Throwable ignored) {}
             boolean accessible = verifyBytebinObjectAccessible(key);
-            try { services.getLogger().info("Paradigm WebEditor: Verified uploaded key accessibility: {} (key={})", accessible, key); } catch (Throwable ignored) {}
+            try { services.getLogger().info("Paradigm WebEditor: Verified uploaded object accessibility: {}", accessible); } catch (Throwable ignored) {}
             boolean contentMatch = verifyBytebinContentMatches(key, json);
-            try { services.getLogger().info("Paradigm WebEditor: Verified uploaded content integrity: {} (key={}, sha1={})", contentMatch, key, sha1Hex(json)); } catch (Throwable ignored) {}
+            try { services.getLogger().info("Paradigm WebEditor: Verified uploaded content integrity: {} (sha1={})", contentMatch, sha1Hex(json)); } catch (Throwable ignored) {}
         }
         return key;
     }
 
     public static String uploadPayload(Services services, JsonObject payload) {
+        WebEditorPayloadSecurity.requireSafe(payload);
         byte[] json = new com.google.gson.Gson().toJson(payload).getBytes(StandardCharsets.UTF_8);
         byte[] gz = gzip(json);
         String key = uploadGzippedPayload(services, gz, "follow-up", 8000);
@@ -169,14 +153,14 @@ public class WebEditorSession {
             return null;
         }
 
-        try { services.getLogger().info("Paradigm WebEditor: Uploaded follow-up payload to Bytebin: key={}, url={}{}", key, BYTEBIN_BASE_URL, key); } catch (Throwable ignored) {}
+        try { services.getLogger().info("Paradigm WebEditor: Uploaded follow-up payload to Bytebin."); } catch (Throwable ignored) {}
         try {
             boolean dbg = MainConfigHandler.getConfig().debugEnable.value;
             if (dbg) {
                 boolean accessible = verifyBytebinObjectAccessible(key);
-                try { services.getLogger().info("Paradigm WebEditor: Verified follow-up key accessibility: {} (key={})", accessible, key); } catch (Throwable ignored) {}
+                try { services.getLogger().info("Paradigm WebEditor: Verified follow-up object accessibility: {}", accessible); } catch (Throwable ignored) {}
                 boolean contentMatch = verifyBytebinContentMatches(key, json);
-                try { services.getLogger().info("Paradigm WebEditor: Verified follow-up content integrity: {} (key={}, sha1={})", contentMatch, key, sha1Hex(json)); } catch (Throwable ignored) {}
+                try { services.getLogger().info("Paradigm WebEditor: Verified follow-up content integrity: {} (sha1={})", contentMatch, sha1Hex(json)); } catch (Throwable ignored) {}
             }
         } catch (Throwable ignored) {}
         return key;
@@ -351,36 +335,8 @@ public class WebEditorSession {
         files.add("mentions", new com.google.gson.Gson().toJsonTree(MentionConfigHandler.getConfig()));
         files.add("restart", new com.google.gson.Gson().toJsonTree(RestartConfigHandler.getConfig()));
 
-         try {
-            java.nio.file.Path cfgDir;
-            try {
-                cfgDir = services.getPlatformAdapter().getConfig().getConfigDirectory().resolve("paradigm");
-            } catch (Throwable t) {
-                cfgDir = java.nio.file.Path.of(System.getProperty("user.dir")).resolve("config").resolve("paradigm");
-            }
-            if (java.nio.file.Files.isDirectory(cfgDir)) {
-                try (java.util.stream.Stream<java.nio.file.Path> stream = java.nio.file.Files.list(cfgDir)) {
-                    stream.filter(java.nio.file.Files::isRegularFile)
-                          .filter(p -> {
-                              String n = p.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
-                              return n.endsWith(".json");
-                          })
-                          .forEach(p -> {
-                              String name = p.getFileName().toString();
-                              String base = name.substring(0, name.length() - 5);
-                              String key = base.toLowerCase(java.util.Locale.ROOT);
-                              if (files.has(key)) return;
-                              try {
-                                  String content = java.nio.file.Files.readString(p, java.nio.charset.StandardCharsets.UTF_8);
-                                  com.google.gson.JsonElement parsed = com.google.gson.JsonParser.parseString(content);
-                                  if (parsed != null) {
-                                      files.add(key, parsed);
-                                  }
-                              } catch (Throwable ignored) {}
-                          });
-                }
-            }
-         } catch (Throwable ignored) {}
+        // Only configurations that EditorApplier explicitly supports leave the server.
+        // Never scan config/paradigm: it also contains credentials and private state.
          try {
             java.nio.file.Path commandsDir;
             try {
@@ -419,6 +375,7 @@ public class WebEditorSession {
         root.add("sections", sections);
         root.addProperty("schemaVersion", 1);
 
+        WebEditorPayloadSecurity.requireSafe(root);
         return root;
     }
 

@@ -9,6 +9,10 @@ import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.configs.MentionConfigHandler;
 import eu.avalanche7.paradigm.configs.RestartConfigHandler;
 import eu.avalanche7.paradigm.configs.ModerationConfigHandler;
+import eu.avalanche7.paradigm.configs.TablistConfigHandler;
+import eu.avalanche7.paradigm.modules.tab.Tablist;
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardConfig;
 import eu.avalanche7.paradigm.modules.commands.Reload;
@@ -64,6 +68,7 @@ public class ConfigPatchService {
         boolean moderationChanged = false;
         boolean commandsChanged = false;
         boolean cooldownsChanged = false;
+        boolean tablistChanged = false;
 
         for (ConfigPatchOperation op : patch.operations()) {
             String key = op != null ? normalizeKey(op.key()) : null;
@@ -110,6 +115,10 @@ public class ConfigPatchService {
                 } else if (key.startsWith("dashboard.")) {
                     applyDashboard(key.substring("dashboard.".length()), value);
                     dashboardChanged = true;
+                    result.accept(key);
+                } else if (key.startsWith("tablist.")) {
+                    applyTablist(key.substring("tablist.".length()), value);
+                    tablistChanged = true;
                     result.accept(key);
                 } else if (key.startsWith("commands.")) {
                     applyCommand(key.substring("commands.".length()), value, result, key);
@@ -173,6 +182,14 @@ public class ConfigPatchService {
         }
         if (cooldownsChanged) {
             CooldownConfigHandler.persistConfig();
+        }
+        if (tablistChanged) {
+            TablistConfigHandler.persistConfig();
+            scheduleServerThread(() -> {
+                Tablist tablist = Tablist.current();
+                if (tablist != null) tablist.reload();
+            });
+            result.warn("Tablist settings were saved and applied.");
         }
 
         result.newRevision(registry.snapshot().revision());
@@ -242,6 +259,46 @@ public class ConfigPatchService {
             return;
         }
         applyConfigEntry(RestartConfigHandler.Config.class, RestartConfigHandler.getConfig(), fieldName, value);
+    }
+
+    private void applyTablist(String fieldName, Object value) throws Exception {
+        TablistConfigHandler.Config config = TablistConfigHandler.getConfig();
+        if ("perWorldOverrides".equals(fieldName)) {
+            Map<String, TablistConfigHandler.WorldOverride> overrides = new java.util.LinkedHashMap<>();
+            Gson gson = new Gson();
+            for (String raw : stringList(value)) {
+                JsonObject row;
+                try {
+                    row = gson.fromJson(raw, JsonObject.class);
+                } catch (RuntimeException exception) {
+                    throw new IllegalArgumentException("World override data is invalid.");
+                }
+                String world = row != null && row.has("world") ? row.get("world").getAsString().trim() : "";
+                if (world.isEmpty() || world.length() > 128 || overrides.containsKey(world)) {
+                    throw new IllegalArgumentException("World override names must be non-empty and unique.");
+                }
+                TablistConfigHandler.WorldOverride override = new TablistConfigHandler.WorldOverride();
+                if (row.has("header") && !row.get("header").isJsonNull()) override.header = gson.fromJson(row.get("header"), new com.google.gson.reflect.TypeToken<List<String>>() { }.getType());
+                if (row.has("footer") && !row.get("footer").isJsonNull()) override.footer = gson.fromJson(row.get("footer"), new com.google.gson.reflect.TypeToken<List<String>>() { }.getType());
+                if (row.has("playerFormat") && !row.get("playerFormat").isJsonNull()) override.playerFormat = row.get("playerFormat").getAsString();
+                if (row.has("showPing") && !row.get("showPing").isJsonNull()) override.showPing = row.get("showPing").getAsBoolean();
+                overrides.put(world, override);
+            }
+            config.perWorldOverrides = overrides;
+            return;
+        }
+        if ("sorting".equals(fieldName)) {
+            List<String> rules = stringList(value);
+            java.util.Set<String> seen = new java.util.HashSet<>();
+            for (String rule : rules) {
+                if (eu.avalanche7.paradigm.modules.tab.TablistSortRule.parse(rule) == null || !seen.add(rule.toUpperCase(Locale.ROOT))) {
+                    throw new IllegalArgumentException("Tablist sorting rules must be supported and unique.");
+                }
+            }
+            config.sorting.value = rules.stream().map(rule -> rule.toUpperCase(Locale.ROOT)).toList();
+            return;
+        }
+        applyConfigEntry(TablistConfigHandler.Config.class, config, fieldName, value);
     }
 
     static List<String> validateRestartTimes(List<String> values) {

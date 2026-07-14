@@ -202,6 +202,10 @@ public class Services {
         return ChatConfigHandler.getConfig();
     }
 
+    public TablistConfigHandler.Config getTablistConfig() {
+        return TablistConfigHandler.getConfig();
+    }
+
     public CMConfig getCmConfig() {
         return cmConfigInstance;
     }

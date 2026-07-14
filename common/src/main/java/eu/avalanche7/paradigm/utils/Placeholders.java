@@ -1,5 +1,6 @@
 package eu.avalanche7.paradigm.utils;
 
+import eu.avalanche7.paradigm.api.internal.ApiProviderRegistry;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
 import java.util.List;
@@ -66,7 +67,7 @@ public class Placeholders {
             } else {
                 replacedText = replaceInternalPermissionPlaceholders(replacedText, player);
             }
-            return replacedText;
+            return resolveExternal(replacedText, uuidStr);
         }
 
         replacedText = replacedText.replace("{player}", "");
@@ -77,7 +78,7 @@ public class Placeholders {
         replacedText = replacedText.replace("{max_player_health}", "");
         replacedText = stripLuckPermsPlaceholders(replacedText);
         replacedText = stripInternalGroupPlaceholders(replacedText);
-        return replacedText;
+        return resolveExternal(replacedText, null);
     }
 
     /**
@@ -163,7 +164,22 @@ public class Placeholders {
             replacedText = stripInternalGroupPlaceholders(replacedText);
         }
 
-        return replacedText;
+        String uuid = null;
+        if (player != null) {
+            Object rawUuid = invoke(player, "getUUID");
+            if (rawUuid == null) rawUuid = invoke(player, "getUuid");
+            if (rawUuid != null) uuid = String.valueOf(rawUuid);
+        }
+        return resolveExternal(replacedText, uuid);
+    }
+
+    private static String resolveExternal(String text, String playerUuid) {
+        java.util.UUID uuid = null;
+        try {
+            if (playerUuid != null && !playerUuid.isBlank()) uuid = java.util.UUID.fromString(playerUuid);
+        } catch (IllegalArgumentException ignored) {
+        }
+        return ApiProviderRegistry.resolveExternalPlaceholders(text, uuid);
     }
 
     private String stripLuckPermsPlaceholders(String text) {
@@ -242,11 +258,10 @@ public class Placeholders {
             java.lang.reflect.Method getUserManagerMethod = luckPermsClass.getMethod("getUserManager");
             Object userManager = getUserManagerMethod.invoke(luckPerms);
 
-            java.lang.reflect.Method loadUserMethod = userManager.getClass().getMethod("loadUser", java.util.UUID.class);
-            Object completableFuture = loadUserMethod.invoke(userManager, uuid);
-
-            java.lang.reflect.Method joinMethod = completableFuture.getClass().getMethod("join");
-            Object user = joinMethod.invoke(completableFuture);
+            // Placeholder rendering is synchronous, so only use LuckPerms' loaded-user cache.
+            // Loading from storage here could block chat, commands, or companion API messages.
+            java.lang.reflect.Method getUserMethod = userManager.getClass().getMethod("getUser", java.util.UUID.class);
+            Object user = getUserMethod.invoke(userManager, uuid);
 
             if (user == null) return stripLuckPermsPlaceholders(text);
 

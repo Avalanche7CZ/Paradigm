@@ -1291,6 +1291,21 @@ body.show-advanced .advanced-detail { display: block; }
 .minecraft-preview .mc-c { color: #ff5555; } .minecraft-preview .mc-d { color: #ff55ff; }
 .minecraft-preview .mc-e { color: #ffff55; } .minecraft-preview .mc-f { color: #ffffff; }
 .minecraft-preview .mc-9 { color: #5555ff; } .minecraft-preview .mc-7 { color: #aaaaaa; }
+.tablist-editor { display: grid; gap: 16px; }
+.tablist-switch-row, .tablist-world-heading { display: flex; align-items: start; justify-content: space-between; gap: 14px; }
+.tablist-switch-row h2, .tablist-world-heading h2 { margin: 0 0 5px; color: #fff; }
+.switch-label { display: flex; align-items: center; gap: 7px; color: #fff; font-weight: 800; }
+.switch-label input { width: auto; }
+.tablist-format-grid { display: grid; grid-template-columns: repeat(2, minmax(280px, 1fr)); gap: 14px; margin: 14px 0; }
+.tablist-format-grid label, .tablist-player-format, .tablist-world-card > label { display: grid; gap: 6px; min-width: 0; color: #fff; font-weight: 800; }
+.tablist-format-grid textarea, .tablist-player-format textarea, .tablist-world-card textarea { width: 100%; min-width: 0; min-height: 68px; max-height: 168px; }
+.tablist-preview { min-height: 300px; text-align: center; }
+.tablist-preview-header, .tablist-preview-footer { padding: 8px; }
+.tablist-preview-players { display: grid; grid-template-columns: repeat(2, minmax(150px, 1fr)); gap: 5px 24px; padding: 16px; border-top: 1px solid #555; border-bottom: 1px solid #555; text-align: left; }
+.tablist-preview-players > div { min-height: 22px; }
+.tablist-worlds { display: grid; gap: 12px; margin-top: 14px; }
+.tablist-world-card { display: grid; gap: 10px; padding: 12px; border: 2px solid #000; background: #0b143a; }
+.tablist-world-heading label { display: grid; gap: 4px; min-width: min(460px, 70%); color: #fff; font-weight: 800; }
 .command-action { border: 2px solid #000; background: #0b143a; color: #fff; margin: 10px 0; padding: 10px; }
 .command-action-grid { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 8px; }
 .command-json { width: 100%; min-height: 180px; font-family: monospace; }
@@ -1316,6 +1331,7 @@ body.show-advanced .advanced-detail { display: block; }
   .structured-action-fields .action-content { grid-column: 1 / -1; }
   .wide-editor-row { grid-template-columns: 1fr; }
   .motd-format-layout { grid-template-columns: 1fr; }
+  .tablist-format-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 680px) {
   .page-toolbar, .metric-grid, .split-grid, .editor-layout, .master-detail, .config-sections, .editor-section,
@@ -1334,4 +1350,7 @@ body.show-advanced .advanced-detail { display: block; }
   .structured-action-fields.is-broadcast { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .structured-action-fields .action-content { grid-column: 1 / -1; }
   .channel-heading { align-items: stretch; flex-direction: column; }
+  .tablist-switch-row, .tablist-world-heading { flex-direction: column; }
+  .tablist-world-heading label { min-width: 100%; width: 100%; }
+  .tablist-preview-players { grid-template-columns: 1fr; }
 }

@@ -22,6 +22,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class PermissionNodeRegistry {
     public static final String SOURCE_PARADIGM = "paradigm";
@@ -39,6 +41,7 @@ public class PermissionNodeRegistry {
     private final Gson gson = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     private final Object lock = new Object();
     private RegistryState state = new RegistryState();
+    private final Map<String, ExternalNode> externalNodes = new LinkedHashMap<>();
 
     public PermissionNodeRegistry(Logger logger, DebugLogger debugLogger, IConfig config) {
         this.logger = logger;
@@ -124,6 +127,9 @@ public class PermissionNodeRegistry {
             state.nodes.entrySet().stream()
                     .sorted(Map.Entry.comparingByKey(String.CASE_INSENSITIVE_ORDER))
                     .forEach(entry -> result.put(entry.getKey(), descriptionFor(entry.getValue())));
+            externalNodes.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey(String.CASE_INSENSITIVE_ORDER))
+                    .forEach(entry -> result.put(entry.getKey(), descriptionFor(entry.getValue().permission)));
             return result;
         }
     }
@@ -133,7 +139,9 @@ public class PermissionNodeRegistry {
         int max = limit <= 0 ? 50 : limit;
         synchronized (lock) {
             List<DiscoveredPermission> result = new ArrayList<>();
-            for (DiscoveredPermission entry : state.nodes.values().stream()
+            Map<String, DiscoveredPermission> combined = new LinkedHashMap<>(state.nodes);
+            externalNodes.forEach((node, entry) -> combined.put(node, entry.permission));
+            for (DiscoveredPermission entry : combined.values().stream()
                     .sorted((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(a.node, b.node))
                     .toList()) {
                 if (!q.isEmpty() && (entry.node == null || !entry.node.toLowerCase(Locale.ROOT).contains(q))) {
@@ -146,6 +154,67 @@ public class PermissionNodeRegistry {
             }
             return result;
         }
+    }
+
+    public ExternalRegistration registerExternalNode(String ownerModId, String node, String description,
+                                                     int defaultLevel, String category, String featureIdentifier) {
+        String owner = normalizeOwner(ownerModId);
+        String normalizedNode = normalizeNode(node);
+        if (owner == null || normalizedNode == null || defaultLevel < -1 || defaultLevel > 4) {
+            return ExternalRegistration.inactive(ownerModId, node, ExternalRegistrationStatus.INVALID);
+        }
+
+        synchronized (lock) {
+            ExternalNode existing = externalNodes.get(normalizedNode);
+            if (existing != null) {
+                if (!existing.owner.equals(owner) || !existing.matches(description, defaultLevel, category, featureIdentifier)) {
+                    if (logger != null) {
+                        logger.warn("Paradigm: external permission node '{}' from '{}' conflicts with owner '{}'.",
+                                normalizedNode, owner, existing.owner);
+                    }
+                    return ExternalRegistration.inactive(owner, normalizedNode, ExternalRegistrationStatus.CONFLICT);
+                }
+                UUID token = UUID.randomUUID();
+                existing.tokens.add(token);
+                return registration(owner, normalizedNode, token, ExternalRegistrationStatus.ALREADY_REGISTERED);
+            }
+
+            long now = System.currentTimeMillis();
+            DiscoveredPermission permission = new DiscoveredPermission();
+            permission.node = normalizedNode;
+            permission.source = "external:" + owner;
+            permission.description = clean(description, "External permission node from " + owner + ".");
+            permission.defaultLevel = defaultLevel;
+            permission.category = clean(category, "");
+            permission.featureIdentifier = clean(featureIdentifier, "");
+            permission.firstSeen = now;
+            permission.lastSeen = now;
+
+            UUID token = UUID.randomUUID();
+            ExternalNode entry = new ExternalNode(owner, permission);
+            entry.tokens.add(token);
+            externalNodes.put(normalizedNode, entry);
+            return registration(owner, normalizedNode, token, ExternalRegistrationStatus.REGISTERED);
+        }
+    }
+
+    public void clearExternalNodes() {
+        synchronized (lock) {
+            externalNodes.clear();
+        }
+    }
+
+    private ExternalRegistration registration(String owner, String node, UUID token, ExternalRegistrationStatus status) {
+        AtomicBoolean active = new AtomicBoolean(true);
+        return new ExternalRegistration(owner, node, status, active, () -> {
+            if (!active.compareAndSet(true, false)) return;
+            synchronized (lock) {
+                ExternalNode entry = externalNodes.get(node);
+                if (entry == null || !entry.owner.equals(owner)) return;
+                entry.tokens.remove(token);
+                if (entry.tokens.isEmpty()) externalNodes.remove(node);
+            }
+        });
     }
 
     public Set<String> commandCandidates(String commandLine) {
@@ -343,6 +412,11 @@ public class PermissionNodeRegistry {
         return normalized;
     }
 
+    private static String normalizeOwner(String ownerModId) {
+        String owner = ownerModId != null ? ownerModId.trim().toLowerCase(Locale.ROOT) : "";
+        return owner.matches("[a-z0-9_.-]+") ? owner : null;
+    }
+
     private static String normalizePathSegment(String segment) {
         String cleaned = segment != null ? segment.trim().toLowerCase(Locale.ROOT) : "";
         while (cleaned.startsWith("/")) {
@@ -398,6 +472,8 @@ public class PermissionNodeRegistry {
         public int defaultLevel = -1;
         public long firstSeen;
         public long lastSeen;
+        public String category = "";
+        public String featureIdentifier = "";
 
         public DiscoveredPermission copy() {
             DiscoveredPermission copy = new DiscoveredPermission();
@@ -407,11 +483,50 @@ public class PermissionNodeRegistry {
             copy.defaultLevel = this.defaultLevel;
             copy.firstSeen = this.firstSeen;
             copy.lastSeen = this.lastSeen;
+            copy.category = this.category;
+            copy.featureIdentifier = this.featureIdentifier;
             return copy;
         }
 
         public String lastSeenIso() {
             return lastSeen > 0 ? Instant.ofEpochMilli(lastSeen).toString() : "";
+        }
+    }
+
+    public enum ExternalRegistrationStatus { REGISTERED, ALREADY_REGISTERED, CONFLICT, INVALID }
+
+    public record ExternalRegistration(String owner, String node, ExternalRegistrationStatus status,
+                                       AtomicBoolean active, Runnable closeAction) implements AutoCloseable {
+        static ExternalRegistration inactive(String owner, String node, ExternalRegistrationStatus status) {
+            return new ExternalRegistration(owner != null ? owner : "", node != null ? node : "", status,
+                    new AtomicBoolean(false), () -> { });
+        }
+
+        public boolean isActive() {
+            return active.get();
+        }
+
+        @Override
+        public void close() {
+            closeAction.run();
+        }
+    }
+
+    private static final class ExternalNode {
+        private final String owner;
+        private final DiscoveredPermission permission;
+        private final Set<UUID> tokens = new LinkedHashSet<>();
+
+        private ExternalNode(String owner, DiscoveredPermission permission) {
+            this.owner = owner;
+            this.permission = permission;
+        }
+
+        private boolean matches(String description, int level, String category, String featureIdentifier) {
+            return permission.description.equals(clean(description, "External permission node from " + owner + "."))
+                    && permission.defaultLevel == level
+                    && permission.category.equals(clean(category, ""))
+                    && permission.featureIdentifier.equals(clean(featureIdentifier, ""));
         }
     }
 }

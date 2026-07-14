@@ -22,6 +22,8 @@ import net.minecraft.network.packet.s2c.play.OverlayMessageS2CPacket;
 import net.minecraft.network.packet.s2c.play.PlaySoundS2CPacket;
 import net.minecraft.network.packet.s2c.play.SubtitleS2CPacket;
 import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
+import net.minecraft.network.packet.s2c.play.PlayerListHeaderS2CPacket;
+import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.server.MinecraftServer;
@@ -943,6 +945,41 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
                 debugLogger.debugLog("[Paradigm] Command root /" + normalizedRoot + " did not resolve to the newly registered Paradigm node.");
             }
         }
+    }
+
+    @Override
+    public boolean setPlayerListHeaderFooter(IPlayer player, IComponent header, IComponent footer) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        Text nativeHeader = header instanceof MinecraftComponent component ? component.getHandle() : Text.empty();
+        Text nativeFooter = footer instanceof MinecraftComponent component ? component.getHandle() : Text.empty();
+        mp.getHandle().networkHandler.sendPacket(new PlayerListHeaderS2CPacket(nativeHeader, nativeFooter));
+        return true;
+    }
+
+    @Override
+    public boolean setPlayerListDisplayName(IPlayer player, @Nullable IComponent displayName) {
+        if (!(player instanceof MinecraftPlayer mp) || server == null) return false;
+        Text nativeName = displayName instanceof MinecraftComponent component ? component.getHandle() : null;
+        ((eu.avalanche7.paradigm.platform.Interfaces.ITablistPlayerAccess) mp.getHandle())
+                .paradigm$setTablistDisplayName(nativeName);
+        server.getPlayerManager().sendToAll(new PlayerListS2CPacket(
+                java.util.EnumSet.of(PlayerListS2CPacket.Action.UPDATE_DISPLAY_NAME), List.of(mp.getHandle())));
+        return true;
+    }
+
+    @Override
+    public boolean setPlayerListOrder(IPlayer player, int order) {
+        return false;
+    }
+
+    @Override
+    public int getPlayerPing(IPlayer player) {
+        return player instanceof MinecraftPlayer mp ? Math.max(0, mp.getHandle().pingMilliseconds) : 0;
+    }
+
+    @Override
+    public int getMaxPlayers() {
+        return server != null ? server.getPlayerManager().getMaxPlayerCount() : 0;
     }
 
     @Override

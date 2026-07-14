@@ -8,7 +8,8 @@
   "client": [],
   "server": [
     "PlayerListMixin",
-    "ServerStatusMixin"
+    "ServerStatusMixin",
+    "ServerPlayerTablistMixin"
   ],
   "injectors": {
     "defaultRequire": 1

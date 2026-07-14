@@ -80,6 +80,32 @@ public interface IPlatformAdapter {
     Integer getHighestBlockY(IPlayer player);
     boolean jumpPlayerForward(IPlayer player, int distance);
 
+    /** Updates the header/footer visible to one player without dispatching a command. */
+    default boolean setPlayerListHeaderFooter(IPlayer player, IComponent header, IComponent footer) {
+        return false;
+    }
+
+    /** Updates the native tablist display name for a player. */
+    default boolean setPlayerListDisplayName(IPlayer player, @Nullable IComponent displayName) {
+        return false;
+    }
+
+    /** Applies a native deterministic tab order where the target Minecraft version supports it. */
+    default boolean setPlayerListOrder(IPlayer player, int order) {
+        return false;
+    }
+
+    /** Returns the connection latency in milliseconds, or zero when unavailable. */
+    default int getPlayerPing(IPlayer player) {
+        return 0;
+    }
+
+    default void resetPlayerListState(IPlayer player) {
+        setPlayerListHeaderFooter(player, createEmptyComponent(), createEmptyComponent());
+        setPlayerListDisplayName(player, null);
+        setPlayerListOrder(player, 0);
+    }
+
     String replacePlaceholders(String text, @Nullable IPlayer player);
     boolean hasPermissionForCustomCommand(ICommandSource source, CustomCommand command);
 

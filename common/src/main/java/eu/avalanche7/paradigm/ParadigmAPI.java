@@ -40,6 +40,30 @@ public class ParadigmAPI {
         return instance.getModVersion();
     }
 
+    /** @deprecated Companion mods should use {@link eu.avalanche7.paradigm.api.ParadigmAPI#isAvailable()}. */
+    @Deprecated
+    public static boolean isAvailable() {
+        return eu.avalanche7.paradigm.api.ParadigmAPI.isAvailable();
+    }
+
+    /** @deprecated Companion mods should import the stable facade in {@code eu.avalanche7.paradigm.api}. */
+    @Deprecated
+    public static eu.avalanche7.paradigm.api.PermissionService permissions() {
+        return eu.avalanche7.paradigm.api.ParadigmAPI.permissions();
+    }
+
+    /** @deprecated Companion mods should import the stable facade in {@code eu.avalanche7.paradigm.api}. */
+    @Deprecated
+    public static eu.avalanche7.paradigm.api.MessageService messages() {
+        return eu.avalanche7.paradigm.api.ParadigmAPI.messages();
+    }
+
+    /** @deprecated Companion mods should import the stable facade in {@code eu.avalanche7.paradigm.api}. */
+    @Deprecated
+    public static eu.avalanche7.paradigm.api.PlaceholderService placeholders() {
+        return eu.avalanche7.paradigm.api.ParadigmAPI.placeholders();
+    }
+
     public static ModerationView moderation() {
         return new ModerationView();
     }

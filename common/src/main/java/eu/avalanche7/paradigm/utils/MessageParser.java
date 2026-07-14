@@ -49,7 +49,20 @@ public class MessageParser {
     }
 
     private String convertLegacyToNewFormat(String text) {
+        final char literalAmpersand = '\uE000';
+        StringBuilder protectedText = new StringBuilder(text.length());
+        for (int index = 0; index < text.length(); index++) {
+            char current = text.charAt(index);
+            if (current == '\\' && index + 1 < text.length() && text.charAt(index + 1) == '&') {
+                protectedText.append(literalAmpersand);
+                index++;
+            } else {
+                protectedText.append(current);
+            }
+        }
+        text = protectedText.toString();
         text = text.replace("&", "§");
+        text = text.replace(literalAmpersand, '&');
 
         Pattern hexColorPattern = Pattern.compile("§#([A-Fa-f0-9]{6})");
         Matcher hexMatcher = hexColorPattern.matcher(text);

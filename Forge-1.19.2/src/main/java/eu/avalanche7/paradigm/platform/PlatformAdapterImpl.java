@@ -791,4 +791,24 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         }
     }
 
+    @Override
+    public boolean setPlayerListHeaderFooter(IPlayer player, IComponent header, IComponent footer) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        Component h = header instanceof MinecraftComponent c ? c.getHandle() : Component.empty();
+        Component f = footer instanceof MinecraftComponent c ? c.getHandle() : Component.empty();
+        mp.getHandle().setTabListHeaderFooter(h, f);
+        return true;
+    }
+
+    @Override
+    public boolean setPlayerListDisplayName(IPlayer player, @Nullable IComponent value) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        ((ITablistPlayerAccess) mp.getHandle()).paradigm$setTablistDisplayName(value instanceof MinecraftComponent c ? c.getHandle() : null);
+        mp.getHandle().refreshTabListName();
+        return true;
+    }
+
+    @Override public boolean setPlayerListOrder(IPlayer player, int order) { return false; }
+    @Override public int getPlayerPing(IPlayer player) { return player instanceof MinecraftPlayer mp ? Math.max(0, mp.getHandle().latency) : 0; }
+
 }

@@ -21,6 +21,8 @@ import net.minecraft.network.packet.s2c.play.ClearTitleS2CPacket;
 import net.minecraft.network.packet.s2c.play.OverlayMessageS2CPacket;
 import net.minecraft.network.packet.s2c.play.SubtitleS2CPacket;
 import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
+import net.minecraft.network.packet.s2c.play.PlayerListHeaderS2CPacket;
+import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -941,6 +943,28 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             }
         }
     }
+
+    @Override
+    public boolean setPlayerListHeaderFooter(IPlayer player, IComponent header, IComponent footer) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        Text h = header instanceof MinecraftComponent component ? component.getHandle() : Text.empty();
+        Text f = footer instanceof MinecraftComponent component ? component.getHandle() : Text.empty();
+        mp.getHandle().networkHandler.sendPacket(new PlayerListHeaderS2CPacket(h, f));
+        return true;
+    }
+
+    @Override
+    public boolean setPlayerListDisplayName(IPlayer player, @Nullable IComponent displayName) {
+        if (!(player instanceof MinecraftPlayer mp) || server == null) return false;
+        Text name = displayName instanceof MinecraftComponent component ? component.getHandle() : null;
+        ((eu.avalanche7.paradigm.platform.Interfaces.ITablistPlayerAccess) mp.getHandle()).paradigm$setTablistDisplayName(name);
+        server.getPlayerManager().sendToAll(new PlayerListS2CPacket(PlayerListS2CPacket.Action.UPDATE_DISPLAY_NAME, List.of(mp.getHandle())));
+        return true;
+    }
+
+    @Override public boolean setPlayerListOrder(IPlayer player, int order) { return false; }
+    @Override public int getPlayerPing(IPlayer player) { return player instanceof MinecraftPlayer mp ? Math.max(0, mp.getHandle().pingMilliseconds) : 0; }
+    @Override public int getMaxPlayers() { return server != null ? server.getPlayerManager().getMaxPlayerCount() : 0; }
 
     @Override
     public boolean isFirstJoin(eu.avalanche7.paradigm.platform.Interfaces.IPlayer player) {

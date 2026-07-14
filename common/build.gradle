@@ -48,3 +48,17 @@ test {
 jar {
     from(sourceSets.main.output)
 }
+
+tasks.register('apiJar', Jar) {
+    group = 'build'
+    description = 'Builds the compile-only public companion API artifact.'
+    archiveBaseName.set('paradigm-api')
+    from(sourceSets.main.output)
+    include 'eu/avalanche7/paradigm/api/*.class'
+    include 'eu/avalanche7/paradigm/api/internal/ApiProvider*.class'
+    include 'eu/avalanche7/paradigm/api/internal/SimpleRegistration*.class'
+}
+
+tasks.named('assemble').configure {
+    dependsOn tasks.named('apiJar')
+}

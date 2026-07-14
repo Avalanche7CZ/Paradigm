@@ -1,5 +1,7 @@
 package eu.avalanche7.paradigm.modules;
 
+import eu.avalanche7.paradigm.ParadigmAPI;
+import eu.avalanche7.paradigm.api.internal.ApiProviderRegistry;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 
@@ -15,6 +17,8 @@ public class StorageLifecycle implements ParadigmModule {
 
     @Override
     public void onServerStopping(Object event, Services services) {
+        ApiProviderRegistry.uninstall();
+        ParadigmAPI.setInstance(null);
         if (services != null && services.getStorageService() != null) {
             services.getStorageService().close();
         }

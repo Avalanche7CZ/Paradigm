@@ -6,7 +6,8 @@
     "PlayerManagerMixin",
     "ServerPlayNetworkHandlerMixin",
     "ServerStatusMixin",
-    "PlayerListMixin"
+    "PlayerListMixin",
+    "ServerPlayerTablistMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -24,7 +24,8 @@ const state = {
   motdSelectedLine: 0,
   motdCompact: true,
   openPreviews: new Set(),
-  pendingConfirm: null
+  pendingConfirm: null,
+  tablistActiveEditor: 'tablist-player-format'
 };
 
 const $ = id => document.getElementById(id);
@@ -39,6 +40,7 @@ const pageInfo = {
   announcements: ['Announcements', 'Scheduled messages across supported channels.'],
   restart: ['Restart', 'Schedules, warnings, and restart presentation.'],
   motd: ['MOTD Editor', 'Join and server-list presentation.'],
+  tablist: ['Tablist', 'Player-list formatting, sorting, and world overrides.'],
   customCommands: ['Custom Commands', 'Structured custom command definitions.'],
   commands: ['Command Settings', 'Built-in command availability.'],
   cooldowns: ['Cooldowns', 'Cooldown and warmup timing.'],
@@ -175,6 +177,7 @@ function pageCategories(page = state.page) {
   if (page === 'announcements') return ['announcements'];
   if (page === 'restart') return ['restart'];
   if (page === 'motd') return ['motd'];
+  if (page === 'tablist') return ['tablist'];
   return [];
 }
 
@@ -186,6 +189,7 @@ function renderConfiguration() {
   renderAnnouncements();
   renderRestart();
   renderMotd();
+  renderTablist();
   if (state.page === 'moderation' && $('moderation-ban-screen')) renderModerationBanScreen();
   renderConfigContainer('command-fields', filterByInput(fieldsFor(['commands']), 'command-search'), 'commands');
   renderConfigContainer('cooldown-fields', filterByInput(fieldsFor(['cooldowns']), 'cooldown-search'), 'cooldowns');
@@ -721,6 +725,107 @@ function renderMotdSettings(fields) {
 function renderMotdFieldPreview(panel, previewKey) {
   const key = previewKey.replace(/^motd:/, '');
   renderMinecraftPreview(panel, valueOf(key) || '', { online_players: '12', max_players: '100', server_name: 'Paradigm Server' });
+}
+
+const TABLIST_SORT_RULES = ['GROUP_WEIGHT_DESC','GROUP_WEIGHT_ASC','PLAYER_NAME_ASC','PLAYER_NAME_DESC','PING_ASC','PING_DESC'];
+const TABLIST_SAMPLE_PLAYERS = [
+  { name: 'Alex', group: 'admin', weight: 100, prefix: '<color:red>[Admin] </color>', suffix: '', ping: 38 },
+  { name: 'Steve', group: 'moderator', weight: 50, prefix: '<color:aqua>[Mod] </color>', suffix: '', ping: 74 },
+  { name: 'Maya', group: 'member', weight: 0, prefix: '<color:gray>[Member] </color>', suffix: '', ping: 21 },
+  { name: 'Robin', group: 'member', weight: 0, prefix: '', suffix: '<color:dark_gray> ★</color>', ping: 112 }
+];
+
+function renderTablist() {
+  const root = $('tablist-editor');
+  if (!root || !state.snapshot) return;
+  const enabled = Boolean(valueOf('tablist.enabled'));
+  const header = valueOf('tablist.header') || [];
+  const footer = valueOf('tablist.footer') || [];
+  const playerFormat = valueOf('tablist.playerFormat') || '{player_name}';
+  const sorting = valueOf('tablist.sorting') || [];
+  const showPing = Boolean(valueOf('tablist.showPing'));
+  const refresh = Number(valueOf('tablist.refreshInterval') || 5);
+  const worlds = parseTablistWorlds(valueOf('tablist.perWorldOverrides'));
+  root.innerHTML = `<section class="editor-section tablist-basics"><div class="tablist-switch-row"><div><h2>Tablist presentation</h2><p>Changes apply to online players after saving.</p></div><label class="switch-label"><input id="tablist-enabled" type="checkbox" ${enabled ? 'checked' : ''}> Enabled</label></div><div class="tablist-format-grid"><label>Header<textarea id="tablist-header" class="auto-grow" rows="3">${esc(header.join('\n'))}</textarea>${tablistToolbar('header')}${collapsiblePreview('tablist:header', 'compact-preview')}</label><label>Footer<textarea id="tablist-footer" class="auto-grow" rows="3">${esc(footer.join('\n'))}</textarea>${tablistToolbar('footer')}${collapsiblePreview('tablist:footer', 'compact-preview')}</label></div><label class="tablist-player-format">Player name format<textarea id="tablist-player-format" class="auto-grow" rows="2">${esc(playerFormat)}</textarea>${tablistToolbar('player')}${collapsiblePreview('tablist:player', 'compact-preview')}</label><div class="token-list" id="tablist-placeholders"></div><div class="compact-form"><label>Numeric ping<input id="tablist-ping" type="checkbox" ${showPing ? 'checked' : ''}></label><label>Refresh interval (seconds)<input id="tablist-refresh" type="number" min="1" max="3600" value="${attr(refresh)}"></label></div>${collapsiblePreview('tablist:full', 'tablist-preview')}</section><section class="editor-section"><h2>Sorting</h2><p>Rules are evaluated from top to bottom. Player name and UUID remain deterministic final fallbacks.</p><div id="tablist-sorting" class="reorder-list">${sorting.map((rule, index) => tablistSortRow(rule, index)).join('') || '<div class="reorder-empty">No rules configured; Paradigm defaults are used.</div>'}</div><button id="tablist-sort-add">Add Rule</button></section><section class="editor-section"><div class="tablist-world-heading"><div><h2>Per-world overrides</h2><p>Unset values inherit the global tablist settings.</p></div><button id="tablist-world-add">Add World</button></div><div id="tablist-worlds" class="tablist-worlds">${worlds.map((world, index) => tablistWorldCard(world, index)).join('') || '<div class="reorder-empty">No world overrides configured.</div>'}</div></section>`;
+
+  $('tablist-enabled').addEventListener('change', event => setEdit('tablist.enabled', event.target.checked, 'tablist', false));
+  $('tablist-header').addEventListener('input', event => { setEdit('tablist.header', event.target.value.split('\n'), 'tablist', false); updateTablistPreviews(); });
+  $('tablist-footer').addEventListener('input', event => { setEdit('tablist.footer', event.target.value.split('\n'), 'tablist', false); updateTablistPreviews(); });
+  $('tablist-player-format').addEventListener('input', event => { setEdit('tablist.playerFormat', event.target.value, 'tablist', false); updateTablistPreviews(); });
+  $('tablist-ping').addEventListener('change', event => { setEdit('tablist.showPing', event.target.checked, 'tablist', false); updateTablistPreviews(); });
+  $('tablist-refresh').addEventListener('input', event => setEdit('tablist.refreshInterval', Number(event.target.value), 'tablist', false));
+  root.querySelectorAll('#tablist-header,#tablist-footer,#tablist-player-format').forEach(input => input.addEventListener('focus', () => { state.tablistActiveEditor = input.id; }));
+  root.querySelectorAll('[data-tab-format]').forEach(button => button.addEventListener('click', () => applyFormatToInput($(tablistTargetId(button.closest('[data-tab-target]').dataset.tabTarget)), button.dataset.tabFormat)));
+  renderTokens('tablist-placeholders', ['{player_name}','{prefix}','{suffix}','{group}','{world}','{ping}','{online_players}','{max_players}','{server_name}','{server_id}','{network_id}'], token => { const input = $(state.tablistActiveEditor); if (input) { insertAtCursor(input, token); input.dispatchEvent(new Event('input', { bubbles: true })); input.focus(); } });
+  wirePreviewDisclosures(root, renderTablistPreviewPanel);
+  wireAutoGrow(root);
+
+  root.querySelectorAll('[data-tab-sort-index]').forEach(select => select.addEventListener('change', () => mutateTablistSort(values => values[Number(select.dataset.tabSortIndex)] = select.value)));
+  root.querySelectorAll('[data-tab-sort-move]').forEach(button => button.addEventListener('click', () => mutateTablistSort(values => move(values, Number(button.dataset.index), button.dataset.tabSortMove === 'up' ? -1 : 1))));
+  root.querySelectorAll('[data-tab-sort-remove]').forEach(button => button.addEventListener('click', () => mutateTablistSort(values => values.splice(Number(button.dataset.index), 1))));
+  $('tablist-sort-add').addEventListener('click', () => mutateTablistSort(values => values.push('PLAYER_NAME_ASC')));
+  $('tablist-world-add').addEventListener('click', () => mutateTablistWorlds(values => values.push({ world: '', header: null, footer: null, playerFormat: null, showPing: null })));
+  root.querySelectorAll('[data-tab-world-index]').forEach(input => input.addEventListener('input', () => updateTablistWorldInput(input)));
+  root.querySelectorAll('[data-tab-world-remove]').forEach(button => button.addEventListener('click', () => mutateTablistWorlds(values => values.splice(Number(button.dataset.index), 1))));
+}
+
+function tablistToolbar(target) {
+  return `<div class="format-toolbar compact-format-toolbar" data-tab-target="${target}"><button type="button" data-tab-format="bold">B</button><button type="button" data-tab-format="italic">I</button><button type="button" data-tab-format="underline">U</button><button type="button" data-tab-format="strikethrough">S</button><button type="button" data-tab-format="color:#55FFFF">Color</button><button type="button" data-tab-format="gradient:#22D3EE:#A78BFA">Gradient</button><button type="button" data-tab-format="rainbow">Rainbow</button></div>`;
+}
+
+function tablistSortRow(rule, index) {
+  return `<div class="reorder-row"><span class="reorder-handle">::</span><select data-tab-sort-index="${index}">${TABLIST_SORT_RULES.map(option => `<option ${option === rule ? 'selected' : ''}>${option}</option>`).join('')}</select><div class="reorder-actions"><button data-tab-sort-move="up" data-index="${index}">&#8593;</button><button data-tab-sort-move="down" data-index="${index}">&#8595;</button><button data-tab-sort-remove data-index="${index}">&#215;</button></div></div>`;
+}
+
+function tablistWorldCard(world, index) {
+  const nullable = value => value == null ? '' : value;
+  return `<article class="tablist-world-card"><div class="tablist-world-heading"><label>World ID<input data-tab-world-index="${index}" data-part="world" value="${attr(world.world || '')}" placeholder="minecraft:overworld"></label><button data-tab-world-remove data-index="${index}">Delete</button></div><div class="tablist-format-grid"><label>Header override<textarea data-tab-world-index="${index}" data-part="header" rows="2" placeholder="Inherit global">${esc(Array.isArray(world.header) ? world.header.join('\n') : '')}</textarea></label><label>Footer override<textarea data-tab-world-index="${index}" data-part="footer" rows="2" placeholder="Inherit global">${esc(Array.isArray(world.footer) ? world.footer.join('\n') : '')}</textarea></label></div><label>Player format override<textarea data-tab-world-index="${index}" data-part="playerFormat" rows="2" placeholder="Inherit global">${esc(nullable(world.playerFormat))}</textarea></label><div class="compact-form"><label>Ping override<select data-tab-world-index="${index}" data-part="showPing"><option value="" ${world.showPing == null ? 'selected' : ''}>Inherit</option><option value="true" ${world.showPing === true ? 'selected' : ''}>Show</option><option value="false" ${world.showPing === false ? 'selected' : ''}>Hide</option></select></label></div></article>`;
+}
+
+function mutateTablistSort(mutation) { const values = clone(valueOf('tablist.sorting') || []); mutation(values); setEdit('tablist.sorting', values, 'tablist'); }
+function parseTablistWorlds(rows) { return (rows || []).map(row => { try { return JSON.parse(row); } catch (_) { return null; } }).filter(Boolean); }
+function mutateTablistWorlds(mutation, rerender = true) { const values = parseTablistWorlds(valueOf('tablist.perWorldOverrides')); mutation(values); setEdit('tablist.perWorldOverrides', values.map(value => JSON.stringify(value)), 'tablist', rerender); }
+function updateTablistWorldInput(input) {
+  mutateTablistWorlds(values => {
+    const row = values[Number(input.dataset.tabWorldIndex)];
+    if (!row) return;
+    const part = input.dataset.part;
+    if (part === 'header' || part === 'footer') row[part] = input.value === '' ? null : input.value.split('\n');
+    else if (part === 'showPing') row[part] = input.value === '' ? null : input.value === 'true';
+    else row[part] = input.value === '' && part !== 'world' ? null : input.value;
+  }, false);
+}
+
+function tablistTargetId(target) { return target === 'header' ? 'tablist-header' : target === 'footer' ? 'tablist-footer' : 'tablist-player-format'; }
+function applyFormatToInput(input, tag) {
+  if (!input) return;
+  const start = input.selectionStart ?? input.value.length; const end = input.selectionEnd ?? start;
+  const selected = input.value.slice(start, end) || 'text'; const base = tag.split(':')[0];
+  input.setRangeText(`<${tag}>${selected}</${base}>`, start, end, 'end');
+  input.dispatchEvent(new Event('input', { bubbles: true })); input.focus();
+}
+
+function renderTablistPreviewPanel(panel, key) {
+  const samples = { online_players: '4', max_players: '100', server_name: 'Paradigm Server', server_id: 'survival', network_id: 'main', world: 'minecraft:overworld' };
+  if (key === 'tablist:header') return renderMinecraftPreview(panel, valueOf('tablist.header') || [], samples);
+  if (key === 'tablist:footer') return renderMinecraftPreview(panel, valueOf('tablist.footer') || [], samples);
+  if (key === 'tablist:player') return renderMinecraftPreview(panel, replaceTablistSample(valueOf('tablist.playerFormat') || '', TABLIST_SAMPLE_PLAYERS[0]), samples);
+  const sorted = sortTablistSamples(TABLIST_SAMPLE_PLAYERS, valueOf('tablist.sorting') || []);
+  panel.replaceChildren();
+  const header = document.createElement('div'); header.className = 'tablist-preview-header'; header.append(buildMinecraftPreview(valueOf('tablist.header') || [], samples)); panel.append(header);
+  const list = document.createElement('div'); list.className = 'tablist-preview-players';
+  sorted.forEach(player => { const row = document.createElement('div'); const text = replaceTablistSample(valueOf('tablist.playerFormat') || '{player_name}', player) + (valueOf('tablist.showPing') && !(valueOf('tablist.playerFormat') || '').includes('{ping}') ? ` <color:gray>${player.ping}ms</color>` : ''); row.append(buildMinecraftPreview(text, samples)); list.append(row); });
+  panel.append(list);
+  const footer = document.createElement('div'); footer.className = 'tablist-preview-footer'; footer.append(buildMinecraftPreview(valueOf('tablist.footer') || [], samples)); panel.append(footer);
+}
+
+function updateTablistPreviews() {
+  document.querySelectorAll('#tablist-editor .preview-disclosure.is-open [data-preview-panel]').forEach(panel => renderTablistPreviewPanel(panel, panel.dataset.previewPanel));
+}
+function replaceTablistSample(value, player) { return String(value).replaceAll('{player_name}', player.name).replaceAll('{prefix}', player.prefix).replaceAll('{suffix}', player.suffix).replaceAll('{group}', player.group).replaceAll('{ping}', String(player.ping)); }
+function sortTablistSamples(values, rules) {
+  const result = clone(values); const active = rules.length ? rules : ['GROUP_WEIGHT_DESC','PLAYER_NAME_ASC'];
+  result.sort((a, b) => { for (const rule of active) { let difference = 0; if (rule === 'GROUP_WEIGHT_DESC') difference = b.weight - a.weight; if (rule === 'GROUP_WEIGHT_ASC') difference = a.weight - b.weight; if (rule === 'PLAYER_NAME_ASC') difference = a.name.localeCompare(b.name); if (rule === 'PLAYER_NAME_DESC') difference = b.name.localeCompare(a.name); if (rule === 'PING_ASC') difference = a.ping - b.ping; if (rule === 'PING_DESC') difference = b.ping - a.ping; if (difference) return difference; } return a.name.localeCompare(b.name); }); return result;
 }
 
 function applyMotdTemplate() {

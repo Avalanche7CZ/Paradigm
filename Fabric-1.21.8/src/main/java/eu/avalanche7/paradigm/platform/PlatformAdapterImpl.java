@@ -19,6 +19,8 @@ import net.minecraft.network.packet.s2c.play.OverlayMessageS2CPacket;
 import net.minecraft.network.packet.s2c.play.PlaySoundS2CPacket;
 import net.minecraft.network.packet.s2c.play.SubtitleS2CPacket;
 import net.minecraft.network.packet.s2c.play.TitleS2CPacket;
+import net.minecraft.network.packet.s2c.play.PlayerListHeaderS2CPacket;
+import net.minecraft.network.packet.s2c.play.PlayerListS2CPacket;
 import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryKeys;
 import net.minecraft.server.MinecraftServer;
@@ -932,6 +934,39 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     public IComponent createEmptyComponent() {
         return new MinecraftComponent(Text.empty());
     }
+
+    @Override
+    public boolean setPlayerListHeaderFooter(IPlayer player, IComponent header, IComponent footer) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        Text h = header instanceof MinecraftComponent component ? component.getHandle() : Text.empty();
+        Text f = footer instanceof MinecraftComponent component ? component.getHandle() : Text.empty();
+        mp.getHandle().networkHandler.sendPacket(new PlayerListHeaderS2CPacket(h, f));
+        return true;
+    }
+
+    @Override
+    public boolean setPlayerListDisplayName(IPlayer player, @Nullable IComponent displayName) {
+        if (!(player instanceof MinecraftPlayer mp) || server == null) return false;
+        Text name = displayName instanceof MinecraftComponent component ? component.getHandle() : null;
+        ((eu.avalanche7.paradigm.platform.Interfaces.ITablistPlayerAccess) mp.getHandle()).paradigm$setTablistDisplayName(name);
+        sendPlayerListUpdate(mp.getHandle(), PlayerListS2CPacket.Action.UPDATE_DISPLAY_NAME);
+        return true;
+    }
+
+    @Override
+    public boolean setPlayerListOrder(IPlayer player, int order) {
+        if (!(player instanceof MinecraftPlayer mp) || server == null) return false;
+        ((eu.avalanche7.paradigm.platform.Interfaces.ITablistPlayerAccess) mp.getHandle()).paradigm$setTablistOrder(order);
+        sendPlayerListUpdate(mp.getHandle(), PlayerListS2CPacket.Action.UPDATE_LIST_ORDER);
+        return true;
+    }
+
+    private void sendPlayerListUpdate(ServerPlayerEntity player, PlayerListS2CPacket.Action action) {
+        server.getPlayerManager().sendToAll(new PlayerListS2CPacket(java.util.EnumSet.of(action), List.of(player)));
+    }
+
+    @Override public int getPlayerPing(IPlayer player) { return player instanceof MinecraftPlayer mp ? Math.max(0, mp.getHandle().networkHandler.getLatency()) : 0; }
+    @Override public int getMaxPlayers() { return server != null ? server.getPlayerManager().getMaxPlayerCount() : 0; }
 
     @Override
     public boolean isFirstJoin(IPlayer player) {

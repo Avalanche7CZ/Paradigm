@@ -15,6 +15,7 @@ import eu.avalanche7.paradigm.modules.commands.permissions.PermissionCommands;
 import eu.avalanche7.paradigm.modules.dashboard.LocalDashboardModule;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 import eu.avalanche7.paradigm.modules.commands.moderation.PunishmentCommands;
+import eu.avalanche7.paradigm.modules.tab.Tablist;
 
 import java.util.HashMap;
 import java.util.List;
@@ -61,6 +62,7 @@ public class Reload implements ParadigmModule {
                                 case "mention" -> { MentionConfigHandler.reload(); msg = "Mention config reloaded."; }
                                 case "restart" -> { RestartConfigHandler.reload(); msg = "Restart config reloaded."; }
                                 case "moderation" -> { ModerationConfigHandler.reload(); services.getPunishmentService().refreshAsync(); msg = "Moderation config reloaded."; }
+                                case "tablist" -> { TablistConfigHandler.reload(); msg = "Tablist config reloaded."; }
                                 case "customcommands" -> {
                                     CommandManager.reloadCustomCommands(services);
                                     msg = "Custom commands config reloaded.";
@@ -73,6 +75,7 @@ public class Reload implements ParadigmModule {
                                     MentionConfigHandler.reload();
                                     RestartConfigHandler.reload();
                                     ModerationConfigHandler.reload();
+                                    TablistConfigHandler.reload();
                                     CommandManager.reloadCustomCommands(services);
                                     msg = "All configs reloaded.";
                                 }
@@ -92,6 +95,10 @@ public class Reload implements ParadigmModule {
                             }
                             if ("main".equals(cfg) || "restart".equals(cfg) || "all".equals(cfg)) {
                                 rescheduleRestart(services);
+                            }
+                            if ("tablist".equals(cfg) || "all".equals(cfg)) {
+                                Tablist tablist = Tablist.current();
+                                if (tablist != null) tablist.reload();
                             }
 
                             platform.sendSuccess(ctx.getSource(), platform.createLiteralComponent("§a" + msg), true);

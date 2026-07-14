@@ -9,6 +9,7 @@ import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextResolver;
+import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
 import eu.avalanche7.paradigm.storage.StorageService;
 import eu.avalanche7.paradigm.modules.permissions.PermissionAPI;
 import eu.avalanche7.paradigm.modules.permissions.PermissionDataStore;
@@ -244,9 +245,7 @@ public class PermissionsHandler {
             net.luckperms.api.LuckPerms api = net.luckperms.api.LuckPermsProvider.get();
             Map<String, String> allPermissions = knownPermissionNodes();
 
-            for (String permission : allPermissions.keySet()) {
-                debugLogger.debugLog("Discovered permission for LuckPerms integration: " + permission);
-            }
+            debugLogger.debugLog("Preparing LuckPerms integration with " + allPermissions.size() + " known permission nodes.");
 
             warmupLuckPermsPermissionDiscovery(api, allPermissions);
             logger.info("Paradigm: LuckPerms integration initialized with {} known permission nodes.", allPermissions.size());
@@ -275,9 +274,14 @@ public class PermissionsHandler {
             warmupUserPermissions(user, allPermissions);
         }
 
-        if (platform == null || platform.getOnlinePlayers() == null) return;
+        // Command and PermissionAPI discovery can run before the loader has attached its server instance.
+        // Loaded LuckPerms groups/users are still safe to warm at that point; online players are not.
+        if (platform == null || platform.getMinecraftServer() == null) return;
 
-        for (IPlayer onlinePlayer : platform.getOnlinePlayers()) {
+        List<IPlayer> onlinePlayers = platform.getOnlinePlayers();
+        if (onlinePlayers == null) return;
+
+        for (IPlayer onlinePlayer : onlinePlayers) {
             if (onlinePlayer == null || onlinePlayer.getUUID() == null) continue;
 
             UUID uuid;
@@ -405,7 +409,9 @@ public class PermissionsHandler {
             return;
         }
         permissionNodeRegistry.registerNode(node, source, description, defaultLevel);
-        registerPermissionsWithLuckPerms();
+        // Forge/NeoForge PermissionAPI discovery reports nodes one at a time. Re-warming every
+        // LuckPerms subject for each callback makes startup quadratic. The normal discovery and
+        // server-start registration passes consume the complete registry as one batch.
     }
 
     public List<PermissionNodeRegistry.DiscoveredPermission> listDiscoveredPermissionNodes(String query, int limit) {
@@ -507,6 +513,46 @@ public class PermissionsHandler {
         }
 
         return null;
+    }
+
+    /** Cache-only explicit-context lookup used by the stable companion API. */
+    public Boolean queryDefinedPermission(UUID playerUuid, String permission, PermissionContextSet context) {
+        if (playerUuid == null || permission == null || permission.isBlank()) return null;
+        PermissionContextSet effectiveContext = context != null ? context : PermissionContextSet.empty();
+
+        if (isLuckPermsAvailable()) {
+            try {
+                Boolean result = LuckPermsPublicApiBridge.query(playerUuid, permission, effectiveContext);
+                if (result != null) return result;
+            } catch (Throwable t) {
+                debugLogger.debugLog("[PermissionsHandler] LuckPerms contextual query failed for '" + permission + "': " + t);
+            }
+        }
+
+        if (isInternalPermissionsEnabled()) {
+            try {
+                return internalPermissionApi.hasPermission(playerUuid, permission, effectiveContext);
+            } catch (Throwable t) {
+                debugLogger.debugLog("[PermissionsHandler] Internal contextual query failed for '" + permission + "': " + t);
+            }
+        }
+        return null;
+    }
+
+    /** Applies the existing external/internal order and a typed platform OP fallback without storage access. */
+    public boolean hasPermission(UUID playerUuid, String permission, int fallbackLevel, PermissionContextSet context) {
+        if (playerUuid == null || permission == null || permission.isBlank()) return false;
+        Boolean defined = queryDefinedPermission(playerUuid, permission, context);
+        if (defined != null) return defined;
+        if (fallbackLevel < 0 || platform == null) return false;
+        IPlayer online = platform.getPlayerByUuid(playerUuid.toString());
+        if (online == null) return false;
+        try {
+            return platform.hasPermission(online, permission, fallbackLevel);
+        } catch (Throwable failure) {
+            debugLogger.debugLog("[PermissionsHandler] Platform fallback failed for '" + permission + "': " + failure);
+            return false;
+        }
     }
 
     private static String firstCandidate(Set<String> candidates) {
@@ -958,6 +1004,36 @@ public class PermissionsHandler {
                 meta.suffix(),
                 meta.groups()
         );
+    }
+
+    /** Cache-only metadata used by features such as chat and tablist presentation. */
+    public PermissionAPI.PermissionMeta resolvePlayerMetadata(IPlayer player) {
+        if (!isInternalPermissionsEnabled()) return null;
+        return internalPermissionApi.resolveMeta(player);
+    }
+
+    /** Cache-only resolved metadata for the stable companion API. */
+    public PermissionAPI.PermissionMeta resolvePlayerMetadata(UUID playerUuid) {
+        if (playerUuid == null) return null;
+        if (isInternalPermissionsEnabled()) return internalPermissionApi.resolveMeta(playerUuid);
+        if (!isLuckPermsAvailable()) return null;
+        try {
+            return LuckPermsPublicApiBridge.metadata(playerUuid);
+        } catch (Throwable failure) {
+            debugLogger.debugLog("[PermissionsHandler] LuckPerms metadata lookup failed: " + failure);
+            return null;
+        }
+    }
+
+    public PermissionNodeRegistry.ExternalRegistration registerExternalPermissionNode(
+            String ownerModId, String node, String description, int fallbackLevel,
+            String category, String featureIdentifier) {
+        return permissionNodeRegistry.registerExternalNode(ownerModId, node, description, fallbackLevel,
+                category, featureIdentifier);
+    }
+
+    public void clearExternalPermissionNodes() {
+        permissionNodeRegistry.clearExternalNodes();
     }
 
     public boolean createPermissionGroup(String groupName) {

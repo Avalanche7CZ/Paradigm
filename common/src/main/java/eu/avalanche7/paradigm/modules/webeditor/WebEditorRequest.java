@@ -53,6 +53,7 @@ public class WebEditorRequest {
     }
 
     public byte[] encodeJson() {
+        WebEditorPayloadSecurity.requireSafe(this.payload);
         String s = GSON.toJson(this.payload);
         return s.getBytes(StandardCharsets.UTF_8);
     }
