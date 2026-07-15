@@ -144,6 +144,10 @@ public interface IPlatformAdapter {
     IConfig getConfig();
     IEventSystem getEventSystem();
 
+    default IHologramPlatform getHologramPlatform() {
+        return null;
+    }
+
     ICommandBuilder createCommandBuilder();
     void registerCommand(ICommandBuilder builder);
 

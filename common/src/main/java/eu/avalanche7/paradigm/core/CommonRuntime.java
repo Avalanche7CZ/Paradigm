@@ -126,6 +126,7 @@ public final class CommonRuntime {
         modules.add(new GroupChat(groupChatManager));
         modules.add(new JoinLeaveMessages());
         modules.add(new CommandManager());
+        modules.add(new eu.avalanche7.paradigm.modules.holograms.Holograms());
         modules.add(new eu.avalanche7.paradigm.modules.commands.HomeCommand());
         modules.add(new eu.avalanche7.paradigm.modules.commands.TpaCommand());
         modules.add(new eu.avalanche7.paradigm.modules.commands.WarpCommand());

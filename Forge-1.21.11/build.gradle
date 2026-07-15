@@ -54,6 +54,7 @@ tasks.withType(JavaCompile).configureEach {
 }
 
 minecraft {
+    accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
     mappings channel: project.ext.mapping_channel, version: project.ext.mapping_version
 
     runs {
@@ -205,26 +206,6 @@ repositories {
     mavenCentral()
     maven { url "https://maven.minecraftforge.net/" }
     maven { url "https://repo.lucko.me/" }
-}
-
-processResources {
-    expand(project.properties)
-
-    filesMatching('META-INF/mods.toml') {
-        expand([
-            mod_id: project.ext.mod_id,
-            mod_name: project.ext.mod_name,
-            mod_version: project.ext.mod_version,
-            mod_group_id: project.ext.mod_group_id ?: '',
-            mod_authors: project.ext.mod_authors ?: '',
-            mod_license: project.ext.mod_license ?: '',
-            loader_version_range: project.ext.loader_version_range ?: '',
-            minecraft_version: project.ext.minecraft_version ?: '',
-            forge_version: project.ext.forge_version ?: '',
-            mapping_channel: project.ext.mapping_channel ?: '',
-            mapping_version: project.ext.mapping_version ?: ''
-        ])
-    }
 }
 
 dependencies {

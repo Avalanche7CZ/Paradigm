@@ -752,6 +752,11 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public eu.avalanche7.paradigm.platform.Interfaces.IHologramPlatform getHologramPlatform() {
+        return new MinecraftHologramPlatform(this);
+    }
+
+    @Override
     public Object getCommandDispatcher() {
         return commandDispatcher;
     }

@@ -29,6 +29,7 @@ public final class CommandCatalog {
             entry("customcommands", true, false, true, "customcommandsreload"),
             entry("sc", true, false, true, "sc"),
             entry("groupchat", true, false, true, "groupchat"),
+            entry("hologram", true, false, true, "hologram", "holo"),
 
             entry("sethome", true, false, true, "sethome"),
             entry("home", true, false, true, "home"),

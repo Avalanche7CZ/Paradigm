@@ -25,7 +25,10 @@ const state = {
   motdCompact: true,
   openPreviews: new Set(),
   pendingConfirm: null,
-  tablistActiveEditor: 'tablist-player-format'
+  tablistActiveEditor: 'tablist-player-format',
+  hologramData: null,
+  selectedHologram: null,
+  hologramDraft: null
 };
 
 const $ = id => document.getElementById(id);
@@ -41,6 +44,7 @@ const pageInfo = {
   restart: ['Restart', 'Schedules, warnings, and restart presentation.'],
   motd: ['MOTD Editor', 'Join and server-list presentation.'],
   tablist: ['Tablist', 'Player-list formatting, sorting, and world overrides.'],
+  holograms: ['Holograms', 'Server-side text displays, locations, and refresh behavior.'],
   customCommands: ['Custom Commands', 'Structured custom command definitions.'],
   commands: ['Command Settings', 'Built-in command availability.'],
   cooldowns: ['Cooldowns', 'Cooldown and warmup timing.'],
@@ -151,6 +155,7 @@ async function loadPage(page) {
   if (page === 'storageConfig') await loadStorageConfiguration();
   if (page === 'permissions') await loadPermissions();
   if (page === 'customCommands') await loadCustomCommands();
+  if (page === 'holograms') await loadHolograms();
   if (page === 'moderation') await loadModeration();
   if (page === 'audit') await loadAudit();
   if (state.snapshot) renderConfiguration();
@@ -1496,6 +1501,263 @@ function expiryBadge(expiresAtMs) {
   return `<span class="expiry-badge">${esc(relativeTime(expiresAtMs))}</span>`;
 }
 
+const HOLOGRAM_PLACEHOLDERS = [
+  '{online_players}', '{max_players}', '{server_name}', '{server_id}', '{network_id}', '{world}'
+];
+
+async function loadHolograms() {
+  try {
+    state.hologramData = await api('/api/holograms');
+    const definitions = state.hologramData.config?.holograms || {};
+    if (!state.selectedHologram || !definitions[state.selectedHologram]) {
+      state.selectedHologram = Object.keys(definitions).sort()[0] || null;
+    }
+    state.hologramDraft = state.selectedHologram
+      ? structuredClone(definitions[state.selectedHologram])
+      : null;
+    renderHologramSettings();
+    renderHologramList();
+    renderHologramEditor();
+  } catch (error) {
+    renderError('hologram-editor', error.message);
+  }
+}
+
+function renderHologramSettings() {
+  const root = $('hologram-settings');
+  const config = state.hologramData?.config;
+  if (!root || !config) return;
+  root.innerHTML = `<div class="detail-header"><div><h2>Global Settings</h2><span>Rendering mode: ${esc(config.renderMode || 'auto')}</span></div><button id="hologram-settings-save">Save Settings</button></div>
+    <div class="compact-form">
+      <label class="switch-label"><input id="hologram-global-enabled" type="checkbox" ${config.enabled ? 'checked' : ''}> Enabled</label>
+      <label>Default view distance<input id="hologram-default-distance" type="number" min="1" max="512" step="1" value="${attr(config.defaultViewDistance)}"></label>
+      <label>Default refresh interval<input id="hologram-default-refresh" type="number" min="1" max="3600" step="1" value="${attr(config.defaultRefreshIntervalSeconds)}"></label>
+    </div>
+    ${state.hologramData.supported ? '' : '<div class="notice-inline">This loader does not provide hologram rendering.</div>'}`;
+  $('hologram-settings-save').addEventListener('click', saveHologramSettings);
+}
+
+function renderHologramList() {
+  const root = $('hologram-list');
+  if (!root) return;
+  const definitions = state.hologramData?.config?.holograms || {};
+  const ids = Object.keys(definitions).sort();
+  root.innerHTML = ids.length ? ids.map(id => {
+    const definition = definitions[id];
+    return `<button class="selection-item ${id === state.selectedHologram ? 'active' : ''}" data-hologram-id="${attr(id)}">
+      <strong>${esc(id)}</strong><small>${esc(definition.dimension)} · ${(definition.lines || []).length} lines · ${definition.enabled ? 'enabled' : 'disabled'}</small>
+    </button>`;
+  }).join('') : empty('No holograms configured.');
+  root.querySelectorAll('[data-hologram-id]').forEach(button => button.addEventListener('click', () => {
+    state.selectedHologram = button.dataset.hologramId;
+    state.hologramDraft = structuredClone(definitions[state.selectedHologram]);
+    renderHologramList();
+    renderHologramEditor();
+  }));
+}
+
+function renderHologramEditor() {
+  const root = $('hologram-editor');
+  const definition = state.hologramDraft;
+  if (!root || !definition || !state.selectedHologram) {
+    if (root) {
+      root.className = 'detail-editor empty-detail';
+      root.textContent = 'Select a hologram or create one.';
+    }
+    return;
+  }
+
+  root.className = 'detail-editor hologram-editor';
+  root.innerHTML = `<div class="hologram-subject-header">
+      <div><h2>${esc(state.selectedHologram)}</h2><span>${esc(definition.dimension)}</span></div>
+      <div class="detail-header-actions"><button id="hologram-duplicate">Duplicate</button><button id="hologram-rename">Rename</button><button id="hologram-delete" class="danger">Delete</button><button id="hologram-save">Save</button></div>
+    </div>
+    <section class="hologram-section"><h3>Location and Rendering</h3>
+      <div class="hologram-field-grid">
+        <label class="switch-label"><input data-hologram-field="enabled" type="checkbox" ${definition.enabled ? 'checked' : ''}> Enabled</label>
+        <label>Dimension<input data-hologram-field="dimension" value="${attr(definition.dimension)}"></label>
+        <label>X<input data-hologram-field="x" type="number" step="0.01" value="${attr(definition.x)}"></label>
+        <label>Y<input data-hologram-field="y" type="number" step="0.01" value="${attr(definition.y)}"></label>
+        <label>Z<input data-hologram-field="z" type="number" step="0.01" value="${attr(definition.z)}"></label>
+        <label>View distance<input data-hologram-field="viewDistance" type="number" min="1" max="512" step="1" value="${attr(definition.viewDistance)}"></label>
+        <label>Refresh interval<input data-hologram-field="refreshIntervalSeconds" type="number" min="1" max="3600" step="1" value="${attr(definition.refreshIntervalSeconds)}"></label>
+        <label>Line spacing<input data-hologram-field="lineSpacing" type="number" min="0.05" max="4" step="0.01" value="${attr(definition.lineSpacing)}"></label>
+      </div>
+      ${playerLocationControl()}
+    </section>
+    <section class="hologram-section"><div class="detail-header"><div><h3>Lines</h3><span>One native entity per line.</span></div><button id="hologram-add-line">Add Line</button></div>
+      <div id="hologram-lines" class="reorder-list">${(definition.lines || []).map(hologramLineEditor).join('') || '<div class="reorder-empty">No lines configured.</div>'}</div>
+      <h3>Preview</h3><div id="hologram-preview" class="minecraft-preview multiline"></div>
+    </section>`;
+
+  wireHologramEditor(root);
+  updateHologramPreview();
+}
+
+function hologramLineEditor(text, index) {
+  return `<div class="reorder-row hologram-line-row" data-hologram-line-row="${index}">
+    <span class="reorder-handle">${index + 1}</span>
+    <div class="hologram-line-content">
+      ${formattingToolbar(`hologram-line-${index}`, HOLOGRAM_PLACEHOLDERS)}
+      <textarea class="reorder-editor format-editor" data-hologram-line="${index}" data-config-key="hologram-line-${index}">${esc(text)}</textarea>
+    </div>
+    <div class="reorder-actions"><button data-hologram-line-up="${index}" ${index === 0 ? 'disabled' : ''}>↑</button><button data-hologram-line-down="${index}" ${index === state.hologramDraft.lines.length - 1 ? 'disabled' : ''}>↓</button><button data-hologram-line-delete="${index}">×</button></div>
+  </div>`;
+}
+
+function playerLocationControl() {
+  const players = state.hologramData?.onlinePlayers || [];
+  return `<div class="compact-form hologram-player-location"><label>Online player<select id="hologram-location-player"><option value="">Select player</option>${players.map(player => `<option value="${attr(player.name)}">${esc(player.name)} · ${esc(player.dimension)}</option>`).join('')}</select></label><button id="hologram-use-player-location" ${players.length ? '' : 'disabled'}>Use Player Location</button></div>`;
+}
+
+function wireHologramEditor(root) {
+  root.querySelectorAll('[data-hologram-field]').forEach(input => input.addEventListener('input', () => {
+    const field = input.dataset.hologramField;
+    state.hologramDraft[field] = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value;
+  }));
+  root.querySelectorAll('[data-hologram-line]').forEach(input => input.addEventListener('input', () => {
+    state.hologramDraft.lines[Number(input.dataset.hologramLine)] = input.value;
+    updateHologramPreview();
+  }));
+  root.querySelectorAll('[data-format-tag]').forEach(button => button.addEventListener('click', () => {
+    const row = button.closest('[data-hologram-line-row]');
+    applyFormatInput(row.querySelector('textarea'), button.dataset.formatTag);
+  }));
+  root.querySelectorAll('[data-placeholder-for]').forEach(select => select.addEventListener('change', () => {
+    if (!select.value) return;
+    const row = select.closest('[data-hologram-line-row]');
+    const input = row.querySelector('textarea');
+    insertAtCursor(input, select.value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    select.value = '';
+  }));
+  root.querySelectorAll('[data-hologram-line-up]').forEach(button => button.addEventListener('click', () => moveHologramLine(Number(button.dataset.hologramLineUp), -1)));
+  root.querySelectorAll('[data-hologram-line-down]').forEach(button => button.addEventListener('click', () => moveHologramLine(Number(button.dataset.hologramLineDown), 1)));
+  root.querySelectorAll('[data-hologram-line-delete]').forEach(button => button.addEventListener('click', () => {
+    state.hologramDraft.lines.splice(Number(button.dataset.hologramLineDelete), 1);
+    renderHologramEditor();
+  }));
+  $('hologram-add-line').addEventListener('click', () => {
+    state.hologramDraft.lines.push('<color:white>New line</color>');
+    renderHologramEditor();
+  });
+  $('hologram-use-player-location').addEventListener('click', useSelectedPlayerLocation);
+  $('hologram-save').addEventListener('click', saveSelectedHologram);
+  $('hologram-duplicate').addEventListener('click', duplicateSelectedHologram);
+  $('hologram-rename').addEventListener('click', renameSelectedHologram);
+  $('hologram-delete').addEventListener('click', deleteSelectedHologram);
+}
+
+function moveHologramLine(index, direction) {
+  const target = index + direction;
+  if (target < 0 || target >= state.hologramDraft.lines.length) return;
+  const [line] = state.hologramDraft.lines.splice(index, 1);
+  state.hologramDraft.lines.splice(target, 0, line);
+  renderHologramEditor();
+}
+
+function useSelectedPlayerLocation() {
+  const playerName = $('hologram-location-player').value;
+  const player = (state.hologramData?.onlinePlayers || []).find(candidate => candidate.name === playerName);
+  if (!player) return notice('Select an online player.', true);
+  Object.assign(state.hologramDraft, {
+    dimension: player.dimension,
+    x: player.x,
+    y: player.y,
+    z: player.z
+  });
+  renderHologramEditor();
+}
+
+function updateHologramPreview() {
+  renderMinecraftPreview($('hologram-preview'), state.hologramDraft?.lines || [], {
+    online_players: '24',
+    max_players: '100',
+    server_name: 'Cobbleverse',
+    server_id: 'survival',
+    network_id: 'main',
+    world: state.hologramDraft?.dimension || 'minecraft:overworld'
+  });
+}
+
+async function saveSelectedHologram() {
+  try {
+    await api('/api/holograms/update', {
+      method: 'POST',
+      body: JSON.stringify({ id: state.selectedHologram, definition: state.hologramDraft })
+    });
+    notice(`Hologram ${state.selectedHologram} saved and scheduled for redraw.`);
+    await loadHolograms();
+  } catch (error) {
+    notice(error.message, true);
+  }
+}
+
+async function createHologram() {
+  const id = window.prompt('New hologram id (a-z, 0-9, _ or -):');
+  if (!id) return;
+  const config = state.hologramData?.config || {};
+  const player = state.hologramData?.onlinePlayers?.[0];
+  const definition = {
+    enabled: true,
+    dimension: player?.dimension || 'minecraft:overworld',
+    x: player?.x ?? 0.5,
+    y: player?.y ?? 64.0,
+    z: player?.z ?? 0.5,
+    viewDistance: config.defaultViewDistance ?? 48,
+    refreshIntervalSeconds: config.defaultRefreshIntervalSeconds ?? 5,
+    lineSpacing: 0.28,
+    lines: ['<color:white><bold>New hologram</bold></color>']
+  };
+  try {
+    await api('/api/holograms/create', { method: 'POST', body: JSON.stringify({ id, definition }) });
+    state.selectedHologram = id.toLowerCase();
+    await loadHolograms();
+  } catch (error) {
+    notice(error.message, true);
+  }
+}
+
+async function duplicateSelectedHologram() {
+  const id = window.prompt('Duplicate hologram as:', `${state.selectedHologram}_copy`);
+  if (!id) return;
+  await runHologramOperation('duplicate', { originalId: state.selectedHologram, id }, id.toLowerCase());
+}
+
+async function renameSelectedHologram() {
+  const id = window.prompt('Rename hologram to:', state.selectedHologram);
+  if (!id || id === state.selectedHologram) return;
+  await runHologramOperation('rename', { originalId: state.selectedHologram, id }, id.toLowerCase());
+}
+
+async function deleteSelectedHologram() {
+  if (!await confirmAction(`Delete hologram ${state.selectedHologram}?`, true)) return;
+  await runHologramOperation('delete', { id: state.selectedHologram }, null);
+}
+
+async function runHologramOperation(action, body, nextSelection = state.selectedHologram) {
+  try {
+    await api(`/api/holograms/${action}`, { method: 'POST', body: JSON.stringify(body) });
+    state.selectedHologram = nextSelection;
+    notice(`Hologram ${action} completed.`);
+    await loadHolograms();
+  } catch (error) {
+    notice(error.message, true);
+  }
+}
+
+async function saveHologramSettings() {
+  await runHologramOperation('settings', {
+    enabled: $('hologram-global-enabled').checked,
+    defaultViewDistance: Number($('hologram-default-distance').value),
+    defaultRefreshIntervalSeconds: Number($('hologram-default-refresh').value)
+  });
+}
+
+async function refreshAllHolograms() {
+  await runHologramOperation('refresh', { id: '' });
+}
+
 async function loadModeration() {
   try {
     const [recent, active] = await Promise.all([api('/api/moderation/recent'), api('/api/moderation/active')]);
@@ -1693,6 +1955,8 @@ function bindEvents() {
   $('custom-command-new').addEventListener('click', newCustomCommand);
   $('custom-command-reload').addEventListener('click', async () => { try { await api('/api/custom-commands/reload', { method: 'POST', body: '{}' }); notice('Custom command definitions reloaded.'); await loadCustomCommands(); } catch (error) { notice(error.message, true); } });
   $('custom-command-search').addEventListener('input', debounce(loadCustomCommands, 250));
+  $('hologram-new').addEventListener('click', createHologram);
+  $('hologram-refresh-all').addEventListener('click', refreshAllHolograms);
   $('command-search').addEventListener('input', renderConfiguration);
   $('cooldown-search').addEventListener('input', renderConfiguration);
   document.querySelectorAll('[data-permission-view]').forEach(button => button.addEventListener('click', () => { state.permissionView = button.dataset.permissionView; state.permissionPage = 1; state.selectedPermissionTarget = null; loadPermissions(); $('permission-editor').className = 'detail-editor empty-detail'; $('permission-editor').textContent = state.permissionView === 'nodes' ? 'Select a permission node.' : `Select a ${state.permissionView === 'groups' ? 'group' : 'user'}.`; }));

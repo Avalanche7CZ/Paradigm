@@ -8,6 +8,8 @@
     "ServerStatusMixin",
     "PlayerListMixin",
     "ServerPlayerTablistMixin"
+    ,"DisplayEntityAccessor"
+    ,"TextDisplayEntityAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

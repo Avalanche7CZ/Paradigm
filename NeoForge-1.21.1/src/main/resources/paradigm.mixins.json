@@ -4,6 +4,8 @@
   "package": "eu.avalanche7.paradigm.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "DisplayAccessor",
+    "TextDisplayAccessor",
     "PlayerListMixin",
     "ServerStatusMixin",
     "ServerPlayerTablistMixin"

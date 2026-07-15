@@ -891,6 +891,7 @@ public class PermissionsHandler {
         if (permission.equals(WHOIS_PERMISSION)) return WHOIS_PERMISSION_LEVEL;
         if (permission.equals(TOP_PERMISSION)) return TOP_PERMISSION_LEVEL;
         if (permission.equals(JUMP_PERMISSION)) return JUMP_PERMISSION_LEVEL;
+        if (permission.equals(eu.avalanche7.paradigm.modules.holograms.HologramService.MANAGE_PERMISSION)) return eu.avalanche7.paradigm.modules.holograms.HologramService.MANAGE_PERMISSION_LEVEL;
 
         return -1;
     }
@@ -906,6 +907,7 @@ public class PermissionsHandler {
         nodes.put(GROUPCHAT_PERMISSION, "Allows using /groupchat commands (create, invite, join, etc.).");
         nodes.put(RELOAD_PERMISSION, "Allows using /paradigm reload and /customcommandsreload commands.");
         nodes.put(COMMAND_TOGGLE_PERMISSION, "Allows enabling/disabling Paradigm commands at runtime via /paradigm command.");
+        nodes.put(eu.avalanche7.paradigm.modules.holograms.HologramService.MANAGE_PERMISSION, "Allows creating and managing Paradigm holograms.");
         nodes.put(STORAGE_MANAGE_PERMISSION, "Allows viewing and testing Paradigm storage providers with /paradigm storage.");
         nodes.put(GROUP_MANAGE_PERMISSION, "Allows managing internal permission groups via /paradigm group.");
         nodes.put(EDITOR_PERMISSION, "Allows using /paradigm editor and /paradigm apply.");

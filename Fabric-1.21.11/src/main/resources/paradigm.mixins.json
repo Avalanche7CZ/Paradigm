@@ -7,7 +7,9 @@
     "ServerPlayNetworkHandlerMixin",
     "ServerStatusMixin",
     "PlayerListMixin",
-    "ServerPlayerTablistMixin"
+    "ServerPlayerTablistMixin",
+    "DisplayEntityAccessor",
+    "TextDisplayEntityAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

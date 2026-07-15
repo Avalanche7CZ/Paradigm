@@ -23,6 +23,7 @@
       <button data-page-target="restart">Restart</button>
       <button data-page-target="motd">MOTD Editor</button>
       <button data-page-target="tablist">Tablist</button>
+      <button data-page-target="holograms">Holograms</button>
       <button data-page-target="customCommands">Custom Commands</button>
       <button data-page-target="commands">Command Settings</button>
       <button data-page-target="cooldowns">Cooldowns</button>
@@ -75,6 +76,15 @@
       <section data-page="motd" class="page"><div class="page-toolbar"><div><strong>MOTD Editor</strong><span>Join message, server-list presentation, and player-count hover.</span></div><div><select id="motd-template"><option value="">Choose template</option><option value="minimal">Minimal</option><option value="welcome">Centered welcome</option><option value="info">Server info</option><option value="maintenance">Maintenance</option><option value="blank">Blank</option></select><button id="motd-template-apply">Apply</button></div></div><div class="editor-section motd-join-editor"><h2>Join MOTD</h2><div class="format-toolbar" data-editor-target="motd"><button data-wrap="bold">B</button><button data-wrap="italic">I</button><button data-wrap="underline">U</button><button data-wrap="strikethrough">S</button><button data-wrap="color:#55FFFF">Color</button><button data-wrap="gradient:#22D3EE:#A78BFA">Gradient</button><button data-wrap="rainbow">Rainbow</button></div><div id="motd-placeholders" class="token-list"></div><div id="motd-lines" class="reorder-list"></div><button id="motd-add-line">Add Line</button><div id="motd-join-preview"></div></div><div id="motd-settings" class="config-sections"></div></section>
 
       <section data-page="tablist" class="page"><div class="page-toolbar"><div><strong>Tablist</strong><span>Header, footer, player names, sorting, and world-specific presentation.</span></div><button class="advanced-toggle">Advanced details</button></div><div id="tablist-editor" class="tablist-editor"></div></section>
+
+      <section data-page="holograms" class="page">
+        <div class="page-toolbar"><div><strong>Holograms</strong><span>Server-side text displays with Paradigm formatting and placeholders.</span></div><div><button id="hologram-refresh-all">Refresh All</button><button id="hologram-new">New Hologram</button></div></div>
+        <div id="hologram-settings" class="editor-section"></div>
+        <div class="master-detail hologram-workspace">
+          <aside><div id="hologram-list" class="selection-list"></div></aside>
+          <div id="hologram-editor" class="detail-editor empty-detail">Select a hologram or create one.</div>
+        </div>
+      </section>
 
       <section data-page="customCommands" class="page"><div class="page-toolbar"><div><strong>Custom Commands</strong><span>Create and edit structured command definitions.</span></div><div><input id="custom-command-search" placeholder="Search commands"><button id="custom-command-new">New Command</button><button id="custom-command-reload">Reload Definitions</button></div></div><div class="master-detail"><aside><div id="custom-command-list" class="selection-list"></div></aside><div id="custom-command-editor" class="detail-editor empty-detail">Select a command or create one.</div></div></section>
 

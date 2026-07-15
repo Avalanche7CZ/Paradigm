@@ -633,6 +633,11 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public eu.avalanche7.paradigm.platform.Interfaces.IHologramPlatform getHologramPlatform() {
+        return new MinecraftHologramPlatform(this);
+    }
+
+    @Override
     public List<String> getWorldNames() {
         List<String> worldNames = new ArrayList<>();
         if (server != null) {

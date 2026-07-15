@@ -11,11 +11,13 @@ import eu.avalanche7.paradigm.modules.dashboard.api.PermissionsApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.ServerApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.StaticAssetHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.StorageApiHandler;
+import eu.avalanche7.paradigm.modules.dashboard.api.HologramApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardSession;
 import eu.avalanche7.paradigm.modules.moderation.ModerationActionType;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPermission;
+import eu.avalanche7.paradigm.modules.holograms.HologramService;
 
 public class DashboardRouter {
     private final DashboardService dashboard;
@@ -28,6 +30,7 @@ public class DashboardRouter {
     private final PermissionsApiHandler permissions;
     private final ModerationApiHandler moderation;
     private final AuditApiHandler audit;
+    private final HologramApiHandler holograms;
     private final StaticAssetHandler staticAssets;
 
     public DashboardRouter(DashboardService dashboard) {
@@ -41,6 +44,7 @@ public class DashboardRouter {
         this.permissions = new PermissionsApiHandler(dashboard);
         this.moderation = new ModerationApiHandler(dashboard);
         this.audit = new AuditApiHandler(dashboard);
+        this.holograms = new HologramApiHandler(dashboard);
         this.staticAssets = new StaticAssetHandler(dashboard.config());
     }
 
@@ -89,6 +93,20 @@ public class DashboardRouter {
                 if ("POST".equals(method) && "/api/config/patch".equals(path)) return config.patch(ctx);
                 if ("POST".equals(method) && "/api/config/apply".equals(path)) return config.apply(ctx);
                 if ("GET".equals(method) && "/api/audit/recent".equals(path)) return audit.recent(ctx);
+
+                if (path.startsWith("/api/holograms")
+                        && !dashboard.hasPermission(ctx.principal(), HologramService.MANAGE_PERMISSION, HologramService.MANAGE_PERMISSION_LEVEL)) {
+                    return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to manage holograms.");
+                }
+                if ("GET".equals(method) && "/api/holograms".equals(path)) return holograms.list(ctx);
+                if ("GET".equals(method) && "/api/holograms/item".equals(path)) return holograms.get(ctx);
+                if ("POST".equals(method) && path.startsWith("/api/holograms/")) {
+                    String action = path.substring("/api/holograms/".length());
+                    if (!java.util.Set.of("create", "update", "duplicate", "rename", "delete", "refresh", "settings", "player-location").contains(action)) {
+                        return DashboardResponse.apiError(400, "invalid_request", "Unknown hologram operation.");
+                    }
+                    return holograms.mutate(ctx, action);
+                }
 
                 if (path.startsWith("/api/custom-commands")
                         && !dashboard.hasPermission(ctx.principal(), DashboardPermission.CONFIG_EDIT, 4)) {

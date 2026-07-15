@@ -14,6 +14,7 @@ import eu.avalanche7.paradigm.modules.permissions.PermissionAdminService;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 import eu.avalanche7.paradigm.modules.dashboard.customcommands.CustomCommandAdminService;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentService;
+import eu.avalanche7.paradigm.modules.holograms.HologramService;
 
 import java.util.concurrent.ForkJoinPool;
 
@@ -49,6 +50,7 @@ public class Services {
     private volatile PermissionAdminService permissionAdminService;
     private volatile CustomCommandAdminService customCommandAdminService;
     private volatile PunishmentService punishmentService;
+    private volatile HologramService hologramService;
 
 
     public Services(
@@ -188,6 +190,17 @@ public class Services {
 
     public CommandToggleStore getCommandToggleStore() {
         return commandToggleStoreInstance;
+    }
+
+    public HologramService getHologramService() {
+        HologramService current = hologramService;
+        if (current == null) {
+            synchronized (this) {
+                current = hologramService;
+                if (current == null) hologramService = current = new HologramService(this);
+            }
+        }
+        return current;
     }
 
 
