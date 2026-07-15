@@ -28,3 +28,14 @@ scripts/release-secrets.local.env
 /scripts
 /common/src/test
 /docs
+
+# Public companion API documentation and focused contract tests.
+!/docs/
+/docs/*
+!/docs/COMPANION_API.md
+!/common/src/test/
+/common/src/test/**
+!/common/src/test/**/
+!/common/src/test/java/eu/avalanche7/paradigm/api/**/*.java
+!/common/src/test/java/eu/avalanche7/paradigm/modules/permissions/ExternalPermissionNodeRegistryTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/utils/LiteralPlaceholdersTest.java
