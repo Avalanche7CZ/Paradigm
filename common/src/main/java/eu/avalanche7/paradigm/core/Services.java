@@ -111,9 +111,23 @@ public class Services {
             this.platformAdapter.setMinecraftServer(server);
             this.platformAdapter.provideMessageParser(this.messageParserInstance);
         }
-        if (this.permissionsHandlerInstance != null) {
-            this.permissionsHandlerInstance.discoverCommandTreeFromServer(server);
+        refreshDiscoveredCommandPermissions();
+    }
+
+    /**
+     * Re-scans the dispatcher after loader command registration has completed.
+     * The platform-cached dispatcher is authoritative because mapped server
+     * accessor names differ between loaders and game versions.
+     */
+    public int refreshDiscoveredCommandPermissions() {
+        if (this.permissionsHandlerInstance == null) {
+            return 0;
         }
+        Object dispatcher = this.platformAdapter != null ? this.platformAdapter.getCommandDispatcher() : null;
+        if (dispatcher != null) {
+            return this.permissionsHandlerInstance.discoverCommandTree(dispatcher);
+        }
+        return this.permissionsHandlerInstance.discoverCommandTreeFromServer(this.server);
     }
 
     public Object getMinecraftServer() {

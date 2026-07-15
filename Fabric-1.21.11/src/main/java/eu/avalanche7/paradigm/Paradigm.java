@@ -137,6 +137,7 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
                 module.registerCommands(dispatcher, registryAccess, services);
             }
         });
+        services.refreshDiscoveredCommandPermissions();
     }
 
     private void onServerStopping(MinecraftServer server) {

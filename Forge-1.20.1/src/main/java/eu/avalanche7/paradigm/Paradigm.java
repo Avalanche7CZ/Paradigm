@@ -184,6 +184,7 @@ public class Paradigm {
                 module.registerCommands(event.getDispatcher(), registryAccess, services);
             }
         });
+        services.refreshDiscoveredCommandPermissions();
 
         try {
             if (services != null && services.getPlatformAdapter() != null) {

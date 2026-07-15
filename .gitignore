@@ -39,3 +39,4 @@ scripts/release-secrets.local.env
 !/common/src/test/java/eu/avalanche7/paradigm/api/**/*.java
 !/common/src/test/java/eu/avalanche7/paradigm/modules/permissions/ExternalPermissionNodeRegistryTest.java
 !/common/src/test/java/eu/avalanche7/paradigm/utils/LiteralPlaceholdersTest.java
+/common/src/test

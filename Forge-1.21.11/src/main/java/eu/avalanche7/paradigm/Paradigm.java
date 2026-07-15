@@ -187,6 +187,7 @@ public class Paradigm {
                 module.registerCommands(event.getDispatcher(), event.getBuildContext(), services);
             }
         });
+        services.refreshDiscoveredCommandPermissions();
     }
 
     public void onServerStopping(ServerStoppingEvent event) {

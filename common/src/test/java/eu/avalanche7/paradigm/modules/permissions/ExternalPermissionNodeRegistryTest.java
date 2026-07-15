@@ -3,11 +3,30 @@ package eu.avalanche7.paradigm.modules.permissions;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ExternalPermissionNodeRegistryTest {
+    @Test
+    void discoversExternalLiteralCommandsFromTheRegisteredDispatcher() {
+        PermissionNodeRegistry registry = new PermissionNodeRegistry(
+                LoggerFactory.getLogger("command-discovery-test"), null, null);
+        FakeCommandNode root = new FakeCommandNode("root");
+        FakeCommandNode pokeheal = new FakeCommandNode("pokeheal");
+        pokeheal.add(new FakeCommandNode("other"));
+        pokeheal.add(new FakeArgumentCommandNode("targets"));
+        root.add(pokeheal);
+
+        assertEquals(2, registry.discoverCommandTree(new FakeDispatcher(root)));
+        assertEquals(List.of("command.pokeheal", "command.pokeheal.other"),
+                registry.listNodes("pokeheal", 20).stream().map(node -> node.node).toList());
+    }
+
     @Test
     void registrationIsOwnedIdempotentAndConflictSafe() {
         PermissionNodeRegistry registry = new PermissionNodeRegistry(
@@ -52,5 +71,44 @@ class ExternalPermissionNodeRegistryTest {
         second.close();
         assertFalse(registry.listNodes("protect", 20).stream()
                 .anyMatch(node -> "paradigmprotect.rollback".equals(node.node)));
+    }
+
+    public static final class FakeDispatcher {
+        private final FakeCommandNode root;
+
+        private FakeDispatcher(FakeCommandNode root) {
+            this.root = root;
+        }
+
+        public FakeCommandNode getRoot() {
+            return root;
+        }
+    }
+
+    public static class FakeCommandNode {
+        private final String name;
+        private final List<FakeCommandNode> children = new ArrayList<>();
+
+        private FakeCommandNode(String name) {
+            this.name = name;
+        }
+
+        private void add(FakeCommandNode child) {
+            children.add(child);
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public Collection<FakeCommandNode> getChildren() {
+            return children;
+        }
+    }
+
+    public static final class FakeArgumentCommandNode extends FakeCommandNode {
+        private FakeArgumentCommandNode(String name) {
+            super(name);
+        }
     }
 }

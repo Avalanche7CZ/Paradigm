@@ -178,6 +178,7 @@ public class Paradigm {
                 module.registerCommands(event.getDispatcher(), event.getBuildContext(), services);
             }
         });
+        services.refreshDiscoveredCommandPermissions();
     }
 
     @SubscribeEvent

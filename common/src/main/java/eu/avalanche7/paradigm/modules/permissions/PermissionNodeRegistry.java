@@ -88,7 +88,7 @@ public class PermissionNodeRegistry {
                 collectCommandNode(child, "", discovered, 0);
             }
         } catch (Throwable t) {
-            debugLogger.debugLog("[Permissions] Failed to scan command tree: " + t);
+            if (debugLogger != null) debugLogger.debugLog("[Permissions] Failed to scan command tree: " + t);
             return 0;
         }
 
@@ -116,7 +116,7 @@ public class PermissionNodeRegistry {
             }
             removeCommandAliasNodesLocked();
             saveLocked();
-            debugLogger.debugLog("[Permissions] Discovered " + discovered.size() + " command permission nodes.");
+            if (debugLogger != null) debugLogger.debugLog("[Permissions] Discovered " + discovered.size() + " command permission nodes.");
             return changed;
         }
     }
