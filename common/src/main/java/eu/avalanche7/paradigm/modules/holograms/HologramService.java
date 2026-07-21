@@ -4,6 +4,7 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IHologramPlatform;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
 import java.io.Reader;
 import java.io.Writer;
@@ -13,6 +14,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -20,63 +23,98 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class HologramService {
     public static final String MANAGE_PERMISSION = "paradigm.hologram.manage";
     public static final int MANAGE_PERMISSION_LEVEL = 4;
+    public static final int MAX_HOLOGRAMS = 500;
+    public static final int MAX_LINES = 100;
     private static final String FILE_NAME = "paradigm/holograms.json";
-    private static final int MAX_HOLOGRAMS = 500;
-    private static final int MAX_LINES = 100;
+    private static final int MAX_DIRTY_PER_PASS = 64;
+    private static final int MAX_CHUNK_PROBES_PER_PASS = 96;
+    private static final int MAX_ENTITY_PROBES_PER_PASS = 128;
 
     private final Services services;
     private final IHologramPlatform platform;
     private final HologramRenderer renderer;
+    private final HologramConditionEvaluator conditions;
+    private final HologramActionExecutor actions;
+    private final TemporaryHologramService temporary = new TemporaryHologramService();
     private final Gson gson = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     private final Object lock = new Object();
-    private final Map<String, String> runtimeIds = new LinkedHashMap<>();
-    private final Map<String, Long> lastRefreshMs = new LinkedHashMap<>();
-    private Map<String, HologramDefinition> renderedDefinitions = new LinkedHashMap<>();
+    private final AtomicBoolean lifecycleQueued = new AtomicBoolean();
+    private final Map<String, RuntimeEntity> runtime = new LinkedHashMap<>();
+    private final Map<String, Source> sources = new LinkedHashMap<>();
+    private final Map<ChunkKey, LinkedHashSet<String>> chunkIndex = new LinkedHashMap<>();
+    private final Set<String> dirtySources = new LinkedHashSet<>();
+    private final Map<String, Long> nextDue = new LinkedHashMap<>();
+    private final Map<String, String> interactionSources = new HashMap<>();
+    private final HologramCooldowns interactionCooldowns = new HologramCooldowns();
+
     private Config config;
     private HologramUpdateScheduler scheduler;
     private boolean active;
-    private int cleanupCountdown;
+    private int chunkProbeOffset;
+    private int entityProbeOffset;
+    private boolean startupCleanupPending;
 
     public HologramService(Services services) {
         this.services = Objects.requireNonNull(services, "services");
         this.platform = services.getPlatformAdapter().getHologramPlatform();
         this.renderer = platform != null ? new HologramRenderer(services, platform) : null;
+        this.conditions = platform != null ? new HologramConditionEvaluator(services, platform) : null;
+        this.actions = new HologramActionExecutor(services);
         this.config = loadConfig();
+        rebuildIndex();
     }
 
     public boolean supported() {
         return platform != null;
     }
 
+    public IHologramPlatform.Capabilities capabilities() {
+        return platform != null ? platform.capabilities() : IHologramPlatform.Capabilities.legacy();
+    }
+
+    public TemporaryHologramService temporary() {
+        return temporary;
+    }
+
     public void start() {
         if (!supported() || active) return;
         active = true;
-        scheduler = new HologramUpdateScheduler(services.getTaskScheduler(), this::tick);
+        platform.setInteractionHandler(this::handleInteraction);
+        scheduler = new HologramUpdateScheduler(services.getTaskScheduler(), this::queueLifecycle);
         scheduler.start();
-        reconcile(true);
+        startupCleanupPending = true;
+        markAllDirty();
+        queueLifecycle();
     }
 
     public void stop() {
         active = false;
         if (scheduler != null) scheduler.stop();
         scheduler = null;
-        for (String runtimeId : new ArrayList<>(runtimeIds.values())) renderer.remove(runtimeId);
-        runtimeIds.clear();
-        lastRefreshMs.clear();
-        renderedDefinitions.clear();
+        if (platform != null) platform.setInteractionHandler(null);
+        for (RuntimeEntity entry : new ArrayList<>(runtime.values())) removeRuntime(entry);
+        runtime.clear();
+        nextDue.clear();
+        dirtySources.clear();
+        interactionCooldowns.clear();
+        temporary.clear();
         if (platform != null) platform.removeUnknownOwnedLines(Set.of());
     }
 
     public void reload() {
         synchronized (lock) {
             config = loadConfig();
+            rebuildIndexLocked();
         }
         if (renderer != null) renderer.clearTemplateCache();
-        scheduleReconcile(true);
+        startupCleanupPending = true;
+        markAllDirty();
+        queueLifecycle();
     }
 
     public Config snapshot() {
@@ -98,6 +136,36 @@ public final class HologramService {
         }
     }
 
+    public List<TemporaryHologram> temporaryHolograms() {
+        return temporary.list();
+    }
+
+    public TemporaryHologram createTemporary(HologramDefinition definition, String owner, Long ttlSeconds, Long expiresAt) {
+        TemporaryHologram created = temporary.create(definition, owner, ttlSeconds, expiresAt, System.currentTimeMillis());
+        rebuildIndex();
+        markDirty(sourceId(true, created.id));
+        queueLifecycle();
+        return created;
+    }
+
+    public TemporaryHologram updateTemporary(String id, HologramDefinition definition, Long expiresAt) {
+        TemporaryHologram updated = temporary.update(id, definition, expiresAt);
+        rebuildIndex();
+        markDirty(sourceId(true, id));
+        queueLifecycle();
+        return updated;
+    }
+
+    public boolean removeTemporary(String id) {
+        boolean removed = temporary.remove(id);
+        if (removed) {
+            removeSourceRuntime(sourceId(true, id));
+            rebuildIndex();
+            queueLifecycle();
+        }
+        return removed;
+    }
+
     public void create(String id, String dimension, double x, double y, double z) {
         String normalized = requireId(id);
         synchronized (lock) {
@@ -111,25 +179,26 @@ public final class HologramService {
             definition.viewDistance = config.defaultViewDistance;
             definition.refreshIntervalSeconds = config.defaultRefreshIntervalSeconds;
             definition.lines.add("<color:white><bold>New hologram</bold></color>");
-            definition.normalize(config.defaultViewDistance, config.defaultRefreshIntervalSeconds);
-            config.holograms.put(normalized, definition);
+            config.holograms.put(normalized, validated(definition, config));
             saveLocked();
+            rebuildIndexLocked();
         }
-        scheduleReconcile(true);
+        markDirty(sourceId(false, normalized));
+        queueLifecycle();
     }
 
     public void put(String id, HologramDefinition definition) {
         String normalized = requireId(id);
         if (definition == null) throw new IllegalArgumentException("Hologram definition is required.");
+        removeSourceRuntime(sourceId(false, normalized));
         synchronized (lock) {
-            if (!config.holograms.containsKey(normalized) && config.holograms.size() >= MAX_HOLOGRAMS) {
-                throw new IllegalArgumentException("Hologram limit reached.");
-            }
-            HologramDefinition copy = validated(definition.copy(), config);
-            config.holograms.put(normalized, copy);
+            if (!config.holograms.containsKey(normalized) && config.holograms.size() >= MAX_HOLOGRAMS) throw new IllegalArgumentException("Hologram limit reached.");
+            config.holograms.put(normalized, validated(definition.copy(), config));
             saveLocked();
+            rebuildIndexLocked();
         }
-        scheduleReconcile(true);
+        markDirty(sourceId(false, normalized));
+        queueLifecycle();
     }
 
     public void updateSettings(boolean enabled, double defaultViewDistance, int defaultRefreshIntervalSeconds) {
@@ -138,17 +207,21 @@ public final class HologramService {
             config.defaultViewDistance = defaultViewDistance;
             config.defaultRefreshIntervalSeconds = defaultRefreshIntervalSeconds;
             saveLocked();
+            rebuildIndexLocked();
         }
-        scheduleReconcile(true);
+        markAllDirty();
+        queueLifecycle();
     }
 
     public void delete(String id) {
         String normalized = requireId(id);
+        removeSourceRuntime(sourceId(false, normalized));
         synchronized (lock) {
             if (config.holograms.remove(normalized) == null) throw new IllegalArgumentException("Unknown hologram: " + normalized);
             saveLocked();
+            rebuildIndexLocked();
         }
-        scheduleReconcile(true);
+        queueLifecycle();
     }
 
     public void duplicate(String sourceId, String targetId) {
@@ -160,13 +233,16 @@ public final class HologramService {
             if (config.holograms.size() >= MAX_HOLOGRAMS) throw new IllegalArgumentException("Hologram limit reached.");
             config.holograms.put(normalized, validated(source, config));
             saveLocked();
+            rebuildIndexLocked();
         }
-        scheduleReconcile(true);
+        markDirty(sourceId(false, normalized));
+        queueLifecycle();
     }
 
     public void rename(String sourceId, String targetId) {
         String source = requireId(sourceId);
         String target = requireId(targetId);
+        removeSourceRuntime(sourceId(false, source));
         synchronized (lock) {
             HologramDefinition definition = config.holograms.get(source);
             if (definition == null) throw new IllegalArgumentException("Unknown hologram: " + source);
@@ -175,8 +251,10 @@ public final class HologramService {
             config.holograms.forEach((id, value) -> reordered.put(id.equals(source) ? target : id, value));
             config.holograms = reordered;
             saveLocked();
+            rebuildIndexLocked();
         }
-        scheduleReconcile(true);
+        markDirty(sourceId(false, target));
+        queueLifecycle();
     }
 
     public void addLine(String id, String text) {
@@ -213,14 +291,26 @@ public final class HologramService {
     }
 
     public void refresh(String id) {
-        if (id == null || id.isBlank()) {
-            lastRefreshMs.clear();
-        } else {
+        if (id == null || id.isBlank()) markAllDirty();
+        else {
             String normalized = requireId(id);
             if (definition(normalized) == null) throw new IllegalArgumentException("Unknown hologram: " + normalized);
-            lastRefreshMs.remove(normalized);
+            markDirty(sourceId(false, normalized));
         }
-        scheduleReconcile(true);
+        queueLifecycle();
+    }
+
+    public Map<String, RuntimeStatus> runtimeStatus() {
+        Map<String, RuntimeStatus> statuses = new LinkedHashMap<>();
+        synchronized (lock) {
+            sources.forEach((sourceId, source) -> {
+                long count = runtime.values().stream().filter(value -> sourceId.equals(value.sourceId)).count();
+                boolean loaded = platform != null && platform.isChunkLoaded(source.location());
+                statuses.put(sourceId, new RuntimeStatus(source.persistent ? source.id : "temporary:" + source.id,
+                        source.persistent, loaded, (int) count, nextDue.getOrDefault(sourceId, 0L), dirtySources.contains(sourceId)));
+            });
+        }
+        return statuses;
     }
 
     private void mutateLines(String id, java.util.function.Consumer<List<String>> mutation) {
@@ -229,6 +319,7 @@ public final class HologramService {
 
     private void mutate(String id, java.util.function.Consumer<HologramDefinition> mutation) {
         String normalized = requireId(id);
+        removeSourceRuntime(sourceId(false, normalized));
         synchronized (lock) {
             HologramDefinition existing = config.holograms.get(normalized);
             if (existing == null) throw new IllegalArgumentException("Unknown hologram: " + normalized);
@@ -236,68 +327,290 @@ public final class HologramService {
             mutation.accept(copy);
             config.holograms.put(normalized, validated(copy, config));
             saveLocked();
+            rebuildIndexLocked();
         }
-        scheduleReconcile(true);
+        markDirty(sourceId(false, normalized));
+        queueLifecycle();
     }
 
-    private void tick() {
-        if (active) reconcile(false);
+    private void queueLifecycle() {
+        if (!active || !supported() || !lifecycleQueued.compareAndSet(false, true)) return;
+        services.getPlatformAdapter().executeOnServerThread(() -> {
+            lifecycleQueued.set(false);
+            lifecycle();
+        });
     }
 
-    private void scheduleReconcile(boolean force) {
+    private void lifecycle() {
         if (!active || !supported()) return;
-        services.getPlatformAdapter().executeOnServerThread(() -> reconcile(force));
-    }
-
-    private void reconcile(boolean force) {
-        if (!active || !supported()) return;
-        Config desired = snapshot();
-        Map<String, HologramDefinition> next = desired.enabled ? desired.holograms : Map.of();
-
-        for (Map.Entry<String, HologramDefinition> old : new ArrayList<>(renderedDefinitions.entrySet())) {
-            HologramDefinition replacement = next.get(old.getKey());
-            if (replacement == null || !same(old.getValue(), replacement)) removeRuntimeFor(old.getKey());
-        }
-
         long now = System.currentTimeMillis();
-        for (Map.Entry<String, HologramDefinition> entry : next.entrySet()) {
-            String id = entry.getKey();
-            HologramDefinition definition = entry.getValue();
-            if (!definition.enabled) {
-                removeRuntimeFor(id);
+        for (String expired : temporary.expire(now)) {
+            removeSourceRuntime(sourceId(true, expired));
+            rebuildIndex();
+        }
+        probeChunks();
+        probeRuntimeEntities();
+        processDue(now);
+        processDirty(now);
+        if (startupCleanupPending) {
+            startupCleanupPending = false;
+            platform.removeUnknownOwnedLines(validOwnershipKeys());
+        }
+    }
+
+    private void processDue(long now) {
+        nextDue.entrySet().stream().filter(entry -> entry.getValue() <= now)
+                .sorted(Map.Entry.comparingByValue()).limit(MAX_DIRTY_PER_PASS)
+                .map(Map.Entry::getKey).toList().forEach(dirtySources::add);
+    }
+
+    private void processDirty(long now) {
+        List<String> selected = dirtySources.stream().limit(MAX_DIRTY_PER_PASS).toList();
+        for (String sourceId : selected) {
+            dirtySources.remove(sourceId);
+            Source source = sources.get(sourceId);
+            if (source == null || !source.definition.enabled || !isGloballyEnabled()) {
+                removeSourceRuntime(sourceId);
+                nextDue.remove(sourceId);
                 continue;
             }
-            boolean due = force || now - lastRefreshMs.getOrDefault(id, 0L) >= definition.refreshIntervalSeconds * 1000L;
-            for (int index = 0; index < definition.lines.size(); index++) {
-                HologramLine line = HologramLine.of(index, definition.lines.get(index));
-                String key = ownershipKey(id, definition, index);
-                String runtimeId = runtimeIds.get(key);
-                if (runtimeId != null && !renderer.loaded(runtimeId)) {
-                    runtimeIds.remove(key);
-                    runtimeId = null;
-                }
-                if (runtimeId == null || (line.dynamic() && due) || force) {
-                    String updated = renderer.upsert(id, definition, line, runtimeId);
-                    if (updated != null) runtimeIds.put(key, updated);
-                }
-            }
-            if (due) lastRefreshMs.put(id, now);
+            if (!platform.isChunkLoaded(source.location())) continue;
+            render(source, now);
         }
+        if (!dirtySources.isEmpty()) queueLifecycle();
+    }
 
-        renderedDefinitions = deepCopy(next);
-        Set<String> validKeys = validOwnershipKeys(next);
-        runtimeIds.keySet().removeIf(key -> !validKeys.contains(key));
-        if (force || cleanupCountdown-- <= 0) {
-            platform.removeUnknownOwnedLines(validKeys);
-            cleanupCountdown = 30;
+    private void render(Source source, long now) {
+        boolean viewerSpecific = requiresViewerSpecificRendering(source.definition);
+        if (viewerSpecific && !platform.capabilities().viewerSpecificVisibility()) {
+            nextDue.put(source.sourceId, now + 1000L);
+            return;
+        }
+        if (!viewerSpecific && !globalVisibilityAllows(source.definition)) {
+            removeSourceRuntime(source.sourceId);
+            nextDue.put(source.sourceId, now + source.definition.refreshIntervalSeconds * 1000L);
+            return;
+        }
+        for (int index = 0; index < source.definition.lines.size(); index++) {
+            HologramLine line = HologramLine.of(index, source.definition.lines.get(index));
+            if (viewerSpecific) renderForViewers(source, line);
+            else renderShared(source, line, null);
+        }
+        if (source.definition.interaction.enabled) {
+            String key = interactionOwnershipKey(source.id, source.definition);
+            RuntimeEntity previous = runtime.get(key);
+            String runtimeId = renderer.upsertInteraction(source.id, source.definition, previous != null ? previous.runtimeId : null);
+            if (runtimeId != null) runtime.put(key, new RuntimeEntity(key, source.sourceId, runtimeId));
+        }
+        if (hasDynamicContent(source.definition) || hasDynamicVisibility(source.definition.visibility) || viewerSpecific) {
+            nextDue.put(source.sourceId, now + source.definition.refreshIntervalSeconds * 1000L);
+        }
+        else nextDue.remove(source.sourceId);
+    }
+
+    private void renderShared(Source source, HologramLine line, IPlayer viewer) {
+        String key = ownershipKey(source.id, source.definition, line.index());
+        RuntimeEntity previous = runtime.get(key);
+        String runtimeId = renderer.upsert(source.id, source.definition, line, previous != null ? previous.runtimeId : null, viewer);
+        if (runtimeId != null) runtime.put(key, new RuntimeEntity(key, source.sourceId, runtimeId));
+    }
+
+    private void renderForViewers(Source source, HologramLine line) {
+        String prefix = ownershipKey(source.id, source.definition, line.index()) + ":viewer:";
+        Set<String> visible = new LinkedHashSet<>();
+        for (IPlayer player : services.getPlatformAdapter().getOnlinePlayers()) {
+            String key = prefix + player.getUUID();
+            if (!conditions.test(source.definition.visibility, source.definition, player)) {
+                removeRuntimeKey(key);
+                continue;
+            }
+            visible.add(key);
+            RuntimeEntity previous = runtime.get(key);
+            IHologramPlatform.LineRequest request = renderer.viewerRequest(key, source.definition, line, player);
+            String runtimeId = platform.upsertViewerLine(request, player, previous != null ? previous.runtimeId : null);
+            if (runtimeId != null) runtime.put(key, new RuntimeEntity(key, source.sourceId, runtimeId));
+        }
+        runtime.values().stream()
+                .filter(value -> source.sourceId.equals(value.sourceId) && value.key.startsWith(prefix) && !visible.contains(value.key))
+                .toList()
+                .forEach(value -> removeRuntimeKey(value.key));
+    }
+
+    private void probeChunks() {
+        List<ChunkKey> chunks = new ArrayList<>(chunkIndex.keySet());
+        if (chunks.isEmpty()) return;
+        int count = Math.min(MAX_CHUNK_PROBES_PER_PASS, chunks.size());
+        for (int offset = 0; offset < count; offset++) {
+            ChunkKey key = chunks.get(Math.floorMod(chunkProbeOffset++, chunks.size()));
+            boolean loaded = platform.isChunkLoaded(key.location());
+            for (String sourceId : chunkIndex.getOrDefault(key, new LinkedHashSet<>())) {
+                boolean hasRuntime = runtime.values().stream().anyMatch(value -> sourceId.equals(value.sourceId));
+                if (loaded && !hasRuntime) dirtySources.add(sourceId);
+                if (!loaded && hasRuntime) runtime.entrySet().removeIf(entry -> sourceId.equals(entry.getValue().sourceId));
+            }
         }
     }
 
-    private void removeRuntimeFor(String id) {
-        String prefix = id + ":";
-        List<String> keys = runtimeIds.keySet().stream().filter(key -> key.startsWith(prefix)).toList();
-        for (String key : keys) renderer.remove(runtimeIds.remove(key));
-        lastRefreshMs.remove(id);
+    private void probeRuntimeEntities() {
+        List<RuntimeEntity> entities = new ArrayList<>(runtime.values());
+        if (entities.isEmpty()) return;
+        int count = Math.min(MAX_ENTITY_PROBES_PER_PASS, entities.size());
+        for (int offset = 0; offset < count; offset++) {
+            RuntimeEntity entity = entities.get(Math.floorMod(entityProbeOffset++, entities.size()));
+            if (!platform.isEntityLoaded(entity.runtimeId)) {
+                runtime.remove(entity.key);
+                dirtySources.add(entity.sourceId);
+            }
+        }
+    }
+
+    private void handleInteraction(String ownershipKey, IPlayer player, boolean attack) {
+        if (!active || ownershipKey == null || player == null) return;
+        String sourceId = interactionSources.get(ownershipKey);
+        Source source = sourceId != null ? sources.get(sourceId) : null;
+        if (source == null || !source.definition.interaction.enabled) return;
+        if (!conditions.test(source.definition.visibility, source.definition, player)
+                || !conditions.test(source.definition.interaction.conditions, source.definition, player)) return;
+        long now = System.currentTimeMillis();
+        if (!interactionCooldowns.tryAcquire(sourceId, player.getUUID(), source.definition.interaction.cooldownSeconds, now)) return;
+        actions.execute(player, attack ? source.definition.interaction.onAttack : source.definition.interaction.onInteract);
+    }
+
+    private void rebuildIndex() {
+        synchronized (lock) {
+            rebuildIndexLocked();
+        }
+    }
+
+    private void rebuildIndexLocked() {
+        sources.clear();
+        chunkIndex.clear();
+        interactionSources.clear();
+        if (config.enabled) config.holograms.forEach((id, definition) -> addSource(new Source(sourceId(false, id), id, true, definition.copy())));
+        for (TemporaryHologram value : temporary.list()) addSource(new Source(sourceId(true, value.id), value.id, false, value.definition));
+        nextDue.keySet().removeIf(id -> !sources.containsKey(id));
+    }
+
+    private void addSource(Source source) {
+        sources.put(source.sourceId, source);
+        chunkIndex.computeIfAbsent(ChunkKey.of(source.location()), ignored -> new LinkedHashSet<>()).add(source.sourceId);
+        if (source.definition.interaction.enabled) interactionSources.put(interactionOwnershipKey(source.id, source.definition), source.sourceId);
+    }
+
+    private void markAllDirty() {
+        synchronized (lock) {
+            dirtySources.addAll(sources.keySet());
+        }
+    }
+
+    private void markDirty(String sourceId) {
+        synchronized (lock) {
+            if (sources.containsKey(sourceId)) dirtySources.add(sourceId);
+        }
+    }
+
+    private void removeSourceRuntime(String sourceId) {
+        List<RuntimeEntity> entries = runtime.values().stream().filter(value -> sourceId.equals(value.sourceId)).toList();
+        for (RuntimeEntity entry : entries) {
+            runtime.remove(entry.key);
+            removeRuntime(entry);
+        }
+        nextDue.remove(sourceId);
+        dirtySources.remove(sourceId);
+    }
+
+    private void removeRuntimeKey(String key) {
+        RuntimeEntity entry = runtime.remove(key);
+        if (entry != null) removeRuntime(entry);
+    }
+
+    private void removeRuntime(RuntimeEntity entry) {
+        if (entry.key.startsWith("interaction:")) platform.removeInteraction(entry.runtimeId);
+        else renderer.remove(entry.runtimeId);
+    }
+
+    private boolean isGloballyEnabled() {
+        synchronized (lock) {
+            return config.enabled;
+        }
+    }
+
+    private boolean requiresViewerSpecificRendering(HologramDefinition definition) {
+        return hasViewerSpecificVisibility(definition.visibility) || definition.lines.stream().anyMatch(this::requiresViewerContext);
+    }
+
+    private boolean globalVisibilityAllows(HologramDefinition definition) {
+        return HologramConditionEvaluator.evaluate(definition.visibility, definition, new HologramConditionEvaluator.Context() {
+            @Override public boolean hasPermission(String node) { return false; }
+            @Override public boolean hasGroup(String group) { return false; }
+            @Override public boolean isOperator() { return false; }
+            @Override public String world() { return definition.dimension; }
+            @Override public Double x() { return definition.x; }
+            @Override public Double y() { return definition.y; }
+            @Override public Double z() { return definition.z; }
+            @Override public IHologramPlatform.WorldState worldState(String dimension) { return platform.worldState(dimension); }
+        });
+    }
+
+    private boolean hasViewerSpecificVisibility(HologramConditionGroup group) {
+        if (group == null || group.conditions == null) return false;
+        for (HologramCondition condition : group.conditions) {
+            if (condition == null) continue;
+            if ("permission".equals(condition.type) || "group".equals(condition.type)
+                    || "operator".equals(condition.type) || "distance".equals(condition.type)) return true;
+            if (("all".equals(condition.type) || "any".equals(condition.type)) && hasViewerSpecificVisibility(condition)) return true;
+        }
+        return false;
+    }
+
+    private boolean hasViewerSpecificVisibility(HologramCondition condition) {
+        if (condition.conditions == null) return false;
+        for (HologramCondition child : condition.conditions) {
+            if (child == null) continue;
+            if ("permission".equals(child.type) || "group".equals(child.type)
+                    || "operator".equals(child.type) || "distance".equals(child.type)) return true;
+            if (("all".equals(child.type) || "any".equals(child.type)) && hasViewerSpecificVisibility(child)) return true;
+        }
+        return false;
+    }
+
+    private boolean hasDynamicVisibility(HologramConditionGroup group) {
+        if (group == null || group.conditions == null) return false;
+        for (HologramCondition condition : group.conditions) {
+            if (condition == null) continue;
+            if ("time".equals(condition.type) || "weather".equals(condition.type)) return true;
+            if (("all".equals(condition.type) || "any".equals(condition.type)) && hasDynamicVisibility(condition)) return true;
+        }
+        return false;
+    }
+
+    private boolean hasDynamicVisibility(HologramCondition condition) {
+        if (condition.conditions == null) return false;
+        for (HologramCondition child : condition.conditions) {
+            if (child == null) continue;
+            if ("time".equals(child.type) || "weather".equals(child.type)) return true;
+            if (("all".equals(child.type) || "any".equals(child.type)) && hasDynamicVisibility(child)) return true;
+        }
+        return false;
+    }
+
+    private boolean requiresViewerContext(String line) {
+        String value = line != null ? line : "";
+        return value.contains("{player") || value.contains("{prefix}") || value.contains("{suffix}") || value.contains("{group}");
+    }
+
+    private boolean hasDynamicContent(HologramDefinition definition) {
+        return definition.lines.stream().map(value -> HologramLine.of(0, value)).anyMatch(HologramLine::dynamic);
+    }
+
+    private Set<String> validOwnershipKeys() {
+        Set<String> keys = new LinkedHashSet<>();
+        sources.values().forEach(source -> {
+            if (!source.definition.enabled) return;
+            for (int index = 0; index < source.definition.lines.size(); index++) keys.add(ownershipKey(source.id, source.definition, index));
+            if (source.definition.interaction.enabled) keys.add(interactionOwnershipKey(source.id, source.definition));
+        });
+        return keys;
     }
 
     private Config loadConfig() {
@@ -344,15 +657,9 @@ public final class HologramService {
         definition.x = finite(definition.x, "x");
         definition.y = finite(definition.y, "y");
         definition.z = finite(definition.z, "z");
-        if (definition.lines.size() > MAX_LINES) {
-            throw new IllegalArgumentException(
-                    "A hologram may contain at most " + MAX_LINES + " lines.");
-        }
+        if (definition.lines.size() > MAX_LINES) throw new IllegalArgumentException("A hologram may contain at most " + MAX_LINES + " lines.");
         for (String line : definition.lines) {
-            if (line.length() > 4096) {
-                throw new IllegalArgumentException(
-                        "A hologram line may contain at most 4096 characters.");
-            }
+            if (line.length() > 4096) throw new IllegalArgumentException("A hologram line may contain at most 4096 characters.");
         }
         return definition;
     }
@@ -385,32 +692,15 @@ public final class HologramService {
     }
 
     public static String ownershipKey(String id, HologramDefinition definition, int lineIndex) {
-        int revision = Objects.hash(definition.dimension, definition.x, definition.y, definition.z,
-                definition.lineSpacing, lineIndex, definition.lines.get(lineIndex));
-        return id + ":" + lineIndex + ":" + Integer.toUnsignedString(revision, 36);
+        return "line:" + id + ":" + lineIndex;
     }
 
-    private static Set<String> validOwnershipKeys(Map<String, HologramDefinition> definitions) {
-        Set<String> keys = new LinkedHashSet<>();
-        definitions.forEach((id, definition) -> {
-            if (!definition.enabled) return;
-            for (int index = 0; index < definition.lines.size(); index++) keys.add(ownershipKey(id, definition, index));
-        });
-        return keys;
+    public static String interactionOwnershipKey(String id, HologramDefinition definition) {
+        return "interaction:" + id;
     }
 
-    private static Map<String, HologramDefinition> deepCopy(Map<String, HologramDefinition> input) {
-        Map<String, HologramDefinition> copy = new LinkedHashMap<>();
-        input.forEach((id, definition) -> copy.put(id, definition.copy()));
-        return copy;
-    }
-
-    private static boolean same(HologramDefinition a, HologramDefinition b) {
-        return a.enabled == b.enabled && Objects.equals(a.dimension, b.dimension)
-                && Double.compare(a.x, b.x) == 0 && Double.compare(a.y, b.y) == 0 && Double.compare(a.z, b.z) == 0
-                && Objects.equals(a.viewDistance, b.viewDistance)
-                && Objects.equals(a.refreshIntervalSeconds, b.refreshIntervalSeconds)
-                && Double.compare(a.lineSpacing, b.lineSpacing) == 0 && Objects.equals(a.lines, b.lines);
+    private static String sourceId(boolean temporary, String id) {
+        return (temporary ? "temporary:" : "persistent:") + id;
     }
 
     private static int lineIndex(int oneBasedLine, List<String> lines) {
@@ -446,6 +736,28 @@ public final class HologramService {
         return normalized.matches("[a-z0-9_-]{1,64}") ? normalized : null;
     }
 
+    public record RuntimeStatus(String id, boolean persistent, boolean chunkLoaded, int renderedEntities, long nextDueAt, boolean dirty) {
+    }
+
+    private record RuntimeEntity(String key, String sourceId, String runtimeId) {
+    }
+
+    private record Source(String sourceId, String id, boolean persistent, HologramDefinition definition) {
+        IHologramPlatform.Location location() {
+            return new IHologramPlatform.Location(definition.dimension, definition.x, definition.y, definition.z);
+        }
+    }
+
+    private record ChunkKey(String dimension, int x, int z) {
+        static ChunkKey of(IHologramPlatform.Location location) {
+            return new ChunkKey(location.dimension(), ((int) Math.floor(location.x())) >> 4, ((int) Math.floor(location.z())) >> 4);
+        }
+
+        IHologramPlatform.Location location() {
+            return new IHologramPlatform.Location(dimension, x * 16.0D, 0.0D, z * 16.0D);
+        }
+    }
+
     public static final class Config {
         public boolean enabled = true;
         public double defaultViewDistance = 48.0D;
@@ -459,7 +771,7 @@ public final class HologramService {
             copy.defaultViewDistance = defaultViewDistance;
             copy.defaultRefreshIntervalSeconds = defaultRefreshIntervalSeconds;
             copy.renderMode = "auto";
-            copy.holograms = deepCopy(holograms);
+            holograms.forEach((id, definition) -> copy.holograms.put(id, definition.copy()));
             return copy;
         }
     }

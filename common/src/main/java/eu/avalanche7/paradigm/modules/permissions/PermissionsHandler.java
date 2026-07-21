@@ -42,6 +42,7 @@ public class PermissionsHandler {
     public static final String RELOAD_PERMISSION = "paradigm.reload";
     public static final String COMMAND_TOGGLE_PERMISSION = "paradigm.command.toggle";
     public static final String STORAGE_MANAGE_PERMISSION = "paradigm.storage.manage";
+    public static final String TABLIST_MANAGE_PERMISSION = "paradigm.tablist.manage";
     public static final String GROUP_MANAGE_PERMISSION = "paradigm.group.manage";
     public static final String EDITOR_PERMISSION = "paradigm.editor";
     public static final String PRIVATE_MESSAGE_PERMISSION = "paradigm.msg";
@@ -116,6 +117,7 @@ public class PermissionsHandler {
     public static final int RELOAD_PERMISSION_LEVEL = 2;
     public static final int COMMAND_TOGGLE_PERMISSION_LEVEL = 2;
     public static final int STORAGE_MANAGE_PERMISSION_LEVEL = 2;
+    public static final int TABLIST_MANAGE_PERMISSION_LEVEL = 2;
     public static final int GROUP_MANAGE_PERMISSION_LEVEL = 2;
     public static final int EDITOR_PERMISSION_LEVEL = 2;
     public static final int PRIVATE_MESSAGE_PERMISSION_LEVEL = 0;
@@ -827,6 +829,7 @@ public class PermissionsHandler {
         if (permission.equals(RELOAD_PERMISSION)) return RELOAD_PERMISSION_LEVEL;
         if (permission.equals(COMMAND_TOGGLE_PERMISSION)) return COMMAND_TOGGLE_PERMISSION_LEVEL;
         if (permission.equals(STORAGE_MANAGE_PERMISSION)) return STORAGE_MANAGE_PERMISSION_LEVEL;
+        if (permission.equals(TABLIST_MANAGE_PERMISSION)) return TABLIST_MANAGE_PERMISSION_LEVEL;
         if (permission.equals(GROUP_MANAGE_PERMISSION)) return GROUP_MANAGE_PERMISSION_LEVEL;
         if (permission.equals(EDITOR_PERMISSION)) return EDITOR_PERMISSION_LEVEL;
         if (permission.equals(PRIVATE_MESSAGE_PERMISSION)) return PRIVATE_MESSAGE_PERMISSION_LEVEL;
@@ -909,6 +912,7 @@ public class PermissionsHandler {
         nodes.put(COMMAND_TOGGLE_PERMISSION, "Allows enabling/disabling Paradigm commands at runtime via /paradigm command.");
         nodes.put(eu.avalanche7.paradigm.modules.holograms.HologramService.MANAGE_PERMISSION, "Allows creating and managing Paradigm holograms.");
         nodes.put(STORAGE_MANAGE_PERMISSION, "Allows viewing and testing Paradigm storage providers with /paradigm storage.");
+        nodes.put(TABLIST_MANAGE_PERMISSION, "Allows viewing status and forcing refresh/reload of the Paradigm tablist with /paradigm tablist.");
         nodes.put(GROUP_MANAGE_PERMISSION, "Allows managing internal permission groups via /paradigm group.");
         nodes.put(EDITOR_PERMISSION, "Allows using /paradigm editor and /paradigm apply.");
         nodes.put(PRIVATE_MESSAGE_PERMISSION, "Allows sending private messages with /msg.");
@@ -1012,6 +1016,10 @@ public class PermissionsHandler {
     public PermissionAPI.PermissionMeta resolvePlayerMetadata(IPlayer player) {
         if (!isInternalPermissionsEnabled()) return null;
         return internalPermissionApi.resolveMeta(player);
+    }
+
+    public long permissionsStateVersion() {
+        return internalPermissionApi.stateVersion();
     }
 
     /** Cache-only resolved metadata for the stable companion API. */

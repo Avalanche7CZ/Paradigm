@@ -1,16 +1,23 @@
 package eu.avalanche7.paradigm.platform;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IHologramPlatform;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
+import net.minecraft.network.protocol.game.ClientboundRemoveEntitiesPacket;
+import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.decoration.ArmorStand;
 
 import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -19,6 +26,7 @@ public final class MinecraftHologramPlatform implements IHologramPlatform {
     private static final double ARMOR_STAND_NAME_OFFSET = 1.975D;
 
     private final PlatformAdapterImpl adapter;
+    private final Map<String, ViewerEntity> viewerEntities = new HashMap<>();
 
     public MinecraftHologramPlatform(PlatformAdapterImpl adapter) {
         this.adapter = adapter;
@@ -32,8 +40,12 @@ public final class MinecraftHologramPlatform implements IHologramPlatform {
 
     @Override
     public boolean isEntityLoaded(String runtimeId) {
+        ViewerEntity viewerEntity = viewerEntities.get(runtimeId);
         UUID entityId = parseRuntimeId(runtimeId);
         MinecraftServer server = server();
+        if (viewerEntity != null) {
+            return server != null && server.getPlayerList().getPlayer(viewerEntity.playerId()) != null;
+        }
         if (entityId == null || server == null) {
             return false;
         }
@@ -43,6 +55,13 @@ public final class MinecraftHologramPlatform implements IHologramPlatform {
             }
         }
         return false;
+    }
+
+    @Override
+    public WorldState worldState(String dimension) {
+        ServerLevel world = resolveWorld(dimension);
+        if (world == null) return null;
+        return new WorldState(world.getDayTime(), world.isThundering() ? "thunder" : world.isRaining() ? "rain" : "clear");
     }
 
     @Override
@@ -72,7 +91,38 @@ public final class MinecraftHologramPlatform implements IHologramPlatform {
     }
 
     @Override
+    public String upsertViewerLine(LineRequest request, IPlayer viewer, String runtimeId) {
+        if (!(viewer.getOriginalPlayer() instanceof ServerPlayer player)) return null;
+        ServerLevel world = resolveWorld(request.location().dimension());
+        if (world == null || !isChunkLoaded(request.location())) return null;
+        removeLine(runtimeId);
+
+        ArmorStand armorStand = new ArmorStand(EntityType.ARMOR_STAND, world);
+        enableMarkerFlag(armorStand);
+        armorStand.setPos(request.location().x(), request.location().y() - ARMOR_STAND_NAME_OFFSET, request.location().z());
+        armorStand.setInvisible(true);
+        armorStand.setNoGravity(true);
+        armorStand.setInvulnerable(true);
+        armorStand.setCustomNameVisible(true);
+        Object originalText = request.text().getOriginalText();
+        armorStand.setCustomName(originalText instanceof Component component ? component : Component.literal(request.text().getRawText()));
+
+        player.connection.send(new ClientboundAddEntityPacket(armorStand));
+        player.connection.send(new ClientboundSetEntityDataPacket(armorStand.getId(), armorStand.getEntityData(), true));
+        String viewerRuntimeId = "viewer:" + UUID.randomUUID();
+        viewerEntities.put(viewerRuntimeId, new ViewerEntity(player.getUUID(), armorStand.getId()));
+        return viewerRuntimeId;
+    }
+
+    @Override
     public void removeLine(String runtimeId) {
+        ViewerEntity viewerEntity = viewerEntities.remove(runtimeId);
+        if (viewerEntity != null) {
+            MinecraftServer viewerServer = server();
+            ServerPlayer viewer = viewerServer != null ? viewerServer.getPlayerList().getPlayer(viewerEntity.playerId()) : null;
+            if (viewer != null) viewer.connection.send(new ClientboundRemoveEntitiesPacket(viewerEntity.entityId()));
+            return;
+        }
         UUID entityId = parseRuntimeId(runtimeId);
         MinecraftServer server = server();
         if (entityId == null || server == null) {
@@ -107,6 +157,11 @@ public final class MinecraftHologramPlatform implements IHologramPlatform {
                 }
             }
         }
+    }
+
+    @Override
+    public Capabilities capabilities() {
+        return new Capabilities(false, false, false, false, false, false, false, false, false, true, false, true);
     }
 
     private ArmorStand spawnArmorStand(ServerLevel world, LineRequest request) {
@@ -185,5 +240,8 @@ public final class MinecraftHologramPlatform implements IHologramPlatform {
         } catch (IllegalArgumentException ignored) {
             return null;
         }
+    }
+
+    private record ViewerEntity(UUID playerId, int entityId) {
     }
 }

@@ -102,7 +102,7 @@ public class DashboardRouter {
                 if ("GET".equals(method) && "/api/holograms/item".equals(path)) return holograms.get(ctx);
                 if ("POST".equals(method) && path.startsWith("/api/holograms/")) {
                     String action = path.substring("/api/holograms/".length());
-                    if (!java.util.Set.of("create", "update", "duplicate", "rename", "delete", "refresh", "settings", "player-location").contains(action)) {
+                    if (!java.util.Set.of("create", "update", "duplicate", "rename", "delete", "refresh", "settings", "player-location", "temporary-remove", "temporary-update").contains(action)) {
                         return DashboardResponse.apiError(400, "invalid_request", "Unknown hologram operation.");
                     }
                     return holograms.mutate(ctx, action);

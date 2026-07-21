@@ -10,6 +10,8 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import java.util.List;
 
 public final class Holograms implements ParadigmModule {
+    private static volatile Holograms current;
+
     private Services services;
     private HologramService holograms;
 
@@ -27,6 +29,15 @@ public final class Holograms implements ParadigmModule {
     public void onLoad(Object event, Services services, Object modEventBus) {
         this.services = services;
         this.holograms = services.getHologramService();
+        current = this;
+    }
+
+    public static Holograms current() {
+        return current;
+    }
+
+    public ICommandBuilder buildCommandBranch() {
+        return command("hologram");
     }
 
     @Override
@@ -103,12 +114,29 @@ public final class Holograms implements ParadigmModule {
                     holograms.refresh(ctx.getStringArgument("id"));
                     success(ctx.getSource(), "Hologram refreshed.");
                 }))));
+        ICommandBuilder temporary = builder().literal("temporary");
+        temporary.then(builder().literal("list").executes(ctx -> listTemporary(ctx.getSource())));
+        temporary.then(builder().literal("info").then(temporaryIdArgument().executes(ctx -> temporaryInfo(ctx.getSource(), ctx.getStringArgument("id")))));
+        temporary.then(builder().literal("remove").then(temporaryIdArgument().executes(ctx -> action(ctx.getSource(), () -> {
+            if (!holograms.removeTemporary(ctx.getStringArgument("id"))) throw new IllegalArgumentException("Unknown temporary hologram.");
+            success(ctx.getSource(), "Temporary hologram removed.");
+        }))));
+        temporary.then(builder().literal("create")
+                .then(builder().argument("ttlSeconds", ICommandBuilder.ArgumentType.INTEGER)
+                        .then(builder().argument("text", ICommandBuilder.ArgumentType.GREEDY_STRING)
+                                .executes(ctx -> action(ctx.getSource(), () -> createTemporary(ctx.getSource(), ctx.getIntArgument("ttlSeconds"), ctx.getStringArgument("text")))))));
+        root.then(temporary);
         return root;
     }
 
     private ICommandBuilder idArgument() {
         return builder().argument("id", ICommandBuilder.ArgumentType.WORD)
                 .suggests((context, input) -> holograms.definitions().keySet().stream().sorted().toList());
+    }
+
+    private ICommandBuilder temporaryIdArgument() {
+        return builder().argument("id", ICommandBuilder.ArgumentType.WORD)
+                .suggests((context, input) -> holograms.temporaryHolograms().stream().map(value -> value.id).sorted().toList());
     }
 
     private ICommandBuilder builder() {
@@ -125,6 +153,20 @@ public final class Holograms implements ParadigmModule {
         IPlayer player = requirePlayer(source);
         holograms.create(id, player.getWorldId(), required(player.getX(), "x"), required(player.getY(), "y"), required(player.getZ(), "z"));
         success(source, "Created hologram '" + id + "' at your location.");
+    }
+
+    private void createTemporary(ICommandSource source, int ttlSeconds, String text) {
+        if (ttlSeconds < 1 || ttlSeconds > 86400) throw new IllegalArgumentException("TTL must be between 1 and 86400 seconds.");
+        IPlayer player = requirePlayer(source);
+        HologramDefinition definition = new HologramDefinition();
+        definition.dimension = player.getWorldId();
+        definition.x = required(player.getX(), "x");
+        definition.y = required(player.getY(), "y") + 0.5D;
+        definition.z = required(player.getZ(), "z");
+        definition.lines.clear();
+        definition.lines.add(text);
+        TemporaryHologram temporary = holograms.createTemporary(definition, player.getUUID(), (long) ttlSeconds, null);
+        success(source, "Temporary hologram created: " + temporary.id + ".");
     }
 
     private void moveHere(ICommandSource source, String id) {
@@ -147,6 +189,23 @@ public final class Holograms implements ParadigmModule {
     private int list(ICommandSource source) {
         List<String> ids = holograms.definitions().keySet().stream().sorted().toList();
         success(source, ids.isEmpty() ? "No holograms configured." : "Holograms: " + String.join(", ", ids));
+        return 1;
+    }
+
+    private int listTemporary(ICommandSource source) {
+        List<TemporaryHologram> values = holograms.temporaryHolograms();
+        success(source, values.isEmpty() ? "No temporary holograms." : "Temporary holograms: " + String.join(", ", values.stream().map(value -> value.id).toList()));
+        return 1;
+    }
+
+    private int temporaryInfo(ICommandSource source, String id) {
+        TemporaryHologram value = holograms.temporary().get(id);
+        if (value == null) {
+            failure(source, "Unknown temporary hologram.");
+            return 0;
+        }
+        success(source, value.id + " · " + value.definition.dimension + " · " + value.definition.lines.size() + " lines · "
+                + (value.expiresAt != null ? "expires " + value.expiresAt : "no expiry"));
         return 1;
     }
 

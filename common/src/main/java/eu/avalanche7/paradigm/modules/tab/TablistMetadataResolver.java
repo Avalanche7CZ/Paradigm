@@ -9,34 +9,80 @@ import net.luckperms.api.LuckPermsProvider;
 import net.luckperms.api.model.group.Group;
 import net.luckperms.api.model.user.User;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
+import java.util.function.LongSupplier;
 
 public final class TablistMetadataResolver implements TablistMetadataProvider {
+    private static final int MAX_CACHE_ENTRIES = 256;
+    private static final long CACHE_TTL_MILLIS = 2000L;
+
     private final BooleanSupplier internalEnabled;
     private final TablistMetadataProvider internal;
     private final TablistMetadataProvider luckPerms;
+    private final LongSupplier internalStateVersion;
+    private final LongSupplier clock;
+    private final Map<String, CacheEntry> cache = new LinkedHashMap<>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, CacheEntry> eldest) {
+            return size() > MAX_CACHE_ENTRIES;
+        }
+    };
 
     public TablistMetadataResolver(Services services) {
         this(
                 () -> services.getPermissionsHandler().isInternalPermissionsEnabled(),
                 player -> resolveInternal(services.getPermissionsHandler(), player),
-                TablistMetadataResolver::resolveLuckPerms
+                TablistMetadataResolver::resolveLuckPerms,
+                () -> services.getPermissionsHandler().permissionsStateVersion(),
+                System::currentTimeMillis
         );
     }
 
     TablistMetadataResolver(BooleanSupplier internalEnabled, TablistMetadataProvider internal,
                             TablistMetadataProvider luckPerms) {
+        this(internalEnabled, internal, luckPerms, () -> 0L, System::currentTimeMillis);
+    }
+
+    TablistMetadataResolver(BooleanSupplier internalEnabled, TablistMetadataProvider internal,
+                            TablistMetadataProvider luckPerms, LongSupplier internalStateVersion, LongSupplier clock) {
         this.internalEnabled = internalEnabled;
         this.internal = internal;
         this.luckPerms = luckPerms;
+        this.internalStateVersion = internalStateVersion;
+        this.clock = clock;
     }
 
     @Override
-    public TablistMetadata resolve(IPlayer player) {
+    public synchronized TablistMetadata resolve(IPlayer player) {
         if (player == null) return TablistMetadata.EMPTY;
-        if (internalEnabled.getAsBoolean()) return safeResolve(internal, player);
-        return safeResolve(luckPerms, player);
+        boolean internalSource = internalEnabled.getAsBoolean();
+        String uuid = player.getUUID();
+        long now = clock.getAsLong();
+
+        if (uuid != null) {
+            CacheEntry cached = cache.get(uuid);
+            if (cached != null && cached.internalSource == internalSource && now - cached.timestamp < CACHE_TTL_MILLIS
+                    && (!internalSource || cached.stateVersion == internalStateVersion.getAsLong())) {
+                return cached.metadata;
+            }
+        }
+
+        TablistMetadata resolved = internalSource ? safeResolve(internal, player) : safeResolve(luckPerms, player);
+        if (uuid != null) {
+            cache.put(uuid, new CacheEntry(resolved, internalSource, internalStateVersion.getAsLong(), now));
+        }
+        return resolved;
+    }
+
+    public synchronized void invalidate(String uuid) {
+        if (uuid != null) cache.remove(uuid);
+    }
+
+    public synchronized void invalidateAll() {
+        cache.clear();
     }
 
     private static TablistMetadata safeResolve(TablistMetadataProvider provider, IPlayer player) {
@@ -67,5 +113,8 @@ public final class TablistMetadataResolver implements TablistMetadataProvider {
         var metadata = user.getCachedData().getMetaData();
         return new TablistMetadata(primary, metadata.getPrefix(), metadata.getSuffix(), weight,
                 TablistMetadata.Source.LUCKPERMS);
+    }
+
+    private record CacheEntry(TablistMetadata metadata, boolean internalSource, long stateVersion, long timestamp) {
     }
 }

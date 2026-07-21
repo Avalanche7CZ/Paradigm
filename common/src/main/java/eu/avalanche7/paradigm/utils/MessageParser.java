@@ -6,6 +6,7 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.formatting.FormattingParser;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -160,6 +161,13 @@ public class MessageParser {
 
     public FormattingParser getFormattingParser() {
         return formattingParser;
+    }
+
+    public List<String> availablePlaceholderTokens() {
+        return List.of(
+                "{player}", "{player_name}", "{player_uuid}", "{player_level}", "{player_health}", "{max_player_health}",
+                "{player_prefix}", "{player_suffix}", "{player_group}", "{player_primary_group}", "{player_groups}",
+                "{prefix}", "{suffix}", "{group}");
     }
 
     public void clearCache() {

@@ -3,9 +3,11 @@ package eu.avalanche7.paradigm.modules.holograms;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IHologramPlatform;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
 
 import java.util.Map;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class HologramRenderer {
@@ -18,16 +20,32 @@ public final class HologramRenderer {
         this.platform = platform;
     }
 
-    public String upsert(String id, HologramDefinition definition, HologramLine line, String runtimeId) {
+    public String upsert(String id, HologramDefinition definition, HologramLine line, String runtimeId, IPlayer viewer) {
         double y = definition.y - (line.index() * definition.lineSpacing);
         IHologramPlatform.Location location = new IHologramPlatform.Location(
                 definition.dimension, definition.x, y, definition.z);
         if (!platform.isChunkLoaded(location)) return null;
         String key = HologramService.ownershipKey(id, definition, line.index());
-        IComponent text = line.dynamic()
-                ? parse(line.template(), definition.dimension)
-                : staticTemplates.computeIfAbsent(key + "\n" + line.template(), ignored -> parse(line.template(), definition.dimension));
-        return platform.upsertLine(new IHologramPlatform.LineRequest(key, location, definition.viewDistance, text.copy()), runtimeId);
+        IComponent text = line.dynamic() || viewer != null
+                ? parse(line.template(), definition.dimension, viewer)
+                : staticTemplates.computeIfAbsent(key + "\n" + line.template(), ignored -> parse(line.template(), definition.dimension, null));
+        return platform.upsertLine(new IHologramPlatform.LineRequest(key, location, definition.viewDistance, text.copy(), definition.display.copy()), runtimeId);
+    }
+
+    public String upsertInteraction(String id, HologramDefinition definition, String runtimeId) {
+        if (!definition.interaction.enabled) return null;
+        IHologramPlatform.Location location = new IHologramPlatform.Location(definition.dimension, definition.x, definition.y, definition.z);
+        if (!platform.isChunkLoaded(location)) return null;
+        return platform.upsertInteraction(new IHologramPlatform.InteractionRequest(
+                HologramService.interactionOwnershipKey(id, definition), location,
+                definition.interaction.width, definition.interaction.height), runtimeId);
+    }
+
+    public IHologramPlatform.LineRequest viewerRequest(String ownershipKey, HologramDefinition definition, HologramLine line, IPlayer viewer) {
+        double y = definition.y - (line.index() * definition.lineSpacing);
+        IHologramPlatform.Location location = new IHologramPlatform.Location(definition.dimension, definition.x, y, definition.z);
+        return new IHologramPlatform.LineRequest(ownershipKey, location, definition.viewDistance,
+                parse(line.template(), definition.dimension, viewer), definition.display.copy());
     }
 
     public void remove(String runtimeId) {
@@ -42,9 +60,13 @@ public final class HologramRenderer {
         staticTemplates.clear();
     }
 
-    private IComponent parse(String template, String dimension) {
+    public static List<String> globalPlaceholderTokens() {
+        return List.of("{online_players}", "{max_players}", "{server_name}", "{server_id}", "{network_id}", "{world}");
+    }
+
+    private IComponent parse(String template, String dimension, IPlayer viewer) {
         String expanded = globalPlaceholders(template, dimension);
-        return services.getMessageParser().parseMessage(expanded, null);
+        return services.getMessageParser().parseMessage(expanded, viewer);
     }
 
     private String globalPlaceholders(String input, String dimension) {

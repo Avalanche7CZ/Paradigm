@@ -9,7 +9,8 @@
     "PlayerListMixin",
     "ServerPlayerTablistMixin",
     "DisplayEntityAccessor",
-    "TextDisplayEntityAccessor"
+    "TextDisplayEntityAccessor",
+    "InteractionEntityAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

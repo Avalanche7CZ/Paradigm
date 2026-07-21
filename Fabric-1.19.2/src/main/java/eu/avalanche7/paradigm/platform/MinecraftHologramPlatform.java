@@ -2,10 +2,15 @@ package eu.avalanche7.paradigm.platform;
 
 import eu.avalanche7.paradigm.mixin.ArmorStandEntityAccessor;
 import eu.avalanche7.paradigm.platform.Interfaces.IHologramPlatform;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EntityType;
 import net.minecraft.entity.decoration.ArmorStandEntity;
+import net.minecraft.network.packet.s2c.play.EntitiesDestroyS2CPacket;
+import net.minecraft.network.packet.s2c.play.EntitySpawnS2CPacket;
+import net.minecraft.network.packet.s2c.play.EntityTrackerUpdateS2CPacket;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
@@ -14,6 +19,8 @@ import net.minecraft.util.registry.RegistryKey;
 import net.minecraft.world.World;
 
 import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -22,6 +29,7 @@ public final class MinecraftHologramPlatform implements IHologramPlatform {
     private static final double ARMOR_STAND_NAME_OFFSET = 1.975D;
 
     private final PlatformAdapterImpl adapter;
+    private final Map<String, ViewerEntity> viewerEntities = new HashMap<>();
 
     public MinecraftHologramPlatform(PlatformAdapterImpl adapter) {
         this.adapter = adapter;
@@ -40,8 +48,12 @@ public final class MinecraftHologramPlatform implements IHologramPlatform {
 
     @Override
     public boolean isEntityLoaded(String runtimeId) {
+        ViewerEntity viewerEntity = viewerEntities.get(runtimeId);
         UUID entityId = parseRuntimeId(runtimeId);
         MinecraftServer server = server();
+        if (viewerEntity != null) {
+            return server != null && server.getPlayerManager().getPlayer(viewerEntity.playerId()) != null;
+        }
         if (entityId == null || server == null) {
             return false;
         }
@@ -51,6 +63,13 @@ public final class MinecraftHologramPlatform implements IHologramPlatform {
             }
         }
         return false;
+    }
+
+    @Override
+    public WorldState worldState(String dimension) {
+        ServerWorld world = resolveWorld(dimension);
+        if (world == null) return null;
+        return new WorldState(world.getTimeOfDay(), world.isThundering() ? "thunder" : world.isRaining() ? "rain" : "clear");
     }
 
     @Override
@@ -80,7 +99,38 @@ public final class MinecraftHologramPlatform implements IHologramPlatform {
     }
 
     @Override
+    public String upsertViewerLine(LineRequest request, IPlayer viewer, String runtimeId) {
+        if (!(viewer.getOriginalPlayer() instanceof ServerPlayerEntity player)) return null;
+        ServerWorld world = resolveWorld(request.location().dimension());
+        if (world == null || !isChunkLoaded(request.location())) return null;
+        removeLine(runtimeId);
+
+        ArmorStandEntity armorStand = new ArmorStandEntity(EntityType.ARMOR_STAND, world);
+        armorStand.setPosition(request.location().x(), request.location().y() - ARMOR_STAND_NAME_OFFSET, request.location().z());
+        armorStand.setInvisible(true);
+        ((ArmorStandEntityAccessor) armorStand).paradigm$setMarker(true);
+        armorStand.setNoGravity(true);
+        armorStand.setInvulnerable(true);
+        armorStand.setCustomNameVisible(true);
+        Object originalText = request.text().getOriginalText();
+        armorStand.setCustomName(originalText instanceof Text text ? text : Text.literal(request.text().getRawText()));
+
+        player.networkHandler.sendPacket(new EntitySpawnS2CPacket(armorStand));
+        player.networkHandler.sendPacket(new EntityTrackerUpdateS2CPacket(armorStand.getId(), armorStand.getDataTracker(), true));
+        String viewerRuntimeId = "viewer:" + UUID.randomUUID();
+        viewerEntities.put(viewerRuntimeId, new ViewerEntity(player.getUuid(), armorStand.getId()));
+        return viewerRuntimeId;
+    }
+
+    @Override
     public void removeLine(String runtimeId) {
+        ViewerEntity viewerEntity = viewerEntities.remove(runtimeId);
+        if (viewerEntity != null) {
+            MinecraftServer viewerServer = server();
+            ServerPlayerEntity viewer = viewerServer != null ? viewerServer.getPlayerManager().getPlayer(viewerEntity.playerId()) : null;
+            if (viewer != null) viewer.networkHandler.sendPacket(new EntitiesDestroyS2CPacket(viewerEntity.entityId()));
+            return;
+        }
         UUID entityId = parseRuntimeId(runtimeId);
         MinecraftServer server = server();
         if (entityId == null || server == null) {
@@ -115,6 +165,11 @@ public final class MinecraftHologramPlatform implements IHologramPlatform {
                 }
             }
         }
+    }
+
+    @Override
+    public Capabilities capabilities() {
+        return new Capabilities(false, false, false, false, false, false, false, false, false, true, false, true);
     }
 
     private ArmorStandEntity spawnArmorStand(ServerWorld world, LineRequest request) {
@@ -183,5 +238,8 @@ public final class MinecraftHologramPlatform implements IHologramPlatform {
         } catch (IllegalArgumentException ignored) {
             return null;
         }
+    }
+
+    private record ViewerEntity(UUID playerId, int entityId) {
     }
 }

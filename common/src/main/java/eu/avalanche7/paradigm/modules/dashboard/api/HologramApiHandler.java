@@ -7,12 +7,19 @@ import eu.avalanche7.paradigm.modules.dashboard.DashboardRequestContext;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardResponse;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardService;
 import eu.avalanche7.paradigm.modules.holograms.HologramDefinition;
+import eu.avalanche7.paradigm.modules.holograms.HologramRenderer;
 import eu.avalanche7.paradigm.modules.holograms.HologramService;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
 import java.util.LinkedHashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
 
 public final class HologramApiHandler {
     private final DashboardService dashboard;
@@ -22,23 +29,34 @@ public final class HologramApiHandler {
     }
 
     public DashboardResponse list(DashboardRequestContext context) {
-        HologramService service = service();
-        List<Map<String, Object>> players = dashboard.services().getPlatformAdapter().getOnlinePlayers().stream()
-                .map(this::playerLocation)
-                .toList();
-        return DashboardResponse.apiOk(Map.of(
-                "supported", service.supported(),
-                "config", service.snapshot(),
-                "onlinePlayers", players));
+        return onServerThread(() -> {
+            HologramService service = service();
+            List<Map<String, Object>> players = dashboard.services().getPlatformAdapter().getOnlinePlayers().stream()
+                    .map(this::playerLocation)
+                    .toList();
+            List<String> placeholders = new ArrayList<>(dashboard.services().getMessageParser().availablePlaceholderTokens());
+            placeholders.addAll(HologramRenderer.globalPlaceholderTokens());
+            return DashboardResponse.apiOk(Map.of(
+                    "supported", service.supported(),
+                    "capabilities", service.capabilities(),
+                    "config", service.snapshot(),
+                    "onlinePlayers", players,
+                    "loadedDimensions", dashboard.services().getPlatformAdapter().getWorldNames(),
+                    "runtimeStatus", service.runtimeStatus(),
+                    "temporary", service.temporaryHolograms(),
+                    "placeholderTokens", placeholders));
+        });
     }
 
     public DashboardResponse get(DashboardRequestContext context) {
-        String id = context.query().get("id");
-        HologramDefinition definition = service().definition(id);
-        if (definition == null) {
-            return DashboardResponse.apiError(404, "not_found", "Hologram was not found.");
-        }
-        return DashboardResponse.apiOk(Map.of("id", HologramService.normalizeId(id), "definition", definition));
+        return onServerThread(() -> {
+            String id = context.query().get("id");
+            HologramDefinition definition = service().definition(id);
+            if (definition == null) {
+                return DashboardResponse.apiError(404, "not_found", "Hologram was not found.");
+            }
+            return DashboardResponse.apiOk(Map.of("id", HologramService.normalizeId(id), "definition", definition));
+        });
     }
 
     public DashboardResponse mutate(DashboardRequestContext context, String action) throws Exception {
@@ -46,12 +64,18 @@ public final class HologramApiHandler {
         if (request == null) {
             request = new Request();
         }
+        Request mutationRequest = request;
 
         try {
-            apply(action, request);
+            HologramService.Config config = onServerThread(() -> {
+                apply(action, mutationRequest);
+                return service().snapshot();
+            });
             dashboard.audit().dashboard(context.principal(), AuditActionType.HOLOGRAM_CHANGE, AuditResult.SUCCESS,
-                    "Hologram " + action + " completed.", auditDetails(action, request));
-            return DashboardResponse.apiOk(Map.of("config", service().snapshot()));
+                    "Hologram " + action + " completed.", auditDetails(action, mutationRequest));
+            return DashboardResponse.apiOk(Map.of("config", config));
+        } catch (ServerThreadUnavailableException exception) {
+            return DashboardResponse.apiError(503, "server_busy", exception.getMessage());
         } catch (IllegalArgumentException | IllegalStateException exception) {
             dashboard.audit().dashboard(context.principal(), AuditActionType.HOLOGRAM_CHANGE, AuditResult.FAILED,
                     "Hologram " + action + " failed.", Map.of("action", action, "reason", exception.getClass().getSimpleName()));
@@ -72,6 +96,10 @@ public final class HologramApiHandler {
                     request.defaultViewDistance,
                     request.defaultRefreshIntervalSeconds);
             case "player-location" -> moveToPlayer(request);
+            case "temporary-remove" -> {
+                if (!service.removeTemporary(request.id)) throw new IllegalArgumentException("Temporary hologram was not found.");
+            }
+            case "temporary-update" -> service.updateTemporary(request.id, request.definition, request.expiresAt);
             default -> throw new IllegalArgumentException("Unknown hologram operation.");
         }
     }
@@ -105,8 +133,43 @@ public final class HologramApiHandler {
         return dashboard.services().getHologramService();
     }
 
+    private <T> T onServerThread(Supplier<T> operation) {
+        CompletableFuture<T> result = new CompletableFuture<>();
+        try {
+            dashboard.services().getPlatformAdapter().executeOnServerThread(() -> {
+                try {
+                    result.complete(operation.get());
+                } catch (Throwable throwable) {
+                    result.completeExceptionally(throwable);
+                }
+            });
+        } catch (Throwable throwable) {
+            throw new ServerThreadUnavailableException("The server thread cannot accept hologram requests.", throwable);
+        }
+        try {
+            return result.get(10, TimeUnit.SECONDS);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new ServerThreadUnavailableException("The server thread did not complete the hologram request.", exception);
+        } catch (TimeoutException exception) {
+            throw new ServerThreadUnavailableException("The server thread is busy; retry the hologram request.", exception);
+        } catch (ExecutionException exception) {
+            Throwable cause = exception.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IllegalStateException("Hologram operation failed on the server thread.", cause);
+        }
+    }
+
     private static String safe(String value) {
         return value != null ? value : "";
+    }
+
+    private static final class ServerThreadUnavailableException extends RuntimeException {
+        private ServerThreadUnavailableException(String message, Throwable cause) {
+            super(message, cause);
+        }
     }
 
     public static final class Request {
@@ -117,5 +180,6 @@ public final class HologramApiHandler {
         public boolean enabled = true;
         public double defaultViewDistance = 48.0D;
         public int defaultRefreshIntervalSeconds = 5;
+        public Long expiresAt;
     }
 }

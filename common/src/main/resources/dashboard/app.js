@@ -751,7 +751,8 @@ function renderTablist() {
   const showPing = Boolean(valueOf('tablist.showPing'));
   const refresh = Number(valueOf('tablist.refreshInterval') || 5);
   const worlds = parseTablistWorlds(valueOf('tablist.perWorldOverrides'));
-  root.innerHTML = `<section class="editor-section tablist-basics"><div class="tablist-switch-row"><div><h2>Tablist presentation</h2><p>Changes apply to online players after saving.</p></div><label class="switch-label"><input id="tablist-enabled" type="checkbox" ${enabled ? 'checked' : ''}> Enabled</label></div><div class="tablist-format-grid"><label>Header<textarea id="tablist-header" class="auto-grow" rows="3">${esc(header.join('\n'))}</textarea>${tablistToolbar('header')}${collapsiblePreview('tablist:header', 'compact-preview')}</label><label>Footer<textarea id="tablist-footer" class="auto-grow" rows="3">${esc(footer.join('\n'))}</textarea>${tablistToolbar('footer')}${collapsiblePreview('tablist:footer', 'compact-preview')}</label></div><label class="tablist-player-format">Player name format<textarea id="tablist-player-format" class="auto-grow" rows="2">${esc(playerFormat)}</textarea>${tablistToolbar('player')}${collapsiblePreview('tablist:player', 'compact-preview')}</label><div class="token-list" id="tablist-placeholders"></div><div class="compact-form"><label>Numeric ping<input id="tablist-ping" type="checkbox" ${showPing ? 'checked' : ''}></label><label>Refresh interval (seconds)<input id="tablist-refresh" type="number" min="1" max="3600" value="${attr(refresh)}"></label></div>${collapsiblePreview('tablist:full', 'tablist-preview')}</section><section class="editor-section"><h2>Sorting</h2><p>Rules are evaluated from top to bottom. Player name and UUID remain deterministic final fallbacks.</p><div id="tablist-sorting" class="reorder-list">${sorting.map((rule, index) => tablistSortRow(rule, index)).join('') || '<div class="reorder-empty">No rules configured; Paradigm defaults are used.</div>'}</div><button id="tablist-sort-add">Add Rule</button></section><section class="editor-section"><div class="tablist-world-heading"><div><h2>Per-world overrides</h2><p>Unset values inherit the global tablist settings.</p></div><button id="tablist-world-add">Add World</button></div><div id="tablist-worlds" class="tablist-worlds">${worlds.map((world, index) => tablistWorldCard(world, index)).join('') || '<div class="reorder-empty">No world overrides configured.</div>'}</div></section>`;
+  const issues = tablistValidationIssues(worlds, refresh);
+  root.innerHTML = `<section class="editor-section tablist-basics"><div class="tablist-switch-row"><div><h2>Tablist presentation</h2><p>Changes apply to online players after saving.</p></div><label class="switch-label"><input id="tablist-enabled" type="checkbox" ${enabled ? 'checked' : ''}> Enabled</label></div><div class="tablist-format-grid"><label>Header<textarea id="tablist-header" class="auto-grow" rows="3">${esc(header.join('\n'))}</textarea>${tablistToolbar('header')}${collapsiblePreview('tablist:header', 'compact-preview')}</label><label>Footer<textarea id="tablist-footer" class="auto-grow" rows="3">${esc(footer.join('\n'))}</textarea>${tablistToolbar('footer')}${collapsiblePreview('tablist:footer', 'compact-preview')}</label></div><label class="tablist-player-format">Player name format<textarea id="tablist-player-format" class="auto-grow" rows="2">${esc(playerFormat)}</textarea>${tablistToolbar('player')}${collapsiblePreview('tablist:player', 'compact-preview')}</label><div class="token-list" id="tablist-placeholders"></div><div class="compact-form"><label>Numeric ping<input id="tablist-ping" type="checkbox" ${showPing ? 'checked' : ''}></label><label>Refresh interval (seconds)<input id="tablist-refresh" type="number" min="1" max="3600" value="${attr(refresh)}"></label></div>${collapsiblePreview('tablist:full', 'tablist-preview')}</section><section class="editor-section"><h2>Sorting</h2><p>Rules are evaluated from top to bottom. Player name and UUID remain deterministic final fallbacks.</p><div id="tablist-sorting" class="reorder-list">${sorting.map((rule, index) => tablistSortRow(rule, index)).join('') || '<div class="reorder-empty">No rules configured; Paradigm defaults are used.</div>'}</div><button id="tablist-sort-add">Add Rule</button></section><section class="editor-section"><div class="tablist-world-heading"><div><h2>Per-world overrides</h2><p>Unset values inherit the global tablist settings.</p></div><button id="tablist-world-add">Add World</button></div>${issues.length ? `<div class="field-error">${issues.map(esc).join('<br>')}</div>` : ''}<div id="tablist-worlds" class="tablist-worlds">${worlds.map((world, index) => tablistWorldCard(world, index, issues)).join('') || '<div class="reorder-empty">No world overrides configured.</div>'}</div></section>`;
 
   $('tablist-enabled').addEventListener('change', event => setEdit('tablist.enabled', event.target.checked, 'tablist', false));
   $('tablist-header').addEventListener('input', event => { setEdit('tablist.header', event.target.value.split('\n'), 'tablist', false); updateTablistPreviews(); });
@@ -782,9 +783,26 @@ function tablistSortRow(rule, index) {
   return `<div class="reorder-row"><span class="reorder-handle">::</span><select data-tab-sort-index="${index}">${TABLIST_SORT_RULES.map(option => `<option ${option === rule ? 'selected' : ''}>${option}</option>`).join('')}</select><div class="reorder-actions"><button data-tab-sort-move="up" data-index="${index}">&#8593;</button><button data-tab-sort-move="down" data-index="${index}">&#8595;</button><button data-tab-sort-remove data-index="${index}">&#215;</button></div></div>`;
 }
 
+function tablistValidationIssues(worlds, refreshInterval) {
+  const issues = [];
+  const seen = new Map();
+  worlds.forEach((world, index) => {
+    const id = (world.world || '').trim();
+    if (!id) { issues.push(`World override #${index + 1} is missing a world/dimension ID.`); return; }
+    const normalized = id.toLowerCase();
+    if (seen.has(normalized)) issues.push(`World ID "${id}" is configured more than once; only the first match applies.`);
+    seen.set(normalized, index);
+  });
+  if (!Number.isFinite(refreshInterval) || refreshInterval < 1 || refreshInterval > 3600) {
+    issues.push('Refresh interval must be between 1 and 3600 seconds.');
+  }
+  return issues;
+}
+
 function tablistWorldCard(world, index) {
   const nullable = value => value == null ? '' : value;
-  return `<article class="tablist-world-card"><div class="tablist-world-heading"><label>World ID<input data-tab-world-index="${index}" data-part="world" value="${attr(world.world || '')}" placeholder="minecraft:overworld"></label><button data-tab-world-remove data-index="${index}">Delete</button></div><div class="tablist-format-grid"><label>Header override<textarea data-tab-world-index="${index}" data-part="header" rows="2" placeholder="Inherit global">${esc(Array.isArray(world.header) ? world.header.join('\n') : '')}</textarea></label><label>Footer override<textarea data-tab-world-index="${index}" data-part="footer" rows="2" placeholder="Inherit global">${esc(Array.isArray(world.footer) ? world.footer.join('\n') : '')}</textarea></label></div><label>Player format override<textarea data-tab-world-index="${index}" data-part="playerFormat" rows="2" placeholder="Inherit global">${esc(nullable(world.playerFormat))}</textarea></label><div class="compact-form"><label>Ping override<select data-tab-world-index="${index}" data-part="showPing"><option value="" ${world.showPing == null ? 'selected' : ''}>Inherit</option><option value="true" ${world.showPing === true ? 'selected' : ''}>Show</option><option value="false" ${world.showPing === false ? 'selected' : ''}>Hide</option></select></label></div></article>`;
+  const invalid = !(world.world || '').trim();
+  return `<article class="tablist-world-card"><div class="tablist-world-heading"><label>World ID<input data-tab-world-index="${index}" data-part="world" value="${attr(world.world || '')}" placeholder="minecraft:overworld"${invalid ? ' aria-invalid="true" class="input-invalid"' : ''}></label><button data-tab-world-remove data-index="${index}">Delete</button></div><div class="tablist-format-grid"><label>Header override<textarea data-tab-world-index="${index}" data-part="header" rows="2" placeholder="Inherit global">${esc(Array.isArray(world.header) ? world.header.join('\n') : '')}</textarea></label><label>Footer override<textarea data-tab-world-index="${index}" data-part="footer" rows="2" placeholder="Inherit global">${esc(Array.isArray(world.footer) ? world.footer.join('\n') : '')}</textarea></label></div><label>Player format override<textarea data-tab-world-index="${index}" data-part="playerFormat" rows="2" placeholder="Inherit global">${esc(nullable(world.playerFormat))}</textarea></label><div class="compact-form"><label>Ping override<select data-tab-world-index="${index}" data-part="showPing"><option value="" ${world.showPing == null ? 'selected' : ''}>Inherit</option><option value="true" ${world.showPing === true ? 'selected' : ''}>Show</option><option value="false" ${world.showPing === false ? 'selected' : ''}>Hide</option></select></label></div></article>`;
 }
 
 function mutateTablistSort(mutation) { const values = clone(valueOf('tablist.sorting') || []); mutation(values); setEdit('tablist.sorting', values, 'tablist'); }
@@ -1501,9 +1519,9 @@ function expiryBadge(expiresAtMs) {
   return `<span class="expiry-badge">${esc(relativeTime(expiresAtMs))}</span>`;
 }
 
-const HOLOGRAM_PLACEHOLDERS = [
-  '{online_players}', '{max_players}', '{server_name}', '{server_id}', '{network_id}', '{world}'
-];
+function hologramPlaceholders() {
+  return state.hologramData?.placeholderTokens || [];
+}
 
 async function loadHolograms() {
   try {
@@ -1533,8 +1551,32 @@ function renderHologramSettings() {
       <label>Default view distance<input id="hologram-default-distance" type="number" min="1" max="512" step="1" value="${attr(config.defaultViewDistance)}"></label>
       <label>Default refresh interval<input id="hologram-default-refresh" type="number" min="1" max="3600" step="1" value="${attr(config.defaultRefreshIntervalSeconds)}"></label>
     </div>
-    ${state.hologramData.supported ? '' : '<div class="notice-inline">This loader does not provide hologram rendering.</div>'}`;
+    ${hologramCapabilityWarnings()}
+    ${hologramRuntimeMonitor()}`;
   $('hologram-settings-save').addEventListener('click', saveHologramSettings);
+  root.querySelectorAll('[data-temp-remove]').forEach(button => button.addEventListener('click', async () => {
+    if (!await confirmAction(`Remove temporary hologram ${button.dataset.tempRemove}?`, true)) return;
+    await runHologramOperation('temporary-remove', { id: button.dataset.tempRemove });
+  }));
+}
+
+function hologramCapabilityWarnings() {
+  if (!state.hologramData?.supported) return '<div class="notice-inline">This loader does not provide hologram rendering.</div>';
+  const capabilities = state.hologramData.capabilities || {};
+  const unavailable = [
+    ['textDisplay', 'Text Display entities'], ['billboard', 'billboard'], ['alignment', 'alignment'], ['scale', 'scale'],
+    ['textShadow', 'text shadow'], ['background', 'background'], ['textOpacity', 'text opacity'], ['seeThrough', 'see-through'],
+    ['lineWidth', 'line wrapping'], ['viewerSpecificVisibility', 'viewer-specific visibility'], ['interaction', 'native interactions']
+  ].filter(([key]) => !capabilities[key]).map(([, label]) => label);
+  return unavailable.length ? `<div class="notice-inline">This target safely approximates or does not expose: ${esc(unavailable.join(', '))}.</div>` : '';
+}
+
+function hologramRuntimeMonitor() {
+  const status = Object.values(state.hologramData?.runtimeStatus || {});
+  const temporary = state.hologramData?.temporary || [];
+  const rows = status.length ? status.map(value => `<li><strong>${esc(value.id)}</strong> · ${value.chunkLoaded ? 'chunk loaded' : 'chunk unloaded'} · ${Number(value.renderedEntities || 0)} entities${value.dirty ? ' · redraw queued' : ''}</li>`).join('') : '<li>No runtime holograms.</li>';
+  const temps = temporary.length ? temporary.map(value => `<li><strong>${esc(value.id)}</strong> · ${esc(value.owner || 'unknown')} · ${value.expiresAt ? relativeTime(value.expiresAt) : 'no expiry'} <button data-temp-remove="${attr(value.id)}" class="danger">Remove</button></li>`).join('') : '<li>No temporary holograms.</li>';
+  return `<div class="hologram-monitor"><h3>Runtime monitor</h3><div><strong>Persistent</strong><ul>${rows}</ul></div><div><strong>Temporary</strong><ul>${temps}</ul></div></div>`;
 }
 
 function renderHologramList() {
@@ -1572,10 +1614,11 @@ function renderHologramEditor() {
       <div><h2>${esc(state.selectedHologram)}</h2><span>${esc(definition.dimension)}</span></div>
       <div class="detail-header-actions"><button id="hologram-duplicate">Duplicate</button><button id="hologram-rename">Rename</button><button id="hologram-delete" class="danger">Delete</button><button id="hologram-save">Save</button></div>
     </div>
+    ${state.hologramValidationError ? `<div class="field-error">${esc(state.hologramValidationError)}</div>` : ''}
     <section class="hologram-section"><h3>Location and Rendering</h3>
       <div class="hologram-field-grid">
         <label class="switch-label"><input data-hologram-field="enabled" type="checkbox" ${definition.enabled ? 'checked' : ''}> Enabled</label>
-        <label>Dimension<input data-hologram-field="dimension" value="${attr(definition.dimension)}"></label>
+        <label>Dimension<input data-hologram-field="dimension" list="hologram-dimensions" value="${attr(definition.dimension)}"></label>
         <label>X<input data-hologram-field="x" type="number" step="0.01" value="${attr(definition.x)}"></label>
         <label>Y<input data-hologram-field="y" type="number" step="0.01" value="${attr(definition.y)}"></label>
         <label>Z<input data-hologram-field="z" type="number" step="0.01" value="${attr(definition.z)}"></label>
@@ -1583,11 +1626,27 @@ function renderHologramEditor() {
         <label>Refresh interval<input data-hologram-field="refreshIntervalSeconds" type="number" min="1" max="3600" step="1" value="${attr(definition.refreshIntervalSeconds)}"></label>
         <label>Line spacing<input data-hologram-field="lineSpacing" type="number" min="0.05" max="4" step="0.01" value="${attr(definition.lineSpacing)}"></label>
       </div>
+      <datalist id="hologram-dimensions">${(state.hologramData?.loadedDimensions || []).map(value => `<option value="${attr(value)}">`).join('')}</datalist>
       ${playerLocationControl()}
     </section>
+    <section class="hologram-section"><h3>Display</h3>
+      <div class="hologram-field-grid">
+        <label>Billboard<select data-hologram-path="display.billboard"><option value="center" ${definition.display?.billboard === 'center' ? 'selected' : ''}>Center</option><option value="fixed" ${definition.display?.billboard === 'fixed' ? 'selected' : ''}>Fixed</option><option value="vertical" ${definition.display?.billboard === 'vertical' ? 'selected' : ''}>Vertical</option><option value="horizontal" ${definition.display?.billboard === 'horizontal' ? 'selected' : ''}>Horizontal</option></select></label>
+        <label>Alignment<select data-hologram-path="display.alignment"><option value="left" ${definition.display?.alignment === 'left' ? 'selected' : ''}>Left</option><option value="center" ${definition.display?.alignment !== 'left' && definition.display?.alignment !== 'right' ? 'selected' : ''}>Center</option><option value="right" ${definition.display?.alignment === 'right' ? 'selected' : ''}>Right</option></select></label>
+        <label>Scale<input data-hologram-path="display.scale" type="number" min="0.05" max="16" step="0.05" value="${attr(definition.display?.scale ?? 1)}"></label>
+        <label>Maximum line width<input data-hologram-path="display.maxLineWidth" type="number" min="0" max="1024" value="${attr(definition.display?.maxLineWidth ?? 0)}"></label>
+        <label>Background color<input data-hologram-path="display.backgroundColor" type="color" value="${attr(definition.display?.backgroundColor || '#000000')}"></label>
+        <label>Background opacity<input data-hologram-path="display.backgroundOpacity" type="number" min="0" max="1" step="0.01" value="${attr(definition.display?.backgroundOpacity ?? 0)}"></label>
+        <label>Text opacity<input data-hologram-path="display.textOpacity" type="number" min="0" max="1" step="0.01" value="${attr(definition.display?.textOpacity ?? 1)}"></label>
+        <label class="switch-label"><input data-hologram-path="display.textShadow" type="checkbox" ${definition.display?.textShadow ? 'checked' : ''}> Text shadow</label>
+        <label class="switch-label"><input data-hologram-path="display.seeThrough" type="checkbox" ${definition.display?.seeThrough ? 'checked' : ''}> See-through</label>
+      </div>
+    </section>
+    ${hologramVisibilityEditor(definition)}
+    ${hologramInteractionEditor(definition)}
     <section class="hologram-section"><div class="detail-header"><div><h3>Lines</h3><span>One native entity per line.</span></div><button id="hologram-add-line">Add Line</button></div>
       <div id="hologram-lines" class="reorder-list">${(definition.lines || []).map(hologramLineEditor).join('') || '<div class="reorder-empty">No lines configured.</div>'}</div>
-      <h3>Preview</h3><div id="hologram-preview" class="minecraft-preview multiline"></div>
+      <h3>Preview</h3><div id="hologram-preview" class="minecraft-preview multiline hologram-live-preview"></div>
     </section>`;
 
   wireHologramEditor(root);
@@ -1598,11 +1657,44 @@ function hologramLineEditor(text, index) {
   return `<div class="reorder-row hologram-line-row" data-hologram-line-row="${index}">
     <span class="reorder-handle">${index + 1}</span>
     <div class="hologram-line-content">
-      ${formattingToolbar(`hologram-line-${index}`, HOLOGRAM_PLACEHOLDERS)}
+      ${formattingToolbar(`hologram-line-${index}`, hologramPlaceholders())}
       <textarea class="reorder-editor format-editor" data-hologram-line="${index}" data-config-key="hologram-line-${index}">${esc(text)}</textarea>
     </div>
     <div class="reorder-actions"><button data-hologram-line-up="${index}" ${index === 0 ? 'disabled' : ''}>↑</button><button data-hologram-line-down="${index}" ${index === state.hologramDraft.lines.length - 1 ? 'disabled' : ''}>↓</button><button data-hologram-line-delete="${index}">×</button></div>
   </div>`;
+}
+
+function hologramVisibilityEditor(definition) {
+  const visibility = definition.visibility || { mode: 'all', negate: false, conditions: [] };
+  const rows = (visibility.conditions || []).map((condition, index) => `<div class="hologram-condition-row" data-condition-row="${index}">
+    <select data-condition-field="type" data-condition-index="${index}">${['permission','group','operator','world','distance','time','weather'].map(type => `<option value="${type}" ${condition.type === type ? 'selected' : ''}>${type}</option>`).join('')}</select>
+    <input data-condition-field="value" data-condition-index="${index}" placeholder="Value / world / group / weather" value="${attr(condition.value || '')}">
+    <label>Min<input data-condition-field="minDistance" data-condition-index="${index}" type="number" value="${attr(condition.minDistance ?? '')}"></label>
+    <label>Max<input data-condition-field="maxDistance" data-condition-index="${index}" type="number" value="${attr(condition.maxDistance ?? '')}"></label>
+    <label>Start<input data-condition-field="startTime" data-condition-index="${index}" type="number" min="0" max="23999" value="${attr(condition.startTime ?? '')}"></label>
+    <label>End<input data-condition-field="endTime" data-condition-index="${index}" type="number" min="0" max="23999" value="${attr(condition.endTime ?? '')}"></label>
+    <label class="switch-label"><input data-condition-field="negate" data-condition-index="${index}" type="checkbox" ${condition.negate ? 'checked' : ''}> Not</label>
+    <button data-condition-remove="${index}" class="danger">×</button></div>`).join('') || '<div class="reorder-empty">Visible to every player.</div>';
+  return `<section class="hologram-section"><div class="detail-header"><div><h3>Visibility conditions</h3><span>Rules are evaluated for each viewer.</span></div><button id="hologram-condition-add">Add condition</button></div>
+    <div class="compact-form"><label>Match<select data-hologram-path="visibility.mode"><option value="all" ${visibility.mode !== 'any' ? 'selected' : ''}>All conditions</option><option value="any" ${visibility.mode === 'any' ? 'selected' : ''}>Any condition</option></select></label><label class="switch-label"><input data-hologram-path="visibility.negate" type="checkbox" ${visibility.negate ? 'checked' : ''}> Negate group</label></div>
+    <div class="hologram-condition-list">${rows}</div></section>`;
+}
+
+function hologramInteractionEditor(definition) {
+  const interaction = definition.interaction || { enabled: false, width: 1, height: 1, cooldownSeconds: 0, onInteract: [], onAttack: [] };
+  return `<section class="hologram-section"><div class="detail-header"><div><h3>Interaction</h3><span>Owned invisible carrier with per-player cooldown.</span></div></div>
+    <div class="hologram-field-grid"><label class="switch-label"><input data-hologram-path="interaction.enabled" type="checkbox" ${interaction.enabled ? 'checked' : ''}> Enabled</label><label>Hitbox width<input data-hologram-path="interaction.width" type="number" min="0.1" max="16" step="0.1" value="${attr(interaction.width ?? 1)}"></label><label>Hitbox height<input data-hologram-path="interaction.height" type="number" min="0.1" max="16" step="0.1" value="${attr(interaction.height ?? 1)}"></label><label>Cooldown seconds<input data-hologram-path="interaction.cooldownSeconds" type="number" min="0" max="86400" value="${attr(interaction.cooldownSeconds ?? 0)}"></label></div>
+    ${hologramInteractionConditions(interaction.conditions || { mode: 'all', conditions: [] })}
+    ${hologramActionList('interact', interaction.onInteract || [])}${hologramActionList('attack', interaction.onAttack || [])}</section>`;
+}
+
+function hologramInteractionConditions(group) {
+  const rows = (group.conditions || []).map((condition, index) => `<div class="hologram-condition-row"><select data-interaction-condition-field="type" data-interaction-condition-index="${index}">${['permission','group','operator','world','distance','time','weather'].map(type => `<option value="${type}" ${condition.type === type ? 'selected' : ''}>${type}</option>`).join('')}</select><input data-interaction-condition-field="value" data-interaction-condition-index="${index}" placeholder="Value / world / group / weather" value="${attr(condition.value || '')}"><label>Min<input data-interaction-condition-field="minDistance" data-interaction-condition-index="${index}" type="number" value="${attr(condition.minDistance ?? '')}"></label><label>Max<input data-interaction-condition-field="maxDistance" data-interaction-condition-index="${index}" type="number" value="${attr(condition.maxDistance ?? '')}"></label><label>Start<input data-interaction-condition-field="startTime" data-interaction-condition-index="${index}" type="number" min="0" max="23999" value="${attr(condition.startTime ?? '')}"></label><label>End<input data-interaction-condition-field="endTime" data-interaction-condition-index="${index}" type="number" min="0" max="23999" value="${attr(condition.endTime ?? '')}"></label><label class="switch-label"><input data-interaction-condition-field="negate" data-interaction-condition-index="${index}" type="checkbox" ${condition.negate ? 'checked' : ''}> Not</label><button data-interaction-condition-remove="${index}" class="danger">×</button></div>`).join('') || '<div class="reorder-empty">No additional interaction restrictions.</div>';
+  return `<div class="hologram-action-list"><div class="detail-header"><h4>Interaction conditions</h4><button id="hologram-interaction-condition-add">Add condition</button></div><div class="compact-form"><label>Match<select data-hologram-path="interaction.conditions.mode"><option value="all" ${group.mode !== 'any' ? 'selected' : ''}>All conditions</option><option value="any" ${group.mode === 'any' ? 'selected' : ''}>Any condition</option></select></label><label class="switch-label"><input data-hologram-path="interaction.conditions.negate" type="checkbox" ${group.negate ? 'checked' : ''}> Negate group</label></div>${rows}</div>`;
+}
+
+function hologramActionList(kind, actions) {
+  return `<div class="hologram-action-list"><div class="detail-header"><h4>${kind === 'interact' ? 'Right-click actions' : 'Left-click actions'}</h4><button data-action-add="${kind}">Add action</button></div>${actions.map((action, index) => `<div class="hologram-action-row"><select data-action-field="type" data-action-kind="${kind}" data-action-index="${index}">${['message','actionbar','title','sound','player_command','console_command'].map(type => `<option value="${type}" ${action.type === type ? 'selected' : ''}>${type}</option>`).join('')}</select><input data-action-field="text" data-action-kind="${kind}" data-action-index="${index}" placeholder="Text / title" value="${attr(action.text || '')}"><input data-action-field="subtitle" data-action-kind="${kind}" data-action-index="${index}" placeholder="Subtitle" value="${attr(action.subtitle || '')}"><input data-action-field="sound" data-action-kind="${kind}" data-action-index="${index}" placeholder="Sound id" value="${attr(action.sound || '')}"><select data-action-field="soundCategory" data-action-kind="${kind}" data-action-index="${index}">${['master','music','records','weather','blocks','hostile','neutral','players','ambient','voice'].map(category => `<option value="${category}" ${(action.soundCategory || 'master') === category ? 'selected' : ''}>${category}</option>`).join('')}</select><input data-action-field="volume" data-action-kind="${kind}" data-action-index="${index}" type="number" min="0" max="10" step="0.1" placeholder="Volume" value="${attr(action.volume ?? 1)}"><input data-action-field="pitch" data-action-kind="${kind}" data-action-index="${index}" type="number" min="0" max="4" step="0.1" placeholder="Pitch" value="${attr(action.pitch ?? 1)}"><input data-action-field="command" data-action-kind="${kind}" data-action-index="${index}" placeholder="Command" value="${attr(action.command || '')}"><button data-action-remove="${kind}:${index}" class="danger">×</button></div>`).join('') || '<div class="reorder-empty">No actions.</div>'}</div>`;
 }
 
 function playerLocationControl() {
@@ -1611,9 +1703,55 @@ function playerLocationControl() {
 }
 
 function wireHologramEditor(root) {
-  root.querySelectorAll('[data-hologram-field]').forEach(input => input.addEventListener('input', () => {
+  ensureHologramDraftModels();
+  root.querySelectorAll('[data-hologram-field]').forEach(input => bindHologramInput(input, () => {
     const field = input.dataset.hologramField;
     state.hologramDraft[field] = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value;
+  }));
+  root.querySelectorAll('[data-hologram-path]').forEach(input => bindHologramInput(input, () => {
+    setHologramPath(input.dataset.hologramPath, input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value);
+    updateHologramPreview();
+  }));
+  root.querySelectorAll('[data-condition-field]').forEach(input => bindHologramInput(input, () => {
+    const condition = state.hologramDraft.visibility.conditions[Number(input.dataset.conditionIndex)];
+    condition[input.dataset.conditionField] = input.type === 'checkbox' ? input.checked : input.type === 'number' && input.value !== '' ? Number(input.value) : input.value;
+  }));
+  root.querySelectorAll('[data-condition-remove]').forEach(button => button.addEventListener('click', () => {
+    state.hologramDraft.visibility.conditions.splice(Number(button.dataset.conditionRemove), 1);
+    renderHologramEditor();
+  }));
+  const conditionAdd = $('hologram-condition-add');
+  if (conditionAdd) conditionAdd.addEventListener('click', () => {
+    state.hologramDraft.visibility.conditions.push({ type: 'permission', value: '', negate: false });
+    renderHologramEditor();
+  });
+  root.querySelectorAll('[data-interaction-condition-field]').forEach(input => bindHologramInput(input, () => {
+    const condition = state.hologramDraft.interaction.conditions.conditions[Number(input.dataset.interactionConditionIndex)];
+    condition[input.dataset.interactionConditionField] = input.type === 'checkbox' ? input.checked : input.type === 'number' && input.value !== '' ? Number(input.value) : input.value;
+  }));
+  root.querySelectorAll('[data-interaction-condition-remove]').forEach(button => button.addEventListener('click', () => {
+    state.hologramDraft.interaction.conditions.conditions.splice(Number(button.dataset.interactionConditionRemove), 1);
+    renderHologramEditor();
+  }));
+  const interactionConditionAdd = $('hologram-interaction-condition-add');
+  if (interactionConditionAdd) interactionConditionAdd.addEventListener('click', () => {
+    state.hologramDraft.interaction.conditions.conditions.push({ type: 'permission', value: '', negate: false });
+    renderHologramEditor();
+  });
+  root.querySelectorAll('[data-action-field]').forEach(input => bindHologramInput(input, () => {
+    const actions = input.dataset.actionKind === 'attack' ? state.hologramDraft.interaction.onAttack : state.hologramDraft.interaction.onInteract;
+    actions[Number(input.dataset.actionIndex)][input.dataset.actionField] = input.type === 'number' && input.value !== '' ? Number(input.value) : input.value;
+  }));
+  root.querySelectorAll('[data-action-remove]').forEach(button => button.addEventListener('click', () => {
+    const [kind, index] = button.dataset.actionRemove.split(':');
+    const actions = kind === 'attack' ? state.hologramDraft.interaction.onAttack : state.hologramDraft.interaction.onInteract;
+    actions.splice(Number(index), 1);
+    renderHologramEditor();
+  }));
+  root.querySelectorAll('[data-action-add]').forEach(button => button.addEventListener('click', () => {
+    const actions = button.dataset.actionAdd === 'attack' ? state.hologramDraft.interaction.onAttack : state.hologramDraft.interaction.onInteract;
+    actions.push({ type: 'message', text: '<color:white>Activated</color>' });
+    renderHologramEditor();
   }));
   root.querySelectorAll('[data-hologram-line]').forEach(input => input.addEventListener('input', () => {
     state.hologramDraft.lines[Number(input.dataset.hologramLine)] = input.value;
@@ -1648,6 +1786,31 @@ function wireHologramEditor(root) {
   $('hologram-delete').addEventListener('click', deleteSelectedHologram);
 }
 
+function bindHologramInput(input, listener) {
+  input.addEventListener('input', listener);
+  if (input.tagName === 'SELECT' || input.type === 'checkbox' || input.type === 'color') input.addEventListener('change', listener);
+}
+
+function ensureHologramDraftModels() {
+  const definition = state.hologramDraft;
+  if (!definition) return;
+  definition.display ||= { billboard: 'center', alignment: 'center', scale: 1, textShadow: false, backgroundColor: '#000000', backgroundOpacity: 0, textOpacity: 1, seeThrough: false, maxLineWidth: 0 };
+  definition.visibility ||= { mode: 'all', negate: false, conditions: [] };
+  definition.visibility.conditions ||= [];
+  definition.interaction ||= { enabled: false, width: 1, height: 1, cooldownSeconds: 0, conditions: { mode: 'all', conditions: [] }, onInteract: [], onAttack: [] };
+  definition.interaction.conditions ||= { mode: 'all', negate: false, conditions: [] };
+  definition.interaction.conditions.conditions ||= [];
+  definition.interaction.onInteract ||= [];
+  definition.interaction.onAttack ||= [];
+}
+
+function setHologramPath(path, value) {
+  const parts = path.split('.');
+  let target = state.hologramDraft;
+  parts.slice(0, -1).forEach(part => { target[part] ||= {}; target = target[part]; });
+  target[parts[parts.length - 1]] = value;
+}
+
 function moveHologramLine(index, direction) {
   const target = index + direction;
   if (target < 0 || target >= state.hologramDraft.lines.length) return;
@@ -1670,7 +1833,19 @@ function useSelectedPlayerLocation() {
 }
 
 function updateHologramPreview() {
-  renderMinecraftPreview($('hologram-preview'), state.hologramDraft?.lines || [], {
+  const display = state.hologramDraft?.display || {};
+  const preview = $('hologram-preview');
+  if (preview) {
+    preview.style.textAlign = display.alignment || 'center';
+    preview.style.transform = `scale(${Math.max(0.05, Number(display.scale || 1))})`;
+    preview.style.transformOrigin = display.alignment === 'left' ? 'left center' : display.alignment === 'right' ? 'right center' : 'center';
+    preview.style.backgroundColor = hexWithOpacity(display.backgroundColor || '#000000', Number(display.backgroundOpacity || 0));
+    preview.style.textShadow = display.textShadow ? '1px 1px 0 #000' : '';
+    preview.style.opacity = String(display.textOpacity ?? 1);
+    preview.style.maxWidth = Number(display.maxLineWidth || 0) > 0 ? `${display.maxLineWidth}px` : '';
+    preview.style.lineHeight = String(Math.max(0.4, Number(state.hologramDraft?.lineSpacing || 0.28) * 3));
+  }
+  renderMinecraftPreview(preview, state.hologramDraft?.lines || [], {
     online_players: '24',
     max_players: '100',
     server_name: 'Cobbleverse',
@@ -1680,15 +1855,25 @@ function updateHologramPreview() {
   });
 }
 
+function hexWithOpacity(hex, opacity) {
+  const normalized = /^#[0-9a-f]{6}$/i.test(hex || '') ? hex : '#000000';
+  const alpha = Math.max(0, Math.min(1, opacity));
+  const value = parseInt(normalized.slice(1), 16);
+  return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${alpha})`;
+}
+
 async function saveSelectedHologram() {
   try {
     await api('/api/holograms/update', {
       method: 'POST',
       body: JSON.stringify({ id: state.selectedHologram, definition: state.hologramDraft })
     });
+    state.hologramValidationError = null;
     notice(`Hologram ${state.selectedHologram} saved and scheduled for redraw.`);
     await loadHolograms();
   } catch (error) {
+    state.hologramValidationError = error.message;
+    renderHologramEditor();
     notice(error.message, true);
   }
 }
@@ -1707,6 +1892,9 @@ async function createHologram() {
     viewDistance: config.defaultViewDistance ?? 48,
     refreshIntervalSeconds: config.defaultRefreshIntervalSeconds ?? 5,
     lineSpacing: 0.28,
+    display: { billboard: 'center', alignment: 'center', scale: 1, textShadow: false, backgroundColor: '#000000', backgroundOpacity: 0, textOpacity: 1, seeThrough: false, maxLineWidth: 0 },
+    visibility: { mode: 'all', negate: false, conditions: [] },
+    interaction: { enabled: false, width: 1, height: 1, cooldownSeconds: 0, conditions: { mode: 'all', negate: false, conditions: [] }, onInteract: [], onAttack: [] },
     lines: ['<color:white><bold>New hologram</bold></color>']
   };
   try {

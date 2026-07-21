@@ -13,6 +13,7 @@ import eu.avalanche7.paradigm.storage.migration.StorageMigrationOptions;
 import eu.avalanche7.paradigm.utils.CommandToggleStore;
 import eu.avalanche7.paradigm.modules.commands.permissions.PermissionCommands;
 import eu.avalanche7.paradigm.modules.dashboard.LocalDashboardModule;
+import eu.avalanche7.paradigm.modules.holograms.Holograms;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 import eu.avalanche7.paradigm.modules.commands.moderation.PunishmentCommands;
 import eu.avalanche7.paradigm.modules.tab.Tablist;
@@ -116,6 +117,16 @@ public class Reload implements ParadigmModule {
             paradigm = paradigm
                     .then(dashboard.buildCommandBranch(platform, services))
                     .then(dashboard.buildAuditCommandBranch(platform, services));
+        }
+
+        Tablist tablist = Tablist.current();
+        if (tablist != null) {
+            paradigm = paradigm.then(tablist.buildCommandBranch(platform, services));
+        }
+
+        Holograms holograms = Holograms.current();
+        if (holograms != null) {
+            paradigm = paradigm.then(holograms.buildCommandBranch());
         }
 
         if (services.getPermissionsHandler().isInternalPermissionsEnabled()) {

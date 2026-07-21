@@ -6,6 +6,7 @@
   "mixins": [
     "DisplayAccessor",
     "TextDisplayAccessor",
+    "InteractionAccessor",
     "PlayerListMixin",
     "ServerStatusMixin",
     "ServerPlayerTablistMixin"

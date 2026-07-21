@@ -12,4 +12,13 @@ public interface TextDisplayAccessor {
 
     @Invoker("setBackgroundColor")
     void paradigm$setBackgroundColor(int background);
+
+    @Invoker("setLineWidth")
+    void paradigm$setLineWidth(int value);
+
+    @Invoker("setTextOpacity")
+    void paradigm$setTextOpacity(byte value);
+
+    @Invoker("setFlags")
+    void paradigm$setFlags(byte value);
 }

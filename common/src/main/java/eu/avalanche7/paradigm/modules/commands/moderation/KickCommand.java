@@ -33,7 +33,7 @@ public class KickCommand extends AbstractModerationCommand {
             return 0;
         }
         String reason = reason(rawReason);
-        services.getPlatformAdapter().executeCommandAsConsole("kick " + target.getName() + " " + reason);
+        services.getPlatformAdapter().disconnectPlayer(target, services.getMessageParser().parseMessage(reason, null));
         send(source, "moderation.kick_ok", "Kicked {player}.", "{player}", target.getName());
         return 1;
     }

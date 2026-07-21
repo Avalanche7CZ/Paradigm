@@ -41,6 +41,7 @@ public class PermissionAPI {
     private volatile PermissionRepository permissionRepository;
     private volatile BiConsumer<String, Runnable> asyncPersistenceExecutor;
     private volatile PermissionContextResolver contextResolver;
+    private final java.util.concurrent.atomic.AtomicLong stateVersion = new java.util.concurrent.atomic.AtomicLong();
 
     private PermissionDataStore.PermissionState state = PermissionDataStore.PermissionState.createDefault();
 
@@ -80,10 +81,15 @@ public class PermissionAPI {
         stateLock.writeLock().lock();
         try {
             this.state = loaded;
+            stateVersion.incrementAndGet();
         } finally {
             stateLock.writeLock().unlock();
         }
         logger.info("Paradigm: Internal PermissionAPI loaded (groups={}, users={}, source={}).", loaded.groups.size(), loaded.users.size(), repository != null ? "repository" : "json");
+    }
+
+    public long stateVersion() {
+        return stateVersion.get();
     }
 
     public boolean createGroup(String groupName) {
@@ -1549,6 +1555,7 @@ public class PermissionAPI {
         if (state == null) {
             return;
         }
+        stateVersion.incrementAndGet();
         state.normalize();
         PermissionRepository repository = this.permissionRepository;
         PermissionDataStore.PermissionState snapshot = copyState(state);

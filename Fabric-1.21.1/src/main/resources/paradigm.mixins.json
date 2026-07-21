@@ -10,6 +10,7 @@
     "ServerPlayerTablistMixin"
     ,"DisplayEntityAccessor"
     ,"TextDisplayEntityAccessor"
+    ,"InteractionEntityAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

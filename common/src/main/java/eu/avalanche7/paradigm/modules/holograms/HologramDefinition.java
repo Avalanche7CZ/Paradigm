@@ -14,6 +14,9 @@ public final class HologramDefinition {
     public Integer refreshIntervalSeconds;
     public double lineSpacing = 0.28D;
     public List<String> lines = new ArrayList<>();
+    public HologramDisplaySettings display = new HologramDisplaySettings();
+    public HologramConditionGroup visibility = new HologramConditionGroup();
+    public HologramInteraction interaction = new HologramInteraction();
 
     public HologramDefinition copy() {
         HologramDefinition copy = new HologramDefinition();
@@ -26,6 +29,9 @@ public final class HologramDefinition {
         copy.refreshIntervalSeconds = refreshIntervalSeconds;
         copy.lineSpacing = lineSpacing;
         copy.lines = lines != null ? new ArrayList<>(lines) : new ArrayList<>();
+        copy.display = display != null ? display.copy() : new HologramDisplaySettings();
+        copy.visibility = visibility != null ? visibility.copy() : new HologramConditionGroup();
+        copy.interaction = interaction != null ? interaction.copy() : new HologramInteraction();
         return copy;
     }
 
@@ -41,6 +47,13 @@ public final class HologramDefinition {
         if (!Double.isFinite(lineSpacing) || lineSpacing < 0.05D) lineSpacing = 0.28D;
         lineSpacing = Math.min(4.0D, lineSpacing);
         if (lines == null) lines = new ArrayList<>();
+        else lines = new ArrayList<>(lines);
         lines.removeIf(Objects::isNull);
+        if (display == null) display = new HologramDisplaySettings();
+        display.normalize();
+        if (visibility == null) visibility = new HologramConditionGroup();
+        visibility.normalize();
+        if (interaction == null) interaction = new HologramInteraction();
+        interaction.normalize();
     }
 }
