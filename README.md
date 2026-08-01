@@ -1,225 +1,267 @@
-# Paradigm
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L4Z8L38)
+# Paradigm Essentials [![Downloads](https://www.modpackindex.com/badge/mod/60637/paradigm/downloads.svg)](https://www.modpackindex.com/mod/60637/paradigm) [![Modpacks](https://www.modpackindex.com/badge/mod/60637/paradigm/modpacks.svg)](https://www.modpackindex.com/mod/60637/paradigm)
 
-**Paradigm** is a modular server administration and communication tool for Minecraft, designed to give you powerful control over server messaging, player interactions, and automation. Whether you need scheduled announcements, dynamic MOTD, staff coordination channels, private messages, or custom commands, Paradigm provides a complete suite of features to enhance your server's functionality and keep your community engaged.
+**Paradigm Essentials** is a modular **server administration suite** for Minecraft.
 
-**Current Version:** `Whatever the latest version is` | **Author:** Avalanche7CZ | **License:** CC-BY-NC-ND-4.0
+Manage your server, players, permissions, moderation, communication, and automation from one cozy little mod with a built-in **local web dashboard** for when editing JSON files stops being fun :P
 
----
-## Core Features
+Built for **Forge, Fabric, and NeoForge** servers.
 
-### Advanced Announcement System
-* **Multiple Message Channels:** Broadcast messages globally, via action bar, title, or boss bar with independent scheduling
-* **Random Message Support:** Configure random announcement rotations to keep messages fresh
-* **Flexible Scheduling:** Set custom intervals for each message type (milliseconds to hours)
-* **Dynamic Formatting:** Full support for Minecraft text components with colors, styles, and interactive elements
-* **Server Status Broadcasts:** Announce server events and status changes automatically
-
-### Communication & Chat Features
-* **Private Messages:** Direct player-to-player messaging with `/msg` plus aliases `/tell`, `/w`, `/whisper`, and quick reply via `/reply` or `/r`
-* **Mentions System:** Players can ping each other with `@PlayerName` syntax with configurable cooldowns and permissions
-* **Group Chat:** Create and manage private chat groups for teams, friends, or special discussions
-* **Staff Chat:** Dedicated private channel for server administrators with optional boss bar indicator when enabled
-* **Join/Leave Messages:** Customize welcome and departure messages with player-specific information
-* **Message Formatting Parser:** Advanced text parsing supporting clickable links, hover events, and command execution
-
-###  Customization & Formatting
-* **Rich Text Components:** Full support for colors, bold, italic, underline, and strikethrough formatting
-* **Hex Color Codes:** Use `&#RRGGBB` format for unlimited color customization beyond standard Minecraft palette
-* **Interactive Elements:** Add clickable links, runnable commands, and hover tooltips to any message
-* **Placeholder System:** Support for dynamic placeholders in announcements and messages
-* **Multilingual Support:** Built-in translations for Czech, English, and Russian with extensible language system
-* **Server List MOTD:** Display custom formatted messages in the Minecraft server list browser with random rotation and custom icon support
-* **Server Icons:** Use custom 64x64 PNG icons with random rotation or specific selection per MOTD
-* **In-Game MOTD:** Show personalized welcome messages to players when they join
-
-### Custom Commands & Server Management
-* **Custom Command Creation:** Define custom server commands with multiple actions and flexible arguments
-* **Restart Scheduler:** Automated server restart scheduling with pre-restart commands and warning broadcasts
-* **Configurable Warning System:** Multiple warning messages at customizable intervals before restart
-* **Countdown Timers:** Dynamic countdown displays to alert players of upcoming restarts
-* **Permission-Based Access:** Integrate with LuckPerms for granular permission control
-
-### 🛠️ Web Configuration Editor
-* **Live Configuration Editing:** Web-based interface for editing configuration files without server restart
-* **Session Management:** Secure WebSocket connections for real-time configuration updates
-* **Visual Configuration:** User-friendly interface for managing complex settings
-
-### Development Features
-* **Modular Architecture:** Clean plugin system with `ParadigmModule` interface for extensibility
-* **Debug Logging:** Built-in debug logger for development and troubleshooting
-* **Event System:** Comprehensive event listener system for chat events and server lifecycle
-* **Telemetry Reporter:** Optional telemetry for usage statistics
-* **JSON Validation:** Automatic JSON configuration validation and error reporting
+**Version:** `2.2.4`  
+**Author:** Avalanche7CZ  
+**License:** CC-BY-NC-ND-4.0
 
 ---
-## Compatibility
 
-| Version        | Mod Loader         | Required Version | LuckPerms | Status             |
-|:---------------|:-------------------|:-----------------|:---------:|:-------------------|
-| **1.21.11**    | Forge              | `61.1.3+`        | ✅        | Active             |
-| **1.21.1**     | Forge              | `52.0.26+`       | ✅        | Active             |
-| **1.20.1**     | Forge              | `47.1.0+`        | ✅        | Active             |
-| **1.19.2**     | Forge              | `43.3.0+`        | ✅        | Active             |
-| **1.18.2**     | Forge              | `40.2.0+`        | ✅        | Active             |
-| **1.12.2**     | Forge              | `14.23.5+`       | ✅        | **BUG FIXES ONLY** |
-| **1.21.11**    | Fabric             | `0.18.4+`        | ✅        | Active             |
-| **1.21.8**     | Fabric             | `0.16.14+`       | ✅        | Active             |
-| **1.21.1**     | Fabric             | `0.16.14+`       | ✅        | Active             |
-| **1.20.1**     | Fabric             | `0.15.11+`       | ✅        | Active             |
-| **1.21.1**     | NeoForge           | `21.1.21+`       | ✅        | Active             |
+# One Mod, Lots of Server features
 
+Paradigm combines the everyday tools a server needs into one modular system.
+
+Enable what you need, disable what you dont, and do everything without downloading lots  of separate mods.
+
+### Local Server Dashboard
+
+Paradigm includes a built-in **local web dashboard** for server administration and configuration.
+
+- Configuration editors for each module
+- Permission and group management
+- Command settings and cooldowns
+- MOTD editor with formatting tools and previews
+- Custom command editor
+- Storage status and migration tools
+
+**No external panel required. It runs with your server all localy.**
+
+![dasboard_local_beta](https://cdn.modrinth.com/data/cached_images/0c3711b5d2973fb17ddf9948865c7fd6e53aa844.png)
 
 ---
+
+### Server Administration
+
+A collection of familiar server management and essential :3 commands.
+
+- Homes and `/back`
+- Spawn management
+- Warps
+- /tpa
+- Fly and movement speed
+- Heal and feed
+- Gamemode shortcuts
+- Time and weather controls
+
+And plenty of admin utilities:
+
+`/vanish`, `/god`, `/invsee`, `/repair`, `/enchant`, `/sudo`, `/near`, `/whois`, `/top`, `/jump`, `/jump`
+
+Most built-in commands can be individually enabled or disabled.
+
+---
+
+### Built-In Permissions & Groups
+
+Paradigm includes its own **permission and group system**. 
+
+- Create and manage permission groups
+- Group inheritance
+- Prefixes, suffixes, weights, and descriptions
+- Direct player permissions
+- Explicit allow and deny nodes
+- Temporary permissions and group assignments
+
+Already using LuckPerms? Paradigm also includes **LuckPerms migration tools** for importing or exporting permission data.
+
+---
+
+### Moderation Tools
+
+Standard Commands for Moderating Players
+
+- Kicks /kick
+- Bans and temporary bans (/ban, /tempban)
+- IP bans (/ipban)
+- Mutes and temporary mutes (/mute)
+- Warnings (/warn)
+- Jail system (/jail)
+- Punishment history 
+- Active punishment tracking
+- Server and network punishment scopes (for Network bans , using MySQL)
+
+The dashboard provides a player history, like date of the ban, reason etc. 
+
+---
+
+### Communication Tools
+
+Keep players and staff connected without needing another chat mods.
+
+- Private messages with `/msg`
+- Quick replies with `/reply` or `/r`
+- Player mentions using `@PlayerName`
+- Staff chat `/sc`
+- Private group chats `/groupchat`
+- **CUSTOM **Join and leave messages
+
+![Private Messages](https://cdn.modrinth.com/data/cached_images/01608a40a5aec74de9368d89f7088b131e8fd9cc.png)
+
+---
+
+### Server Announcements
+
+Create scheduled and richly (RGB Support) formatted server announcements.
+
+- Chat broadcasts
+- Actionbar messages
+- Titles and subtitles
+- Bossbars
+- Independent schedules
+- Random message rotation
+- Interactive text components (Hover, click, command)
+
+![Announcements](https://cdn.modrinth.com/data/cached_images/f8eb3598a0dc25f0f9c28bb5b2b3ed0f22390e76.png)
+
+---
+
+### Rich Message Formatting
+
+Paradigm includes its own message formatting system (inspired by mini message format) for supported messages and editors.
+
+- Minecraft colors
+- Hex colors (`&#RRGGBB`)
+- Gradients and styled text
+- Bold, italic, underline, and strikethrough
+- Clickable links
+- Hover text
+- Click-to-run commands
+- Dynamic placeholders
+
+![In-Game MOTD](https://cdn.modrinth.com/data/cached_images/d3310a386583c554820e482b251b4ab6978b0eb5.png)
+
+---
+
+### MOTD & Server List Customization
+
+Make the server a little prettier before players even join.
+
+- Dynamic server-list MOTDs
+- Multiple MOTD profiles
+- Random MOTD rotation
+- Custom server icons
+- Player-count hover customization
+- Personalized in-game welcome MOTD
+- Dashboard MOTD editor with live-style previews and few templates
+
+![Server List](https://cdn.modrinth.com/data/cached_images/b2a38e9b9fb07f3e41d56be4b947f235f92cb60b_0.webp)
+
+---
+
+### Restart Automation (THE SERVER NEEDS ITS OWN SCRIPT, more on WIKI)
+
+Keep server restarts predictable and friendly.
+
+- Scheduled automatic restarts
+- Configurable warning times
+- Countdown messages
+- Pre-restart commands
+- Manual restart scheduling and cancellation
+
+![Restart Scheduler](https://cdn.modrinth.com/data/cached_images/95665b5516330e3b0b78da22bbcbf8f30022bfb6.png)
+
+---
+
+### Custom Commands
+
+Create your own commands without writing a mod.
+
+Custom commands can be configured with structured actions and managed through Paradigm's configuration or dashboard editor.
+
+Perfect for server information, links, shortcuts, rules, and other small server-specific commands.
+
+---
+
+### Flexible Data Storage
+
+Paradigm can store server data using multiple storage providers.
+
+- JSON
+- SQLite
+- MySQL / MariaDB
+
+Storage status, connection testing, fallback state, and migration dry runs are available directly from the dashboard.
+
+Existing data can be migrated between supported storage providers with conflict handling and migration previews.
+
+---
+
+# Modular by Design
+
+Don't need part of Paradigm? Turn it off.
+
+Modules and commands can be configured individually, and built-in command roots can be enabled or disabled through the dashboard or in json config.
+
+---
+
 ## Installation
 
-### For Forge
-1. Download and install the **recommended version of Minecraft Forge** for your game version (see compatibility table above)
-2. Download the latest **Forge** version of Paradigm from the [**Releases Page**](https://modrinth.com/mod/paradigm)
-3. Place the Paradigm `.jar` file into your server's `mods` folder
-4. (Optional) Install **[LuckPerms](https://luckperms.net/)** for permission-based features
+1. Install the supported **Forge, Fabric, or NeoForge** version for your Minecraft server.
+2. Download the matching Paradigm `.jar`.
+3. Place it in your server's `mods` folder.
+4. Start the server.
 
-### For Fabric
-1. Download and install the **Fabric Loader** for your game version
-2. Download the **[Fabric API](https://www.curseforge.com/minecraft/mc-mods/fabric-api)** and place it in your `mods` folder (**required**)
-3. Download the latest **Fabric** version of Paradigm from the [**Releases Page**](https://modrinth.com/mod/paradigm)
-4. Place the Paradigm `.jar` file into your server's `mods` folder
-5. (Optional) Install **[LuckPerms](https://luckperms.net/)** for permission-based features
+Paradigm will generate its configuration and data files automatically.
 
-### For NeoForge
-1. Download and install **NeoForge** for your game version
-2. Download the latest **NeoForge** version of Paradigm from the [**Releases Page**](https://modrinth.com/mod/paradigm)
-3. Place the Paradigm `.jar` file into your server's `mods` folder
-4. (Optional) Install **[LuckPerms](https://luckperms.net/)** for permission-based features
-
-### For NeoForge via Sinytra Connector (Experimental)
-If you prefer to use the Fabric version with NeoForge, you can use Sinytra Connector:
-
-1. Download and install **NeoForge** for your game version
-2. Download **[Sinytra Connector](https://www.curseforge.com/minecraft/mc-mods/sinytra-connector)** and place it in your `mods` folder
-3. Download **[Forgified Fabric API](https://www.curseforge.com/minecraft/mc-mods/forgified-fabric-api)** and place it in your `mods` folder
-4. Download the latest **Fabric** version of Paradigm from the [**Releases Page**](https://modrinth.com/mod/paradigm)
-5. Place the Paradigm **Fabric** `.jar` file into your `mods` folder
-6. (Optional) Install **[LuckPerms](https://luckperms.net/)** for permission-based features
-
-**Note:** The dedicated NeoForge version is recommended. The Sinytra Connector method is experimental and may have compatibility issues.
+For Fabric versions, **dont forget Fabric API**. (If you are using downloaded fabric modpack, the API will be there already)
 
 ---
-## Configuration
 
-### File Structure
-After running the server once with Paradigm installed, configuration files will be generated in your server's `config/Paradigm/` directory:
+## Commands
+
+Paradigm contains quite a few commands now. Like... a lot. qwq
+
+Use:
 
 ```
-config/Paradigm/
-├── config.json               # Main settings and module toggles
-├── announcements.json        # Automated announcement scheduling
-├── motd.json                 # Message of the Day configuration
-├── mention.json              # Mention system settings
-├── restart.json              # Server restart scheduler
-├── chat.json                 # Group chat, staff chat, and private message settings
-└── cooldown.json             # Cooldown configurations
+
+/paradigm help
+
 ```
 
-### Using the Web Editor
-Paradigm includes a web-based configuration editor for convenient live editing without server restarts. Access the web interface and make real-time changes to your configuration files.
+for built-in help and module information.
 
-### Multiplayer Server List (Custom MOTD/Icon)
-Paradigm supports custom MOTD and server icon directly in the multiplayer server list (the server browser screen).
-
-- Configure this in `motd.json`
-- You can use formatted text and random MOTD rotation
-- You can set a custom 64x64 server icon and rotate icons together with MOTD profiles
-- This affects how your server appears before players join (in the multiplayer list)
+The dashboard also includes searchable command settings for enabling or disabling built-in command roots.
 
 ---
-## Commands Reference
 
-### Main Commands
-- `/paradigm` - Display main Paradigm help
-- `/paradigm help` - Show help for Paradigm modules
-- `/paradigm help <module>` - Show help for a specific module
-- `/paradigm reload <config>` - Reload specific config (main, announcements, chat, motd, mention, restart, customcommands, all)
-- `/paradigm editor` - Access web configuration editor
-- `/paradigm apply <code>` - Apply web editor changes from code
-
-### Broadcast Commands
-- `/paradigm broadcast <message>` - Send chat broadcast
-- `/paradigm actionbar <message>` - Send actionbar message
-- `/paradigm title <title || subtitle>` - Send title/subtitle message
-- `/paradigm bossbar <interval> <color> <message>` - Send bossbar message
-
-### Private Messages
-- `/msg <player> <message>` - Send a private message
-- `/tell <player> <message>` - Alias for `/msg`
-- `/w <player> <message>` - Alias for `/msg`
-- `/whisper <player> <message>` - Alias for `/msg`
-- `/reply <message>` - Reply to your last PM conversation
-- `/r <message>` - Alias for `/reply`
-
-### Restart Management
-- `/restart now` - Schedule an immediate server restart
-- `/restart cancel` - Cancel a scheduled restart
-
-### Staff Chat
-- `/sc` - Toggle staff chat mode
-- `/sc toggle` - Toggle staff chat mode
-
-### Group Chat
-- `/groupchat create <name>` - Create a new group chat
-- `/groupchat join <name>` - Join an existing group chat
-- `/groupchat leave` - Leave current group chat
-
-### Mentions
-- `/mention <player>` - Mention a specific player
-
-### Web Editor
-- `/paradigm editor trust` - Trust a player for web editor access
-- `/paradigm editor untrust` - Remove web editor trust
-- `/paradigm editor trusted` - List trusted players
-
----
-## Permissions
-
-Paradigm uses LuckPerms for permission management. Common permission nodes:
-
-```
-paradigm.mention.everyone     # Use @everyone in Mentions
-paradigm.mention.player       # Mention individual players
-paradigm.msg                  # Send private messages (/msg, /tell, /w, /whisper)
-paradigm.reply                # Reply to private messages (/reply, /r)
-paradigm.staff                # Access staff chat (/sc)
-paradigm.restart.manage       # Manage server restarts
-paradigm.broadcast            # Access /paradigm broadcast, actionbar, title, bossbar
-paradigm.reload               # Reload configurations
-paradigm.editor               # Access /paradigm editor and /paradigm apply
-paradigm.groupchat            # Use group chat commands
-```
-
----
 ## License
 
-This project is licensed under the **CC-BY-NC-ND-4.0** license. See the [LICENSE](LICENSE) file for details.
+Paradigm is licensed under **CC-BY-NC-ND-4.0**.
 
-- ✅ You can use this project
-- ❌ You cannot modify it
-- ❌ You cannot distribute it commercially
-- ✅ You must give credit to the author
+See the [LICENSE](LICENSE) file for the full license terms.
 
+Want to include Paradigm somewhere, create an integration, translate it, modify it, or use it in a way that may not be covered by the license? Feel free to ask :3
+
+I am open to most reasonable requests. Any additional permission must be agreed to in writing first.
 ---
+
 ## Support & Community
 
-Have questions, need help, or want to try the latest development builds? Join our community on Discord!
+Need help, found a bug, or have a cute little feature idea?
+
+Come say hi ♡
 
 [![Discord](https://img.shields.io/badge/Join%20our%20Discord-5865F2?logo=discord&logoColor=white)](https://discord.gg/bbqPQTzK7b)
 
 ---
-## Credits
 
-**Paradigm** is developed and maintained by **Avalanche7CZ**. Special thanks to all contributors and community members who have provided feedback and support.
+## Support Development
 
+Enjoying Paradigm and want to support its development?
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L4Z8L38)
 
+Every bit of support helps me spend more time making Paradigm better and adding more silly server things. ♡
 
+---
 
+# Credits
 
+**Paradigm** is developed and maintained with lots of caffeine and questionable sleep decisions by **Avalanche7CZ**.
+```
