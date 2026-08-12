@@ -1,16 +1,16 @@
 package eu.avalanche7.paradigm.modules.commands;
 
+import java.time.Duration;
+import java.util.UUID;
+
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-
-import java.time.Duration;
-import java.util.UUID;
 
 public class SeenCommand implements ParadigmModule {
     private Services services;
@@ -54,7 +54,7 @@ public class SeenCommand implements ParadigmModule {
                 .literal("seen")
                 .requires(src -> src.getPlayer() != null
                         && services.getCommandToggleStore().isEnabled("seen")
-                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), PermissionsHandler.SEEN_PERMISSION, PermissionsHandler.SEEN_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), ParadigmPermissions.SEEN))
                 .then(services.getPlatformAdapter().createCommandBuilder()
                         .argument("player", ICommandBuilder.ArgumentType.WORD)
                         .executes(ctx -> {

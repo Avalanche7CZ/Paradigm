@@ -1,11 +1,12 @@
 package eu.avalanche7.paradigm.storage.sqlite;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 import eu.avalanche7.paradigm.storage.StorageConfig;
 import eu.avalanche7.paradigm.storage.StorageException;
 import eu.avalanche7.paradigm.storage.sql.SqlDialect;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 public class SqliteDialect implements SqlDialect {
     @Override public String name() { return "sqlite"; }
@@ -24,7 +25,7 @@ public class SqliteDialect implements SqlDialect {
             if (parent != null) {
                 Files.createDirectories(parent);
             }
-        } catch (Throwable t) {
+        } catch (IOException | RuntimeException t) {
             throw new StorageException("Could not create sqlite database directory for " + rawPath + ": " + t.getMessage(), t);
         }
     }

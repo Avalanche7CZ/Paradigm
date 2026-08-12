@@ -19,6 +19,10 @@ public class StorageLifecycle implements ParadigmModule {
     public void onServerStopping(Object event, Services services) {
         ApiProviderRegistry.uninstall();
         ParadigmAPI.setInstance(null);
+    }
+
+    @Override
+    public void onServerStopped(Object event, Services services) {
         if (services != null && services.getStorageService() != null) {
             services.getStorageService().close();
         }

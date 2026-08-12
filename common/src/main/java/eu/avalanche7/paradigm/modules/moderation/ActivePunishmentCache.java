@@ -1,14 +1,13 @@
 package eu.avalanche7.paradigm.modules.moderation;
 
-import eu.avalanche7.paradigm.storage.identity.ServerScope;
-
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+
+import eu.avalanche7.paradigm.storage.identity.ServerScope;
 
 public final class ActivePunishmentCache {
     private final Map<String, PunishmentRecord> byId = new ConcurrentHashMap<>();

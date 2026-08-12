@@ -1,10 +1,10 @@
 package eu.avalanche7.paradigm.utils;
 
-import eu.avalanche7.paradigm.api.internal.ApiProviderRegistry;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-
 import java.util.List;
 import java.util.function.Function;
+
+import eu.avalanche7.paradigm.api.internal.ApiProviderRegistry;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
 public class Placeholders {
 

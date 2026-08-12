@@ -1,8 +1,8 @@
 package eu.avalanche7.paradigm.modules.moderation;
 
-import eu.avalanche7.paradigm.storage.identity.ServerScope;
-
 import java.util.Map;
+
+import eu.avalanche7.paradigm.storage.identity.ServerScope;
 
 public record PunishmentRecord(
         String punishmentId,

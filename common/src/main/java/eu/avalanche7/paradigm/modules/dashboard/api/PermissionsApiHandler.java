@@ -1,7 +1,7 @@
 package eu.avalanche7.paradigm.modules.dashboard.api;
 
-import eu.avalanche7.paradigm.modules.dashboard.DashboardRequestContext;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardJson;
+import eu.avalanche7.paradigm.modules.dashboard.DashboardRequestContext;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardResponse;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardService;
 import eu.avalanche7.paradigm.modules.permissions.PermissionMutationRequest;

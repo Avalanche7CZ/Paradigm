@@ -1,10 +1,10 @@
 package eu.avalanche7.paradigm.storage.repository;
 
-import eu.avalanche7.paradigm.storage.model.StoredLocation;
-import eu.avalanche7.paradigm.storage.model.StoredWarp;
-
 import java.util.List;
 import java.util.Optional;
+
+import eu.avalanche7.paradigm.storage.model.StoredLocation;
+import eu.avalanche7.paradigm.storage.model.StoredWarp;
 
 public interface WarpRepository {
     void saveWarp(StoredWarp warp);

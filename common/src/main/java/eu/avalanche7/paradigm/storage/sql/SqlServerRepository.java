@@ -1,11 +1,11 @@
 package eu.avalanche7.paradigm.storage.sql;
 
-import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
-import eu.avalanche7.paradigm.storage.repository.ServerRepository;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+
+import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
+import eu.avalanche7.paradigm.storage.repository.ServerRepository;
 
 public class SqlServerRepository implements ServerRepository {
     private final SqlExecutor sql;
@@ -17,23 +17,25 @@ public class SqlServerRepository implements ServerRepository {
     @Override
     public void registerServer(ServerIdentity identity) {
         if (identity == null) return;
-        int updated = sql.update("UPDATE server_instances SET network_id = ?, server_name = ?, last_seen_ms = ? WHERE server_id = ?", ps -> {
-            long now = System.currentTimeMillis();
-            ps.setString(1, identity.networkId());
-            ps.setString(2, identity.serverName());
-            ps.setLong(3, now);
-            ps.setString(4, identity.serverId());
-        });
-        if (updated <= 0) {
-            sql.update("INSERT INTO server_instances(server_id, network_id, server_name, created_at_ms, last_seen_ms) VALUES(?, ?, ?, ?, ?)", ps -> {
+        sql.transaction(() -> {
+            int updated = sql.update("UPDATE server_instances SET network_id = ?, server_name = ?, last_seen_ms = ? WHERE server_id = ?", ps -> {
                 long now = System.currentTimeMillis();
-                ps.setString(1, identity.serverId());
-                ps.setString(2, identity.networkId());
-                ps.setString(3, identity.serverName());
-                ps.setLong(4, now);
-                ps.setLong(5, now);
+                ps.setString(1, identity.networkId());
+                ps.setString(2, identity.serverName());
+                ps.setLong(3, now);
+                ps.setString(4, identity.serverId());
             });
-        }
+            if (updated <= 0) {
+                sql.update("INSERT INTO server_instances(server_id, network_id, server_name, created_at_ms, last_seen_ms) VALUES(?, ?, ?, ?, ?)", ps -> {
+                    long now = System.currentTimeMillis();
+                    ps.setString(1, identity.serverId());
+                    ps.setString(2, identity.networkId());
+                    ps.setString(3, identity.serverName());
+                    ps.setLong(4, now);
+                    ps.setLong(5, now);
+                });
+            }
+        });
     }
 
     @Override

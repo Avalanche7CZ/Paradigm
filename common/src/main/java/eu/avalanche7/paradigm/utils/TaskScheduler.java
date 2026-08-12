@@ -3,50 +3,70 @@ package eu.avalanche7.paradigm.utils;
 import java.lang.reflect.Method;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.Delayed;
-import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 public class TaskScheduler {
 
-    private ScheduledExecutorService executorService;
+    private static final int POOL_SIZE = 2;
+    private static final String THREAD_NAME_PREFIX = "paradigm-scheduler-";
+    private static final ScheduledFuture<?> REJECTED_FUTURE = new RejectedScheduledFuture();
+
+    private final Object lifecycleLock = new Object();
+    private final AtomicInteger threadIndex = new AtomicInteger();
     private final AtomicReference<Object> serverRef = new AtomicReference<>(null);
     private final DebugLogger debugLogger;
+
+    private ScheduledThreadPoolExecutor executorService;
     private volatile Consumer<Runnable> mainThreadExecutor;
     private volatile boolean acceptingTasks = true;
 
-    private static final ScheduledFuture<?> REJECTED_FUTURE = new RejectedScheduledFuture();
-
     public TaskScheduler(DebugLogger debugLogger) {
         this.debugLogger = debugLogger;
-        ensureExecutor();
     }
 
-    private synchronized void ensureExecutor() {
-        if (!acceptingTasks) {
-            return;
-        }
-        if (this.executorService == null || this.executorService.isShutdown() || this.executorService.isTerminated()) {
-            this.executorService = Executors.newScheduledThreadPool(2);
-            try {
-                debugLogger.debugLog("TaskScheduler: Executor service created.");
-            } catch (Throwable ignored) {
+    private ScheduledThreadPoolExecutor executor() {
+        synchronized (lifecycleLock) {
+            if (!acceptingTasks) {
+                return null;
             }
+            if (executorService == null || executorService.isShutdown()) {
+                executorService = createExecutor();
+                debug("TaskScheduler: Executor service created.");
+            }
+            return executorService;
         }
+    }
+
+    private ScheduledThreadPoolExecutor createExecutor() {
+        ThreadFactory factory = runnable -> {
+            Thread thread = new Thread(runnable, THREAD_NAME_PREFIX + threadIndex.incrementAndGet());
+            thread.setDaemon(true);
+            thread.setUncaughtExceptionHandler((t, error) -> debug("TaskScheduler: Uncaught error on " + t.getName() + ": " + error));
+            return thread;
+        };
+        ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(POOL_SIZE, factory);
+        executor.setRemoveOnCancelPolicy(true);
+        executor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+        executor.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
+        return executor;
     }
 
     public void initialize(Object serverInstance) {
-        this.acceptingTasks = true;
-        ensureExecutor();
+        synchronized (lifecycleLock) {
+            this.acceptingTasks = true;
+        }
         this.serverRef.set(serverInstance);
         if (serverInstance != null) {
-            debugLogger.debugLog("TaskScheduler: Initialized with server instance.");
+            debug("TaskScheduler: Initialized with server instance.");
         } else {
-            debugLogger.debugLog("TaskScheduler: Initialized with null server instance (server might not be ready).");
+            debug("TaskScheduler: Initialized with null server instance (server might not be ready).");
         }
     }
 
@@ -55,12 +75,8 @@ public class TaskScheduler {
     }
 
     public ScheduledFuture<?> scheduleAtFixedRate(Runnable task, long initialDelay, long period, TimeUnit unit) {
-        if (!acceptingTasks) {
-            return reject("scheduleAtFixedRate");
-        }
-        ensureExecutor();
-        ScheduledExecutorService exec = this.executorService;
-        if (exec == null || exec.isShutdown()) {
+        ScheduledThreadPoolExecutor exec = executor();
+        if (exec == null) {
             return reject("scheduleAtFixedRate");
         }
         try {
@@ -71,12 +87,8 @@ public class TaskScheduler {
     }
 
     public ScheduledFuture<?> schedule(Runnable task, long delay, TimeUnit unit) {
-        if (!acceptingTasks) {
-            return reject("schedule");
-        }
-        ensureExecutor();
-        ScheduledExecutorService exec = this.executorService;
-        if (exec == null || exec.isShutdown()) {
+        ScheduledThreadPoolExecutor exec = executor();
+        if (exec == null) {
             return reject("schedule");
         }
         try {
@@ -87,12 +99,8 @@ public class TaskScheduler {
     }
 
     public ScheduledFuture<?> scheduleRaw(Runnable task, long delay, TimeUnit unit) {
-        if (!acceptingTasks) {
-            return reject("scheduleRaw");
-        }
-        ensureExecutor();
-        ScheduledExecutorService exec = this.executorService;
-        if (exec == null || exec.isShutdown()) {
+        ScheduledThreadPoolExecutor exec = executor();
+        if (exec == null) {
             return reject("scheduleRaw");
         }
         try {
@@ -109,8 +117,8 @@ public class TaskScheduler {
         if (exec != null) {
             try {
                 exec.accept(() -> runSafely(task, "main thread executor"));
-            } catch (Throwable t) {
-                debugLogger.debugLog("TaskScheduler: Failed to enqueue task on main thread executor: " + t.getMessage());
+            } catch (RuntimeException t) {
+                debug("TaskScheduler: Failed to enqueue task on main thread executor: " + t.getMessage());
             }
             return;
         }
@@ -125,47 +133,60 @@ public class TaskScheduler {
         try {
             Method m = currentServer.getClass().getMethod("execute", Runnable.class);
             m.invoke(currentServer, (Runnable) () -> runSafely(task, "server main thread"));
-        } catch (Throwable t) {
-            debugLogger.debugLog("TaskScheduler: Failed to execute task on main thread: " + t.getMessage());
+        } catch (ReflectiveOperationException | RuntimeException t) {
+            debug("TaskScheduler: Failed to execute task on main thread: " + t.getMessage());
         }
     }
 
     private void runSafely(Runnable task, String context) {
         try {
             task.run();
-        } catch (Throwable t) {
-            debugLogger.debugLog("TaskScheduler: Task failed (" + context + "): " + t.getMessage());
+        } catch (Exception t) {
+            debug("TaskScheduler: Task failed (" + context + "): " + t.getMessage());
         }
     }
 
     public void onServerStopping() {
-        acceptingTasks = false;
+        shutdown();
+    }
+
+    public void shutdown() {
+        ScheduledThreadPoolExecutor exec;
+        synchronized (lifecycleLock) {
+            boolean alreadyStopped = !acceptingTasks && executorService == null;
+            acceptingTasks = false;
+            exec = executorService;
+            executorService = null;
+            if (exec == null) {
+                debug(alreadyStopped
+                        ? "TaskScheduler: Already shut down."
+                        : "TaskScheduler: Executor service was never started, nothing to shut down.");
+            }
+        }
         serverRef.set(null);
         mainThreadExecutor = null;
+        if (exec == null) {
+            return;
+        }
 
-        if (executorService == null) {
-            debugLogger.debugLog("TaskScheduler: Executor service was null, nothing to shut down.");
-            return;
-        }
-        if (executorService.isShutdown()) {
-            debugLogger.debugLog("TaskScheduler: Executor service already shut down.");
-            return;
-        }
-        debugLogger.debugLog("TaskScheduler: Server is stopping, shutting down scheduler...");
-        executorService.shutdown();
+        debug("TaskScheduler: Server is stopping, shutting down scheduler...");
+        exec.shutdown();
+        exec.getQueue().clear();
         try {
-            if (!executorService.awaitTermination(5, TimeUnit.SECONDS)) {
-                executorService.shutdownNow();
-                debugLogger.debugLog("TaskScheduler: Executor service forcefully shut down.");
+            if (!exec.awaitTermination(5, TimeUnit.SECONDS)) {
+                exec.shutdownNow();
+                if (exec.awaitTermination(5, TimeUnit.SECONDS)) {
+                    debug("TaskScheduler: Executor service forcefully shut down.");
+                } else {
+                    debug("TaskScheduler: Executor service did not terminate after shutdownNow().");
+                }
             } else {
-                debugLogger.debugLog("TaskScheduler: Executor service shut down gracefully.");
+                debug("TaskScheduler: Executor service shut down gracefully.");
             }
         } catch (InterruptedException ex) {
-            executorService.shutdownNow();
-            debugLogger.debugLog("TaskScheduler: Executor service shutdown interrupted.");
+            exec.shutdownNow();
+            debug("TaskScheduler: Executor service shutdown interrupted.");
             Thread.currentThread().interrupt();
-        } finally {
-            executorService = null;
         }
     }
 
@@ -173,11 +194,33 @@ public class TaskScheduler {
         return serverRef.get() != null;
     }
 
-    private ScheduledFuture<?> reject(String action) {
-        try {
-            debugLogger.debugLog("TaskScheduler: Ignoring " + action + " because scheduler is stopping/stopped.");
-        } catch (Throwable ignored) {
+    public boolean isShutdown() {
+        synchronized (lifecycleLock) {
+            return !acceptingTasks;
         }
+    }
+
+    public boolean hasActiveExecutor() {
+        synchronized (lifecycleLock) {
+            return executorService != null && !executorService.isShutdown();
+        }
+    }
+
+    public int queuedTaskCount() {
+        synchronized (lifecycleLock) {
+            return executorService == null ? 0 : executorService.getQueue().size();
+        }
+    }
+
+    private void debug(String message) {
+        try {
+            if (debugLogger != null) debugLogger.debugLog(message);
+        } catch (RuntimeException ignored) {
+        }
+    }
+
+    private ScheduledFuture<?> reject(String action) {
+        debug("TaskScheduler: Ignoring " + action + " because scheduler is stopping/stopped.");
         return REJECTED_FUTURE;
     }
 

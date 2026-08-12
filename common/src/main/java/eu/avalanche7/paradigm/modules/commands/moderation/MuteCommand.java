@@ -3,13 +3,13 @@ package eu.avalanche7.paradigm.modules.commands.moderation;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.identity.ServerScope;
-import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
-import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 public class MuteCommand extends AbstractModerationCommand {
     @Override
@@ -50,7 +50,7 @@ public class MuteCommand extends AbstractModerationCommand {
     private void registerMute() {
         ICommandBuilder cmd = builder()
                 .literal("mute")
-                .requires(src -> allowed(src, "mute", PermissionsHandler.MUTE_PERMISSION, PermissionsHandler.MUTE_PERMISSION_LEVEL))
+                .requires(src -> allowed(src, "mute", ParadigmPermissions.MUTE))
                 .then(builder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
                         .executes(ctx -> mute(ctx.getSource(), ctx.getPlayerArgument("player"), null))
@@ -63,7 +63,7 @@ public class MuteCommand extends AbstractModerationCommand {
     private void registerUnmute() {
         ICommandBuilder cmd = builder()
                 .literal("unmute")
-                .requires(src -> allowed(src, "unmute", PermissionsHandler.MUTE_PERMISSION, PermissionsHandler.MUTE_PERMISSION_LEVEL))
+                .requires(src -> allowed(src, "unmute", ParadigmPermissions.MUTE))
                 .then(builder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
                         .executes(ctx -> unmute(ctx.getSource(), ctx.getPlayerArgument("player"))));

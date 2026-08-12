@@ -1,20 +1,22 @@
 package eu.avalanche7.paradigm.modules.moderation;
 
-import eu.avalanche7.paradigm.modules.audit.AuditActionType;
-import eu.avalanche7.paradigm.modules.audit.AuditResult;
-import eu.avalanche7.paradigm.modules.audit.AuditService;
-import eu.avalanche7.paradigm.configs.ModerationConfigHandler;
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.storage.identity.ServerScope;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import eu.avalanche7.paradigm.configs.ModerationConfigHandler;
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.audit.AuditActionType;
+import eu.avalanche7.paradigm.modules.audit.AuditResult;
+import eu.avalanche7.paradigm.modules.audit.AuditService;
+import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.storage.identity.ServerScope;
+import eu.avalanche7.paradigm.utils.TaskScheduler;
 
 public final class PunishmentService {
     private final Services services;
@@ -23,15 +25,33 @@ public final class PunishmentService {
     private final BanScreenFormatter banScreen;
     private volatile long lastRefreshMs;
     private final AtomicBoolean refreshRunning = new AtomicBoolean();
+    private final AtomicBoolean started = new AtomicBoolean();
+    private volatile ScheduledFuture<?> refreshTask;
 
     public PunishmentService(Services services, AuditService audit) {
         this.services = services;
         this.audit = audit;
         this.banScreen = new BanScreenFormatter(services);
+    }
+
+    public void start() {
+        if (!started.compareAndSet(false, true)) return;
         refreshNow();
-        if (services.getTaskScheduler() != null) {
-            services.getTaskScheduler().scheduleAtFixedRate(this::refreshIfDue, 10L, 10L, TimeUnit.SECONDS);
+        TaskScheduler scheduler = services.getTaskScheduler();
+        if (scheduler != null) {
+            refreshTask = scheduler.scheduleAtFixedRate(this::refreshIfDue, 10L, 10L, TimeUnit.SECONDS);
         }
+    }
+
+    public void stop() {
+        started.set(false);
+        ScheduledFuture<?> task = refreshTask;
+        refreshTask = null;
+        if (task != null) task.cancel(false);
+    }
+
+    public boolean isStarted() {
+        return started.get();
     }
 
     public PunishmentRecord create(PunishmentType type, ServerScope scope, String subjectUuid, String subjectName,

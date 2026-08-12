@@ -1,14 +1,5 @@
 package eu.avalanche7.paradigm.modules;
 
-import eu.avalanche7.paradigm.configs.RestartConfigHandler;
-import eu.avalanche7.paradigm.core.ParadigmModule;
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
-import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-
 import java.text.DecimalFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
@@ -19,6 +10,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import eu.avalanche7.paradigm.configs.RestartConfigHandler;
+import eu.avalanche7.paradigm.core.ParadigmModule;
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 
 public class Restart implements ParadigmModule {
 

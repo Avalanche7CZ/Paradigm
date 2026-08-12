@@ -1,10 +1,10 @@
 package eu.avalanche7.paradigm.modules.commands.admin;
 
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 public class SudoCommand extends AbstractAdminCommand {
     @Override
@@ -17,7 +17,7 @@ public class SudoCommand extends AbstractAdminCommand {
         this.services = services;
         ICommandBuilder cmd = builder()
                 .literal("sudo")
-                .requires(src -> allowed(src, "sudo", PermissionsHandler.SUDO_PERMISSION, PermissionsHandler.SUDO_PERMISSION_LEVEL))
+                .requires(src -> allowed(src, "sudo", ParadigmPermissions.SUDO))
                 .then(builder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
                         .then(builder()

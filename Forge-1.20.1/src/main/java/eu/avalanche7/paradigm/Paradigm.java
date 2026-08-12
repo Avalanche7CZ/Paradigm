@@ -12,6 +12,7 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
+import net.minecraftforge.event.server.ServerStoppedEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.EventPriority;
@@ -204,7 +205,16 @@ public class Paradigm {
             }
         });
         if (telemetryReporter != null) telemetryReporter.stop();
-        services.getTaskScheduler().onServerStopping();
+        services.shutdown();
         CooldownConfigHandler.saveCooldowns();
+    }
+
+    @SubscribeEvent
+    public void onServerStopped(ServerStoppedEvent event) {
+        modules.forEach(module -> {
+            if (module.isEnabled(services)) {
+                module.onServerStopped(event, services);
+            }
+        });
     }
 }

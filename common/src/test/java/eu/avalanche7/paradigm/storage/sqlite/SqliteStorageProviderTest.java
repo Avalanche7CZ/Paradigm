@@ -1,34 +1,43 @@
 package eu.avalanche7.paradigm.storage.sqlite;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.nio.file.Path;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
 import eu.avalanche7.paradigm.modules.audit.AuditActionType;
 import eu.avalanche7.paradigm.modules.audit.AuditEntry;
 import eu.avalanche7.paradigm.modules.audit.AuditResult;
 import eu.avalanche7.paradigm.modules.audit.AuditSource;
-import eu.avalanche7.paradigm.storage.StorageConfig;
-import eu.avalanche7.paradigm.storage.identity.ServerIdentityService;
-import eu.avalanche7.paradigm.storage.identity.StorageContext;
-import eu.avalanche7.paradigm.storage.model.StoredHome;
-import eu.avalanche7.paradigm.storage.model.StoredLocation;
-import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
-import eu.avalanche7.paradigm.storage.model.StoredWarp;
-import eu.avalanche7.paradigm.storage.model.StoredPermissionNode;
-import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
-import java.nio.file.Path;
-import java.util.Map;
-import java.sql.DriverManager;
-import java.util.HashSet;
-import java.util.Set;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentIds;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
+import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
+import eu.avalanche7.paradigm.storage.StorageConfig;
+import eu.avalanche7.paradigm.storage.identity.ServerIdentityService;
 import eu.avalanche7.paradigm.storage.identity.ServerScope;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import eu.avalanche7.paradigm.storage.identity.StorageContext;
+import eu.avalanche7.paradigm.storage.model.StoredHome;
+import eu.avalanche7.paradigm.storage.model.StoredLocation;
+import eu.avalanche7.paradigm.storage.model.StoredPermissionNode;
+import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
+import eu.avalanche7.paradigm.storage.model.StoredWarp;
+import eu.avalanche7.paradigm.storage.sql.SqlConnectionProvider;
+import eu.avalanche7.paradigm.storage.sql.SqlExecutor;
 
 class SqliteStorageProviderTest {
     @TempDir
@@ -119,5 +128,94 @@ class SqliteStorageProviderTest {
         assertTrue(database.getParent().toFile().isDirectory());
         assertTrue(database.toFile().isFile());
         provider.close();
+    }
+
+    @Test
+    void configuresBusyTimeoutOnEveryConnection() throws Exception {
+        SqlConnectionProvider connections = connections("busy-timeout.db");
+
+        try (Connection connection = connections.getConnection();
+             var statement = connection.createStatement();
+             var result = statement.executeQuery("PRAGMA busy_timeout")) {
+            result.next();
+            assertEquals(10_000, result.getInt(1));
+        }
+    }
+
+    @Test
+    void waitsForAnExternalWriterInsteadOfFailingWithDatabaseLocked() throws Exception {
+        SqlConnectionProvider connections = connections("external-lock.db");
+        SqlExecutor sql = new SqlExecutor(connections);
+        sql.update("CREATE TABLE lock_probe(id INTEGER PRIMARY KEY)", null);
+        ExecutorService worker = Executors.newSingleThreadExecutor();
+
+        try (Connection blocker = DriverManager.getConnection("jdbc:sqlite:" + tempDir.resolve("external-lock.db"));
+             var statement = blocker.createStatement()) {
+            statement.execute("BEGIN EXCLUSIVE");
+            statement.executeUpdate("INSERT INTO lock_probe(id) VALUES(1)");
+            Future<Integer> waiting = worker.submit(() -> sql.query("SELECT COUNT(*) FROM lock_probe", null, result -> {
+                result.next();
+                return result.getInt(1);
+            }));
+
+            TimeUnit.MILLISECONDS.sleep(150);
+            assertFalse(waiting.isDone());
+            statement.execute("COMMIT");
+            assertEquals(1, waiting.get(2, TimeUnit.SECONDS));
+        } finally {
+            worker.shutdownNow();
+        }
+    }
+
+    @Test
+    void keepsReplacementWritesAtomicAcrossRepositoryThreads() throws Exception {
+        SqlExecutor first = new SqlExecutor(connections("atomic.db"));
+        SqlExecutor second = new SqlExecutor(connections("atomic.db"));
+        first.update("CREATE TABLE state(id INTEGER PRIMARY KEY, value TEXT NOT NULL)", null);
+        first.update("INSERT INTO state(id, value) VALUES(1, 'old')", null);
+        CountDownLatch deleted = new CountDownLatch(1);
+        CountDownLatch continueWrite = new CountDownLatch(1);
+        ExecutorService workers = Executors.newFixedThreadPool(2);
+
+        try {
+            Future<?> replacement = workers.submit(() -> first.transaction(() -> {
+                first.update("DELETE FROM state WHERE id = 1", null);
+                deleted.countDown();
+                await(continueWrite);
+                first.update("INSERT INTO state(id, value) VALUES(1, 'new')", null);
+            }));
+            assertTrue(deleted.await(2, TimeUnit.SECONDS));
+
+            Future<String> reader = workers.submit(() -> second.query("SELECT value FROM state WHERE id = 1", null,
+                    result -> result.next() ? result.getString(1) : "missing"));
+            TimeUnit.MILLISECONDS.sleep(150);
+            assertFalse(reader.isDone());
+
+            continueWrite.countDown();
+            replacement.get(2, TimeUnit.SECONDS);
+            assertEquals("new", reader.get(2, TimeUnit.SECONDS));
+        } finally {
+            continueWrite.countDown();
+            workers.shutdownNow();
+        }
+    }
+
+    private SqlConnectionProvider connections(String fileName) {
+        StorageConfig config = new StorageConfig();
+        config.provider = "sqlite";
+        config.sqlite.path = tempDir.resolve(fileName).toString();
+        config.runtimeLibraries.enabled = false;
+        return new SqlConnectionProvider(config, new SqliteDialect(), null);
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            if (!latch.await(2, TimeUnit.SECONDS)) {
+                throw new AssertionError("Timed out waiting for test coordination latch.");
+            }
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(interrupted);
+        }
     }
 }

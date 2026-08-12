@@ -1,11 +1,11 @@
 package eu.avalanche7.paradigm.api.internal;
 
+import java.util.Set;
+
 import eu.avalanche7.paradigm.api.ApiCapability;
 import eu.avalanche7.paradigm.api.MessageService;
 import eu.avalanche7.paradigm.api.PermissionService;
 import eu.avalanche7.paradigm.api.PlaceholderService;
-
-import java.util.Set;
 
 public interface ApiProvider extends AutoCloseable {
     boolean available();

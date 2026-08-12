@@ -1,12 +1,12 @@
 package eu.avalanche7.paradigm.modules.holograms;
 
+import java.util.Arrays;
+import java.util.Locale;
+
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.permissions.PermissionAPI;
 import eu.avalanche7.paradigm.platform.Interfaces.IHologramPlatform;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-
-import java.util.Arrays;
-import java.util.Locale;
 
 public final class HologramConditionEvaluator {
     private final Services services;

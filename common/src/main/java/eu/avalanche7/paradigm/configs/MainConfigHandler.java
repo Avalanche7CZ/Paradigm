@@ -2,11 +2,12 @@ package eu.avalanche7.paradigm.configs;
 
 
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import eu.avalanche7.paradigm.ParadigmConstants;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.utils.DebugLogger;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class MainConfigHandler extends BaseConfigHandler<MainConfigHandler.Config> {
 
@@ -124,10 +125,6 @@ public class MainConfigHandler extends BaseConfigHandler<MainConfigHandler.Confi
                 "",
                 "Anonymous server ID (auto-generated when empty)."
         );
-        public ConfigEntry<Boolean> webEditorTestUrl = new ConfigEntry<>(
-                false,
-                "When enabled, use the local web editor test URL (http://localhost:8083) instead of production."
-        );
         public ConfigEntry<String> spawnWorld = new ConfigEntry<>(
                 "",
                 "Global spawn world id (set via /setspawn). Empty means spawn is not configured."
@@ -211,6 +208,22 @@ public class MainConfigHandler extends BaseConfigHandler<MainConfigHandler.Confi
         public ConfigEntry<Boolean> adminUtilityCommandsEnable = new ConfigEntry<>(
                 true,
                 "Enable or disable admin utility commands (/vanish, /god, /invsee, /repair, /sudo, /near, /whois, /top, /jump)."
+        );
+        public ConfigEntry<Boolean> rtpCommandsEnable = new ConfigEntry<>(
+                true,
+                "Enable or disable the /rtp command."
+        );
+        public ConfigEntry<Integer> rtpMinRadius = new ConfigEntry<>(
+                100,
+                "Minimum distance in blocks from the player's current position for /rtp."
+        );
+        public ConfigEntry<Integer> rtpMaxRadius = new ConfigEntry<>(
+                2500,
+                "Maximum distance in blocks from the player's current position for /rtp."
+        );
+        public ConfigEntry<Integer> rtpMaxAttempts = new ConfigEntry<>(
+                20,
+                "Maximum number of random locations /rtp will try before giving up."
         );
     }
 }

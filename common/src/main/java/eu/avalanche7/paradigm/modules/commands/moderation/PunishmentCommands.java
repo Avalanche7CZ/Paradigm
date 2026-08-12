@@ -1,14 +1,14 @@
 package eu.avalanche7.paradigm.modules.commands.moderation;
 
+import java.util.List;
+
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
 import eu.avalanche7.paradigm.modules.commands.shared.CommandMessages;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-
-import java.util.List;
 
 public final class PunishmentCommands {
     private PunishmentCommands() { }
@@ -71,7 +71,7 @@ public final class PunishmentCommands {
     private static boolean allowed(ICommandSource source, Services services) {
         if (source == null) return false;
         if (source.isConsole()) return true;
-        return source.getPlayer() != null && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.BAN_PERMISSION, PermissionsHandler.BAN_PERMISSION_LEVEL);
+        return source.getPlayer() != null && services.getPermissionsHandler().hasPermission(source.getPlayer(), ParadigmPermissions.BAN);
     }
 
     private static void send(Services services, ICommandSource source, String key, String fallback, String... placeholders) {

@@ -294,6 +294,11 @@
     "error_load": "Could not load spawn. Please try again later.",
     "error_save": "Could not save spawn. Please try again later."
   },
+  "rtp": {
+    "location_unavailable": "Unable to read your current location.",
+    "teleported": "Teleported to a random location.",
+    "no_safe_location": "Could not find a safe location. Please try again."
+  },
   "seen": {
     "online": "{player} is online right now.",
     "need_uuid": "Player is offline. Use UUID for exact lookup.",

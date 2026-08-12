@@ -1,11 +1,11 @@
 package eu.avalanche7.paradigm.storage.json;
 
+import java.util.List;
+import java.util.Optional;
+
 import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
 import eu.avalanche7.paradigm.storage.identity.StorageContext;
 import eu.avalanche7.paradigm.storage.repository.ServerRepository;
-
-import java.util.List;
-import java.util.Optional;
 
 public class JsonServerRepository implements ServerRepository {
     private final StorageContext context;

@@ -1,11 +1,6 @@
 package eu.avalanche7.paradigm.storage.sql;
 
-import eu.avalanche7.paradigm.storage.StorageException;
-import eu.avalanche7.paradigm.storage.migration.Migration;
-import eu.avalanche7.paradigm.storage.migration.MigrationResult;
-import eu.avalanche7.paradigm.storage.migration.MigrationRunner;
-import org.slf4j.Logger;
-
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -15,6 +10,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
+
+import org.slf4j.Logger;
+
+import eu.avalanche7.paradigm.storage.StorageException;
+import eu.avalanche7.paradigm.storage.migration.Migration;
+import eu.avalanche7.paradigm.storage.migration.MigrationResult;
+import eu.avalanche7.paradigm.storage.migration.MigrationRunner;
 
 public class SqlMigrationRunner implements MigrationRunner {
     private final SqlConnectionProvider connections;
@@ -32,6 +34,10 @@ public class SqlMigrationRunner implements MigrationRunner {
 
     @Override
     public MigrationResult run(List<Migration> migrations) {
+        var operationLock = connections.operationLock();
+        if (operationLock != null) {
+            operationLock.lock();
+        }
         List<Integer> applied = new ArrayList<>();
         try (Connection connection = connections.getConnection()) {
             connection.setAutoCommit(false);
@@ -51,8 +57,12 @@ public class SqlMigrationRunner implements MigrationRunner {
             connection.commit();
             currentVersion = existing.stream().mapToInt(Integer::intValue).max().orElse(0);
             return new MigrationResult(true, currentVersion, applied, "Migrations applied successfully.");
-        } catch (Throwable t) {
+        } catch (Exception t) {
             throw new StorageException("SQL migration failed: " + t.getMessage(), t);
+        } finally {
+            if (operationLock != null) {
+                operationLock.unlock();
+            }
         }
     }
 
@@ -121,7 +131,7 @@ public class SqlMigrationRunner implements MigrationRunner {
                 return null;
             }
             return new String(stream.readAllBytes(), StandardCharsets.UTF_8);
-        } catch (Throwable t) {
+        } catch (IOException t) {
             throw new StorageException("Could not read migration resource " + resource, t);
         }
     }

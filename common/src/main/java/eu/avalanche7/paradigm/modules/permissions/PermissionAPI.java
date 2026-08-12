@@ -1,31 +1,30 @@
 package eu.avalanche7.paradigm.modules.permissions;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.BiConsumer;
+
+import org.slf4j.Logger;
+
 import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextMatchResult;
 import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextResolver;
 import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
-import eu.avalanche7.paradigm.modules.permissions.PermissionAssignment;
-import eu.avalanche7.paradigm.modules.permissions.PermissionAssignmentId;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.model.StoredPermissionGroup;
 import eu.avalanche7.paradigm.storage.model.StoredPermissionNode;
 import eu.avalanche7.paradigm.storage.model.StoredUserPermissionData;
 import eu.avalanche7.paradigm.storage.repository.PermissionRepository;
 import eu.avalanche7.paradigm.utils.DebugLogger;
-import org.slf4j.Logger;
-
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.function.BiConsumer;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Internal permission evaluator used when external providers (e.g. LuckPerms) are unavailable.

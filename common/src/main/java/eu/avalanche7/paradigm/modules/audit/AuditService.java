@@ -1,15 +1,15 @@
 package eu.avalanche7.paradigm.modules.audit;
 
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
-
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 
 public class AuditService {
     private final Services services;
@@ -22,7 +22,7 @@ public class AuditService {
         AuditRepository active;
         try {
             active = services.getStorageService().audit();
-        } catch (Throwable ignored) {
+        } catch (RuntimeException storageUnavailable) {
             active = new JsonAuditRepository(services.getPlatformAdapter().getConfig(), services.getLogger());
         }
         this.repository = active;

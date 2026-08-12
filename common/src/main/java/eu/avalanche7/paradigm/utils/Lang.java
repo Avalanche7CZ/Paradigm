@@ -1,12 +1,5 @@
 package eu.avalanche7.paradigm.utils;
 
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
-import eu.avalanche7.paradigm.configs.MainConfigHandler;
-import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import org.slf4j.Logger;
-
 import java.io.*;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
@@ -14,6 +7,14 @@ import java.nio.file.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+import org.slf4j.Logger;
+
+import eu.avalanche7.paradigm.configs.MainConfigHandler;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 
 public class Lang {
 

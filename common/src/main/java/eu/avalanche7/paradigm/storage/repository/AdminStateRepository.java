@@ -1,9 +1,9 @@
 package eu.avalanche7.paradigm.storage.repository;
 
-import eu.avalanche7.paradigm.storage.model.StoredAdminState;
-
 import java.util.Optional;
 import java.util.Set;
+
+import eu.avalanche7.paradigm.storage.model.StoredAdminState;
 
 public interface AdminStateRepository {
     boolean isGod(String uuid);

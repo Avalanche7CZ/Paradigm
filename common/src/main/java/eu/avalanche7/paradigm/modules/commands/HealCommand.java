@@ -2,9 +2,9 @@ package eu.avalanche7.paradigm.modules.commands;
 
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 public class HealCommand implements ParadigmModule {
     private Services services;
@@ -48,7 +48,7 @@ public class HealCommand implements ParadigmModule {
                 .literal("heal")
                 .requires(src -> services.getCommandToggleStore().isEnabled("heal")
                         && src.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), PermissionsHandler.HEAL_PERMISSION, PermissionsHandler.HEAL_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), ParadigmPermissions.HEAL))
                 .executes(ctx -> applyHeal(ctx.getSource().getPlayer(), ctx.getSource().getPlayer()))
                 .then(services.getPlatformAdapter().createCommandBuilder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
@@ -80,7 +80,7 @@ public class HealCommand implements ParadigmModule {
         if (actor == null || target == null || actor.getUUID() == null || actor.getUUID().equals(target.getUUID())) {
             return true;
         }
-        return services.getPermissionsHandler().hasPermission(actor, PermissionsHandler.HEAL_OTHERS_PERMISSION, PermissionsHandler.HEAL_OTHERS_PERMISSION_LEVEL);
+        return services.getPermissionsHandler().hasPermission(actor, ParadigmPermissions.HEAL_OTHERS);
     }
 
     private void send(IPlayer player, String key, String fallback, String... placeholders) {

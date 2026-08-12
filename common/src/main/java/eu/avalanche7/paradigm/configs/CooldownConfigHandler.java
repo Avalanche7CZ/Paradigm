@@ -1,16 +1,17 @@
 package eu.avalanche7.paradigm.configs;
 
-import eu.avalanche7.paradigm.ParadigmConstants;
-import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
-import eu.avalanche7.paradigm.utils.DebugLogger;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import eu.avalanche7.paradigm.ParadigmConstants;
+import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import eu.avalanche7.paradigm.utils.DebugLogger;
 
 public class CooldownConfigHandler extends BaseConfigHandler<CooldownConfigHandler.Config> {
 
@@ -142,10 +143,10 @@ public class CooldownConfigHandler extends BaseConfigHandler<CooldownConfigHandl
         }
 
         private void addDefaultCooldowns() {
-            for (String command : new String[]{"home", "back", "spawn", "warp", "tpa", "tpahere", "tpaccept"}) {
+            for (String command : new String[]{"home", "back", "spawn", "warp", "tpa", "tpahere", "tpaccept", "rtp"}) {
                 commandCooldownSeconds.put(command, 0);
             }
-            for (String command : new String[]{"home", "back", "spawn", "warp", "tpaccept"}) {
+            for (String command : new String[]{"home", "back", "spawn", "warp", "tpaccept", "rtp"}) {
                 commandWarmupSeconds.put(command, 0);
             }
         }

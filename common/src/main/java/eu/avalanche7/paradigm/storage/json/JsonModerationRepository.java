@@ -1,6 +1,16 @@
 package eu.avalanche7.paradigm.storage.json;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+
 import eu.avalanche7.paradigm.data.ModerationDataStore;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentIds;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
 import eu.avalanche7.paradigm.storage.identity.ServerScope;
 import eu.avalanche7.paradigm.storage.identity.StorageContext;
 import eu.avalanche7.paradigm.storage.model.StoredJailState;
@@ -8,16 +18,6 @@ import eu.avalanche7.paradigm.storage.model.StoredLocation;
 import eu.avalanche7.paradigm.storage.model.StoredPunishment;
 import eu.avalanche7.paradigm.storage.model.StoredWarning;
 import eu.avalanche7.paradigm.storage.repository.ModerationRepository;
-import eu.avalanche7.paradigm.modules.moderation.PunishmentIds;
-import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
-import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Optional;
-import java.util.Map;
-import java.util.Comparator;
 
 public class JsonModerationRepository implements ModerationRepository {
     private final ModerationDataStore store;

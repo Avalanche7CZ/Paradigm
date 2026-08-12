@@ -1,23 +1,5 @@
 package eu.avalanche7.paradigm.configs.schema;
 
-import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
-import eu.avalanche7.paradigm.configs.ChatConfigHandler;
-import eu.avalanche7.paradigm.configs.ConfigEntry;
-import eu.avalanche7.paradigm.configs.CooldownConfigHandler;
-import eu.avalanche7.paradigm.configs.MOTDConfigHandler;
-import eu.avalanche7.paradigm.configs.MainConfigHandler;
-import eu.avalanche7.paradigm.configs.MentionConfigHandler;
-import eu.avalanche7.paradigm.configs.RestartConfigHandler;
-import eu.avalanche7.paradigm.configs.ModerationConfigHandler;
-import eu.avalanche7.paradigm.configs.TablistConfigHandler;
-import eu.avalanche7.paradigm.modules.tab.Tablist;
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.dashboard.DashboardConfig;
-import eu.avalanche7.paradigm.modules.commands.Reload;
-import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
-
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -26,6 +8,25 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+
+import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
+import eu.avalanche7.paradigm.configs.ChatConfigHandler;
+import eu.avalanche7.paradigm.configs.ConfigEntry;
+import eu.avalanche7.paradigm.configs.CooldownConfigHandler;
+import eu.avalanche7.paradigm.configs.MOTDConfigHandler;
+import eu.avalanche7.paradigm.configs.MainConfigHandler;
+import eu.avalanche7.paradigm.configs.MentionConfigHandler;
+import eu.avalanche7.paradigm.configs.ModerationConfigHandler;
+import eu.avalanche7.paradigm.configs.RestartConfigHandler;
+import eu.avalanche7.paradigm.configs.TablistConfigHandler;
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.commands.Reload;
+import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
+import eu.avalanche7.paradigm.modules.dashboard.DashboardConfig;
+import eu.avalanche7.paradigm.modules.tab.Tablist;
 
 public class ConfigPatchService {
     private static final Pattern HEX_COLOR = Pattern.compile("#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})");

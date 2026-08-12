@@ -1,25 +1,25 @@
 package eu.avalanche7.paradigm.modules.commands;
 
-import eu.avalanche7.paradigm.core.ParadigmModule;
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.data.PlayerDataStore;
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
-import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
-import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
-import eu.avalanche7.paradigm.storage.model.StoredHome;
-import eu.avalanche7.paradigm.storage.model.StoredLocation;
-import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
-import eu.avalanche7.paradigm.utils.CommandCooldowns;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
+
+import eu.avalanche7.paradigm.core.ParadigmModule;
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.data.PlayerDataStore;
+import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.storage.model.StoredHome;
+import eu.avalanche7.paradigm.storage.model.StoredLocation;
+import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
+import eu.avalanche7.paradigm.utils.CommandCooldowns;
 
 public class HomeCommand implements ParadigmModule {
     private static final String HOME_LIMIT_PREFIX = "paradigm.home.limit.";
@@ -103,7 +103,7 @@ public class HomeCommand implements ParadigmModule {
                 .literal("sethome")
                 .requires(source -> services.getCommandToggleStore().isEnabled("sethome")
                         && source.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.HOME_SET_PERMISSION, PermissionsHandler.HOME_SET_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), ParadigmPermissions.HOME_SET))
                 .executes(ctx -> executeSetHome(ctx.getSource().getPlayer(), "home"))
                 .then(platform.createCommandBuilder()
                         .argument("name", ICommandBuilder.ArgumentType.WORD)
@@ -159,31 +159,31 @@ public class HomeCommand implements ParadigmModule {
     private boolean canUseHome(IPlayer player) {
         return player != null
                 && services.getCommandToggleStore().isEnabled("home")
-                && services.getPermissionsHandler().hasPermission(player, PermissionsHandler.HOME_USE_PERMISSION, PermissionsHandler.HOME_USE_PERMISSION_LEVEL);
+                && services.getPermissionsHandler().hasPermission(player, ParadigmPermissions.HOME_USE);
     }
 
     private boolean canSetHome(IPlayer player) {
         return player != null
                 && services.getCommandToggleStore().isEnabled("sethome")
-                && services.getPermissionsHandler().hasPermission(player, PermissionsHandler.HOME_SET_PERMISSION, PermissionsHandler.HOME_SET_PERMISSION_LEVEL);
+                && services.getPermissionsHandler().hasPermission(player, ParadigmPermissions.HOME_SET);
     }
 
     private boolean canDeleteHome(IPlayer player) {
         return player != null
                 && services.getCommandToggleStore().isEnabled("delhome")
-                && services.getPermissionsHandler().hasPermission(player, PermissionsHandler.HOME_DEL_PERMISSION, PermissionsHandler.HOME_DEL_PERMISSION_LEVEL);
+                && services.getPermissionsHandler().hasPermission(player, ParadigmPermissions.HOME_DELETE);
     }
 
     private boolean canListHomes(IPlayer player) {
         return player != null
                 && services.getCommandToggleStore().isEnabled("homes")
-                && services.getPermissionsHandler().hasPermission(player, PermissionsHandler.HOME_LIST_PERMISSION, PermissionsHandler.HOME_LIST_PERMISSION_LEVEL);
+                && services.getPermissionsHandler().hasPermission(player, ParadigmPermissions.HOME_LIST);
     }
 
     private boolean canBack(IPlayer player) {
         return player != null
                 && services.getCommandToggleStore().isEnabled("back")
-                && services.getPermissionsHandler().hasPermission(player, PermissionsHandler.BACK_PERMISSION, PermissionsHandler.BACK_PERMISSION_LEVEL);
+                && services.getPermissionsHandler().hasPermission(player, ParadigmPermissions.BACK);
     }
 
     private void registerDelHome() {
@@ -191,7 +191,7 @@ public class HomeCommand implements ParadigmModule {
                 .literal("delhome")
                 .requires(source -> services.getCommandToggleStore().isEnabled("delhome")
                         && source.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.HOME_DEL_PERMISSION, PermissionsHandler.HOME_DEL_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), ParadigmPermissions.HOME_DELETE))
                 .then(platform.createCommandBuilder()
                         .argument("name", ICommandBuilder.ArgumentType.WORD)
                         .suggests((c, input) -> homeSuggestions(c.getSource().getPlayer()))
@@ -204,7 +204,7 @@ public class HomeCommand implements ParadigmModule {
                 .literal("homes")
                 .requires(source -> services.getCommandToggleStore().isEnabled("homes")
                         && source.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.HOME_LIST_PERMISSION, PermissionsHandler.HOME_LIST_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), ParadigmPermissions.HOME_LIST))
                 .executes(ctx -> executeHomes(ctx.getSource().getPlayer()));
         platform.registerCommand(command);
     }
@@ -214,7 +214,7 @@ public class HomeCommand implements ParadigmModule {
                 .literal("back")
                 .requires(source -> services.getCommandToggleStore().isEnabled("back")
                         && source.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.BACK_PERMISSION, PermissionsHandler.BACK_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), ParadigmPermissions.BACK))
                 .executes(ctx -> executeBack(ctx.getSource().getPlayer()));
         platform.registerCommand(command);
     }

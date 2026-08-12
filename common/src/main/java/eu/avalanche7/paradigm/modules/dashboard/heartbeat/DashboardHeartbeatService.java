@@ -1,16 +1,5 @@
 package eu.avalanche7.paradigm.modules.dashboard.heartbeat;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.reflect.TypeToken;
-import eu.avalanche7.paradigm.ParadigmAPI;
-import eu.avalanche7.paradigm.core.ParadigmModule;
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.dashboard.DashboardConfig;
-import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
-import eu.avalanche7.paradigm.storage.StorageService;
-import org.slf4j.Logger;
-
 import java.io.Reader;
 import java.io.Writer;
 import java.lang.reflect.Type;
@@ -21,6 +10,18 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.reflect.TypeToken;
+import org.slf4j.Logger;
+
+import eu.avalanche7.paradigm.ParadigmAPI;
+import eu.avalanche7.paradigm.core.ParadigmModule;
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.dashboard.DashboardConfig;
+import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import eu.avalanche7.paradigm.storage.StorageService;
 
 public class DashboardHeartbeatService {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();

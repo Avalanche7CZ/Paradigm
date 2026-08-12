@@ -1,12 +1,12 @@
 package eu.avalanche7.paradigm;
 
-import eu.avalanche7.paradigm.core.ParadigmModule;
-import eu.avalanche7.paradigm.core.Services;
-
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+
+import eu.avalanche7.paradigm.core.ParadigmModule;
+import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
 
 /**

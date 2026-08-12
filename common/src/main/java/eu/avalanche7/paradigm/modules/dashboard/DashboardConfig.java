@@ -1,10 +1,5 @@
 package eu.avalanche7.paradigm.modules.dashboard;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
-import org.slf4j.Logger;
-
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
@@ -12,6 +7,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import org.slf4j.Logger;
+
+import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 
 public class DashboardConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();

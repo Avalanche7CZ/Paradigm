@@ -1,11 +1,12 @@
 package eu.avalanche7.paradigm.storage.identity;
 
-import eu.avalanche7.paradigm.storage.StorageConfig;
-import eu.avalanche7.paradigm.storage.repository.ServerRepository;
-import org.slf4j.Logger;
-
 import java.util.Locale;
 import java.util.regex.Pattern;
+
+import org.slf4j.Logger;
+
+import eu.avalanche7.paradigm.storage.StorageConfig;
+import eu.avalanche7.paradigm.storage.repository.ServerRepository;
 
 public class ServerIdentityService {
     private static final Pattern SAFE_ID = Pattern.compile("[A-Za-z0-9_.:-]{1,64}");
@@ -34,7 +35,7 @@ public class ServerIdentityService {
             repository.registerServer(identity);
             repository.updateLastSeen(identity);
             return true;
-        } catch (Throwable t) {
+        } catch (RuntimeException t) {
             if (logger != null) {
                 logger.warn("Paradigm storage: failed to register server identity {}: {}", identity.serverId(), t.getMessage());
             }

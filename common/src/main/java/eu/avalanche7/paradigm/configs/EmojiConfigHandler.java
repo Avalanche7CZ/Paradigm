@@ -1,12 +1,13 @@
 package eu.avalanche7.paradigm.configs;
 
-import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
-import eu.avalanche7.paradigm.utils.DebugLogger;
+import java.util.HashMap;
+import java.util.Map;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
-import java.util.Map;
+import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import eu.avalanche7.paradigm.utils.DebugLogger;
 
 public class EmojiConfigHandler extends BaseConfigHandler<EmojiConfigHandler.Config> {
 

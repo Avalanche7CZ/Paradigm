@@ -1,10 +1,10 @@
 package eu.avalanche7.paradigm.configs.schema;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 
 public final class ConfigRevisionService {
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();

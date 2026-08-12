@@ -1,15 +1,16 @@
 package eu.avalanche7.paradigm.modules.permissions;
 
-import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.UUID;
+
 import net.luckperms.api.LuckPerms;
 import net.luckperms.api.LuckPermsProvider;
 import net.luckperms.api.context.ImmutableContextSet;
 import net.luckperms.api.query.QueryOptions;
 import net.luckperms.api.util.Tristate;
 
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.UUID;
+import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
 
 /** Isolates optional LuckPerms linkage from classes that must load when LuckPerms is absent. */
 final class LuckPermsPublicApiBridge {

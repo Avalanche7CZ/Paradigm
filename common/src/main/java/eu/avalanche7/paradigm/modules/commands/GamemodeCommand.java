@@ -1,12 +1,12 @@
 package eu.avalanche7.paradigm.modules.commands;
 
+import java.util.List;
+
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-
-import java.util.List;
 
 public class GamemodeCommand implements ParadigmModule {
     private Services services;
@@ -67,7 +67,7 @@ public class GamemodeCommand implements ParadigmModule {
                 .requires(src -> services.getCommandToggleStore().isEnabled("gamemode")
                         && src.getPlayer() != null
                         && (src.hasPermissionLevel(2)
-                        || services.getPermissionsHandler().hasPermission(src.getPlayer(), PermissionsHandler.GAMEMODE_PERMISSION, PermissionsHandler.GAMEMODE_PERMISSION_LEVEL)));
+                        || services.getPermissionsHandler().hasPermission(src.getPlayer(), ParadigmPermissions.GAMEMODE)));
 
         ICommandBuilder modeArg = services.getPlatformAdapter().createCommandBuilder()
                 .argument("mode", ICommandBuilder.ArgumentType.WORD)
@@ -86,7 +86,7 @@ public class GamemodeCommand implements ParadigmModule {
                 .requires(src -> services.getCommandToggleStore().isEnabled(literal)
                         && src.getPlayer() != null
                         && (src.hasPermissionLevel(2)
-                        || services.getPermissionsHandler().hasPermission(src.getPlayer(), PermissionsHandler.GAMEMODE_PERMISSION, PermissionsHandler.GAMEMODE_PERMISSION_LEVEL)))
+                        || services.getPermissionsHandler().hasPermission(src.getPlayer(), ParadigmPermissions.GAMEMODE)))
                 .executes(ctx -> applyGamemode(ctx.getSource().getPlayer(), ctx.getSource().getPlayer(), mode))
                 .then(services.getPlatformAdapter().createCommandBuilder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
@@ -122,7 +122,7 @@ public class GamemodeCommand implements ParadigmModule {
         if (actor == null || target == null || actor.getUUID() == null || actor.getUUID().equals(target.getUUID())) {
             return true;
         }
-        return services.getPermissionsHandler().hasPermission(actor, PermissionsHandler.GAMEMODE_OTHERS_PERMISSION, PermissionsHandler.GAMEMODE_OTHERS_PERMISSION_LEVEL);
+        return services.getPermissionsHandler().hasPermission(actor, ParadigmPermissions.GAMEMODE_OTHERS);
     }
 
     private String normalizeMode(String modeRaw) {

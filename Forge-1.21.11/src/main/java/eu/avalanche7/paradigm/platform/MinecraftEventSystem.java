@@ -1,5 +1,6 @@
 package eu.avalanche7.paradigm.platform;
 
+import com.mojang.logging.LogUtils;
 import eu.avalanche7.paradigm.Paradigm;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
@@ -18,11 +19,13 @@ import net.minecraftforge.server.permission.events.PermissionGatherEvent;
 import net.minecraftforge.server.permission.nodes.PermissionNode;
 import net.minecraftforge.eventbus.api.listener.Priority;
 import eu.avalanche7.paradigm.modules.permissions.PermissionNodeRegistry;
+import org.slf4j.Logger;
 
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class MinecraftEventSystem implements IEventSystem {
 
+    private static final Logger LOGGER = LogUtils.getLogger();
     private final CopyOnWriteArrayList<ChatEventListener> chatListeners = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<PlayerJoinEventListener> joinListeners = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<PlayerLeaveEventListener> leaveListeners = new CopyOnWriteArrayList<>();
@@ -77,8 +80,8 @@ public class MinecraftEventSystem implements IEventSystem {
             if (leaveListeners.isEmpty()) return;
             MinecraftPlayerLeaveEvent leaveEvent = new MinecraftPlayerLeaveEvent(event);
             for (PlayerLeaveEventListener listener : leaveListeners) {
-                try { listener.onPlayerLeave(leaveEvent); } catch (Exception e) {
-                    System.err.println("Error in player leave event listener: " + e.getMessage());
+                try { listener.onPlayerLeave(leaveEvent); } catch (Exception failure) {
+                    LOGGER.error("Error in player leave event listener.", failure);
                 }
             }
             try {

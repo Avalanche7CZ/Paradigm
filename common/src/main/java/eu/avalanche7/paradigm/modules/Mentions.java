@@ -1,19 +1,19 @@
 package eu.avalanche7.paradigm.modules;
 
-import eu.avalanche7.paradigm.configs.MentionConfigHandler;
-import eu.avalanche7.paradigm.core.ParadigmModule;
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.platform.Interfaces.*;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import java.util.LinkedHashSet;
-import java.util.Set;
+
+import eu.avalanche7.paradigm.configs.MentionConfigHandler;
+import eu.avalanche7.paradigm.core.ParadigmModule;
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
+import eu.avalanche7.paradigm.platform.Interfaces.*;
 
 public class Mentions implements ParadigmModule {
 
@@ -113,7 +113,7 @@ public class Mentions implements ParadigmModule {
 
     private void handleEveryoneMention(IPlayer sender, String rawMessage, MentionConfigHandler.Config mentionConfig, String matchedEveryoneMention, Services services) {
         if (sender != null) {
-            if (!services.getPermissionsHandler().hasPermission(sender, PermissionsHandler.MENTION_EVERYONE_PERMISSION, PermissionsHandler.MENTION_EVERYONE_PERMISSION_LEVEL)) {
+            if (!services.getPermissionsHandler().hasPermission(sender, ParadigmPermissions.MENTION_EVERYONE)) {
                 platform.sendSystemMessage(sender, services.getLang().translate("mention.no_permission_everyone"));
                 return;
             }
@@ -144,7 +144,7 @@ public class Mentions implements ParadigmModule {
         mentionMatcher.reset();
 
         if (sender != null) {
-            if (!services.getPermissionsHandler().hasPermission(sender, PermissionsHandler.MENTION_PLAYER_PERMISSION, PermissionsHandler.MENTION_PLAYER_PERMISSION_LEVEL)) {
+            if (!services.getPermissionsHandler().hasPermission(sender, ParadigmPermissions.MENTION_PLAYER)) {
                 return;
             }
             if (!canMentionIndividualNow(sender, mentionConfig)) {
@@ -190,7 +190,7 @@ public class Mentions implements ParadigmModule {
 
         if (everyoneMatcher.find()) {
             if (!isConsole) {
-                if (!services.getPermissionsHandler().hasPermission(sender, PermissionsHandler.MENTION_EVERYONE_PERMISSION, PermissionsHandler.MENTION_EVERYONE_PERMISSION_LEVEL)) {
+                if (!services.getPermissionsHandler().hasPermission(sender, ParadigmPermissions.MENTION_EVERYONE)) {
                     platform.sendSystemMessage(sender, services.getLang().translate("mention.no_permission_everyone"));
                     return 0;
                 }
@@ -215,7 +215,7 @@ public class Mentions implements ParadigmModule {
         mentionMatcher.reset();
 
         if (containsAnyMention && !isConsole) {
-            if (!services.getPermissionsHandler().hasPermission(sender, PermissionsHandler.MENTION_PLAYER_PERMISSION, PermissionsHandler.MENTION_PLAYER_PERMISSION_LEVEL)) {
+            if (!services.getPermissionsHandler().hasPermission(sender, ParadigmPermissions.MENTION_PLAYER)) {
                 platform.sendFailure(source, platform.createLiteralComponent("No permission to mention players."));
                 return 0;
             }
@@ -322,7 +322,7 @@ public class Mentions implements ParadigmModule {
 
     private boolean canMentionEveryoneNow(IPlayer sender, MentionConfigHandler.Config config) {
         if (sender == null) return true;
-        if (services.getPermissionsHandler().hasPermission(sender, PermissionsHandler.MENTION_EVERYONE_PERMISSION, PermissionsHandler.MENTION_EVERYONE_PERMISSION_LEVEL)) return true;
+        if (services.getPermissionsHandler().hasPermission(sender, ParadigmPermissions.MENTION_EVERYONE)) return true;
 
         int rateLimit = config.EVERYONE_MENTION_RATE_LIMIT.get();
         if (rateLimit <= 0) return true;
@@ -339,7 +339,7 @@ public class Mentions implements ParadigmModule {
 
     private boolean canMentionIndividualNow(IPlayer sender, MentionConfigHandler.Config config) {
         if (sender == null) return true;
-        if (services.getPermissionsHandler().hasPermission(sender, PermissionsHandler.MENTION_PLAYER_PERMISSION, PermissionsHandler.MENTION_PLAYER_PERMISSION_LEVEL)) return true;
+        if (services.getPermissionsHandler().hasPermission(sender, ParadigmPermissions.MENTION_PLAYER)) return true;
 
         int rateLimit = config.INDIVIDUAL_MENTION_RATE_LIMIT.get();
         if (rateLimit <= 0) return true;

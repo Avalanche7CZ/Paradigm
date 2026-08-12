@@ -1,11 +1,11 @@
 package eu.avalanche7.paradigm.modules.permissions.migration;
 
-import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
-import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextType;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+
+import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
+import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextType;
 
 /** Pure mapping rules shared by the runtime migration and unit tests. */
 public final class LuckPermsMigrationMapper {

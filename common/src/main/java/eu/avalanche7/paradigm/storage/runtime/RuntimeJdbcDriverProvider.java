@@ -1,12 +1,15 @@
 package eu.avalanche7.paradigm.storage.runtime;
 
-import eu.avalanche7.paradigm.storage.sql.SqlDialect;
-import org.slf4j.Logger;
-
+import java.io.IOException;
 import java.sql.Driver;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.LinkedHashMap;
 import java.util.Map;
+
+import org.slf4j.Logger;
+
+import eu.avalanche7.paradigm.storage.sql.SqlDialect;
 
 public class RuntimeJdbcDriverProvider implements AutoCloseable {
     private final RuntimeLibraryManager libraries;
@@ -38,7 +41,7 @@ public class RuntimeJdbcDriverProvider implements AutoCloseable {
                 logger.info("Paradigm storage: runtime JDBC driver loaded for {} from {}.", library.id(), result.path());
             }
             return new RuntimeLibraryDownloadResult(library, RuntimeLibraryDownloadResult.State.LOADED, result.path(), "Runtime JDBC driver loaded.");
-        } catch (Throwable t) {
+        } catch (Exception | LinkageError t) {
             throw new RuntimeLibraryException("Could not load runtime JDBC driver " + library.primaryClass() + ": " + t.getMessage(), t);
         }
     }
@@ -60,14 +63,14 @@ public class RuntimeJdbcDriverProvider implements AutoCloseable {
         for (LoadedDriver loaded : loadedDrivers.values()) {
             try {
                 DriverManager.deregisterDriver(loaded.shim());
-            } catch (Throwable t) {
+            } catch (SQLException t) {
                 if (logger != null) {
                     logger.warn("Paradigm storage: failed to deregister runtime JDBC driver: {}", t.getMessage());
                 }
             }
             try {
                 loaded.classLoader().close();
-            } catch (Throwable t) {
+            } catch (IOException t) {
                 if (logger != null) {
                     logger.warn("Paradigm storage: failed to close runtime JDBC classloader: {}", t.getMessage());
                 }

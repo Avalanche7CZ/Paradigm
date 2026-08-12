@@ -2,9 +2,9 @@ package eu.avalanche7.paradigm.modules.commands;
 
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 public class ClearInventoryCommand implements ParadigmModule {
     private Services services;
@@ -57,7 +57,7 @@ public class ClearInventoryCommand implements ParadigmModule {
                 .literal(literal)
                 .requires(src -> services.getCommandToggleStore().isEnabled("clearinv")
                         && src.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), PermissionsHandler.CLEARINV_PERMISSION, PermissionsHandler.CLEARINV_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), ParadigmPermissions.CLEAR_INVENTORY))
                 .executes(ctx -> clearInventory(ctx.getSource().getPlayer(), ctx.getSource().getPlayer()))
                 .then(services.getPlatformAdapter().createCommandBuilder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
@@ -85,7 +85,7 @@ public class ClearInventoryCommand implements ParadigmModule {
         if (actor == null || target == null || actor.getUUID() == null || actor.getUUID().equals(target.getUUID())) {
             return true;
         }
-        return services.getPermissionsHandler().hasPermission(actor, PermissionsHandler.CLEARINV_OTHERS_PERMISSION, PermissionsHandler.CLEARINV_OTHERS_PERMISSION_LEVEL);
+        return services.getPermissionsHandler().hasPermission(actor, ParadigmPermissions.CLEAR_INVENTORY_OTHERS);
     }
 
     private void send(IPlayer player, String key, String fallback, String... placeholders) {

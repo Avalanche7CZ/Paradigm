@@ -1,8 +1,5 @@
 package eu.avalanche7.paradigm.modules.dashboard;
 
-import com.sun.net.httpserver.HttpExchange;
-import com.sun.net.httpserver.HttpServer;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.HashSet;
@@ -11,6 +8,9 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
 
 public class DashboardHttpServer implements AutoCloseable {
     private final DashboardService dashboard;

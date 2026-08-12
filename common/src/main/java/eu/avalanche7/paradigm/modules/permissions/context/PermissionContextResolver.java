@@ -1,11 +1,11 @@
 package eu.avalanche7.paradigm.modules.permissions.context;
 
-import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.Supplier;
+
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
 
 public class PermissionContextResolver {
     private final Supplier<ServerIdentity> identitySupplier;

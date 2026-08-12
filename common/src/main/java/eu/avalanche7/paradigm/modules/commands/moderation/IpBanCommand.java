@@ -1,17 +1,17 @@
 package eu.avalanche7.paradigm.modules.commands.moderation;
 
+import java.util.List;
+
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
+import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
 import eu.avalanche7.paradigm.modules.moderation.IpAddressUtil;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentIds;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
-import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
-import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-
-import java.util.List;
 
 public final class IpBanCommand extends AbstractModerationCommand {
     @Override public String getName() { return "IPBan"; }
@@ -22,7 +22,7 @@ public final class IpBanCommand extends AbstractModerationCommand {
         registerCreate("ipban", false);
         registerCreate("tempipban", true);
         services.getPlatformAdapter().registerCommand(builder().literal("unipban")
-                .requires(source -> allowed(source, "unipban", PermissionsHandler.IPBAN_PERMISSION, PermissionsHandler.BAN_PERMISSION_LEVEL))
+                .requires(source -> allowed(source, "unipban", ParadigmPermissions.IP_BAN))
                 .then(builder().argument("target", ICommandBuilder.ArgumentType.WORD)
                         .executes(context -> revoke(context.getSource(), context.getStringArgument("target"), null))
                         .then(builder().argument("reason", ICommandBuilder.ArgumentType.GREEDY_STRING)
@@ -42,7 +42,7 @@ public final class IpBanCommand extends AbstractModerationCommand {
                             .executes(context -> create(context.getSource(), context.getStringArgument("target"), null, context.getStringArgument("reason"))));
         }
         services.getPlatformAdapter().registerCommand(builder().literal(literal)
-                .requires(source -> allowed(source, literal, PermissionsHandler.IPBAN_PERMISSION, PermissionsHandler.BAN_PERMISSION_LEVEL)).then(target));
+                .requires(source -> allowed(source, literal, ParadigmPermissions.IP_BAN)).then(target));
     }
 
     private int create(ICommandSource source, String targetValue, String duration, String rawReason) {

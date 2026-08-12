@@ -1,10 +1,10 @@
 package eu.avalanche7.paradigm.modules.commands.moderation;
 
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 public class KickCommand extends AbstractModerationCommand {
     @Override
@@ -17,7 +17,7 @@ public class KickCommand extends AbstractModerationCommand {
         this.services = services;
         ICommandBuilder cmd = builder()
                 .literal("kick")
-                .requires(src -> allowed(src, "kick", PermissionsHandler.KICK_PERMISSION, PermissionsHandler.KICK_PERMISSION_LEVEL))
+                .requires(src -> allowed(src, "kick", ParadigmPermissions.KICK))
                 .then(builder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
                         .executes(ctx -> kick(ctx.getSource(), ctx.getPlayerArgument("player"), null))

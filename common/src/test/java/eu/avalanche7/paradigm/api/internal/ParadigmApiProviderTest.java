@@ -1,5 +1,18 @@
 package eu.avalanche7.paradigm.api.internal;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.lang.reflect.Proxy;
+import java.nio.file.Path;
+import java.util.Map;
+import java.util.UUID;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.slf4j.LoggerFactory;
+
 import eu.avalanche7.paradigm.api.MessageResult;
 import eu.avalanche7.paradigm.api.PermissionContext;
 import eu.avalanche7.paradigm.api.PermissionDecision;
@@ -13,18 +26,6 @@ import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.DebugLogger;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-import org.slf4j.LoggerFactory;
-
-import java.lang.reflect.Proxy;
-import java.nio.file.Path;
-import java.util.Map;
-import java.util.UUID;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ParadigmApiProviderTest {
     private static final UUID PLAYER = UUID.fromString("00000000-0000-0000-0000-000000000042");
@@ -91,7 +92,7 @@ class ParadigmApiProviderTest {
 
     private static Services services(IPlatformAdapter platform, PermissionsHandler handler) {
         return new Services(null, null, null, null, null, null, null, null, null, null, null,
-                null, handler, null, null, null, null, null, null, null, platform, null);
+                null, handler, null, null, null, null, null, null, null, platform);
     }
 
     private static IConfig config(Path path) {

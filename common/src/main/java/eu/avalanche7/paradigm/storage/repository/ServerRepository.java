@@ -1,9 +1,9 @@
 package eu.avalanche7.paradigm.storage.repository;
 
-import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
-
 import java.util.List;
 import java.util.Optional;
+
+import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
 
 public interface ServerRepository {
     void registerServer(ServerIdentity identity);

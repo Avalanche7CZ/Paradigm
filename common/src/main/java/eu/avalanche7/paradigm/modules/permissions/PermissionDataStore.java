@@ -1,14 +1,5 @@
 package eu.avalanche7.paradigm.modules.permissions;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.annotations.SerializedName;
-import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
-import eu.avalanche7.paradigm.modules.permissions.PermissionAssignmentId;
-import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
-import eu.avalanche7.paradigm.utils.DebugLogger;
-import org.slf4j.Logger;
-
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
@@ -21,6 +12,15 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.annotations.SerializedName;
+import org.slf4j.Logger;
+
+import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
+import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import eu.avalanche7.paradigm.utils.DebugLogger;
 
 public class PermissionDataStore {
     private static final String FILE_NAME = "paradigm/permissions.json";

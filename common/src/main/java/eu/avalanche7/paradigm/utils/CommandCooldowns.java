@@ -1,14 +1,14 @@
 package eu.avalanche7.paradigm.utils;
 
-import eu.avalanche7.paradigm.configs.CooldownConfigHandler;
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+
+import eu.avalanche7.paradigm.configs.CooldownConfigHandler;
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
 public final class CommandCooldowns {
     private static final Map<String, Long> PENDING_WARMUPS = new ConcurrentHashMap<>();

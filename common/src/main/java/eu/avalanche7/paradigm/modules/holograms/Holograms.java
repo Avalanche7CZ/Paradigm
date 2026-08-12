@@ -1,13 +1,14 @@
 package eu.avalanche7.paradigm.modules.holograms;
 
+import java.util.List;
+
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-
-import java.util.List;
 
 public final class Holograms implements ParadigmModule {
     private static volatile Holograms current;
@@ -146,7 +147,7 @@ public final class Holograms implements ParadigmModule {
     private boolean canManage(ICommandSource source) {
         return services.getCommandToggleStore().isEnabled("hologram")
                 && (source == null || source.isConsole() || services.getPermissionsHandler().hasPermission(
-                source.getPlayer(), HologramService.MANAGE_PERMISSION, HologramService.MANAGE_PERMISSION_LEVEL));
+                source.getPlayer(), ParadigmPermissions.HOLOGRAM_MANAGE));
     }
 
     private void create(ICommandSource source, String id) {

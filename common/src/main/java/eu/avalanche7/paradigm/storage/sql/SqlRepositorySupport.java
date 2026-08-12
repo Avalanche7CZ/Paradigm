@@ -1,11 +1,11 @@
 package eu.avalanche7.paradigm.storage.sql;
 
-import eu.avalanche7.paradigm.storage.identity.StorageContext;
-import eu.avalanche7.paradigm.storage.model.StoredLocation;
-
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+
+import eu.avalanche7.paradigm.storage.identity.StorageContext;
+import eu.avalanche7.paradigm.storage.model.StoredLocation;
 
 abstract class SqlRepositorySupport {
     protected final SqlExecutor sql;

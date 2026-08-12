@@ -1,5 +1,19 @@
 package eu.avalanche7.paradigm.storage.migration;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+
+import org.junit.jupiter.api.Test;
+
 import eu.avalanche7.paradigm.modules.moderation.PunishmentIds;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
@@ -25,19 +39,6 @@ import eu.avalanche7.paradigm.storage.repository.PermissionRepository;
 import eu.avalanche7.paradigm.storage.repository.PlayerRepository;
 import eu.avalanche7.paradigm.storage.repository.ServerRepository;
 import eu.avalanche7.paradigm.storage.repository.WarpRepository;
-import org.junit.jupiter.api.Test;
-
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class StorageMigrationServiceTest {
     private static final ServerIdentity IDENTITY = new ServerIdentity("network", "server", "Server");

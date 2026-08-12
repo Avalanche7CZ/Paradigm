@@ -1,10 +1,10 @@
 package eu.avalanche7.paradigm.modules.commands.admin;
 
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 public class InventoryInspectCommand extends AbstractAdminCommand {
     private static final int MAX_LINES = 20;
@@ -24,7 +24,7 @@ public class InventoryInspectCommand extends AbstractAdminCommand {
     private void registerInventory() {
         ICommandBuilder cmd = builder()
                 .literal("invsee")
-                .requires(src -> allowed(src, "invsee", PermissionsHandler.INVSEE_PERMISSION, PermissionsHandler.INVSEE_PERMISSION_LEVEL))
+                .requires(src -> allowed(src, "invsee", ParadigmPermissions.INVENTORY_SEE))
                 .then(builder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
                         .executes(ctx -> inspect(ctx.getSource(), ctx.getPlayerArgument("player"), false)));
@@ -34,7 +34,7 @@ public class InventoryInspectCommand extends AbstractAdminCommand {
     private void registerEnder() {
         ICommandBuilder cmd = builder()
                 .literal("endersee")
-                .requires(src -> allowed(src, "endersee", PermissionsHandler.ENDERSEE_PERMISSION, PermissionsHandler.ENDERSEE_PERMISSION_LEVEL))
+                .requires(src -> allowed(src, "endersee", ParadigmPermissions.ENDER_SEE))
                 .then(builder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
                         .executes(ctx -> inspect(ctx.getSource(), ctx.getPlayerArgument("player"), true)));

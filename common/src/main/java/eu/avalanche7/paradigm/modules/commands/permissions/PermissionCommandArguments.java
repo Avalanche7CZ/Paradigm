@@ -1,11 +1,11 @@
 package eu.avalanche7.paradigm.modules.commands.permissions;
 
+import java.util.UUID;
+
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.permissions.context.PermissionMutationArgumentParser;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-
-import java.util.UUID;
 
 public final class PermissionCommandArguments {
     private PermissionCommandArguments() {

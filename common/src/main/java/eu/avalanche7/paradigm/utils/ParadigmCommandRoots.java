@@ -1,6 +1,7 @@
 package eu.avalanche7.paradigm.utils;
 
 import java.util.Set;
+
 import eu.avalanche7.paradigm.modules.commands.shared.CommandCatalog;
 
 /**

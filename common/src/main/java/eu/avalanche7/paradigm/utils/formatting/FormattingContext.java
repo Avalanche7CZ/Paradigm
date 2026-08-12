@@ -1,10 +1,10 @@
 package eu.avalanche7.paradigm.utils.formatting;
 
+import java.util.Stack;
+
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.formatting.tags.CenterTag;
-
-import java.util.Stack;
 
 public class FormattingContext {
     private final IComponent rootComponent;

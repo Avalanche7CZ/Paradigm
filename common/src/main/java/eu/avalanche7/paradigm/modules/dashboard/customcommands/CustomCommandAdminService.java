@@ -1,14 +1,5 @@
 package eu.avalanche7.paradigm.modules.dashboard.customcommands;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.dashboard.DashboardJson;
-import eu.avalanche7.paradigm.data.CustomCommand;
-import eu.avalanche7.paradigm.modules.CommandManager;
-
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
@@ -26,6 +17,16 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.data.CustomCommand;
+import eu.avalanche7.paradigm.modules.CommandManager;
+import eu.avalanche7.paradigm.modules.dashboard.DashboardJson;
 
 /** Constrained CRUD service for the custom-command directory. */
 public final class CustomCommandAdminService {

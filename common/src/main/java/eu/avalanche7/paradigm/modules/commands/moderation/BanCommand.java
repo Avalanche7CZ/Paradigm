@@ -2,12 +2,12 @@ package eu.avalanche7.paradigm.modules.commands.moderation;
 
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentIds;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
-import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
-import eu.avalanche7.paradigm.modules.moderation.PunishmentIds;
-import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 public class BanCommand extends AbstractModerationCommand {
     @Override
@@ -26,7 +26,7 @@ public class BanCommand extends AbstractModerationCommand {
     private void registerBan() {
         ICommandBuilder cmd = builder()
                 .literal("ban")
-                .requires(src -> allowed(src, "ban", PermissionsHandler.BAN_PERMISSION, PermissionsHandler.BAN_PERMISSION_LEVEL))
+                .requires(src -> allowed(src, "ban", ParadigmPermissions.BAN))
                 .then(builder()
                         .argument("player", ICommandBuilder.ArgumentType.WORD)
                         .executes(ctx -> ban(ctx.getSource(), ctx.getStringArgument("player"), null))
@@ -39,7 +39,7 @@ public class BanCommand extends AbstractModerationCommand {
     private void registerUnban(String literal) {
         ICommandBuilder cmd = builder()
                 .literal(literal)
-                .requires(src -> allowed(src, literal, PermissionsHandler.BAN_PERMISSION, PermissionsHandler.BAN_PERMISSION_LEVEL))
+                .requires(src -> allowed(src, literal, ParadigmPermissions.BAN))
                 .then(builder()
                         .argument("player", ICommandBuilder.ArgumentType.WORD)
                         .executes(ctx -> unban(ctx.getSource(), ctx.getStringArgument("player"), null))

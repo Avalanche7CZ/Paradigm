@@ -1,18 +1,19 @@
 package eu.avalanche7.paradigm.modules.dashboard.api;
 
+import java.net.URI;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import com.google.gson.JsonObject;
+
 import eu.avalanche7.paradigm.modules.audit.AuditActionType;
 import eu.avalanche7.paradigm.modules.audit.AuditResult;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardRequestContext;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardResponse;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardService;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardAuthService;
-
-import java.net.URI;
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 public class AuthApiHandler {
     private static final String COOKIE_NAME = "PARADIGM_DASHBOARD_SESSION";

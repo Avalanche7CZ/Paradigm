@@ -1,10 +1,10 @@
 package eu.avalanche7.paradigm.modules.dashboard;
 
+import java.io.Reader;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
-
-import java.io.Reader;
 
 public final class DashboardJson {
     public static final Gson GSON = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();

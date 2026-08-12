@@ -2,9 +2,9 @@ package eu.avalanche7.paradigm.modules.commands;
 
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 public class TimeWeatherCommand implements ParadigmModule {
     private Services services;
@@ -61,7 +61,7 @@ public class TimeWeatherCommand implements ParadigmModule {
                 .literal(literal)
                 .requires(src -> services.getCommandToggleStore().isEnabled(literal)
                         && src.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), PermissionsHandler.TIME_PERMISSION, PermissionsHandler.TIME_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), ParadigmPermissions.TIME))
                 .executes(ctx -> executeTimeCommand(ctx.getSource().getPlayer(), timeOfDay, literal));
         services.getPlatformAdapter().registerCommand(cmd);
     }
@@ -71,7 +71,7 @@ public class TimeWeatherCommand implements ParadigmModule {
                 .literal(literal)
                 .requires(src -> services.getCommandToggleStore().isEnabled(literal)
                         && src.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), PermissionsHandler.WEATHER_PERMISSION, PermissionsHandler.WEATHER_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), ParadigmPermissions.WEATHER))
                 .executes(ctx -> executeWeatherCommand(ctx.getSource().getPlayer(), command, literal));
         services.getPlatformAdapter().registerCommand(cmd);
     }

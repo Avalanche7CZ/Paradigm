@@ -1,14 +1,15 @@
 package eu.avalanche7.paradigm.platform.Interfaces;
 
+import java.util.List;
+import java.util.Optional;
+
+import org.jetbrains.annotations.Nullable;
+
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.utils.CommandPriority;
 import eu.avalanche7.paradigm.utils.MessageParser;
-import org.jetbrains.annotations.Nullable;
-
-import java.util.List;
-import java.util.Locale;
-import java.util.Optional;
+import eu.avalanche7.paradigm.utils.TaskScheduler;
 
 public interface IPlatformAdapter {
     enum BossBarColor { PINK, BLUE, RED, GREEN, YELLOW, PURPLE, WHITE }
@@ -28,6 +29,8 @@ public interface IPlatformAdapter {
     Object createItemStack(String itemId);
     boolean hasPermission(IPlayer player, String permissionNode);
     boolean hasPermission(IPlayer player, String permissionNode, int vanillaLevel);
+    /** Native vanilla permission-level check only, independent of internal/LuckPerms permission nodes. */
+    boolean hasVanillaPermissionLevel(IPlayer player, int level);
     void sendSystemMessage(IPlayer player, IComponent message);
     void broadcastSystemMessage(IComponent message);
     void broadcastChatMessage(IComponent message);
@@ -45,6 +48,8 @@ public interface IPlatformAdapter {
 
     void executeCommandAs(ICommandSource source, String command);
     void executeCommandAsConsole(String command);
+
+    TaskScheduler getTaskScheduler();
 
     default void executeOnServerThread(Runnable task) {
         if (task != null) task.run();
@@ -196,6 +201,10 @@ public interface IPlatformAdapter {
 
     default int getMaxPlayers() {
         return 0;
+    }
+
+    default Optional<Double> findSafeRtpY(IPlayer player, double x, double z) {
+        return Optional.empty();
     }
 
     default boolean isFirstJoin(IPlayer player) {

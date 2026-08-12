@@ -100,10 +100,9 @@ public final class CommandCatalog {
             entry("setwarp", true, false, true, "setwarp"),
             entry("delwarp", true, false, true, "delwarp"),
             entry("warpinfo", true, false, true, "warpinfo"),
+            entry("rtp", true, false, true, "rtp"),
 
             entry("reload", true, false, true, "reload"),
-            entry("paradigm.editor", true, false, true, "editor"),
-            entry("paradigm.apply", true, false, false, "apply"),
             entry("paradigm.help", true, false, false, "help"),
             entry("paradigm.command", true, true, false, "command", "commands"),
             entry("paradigm.dashboard", true, true, false, "dashboard")

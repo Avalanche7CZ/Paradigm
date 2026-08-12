@@ -1,21 +1,21 @@
 package eu.avalanche7.paradigm.modules.dashboard;
 
-import eu.avalanche7.paradigm.core.ParadigmModule;
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPermission;
-import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
-import eu.avalanche7.paradigm.modules.audit.AuditEntry;
-import eu.avalanche7.paradigm.modules.audit.AuditService;
-import eu.avalanche7.paradigm.modules.audit.AuditActionType;
-import eu.avalanche7.paradigm.modules.audit.AuditResult;
-import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+
+import eu.avalanche7.paradigm.core.ParadigmModule;
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.audit.AuditActionType;
+import eu.avalanche7.paradigm.modules.audit.AuditEntry;
+import eu.avalanche7.paradigm.modules.audit.AuditResult;
+import eu.avalanche7.paradigm.modules.audit.AuditService;
+import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPermission;
+import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
 public class LocalDashboardModule implements ParadigmModule {
     private static volatile LocalDashboardModule INSTANCE;

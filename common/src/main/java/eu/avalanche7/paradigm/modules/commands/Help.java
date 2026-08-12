@@ -1,5 +1,7 @@
 package eu.avalanche7.paradigm.modules.commands;
 
+import java.util.*;
+
 import eu.avalanche7.paradigm.ParadigmAPI;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
@@ -8,8 +10,6 @@ import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.MessageParser;
-
-import java.util.*;
 
 public class Help implements ParadigmModule {
     private static final String NAME = "Help";

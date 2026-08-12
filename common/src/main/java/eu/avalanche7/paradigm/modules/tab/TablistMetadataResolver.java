@@ -1,19 +1,20 @@
 package eu.avalanche7.paradigm.modules.tab;
 
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.permissions.PermissionAPI;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import net.luckperms.api.LuckPerms;
-import net.luckperms.api.LuckPermsProvider;
-import net.luckperms.api.model.group.Group;
-import net.luckperms.api.model.user.User;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import java.util.function.LongSupplier;
+
+import net.luckperms.api.LuckPerms;
+import net.luckperms.api.LuckPermsProvider;
+import net.luckperms.api.model.group.Group;
+import net.luckperms.api.model.user.User;
+
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.PermissionAPI;
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
 public final class TablistMetadataResolver implements TablistMetadataProvider {
     private static final int MAX_CACHE_ENTRIES = 256;

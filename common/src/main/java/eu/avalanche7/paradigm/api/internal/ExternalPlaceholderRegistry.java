@@ -1,18 +1,19 @@
 package eu.avalanche7.paradigm.api.internal;
 
-import eu.avalanche7.paradigm.api.ExternalPlaceholderResolver;
-import eu.avalanche7.paradigm.api.PlaceholderContext;
-import eu.avalanche7.paradigm.api.Registration;
-import eu.avalanche7.paradigm.api.RegistrationStatus;
-import eu.avalanche7.paradigm.utils.LiteralPlaceholders;
-import org.slf4j.Logger;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+
+import org.slf4j.Logger;
+
+import eu.avalanche7.paradigm.api.ExternalPlaceholderResolver;
+import eu.avalanche7.paradigm.api.PlaceholderContext;
+import eu.avalanche7.paradigm.api.Registration;
+import eu.avalanche7.paradigm.api.RegistrationStatus;
+import eu.avalanche7.paradigm.utils.LiteralPlaceholders;
 
 final class ExternalPlaceholderRegistry {
     private final Object lock = new Object();

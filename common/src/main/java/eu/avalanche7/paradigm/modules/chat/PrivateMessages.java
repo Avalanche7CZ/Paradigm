@@ -1,19 +1,19 @@
 package eu.avalanche7.paradigm.modules.chat;
 
+import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandContext;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-
-import java.util.Locale;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 
 public class PrivateMessages implements ParadigmModule {
 
@@ -82,8 +82,7 @@ public class PrivateMessages implements ParadigmModule {
                         && source.getPlayer() != null &&
                         services.getPermissionsHandler().hasPermission(
                                 source.getPlayer(),
-                                PermissionsHandler.PRIVATE_MESSAGE_PERMISSION,
-                                PermissionsHandler.PRIVATE_MESSAGE_PERMISSION_LEVEL
+                                ParadigmPermissions.PRIVATE_MESSAGE
                         ))
                 .then(platform.createCommandBuilder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
@@ -100,8 +99,7 @@ public class PrivateMessages implements ParadigmModule {
                         && source.getPlayer() != null &&
                         services.getPermissionsHandler().hasPermission(
                                 source.getPlayer(),
-                                PermissionsHandler.PRIVATE_REPLY_PERMISSION,
-                                PermissionsHandler.PRIVATE_REPLY_PERMISSION_LEVEL
+                                ParadigmPermissions.PRIVATE_REPLY
                         ))
                 .then(platform.createCommandBuilder()
                         .argument("message", ICommandBuilder.ArgumentType.GREEDY_STRING)
@@ -116,8 +114,7 @@ public class PrivateMessages implements ParadigmModule {
                         && source.getPlayer() != null
                         && services.getPermissionsHandler().hasPermission(
                                 source.getPlayer(),
-                                PermissionsHandler.SOCIALSPY_PERMISSION,
-                                PermissionsHandler.SOCIALSPY_PERMISSION_LEVEL
+                                ParadigmPermissions.SOCIAL_SPY
                         ))
                 .executes(ctx -> {
                     IPlayer player = ctx.getSource().requirePlayer();
@@ -296,7 +293,7 @@ public class PrivateMessages implements ParadigmModule {
             if (!socialSpyEnabledByUuid.getOrDefault(online.getUUID(), false)) {
                 continue;
             }
-            if (!services.getPermissionsHandler().hasPermission(online, PermissionsHandler.SOCIALSPY_PERMISSION, PermissionsHandler.SOCIALSPY_PERMISSION_LEVEL)) {
+            if (!services.getPermissionsHandler().hasPermission(online, ParadigmPermissions.SOCIAL_SPY)) {
                 continue;
             }
             platform.sendSystemMessage(online, services.getMessageParser().parseMessage(line, online));
@@ -334,4 +331,3 @@ public class PrivateMessages implements ParadigmModule {
         lastContactByUuid.entrySet().removeIf(entry -> playerUuid.equals(entry.getValue()));
     }
 }
-

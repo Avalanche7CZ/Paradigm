@@ -1,5 +1,8 @@
 package eu.avalanche7.paradigm.utils;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
@@ -7,9 +10,6 @@ import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public class JsonValidator {
 

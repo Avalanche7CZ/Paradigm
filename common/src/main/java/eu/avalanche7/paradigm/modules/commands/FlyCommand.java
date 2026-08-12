@@ -2,9 +2,9 @@ package eu.avalanche7.paradigm.modules.commands;
 
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 public class FlyCommand implements ParadigmModule {
     private Services services;
@@ -48,7 +48,7 @@ public class FlyCommand implements ParadigmModule {
                 .literal("fly")
                 .requires(src -> services.getCommandToggleStore().isEnabled("fly")
                         && src.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), PermissionsHandler.FLY_PERMISSION, PermissionsHandler.FLY_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), ParadigmPermissions.FLY))
                 .executes(ctx -> toggleFly(ctx.getSource().getPlayer(), ctx.getSource().getPlayer()))
                 .then(services.getPlatformAdapter().createCommandBuilder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
@@ -82,7 +82,7 @@ public class FlyCommand implements ParadigmModule {
         if (actor == null || target == null || actor.getUUID() == null || actor.getUUID().equals(target.getUUID())) {
             return true;
         }
-        return services.getPermissionsHandler().hasPermission(actor, PermissionsHandler.FLY_OTHERS_PERMISSION, PermissionsHandler.FLY_OTHERS_PERMISSION_LEVEL);
+        return services.getPermissionsHandler().hasPermission(actor, ParadigmPermissions.FLY_OTHERS);
     }
 
     private void send(IPlayer player, String key, String fallback, String... placeholders) {

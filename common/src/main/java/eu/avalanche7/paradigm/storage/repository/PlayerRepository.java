@@ -1,12 +1,12 @@
 package eu.avalanche7.paradigm.storage.repository;
 
-import eu.avalanche7.paradigm.storage.model.StoredHome;
-import eu.avalanche7.paradigm.storage.model.StoredLocation;
-import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
-
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+
+import eu.avalanche7.paradigm.storage.model.StoredHome;
+import eu.avalanche7.paradigm.storage.model.StoredLocation;
+import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
 
 public interface PlayerRepository {
     List<StoredPlayerProfile> listProfiles();

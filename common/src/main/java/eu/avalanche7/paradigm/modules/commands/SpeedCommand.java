@@ -2,9 +2,9 @@ package eu.avalanche7.paradigm.modules.commands;
 
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 public class SpeedCommand implements ParadigmModule {
     private Services services;
@@ -48,7 +48,7 @@ public class SpeedCommand implements ParadigmModule {
                 .literal("speed")
                 .requires(src -> services.getCommandToggleStore().isEnabled("speed")
                         && src.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), PermissionsHandler.SPEED_PERMISSION, PermissionsHandler.SPEED_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), ParadigmPermissions.SPEED))
                 .then(services.getPlatformAdapter().createCommandBuilder()
                         .argument("level", ICommandBuilder.ArgumentType.INTEGER)
                         .executes(ctx -> applySpeed(ctx.getSource().getPlayer(), ctx.getSource().getPlayer(), ctx.getIntArgument("level")))
@@ -88,7 +88,7 @@ public class SpeedCommand implements ParadigmModule {
         if (actor == null || target == null || actor.getUUID() == null || actor.getUUID().equals(target.getUUID())) {
             return true;
         }
-        return services.getPermissionsHandler().hasPermission(actor, PermissionsHandler.SPEED_OTHERS_PERMISSION, PermissionsHandler.SPEED_OTHERS_PERMISSION_LEVEL);
+        return services.getPermissionsHandler().hasPermission(actor, ParadigmPermissions.SPEED_OTHERS);
     }
 
     private boolean setPlayerSpeed(IPlayer target, int level) {

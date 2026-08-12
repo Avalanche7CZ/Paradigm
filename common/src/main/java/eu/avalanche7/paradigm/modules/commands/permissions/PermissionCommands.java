@@ -1,22 +1,5 @@
 package eu.avalanche7.paradigm.modules.commands.permissions;
 
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
-import eu.avalanche7.paradigm.modules.permissions.PermissionAssignment;
-import eu.avalanche7.paradigm.modules.permissions.PermissionDisplayFormatter;
-import eu.avalanche7.paradigm.modules.permissions.PermissionMutationRequest;
-import eu.avalanche7.paradigm.modules.permissions.PermissionMutationResult;
-import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
-import eu.avalanche7.paradigm.modules.permissions.context.PermissionMutationArgumentParser;
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.permissions.PermissionAPI;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-import eu.avalanche7.paradigm.modules.permissions.migration.LuckPermsMigrationReport;
-import eu.avalanche7.paradigm.modules.permissions.migration.LuckPermsMigrationService;
-
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
@@ -26,6 +9,23 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
+import eu.avalanche7.paradigm.modules.permissions.PermissionAPI;
+import eu.avalanche7.paradigm.modules.permissions.PermissionAssignment;
+import eu.avalanche7.paradigm.modules.permissions.PermissionDisplayFormatter;
+import eu.avalanche7.paradigm.modules.permissions.PermissionMutationRequest;
+import eu.avalanche7.paradigm.modules.permissions.PermissionMutationResult;
+import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
+import eu.avalanche7.paradigm.modules.permissions.context.PermissionMutationArgumentParser;
+import eu.avalanche7.paradigm.modules.permissions.migration.LuckPermsMigrationReport;
+import eu.avalanche7.paradigm.modules.permissions.migration.LuckPermsMigrationService;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
 /**
  * Internal permission/group command registration and mutation handling.
@@ -726,6 +726,6 @@ public final class PermissionCommands {
         if (source.isConsole() || source.hasPermissionLevel(2)) return true;
         IPlayer player = source.getPlayer();
         return player != null && services.getPermissionsHandler().hasPermission(
-                player, PermissionsHandler.GROUP_MANAGE_PERMISSION, PermissionsHandler.GROUP_MANAGE_PERMISSION_LEVEL);
+                player, ParadigmPermissions.GROUP_MANAGE);
     }
 }

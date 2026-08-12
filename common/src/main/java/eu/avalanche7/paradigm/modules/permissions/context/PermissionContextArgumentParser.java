@@ -1,14 +1,14 @@
 package eu.avalanche7.paradigm.modules.permissions.context;
 
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
-
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.function.Supplier;
+
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
 
 /** Parses repeatable key=value permission-context arguments for command mutations. */
 public final class PermissionContextArgumentParser {

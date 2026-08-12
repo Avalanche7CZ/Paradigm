@@ -1,9 +1,5 @@
 package eu.avalanche7.paradigm.storage.runtime;
 
-import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
-import eu.avalanche7.paradigm.storage.StorageConfig;
-import org.slf4j.Logger;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
@@ -23,6 +19,11 @@ import java.util.EnumSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
+import org.slf4j.Logger;
+
+import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import eu.avalanche7.paradigm.storage.StorageConfig;
 
 public class RuntimeLibraryManager {
     private final StorageConfig config;
@@ -81,7 +82,7 @@ public class RuntimeLibraryManager {
             }
         } catch (RuntimeLibraryException e) {
             throw e;
-        } catch (Throwable t) {
+        } catch (Exception t) {
             RuntimeLibraryDownloadResult result = new RuntimeLibraryDownloadResult(
                     library,
                     RuntimeLibraryDownloadResult.State.FAILED,
@@ -145,7 +146,7 @@ public class RuntimeLibraryManager {
             return URI.create(base + "/" + library.mavenPath()).toURL();
         } catch (RuntimeLibraryException e) {
             throw e;
-        } catch (Throwable t) {
+        } catch (Exception t) {
             throw new RuntimeLibraryException("Could not build Maven URL for " + library.fileName(), t);
         }
     }
@@ -156,7 +157,7 @@ public class RuntimeLibraryManager {
         }
         try {
             return library.sha256().equalsIgnoreCase(sha256(file));
-        } catch (Throwable ignored) {
+        } catch (Exception ignored) {
             return false;
         }
     }
@@ -222,7 +223,7 @@ public class RuntimeLibraryManager {
             return new RuntimeLibraryDownloadResult(library, RuntimeLibraryDownloadResult.State.DOWNLOADED, target, "Runtime library downloaded and verified.");
         } catch (RuntimeLibraryException e) {
             throw e;
-        } catch (Throwable t) {
+        } catch (Exception t) {
             try {
                 Files.deleteIfExists(temp);
             } catch (IOException ignored) {
@@ -241,7 +242,7 @@ public class RuntimeLibraryManager {
         URI uri;
         try {
             uri = URI.create(base);
-        } catch (Throwable t) {
+        } catch (IllegalArgumentException t) {
             throw new RuntimeLibraryException("Runtime library repository URL is invalid: " + base, t);
         }
         String scheme = uri.getScheme() != null ? uri.getScheme().toLowerCase(Locale.ROOT) : "";

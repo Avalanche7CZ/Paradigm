@@ -10,4 +10,3 @@ public class ParadigmConstants {
         // Utility class
     }
 }
-

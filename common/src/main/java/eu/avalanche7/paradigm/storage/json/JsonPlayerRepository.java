@@ -1,16 +1,16 @@
 package eu.avalanche7.paradigm.storage.json;
 
-import eu.avalanche7.paradigm.data.PlayerDataStore;
-import eu.avalanche7.paradigm.storage.model.StoredHome;
-import eu.avalanche7.paradigm.storage.model.StoredLocation;
-import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
-import eu.avalanche7.paradigm.storage.repository.PlayerRepository;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+
+import eu.avalanche7.paradigm.data.PlayerDataStore;
+import eu.avalanche7.paradigm.storage.model.StoredHome;
+import eu.avalanche7.paradigm.storage.model.StoredLocation;
+import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
+import eu.avalanche7.paradigm.storage.repository.PlayerRepository;
 
 public class JsonPlayerRepository implements PlayerRepository {
     private final PlayerDataStore store;

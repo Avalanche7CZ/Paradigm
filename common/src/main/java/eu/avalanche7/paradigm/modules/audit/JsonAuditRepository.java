@@ -1,12 +1,8 @@
 package eu.avalanche7.paradigm.modules.audit;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
-import org.slf4j.Logger;
-
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,6 +10,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import org.slf4j.Logger;
+
+import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 
 public class JsonAuditRepository implements AuditRepository {
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
@@ -40,7 +42,7 @@ public class JsonAuditRepository implements AuditRepository {
                     writer.write(GSON.toJson(entry));
                     writer.newLine();
                 }
-            } catch (Throwable t) {
+            } catch (IOException | RuntimeException t) {
                 if (logger != null) {
                     logger.warn("Paradigm audit: failed to append audit entry: {}", t.getMessage());
                 }
@@ -87,7 +89,7 @@ public class JsonAuditRepository implements AuditRepository {
                         entries = entries.subList(entries.size() - max * 2, entries.size());
                     }
                 }
-            } catch (Throwable t) {
+            } catch (IOException | RuntimeException t) {
                 if (logger != null) {
                     logger.warn("Paradigm audit: failed to read audit log: {}", t.getMessage());
                 }

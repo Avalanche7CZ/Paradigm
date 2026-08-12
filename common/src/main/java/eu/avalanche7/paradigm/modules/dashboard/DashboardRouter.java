@@ -1,23 +1,23 @@
 package eu.avalanche7.paradigm.modules.dashboard;
 
 import com.sun.net.httpserver.HttpExchange;
+
 import eu.avalanche7.paradigm.modules.dashboard.api.AuditApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.AuthApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.ConfigApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.CustomCommandApiHandler;
+import eu.avalanche7.paradigm.modules.dashboard.api.HologramApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.ModerationApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.OverviewApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.PermissionsApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.ServerApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.StaticAssetHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.StorageApiHandler;
-import eu.avalanche7.paradigm.modules.dashboard.api.HologramApiHandler;
+import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPermission;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardSession;
 import eu.avalanche7.paradigm.modules.moderation.ModerationActionType;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPermission;
-import eu.avalanche7.paradigm.modules.holograms.HologramService;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 
 public class DashboardRouter {
     private final DashboardService dashboard;
@@ -74,7 +74,7 @@ public class DashboardRouter {
                 if ("GET".equals(method) && "/api/overview".equals(path)) return overview.get(ctx);
                 if ("GET".equals(method) && "/api/servers".equals(path)) return servers.list(ctx);
                 if (path.startsWith("/api/storage/") && mutating(method)
-                        && !dashboard.hasPermission(ctx.principal(), PermissionsHandler.STORAGE_MANAGE_PERMISSION, PermissionsHandler.STORAGE_MANAGE_PERMISSION_LEVEL)) {
+                        && !dashboard.hasPermission(ctx.principal(), ParadigmPermissions.STORAGE_MANAGE)) {
                     return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to manage storage.");
                 }
                 if ("GET".equals(method) && "/api/storage/status".equals(path)) return storage.status(ctx);
@@ -95,7 +95,7 @@ public class DashboardRouter {
                 if ("GET".equals(method) && "/api/audit/recent".equals(path)) return audit.recent(ctx);
 
                 if (path.startsWith("/api/holograms")
-                        && !dashboard.hasPermission(ctx.principal(), HologramService.MANAGE_PERMISSION, HologramService.MANAGE_PERMISSION_LEVEL)) {
+                        && !dashboard.hasPermission(ctx.principal(), ParadigmPermissions.HOLOGRAM_MANAGE)) {
                     return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to manage holograms.");
                 }
                 if ("GET".equals(method) && "/api/holograms".equals(path)) return holograms.list(ctx);
@@ -122,7 +122,7 @@ public class DashboardRouter {
                     return customCommands.mutate(ctx, action);
                 }
 
-                if (path.startsWith("/api/permissions/") && !dashboard.hasPermission(ctx.principal(), PermissionsHandler.GROUP_MANAGE_PERMISSION, PermissionsHandler.GROUP_MANAGE_PERMISSION_LEVEL)) {
+                if (path.startsWith("/api/permissions/") && !dashboard.hasPermission(ctx.principal(), ParadigmPermissions.GROUP_MANAGE)) {
                     return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to view permissions.");
                 }
                 if ("GET".equals(method) && "/api/permissions/summary".equals(path)) return permissions.summary(ctx);
@@ -198,21 +198,21 @@ public class DashboardRouter {
     }
 
     private boolean canViewModeration(DashboardPrincipal principal) {
-        return dashboard.hasPermission(principal, PermissionsHandler.KICK_PERMISSION, PermissionsHandler.KICK_PERMISSION_LEVEL)
-                || dashboard.hasPermission(principal, PermissionsHandler.BAN_PERMISSION, PermissionsHandler.BAN_PERMISSION_LEVEL)
-                || dashboard.hasPermission(principal, PermissionsHandler.WARN_PERMISSION, PermissionsHandler.WARN_PERMISSION_LEVEL)
-                || dashboard.hasPermission(principal, PermissionsHandler.JAIL_PERMISSION, PermissionsHandler.JAIL_PERMISSION_LEVEL);
+        return dashboard.hasPermission(principal, ParadigmPermissions.KICK)
+                || dashboard.hasPermission(principal, ParadigmPermissions.BAN)
+                || dashboard.hasPermission(principal, ParadigmPermissions.WARN)
+                || dashboard.hasPermission(principal, ParadigmPermissions.JAIL);
     }
 
     private boolean canRunModerationAction(DashboardPrincipal principal, String action) {
         return switch (action) {
-            case "warn" -> dashboard.hasPermission(principal, PermissionsHandler.WARN_PERMISSION, PermissionsHandler.WARN_PERMISSION_LEVEL);
-            case "mute", "tempmute", "unmute" -> dashboard.hasPermission(principal, PermissionsHandler.MUTE_PERMISSION, PermissionsHandler.MUTE_PERMISSION_LEVEL)
-                    || dashboard.hasPermission(principal, PermissionsHandler.TEMPMUTE_PERMISSION, PermissionsHandler.TEMPMUTE_PERMISSION_LEVEL);
-            case "ban", "tempban", "unban", "revoke" -> dashboard.hasPermission(principal, PermissionsHandler.BAN_PERMISSION, PermissionsHandler.BAN_PERMISSION_LEVEL)
-                    || dashboard.hasPermission(principal, PermissionsHandler.TEMPBAN_PERMISSION, PermissionsHandler.TEMPBAN_PERMISSION_LEVEL);
-            case "ipban", "tempipban", "unipban" -> dashboard.hasPermission(principal, PermissionsHandler.IPBAN_PERMISSION, PermissionsHandler.BAN_PERMISSION_LEVEL);
-            case "jail", "unjail" -> dashboard.hasPermission(principal, PermissionsHandler.JAIL_PERMISSION, PermissionsHandler.JAIL_PERMISSION_LEVEL);
+            case "warn" -> dashboard.hasPermission(principal, ParadigmPermissions.WARN);
+            case "mute", "tempmute", "unmute" -> dashboard.hasPermission(principal, ParadigmPermissions.MUTE)
+                    || dashboard.hasPermission(principal, ParadigmPermissions.TEMP_MUTE);
+            case "ban", "tempban", "unban", "revoke" -> dashboard.hasPermission(principal, ParadigmPermissions.BAN)
+                    || dashboard.hasPermission(principal, ParadigmPermissions.TEMP_BAN);
+            case "ipban", "tempipban", "unipban" -> dashboard.hasPermission(principal, ParadigmPermissions.IP_BAN);
+            case "jail", "unjail" -> dashboard.hasPermission(principal, ParadigmPermissions.JAIL);
             default -> false;
         };
     }

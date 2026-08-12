@@ -1,54 +1,54 @@
 package eu.avalanche7.paradigm.modules.dashboard;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+import com.google.gson.JsonObject;
+
 import eu.avalanche7.paradigm.ParadigmAPI;
-import eu.avalanche7.paradigm.modules.audit.AuditActionType;
-import eu.avalanche7.paradigm.modules.audit.AuditResult;
-import eu.avalanche7.paradigm.modules.audit.AuditService;
-import eu.avalanche7.paradigm.configs.schema.ConfigPatchService;
-import eu.avalanche7.paradigm.configs.schema.ConfigSchemaRegistry;
 import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.configs.MOTDConfigHandler;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.configs.MentionConfigHandler;
 import eu.avalanche7.paradigm.configs.RestartConfigHandler;
+import eu.avalanche7.paradigm.configs.schema.ConfigPatchService;
+import eu.avalanche7.paradigm.configs.schema.ConfigSchemaRegistry;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.Announcements;
+import eu.avalanche7.paradigm.modules.Restart;
+import eu.avalanche7.paradigm.modules.audit.AuditActionType;
+import eu.avalanche7.paradigm.modules.audit.AuditResult;
+import eu.avalanche7.paradigm.modules.audit.AuditService;
+import eu.avalanche7.paradigm.modules.commands.Reload;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardAuthService;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPermission;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
+import eu.avalanche7.paradigm.modules.dashboard.customcommands.CustomCommandAdminService;
 import eu.avalanche7.paradigm.modules.dashboard.heartbeat.DashboardHeartbeatService;
 import eu.avalanche7.paradigm.modules.moderation.ModerationActionRequest;
 import eu.avalanche7.paradigm.modules.moderation.ModerationService;
 import eu.avalanche7.paradigm.modules.permissions.PermissionAdminService;
-import eu.avalanche7.paradigm.modules.Announcements;
-import eu.avalanche7.paradigm.modules.Restart;
-import eu.avalanche7.paradigm.modules.commands.Reload;
-import eu.avalanche7.paradigm.modules.permissions.PermissionMutationRequest;
 import eu.avalanche7.paradigm.modules.permissions.PermissionAssignmentId;
-import eu.avalanche7.paradigm.modules.dashboard.customcommands.CustomCommandAdminService;
-import com.google.gson.JsonObject;
+import eu.avalanche7.paradigm.modules.permissions.PermissionDefinition;
+import eu.avalanche7.paradigm.modules.permissions.PermissionMutationRequest;
+import eu.avalanche7.paradigm.modules.permissions.PermissionNodeRegistry;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.storage.StorageConfig;
+import eu.avalanche7.paradigm.storage.StorageProviderType;
+import eu.avalanche7.paradigm.storage.StorageService;
 import eu.avalanche7.paradigm.storage.migration.StorageMigrationOptions;
-import eu.avalanche7.paradigm.storage.identity.ServerScope;
 import eu.avalanche7.paradigm.storage.model.StoredJailState;
 import eu.avalanche7.paradigm.storage.model.StoredPermissionNode;
 import eu.avalanche7.paradigm.storage.model.StoredUserPermissionData;
-import eu.avalanche7.paradigm.storage.model.StoredWarning;
-import eu.avalanche7.paradigm.storage.StorageService;
-import eu.avalanche7.paradigm.storage.StorageConfig;
-import eu.avalanche7.paradigm.storage.StorageProviderType;
-import eu.avalanche7.paradigm.modules.permissions.PermissionNodeRegistry;
-
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.UUID;
 
 public class DashboardService implements AutoCloseable {
     private final Services services;
@@ -191,6 +191,10 @@ public class DashboardService implements AutoCloseable {
             return true;
         }
         return services.getPermissionsHandler().hasPermission(principal.uuid(), DashboardPermission.MANAGE, 4);
+    }
+
+    public boolean hasPermission(DashboardPrincipal principal, PermissionDefinition permission) {
+        return permission != null && hasPermission(principal, permission.node(), permission.fallbackLevel());
     }
 
     public boolean hasPermission(DashboardPrincipal principal, String permission, int fallbackLevel) {

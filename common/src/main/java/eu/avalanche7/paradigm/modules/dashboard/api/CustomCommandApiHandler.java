@@ -1,14 +1,15 @@
 package eu.avalanche7.paradigm.modules.dashboard.api;
 
+import java.util.Map;
+
 import com.google.gson.JsonObject;
+
 import eu.avalanche7.paradigm.modules.audit.AuditActionType;
 import eu.avalanche7.paradigm.modules.audit.AuditResult;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardJson;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardRequestContext;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardResponse;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardService;
-
-import java.util.Map;
 
 public final class CustomCommandApiHandler {
     private final DashboardService dashboard;

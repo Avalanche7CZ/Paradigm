@@ -1,16 +1,16 @@
 package eu.avalanche7.paradigm.utils.formatting;
 
-import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import eu.avalanche7.paradigm.utils.Placeholders;
-import eu.avalanche7.paradigm.utils.formatting.tags.Tag;
-import eu.avalanche7.paradigm.utils.formatting.tags.TagRegistry;
-
 import java.util.List;
 import java.util.Stack;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.utils.Placeholders;
+import eu.avalanche7.paradigm.utils.formatting.tags.Tag;
+import eu.avalanche7.paradigm.utils.formatting.tags.TagRegistry;
 
 public class FormattingParser {
     private final TagRegistry tagRegistry;

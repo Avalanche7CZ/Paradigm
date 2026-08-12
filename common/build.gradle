@@ -1,5 +1,18 @@
 plugins {
     id 'java-library'
+    id 'com.diffplug.spotless' version '6.25.0'
+}
+
+spotless {
+    java {
+        target 'src/main/java/**/*.java', 'src/test/java/**/*.java'
+        toggleOffOn()
+        importOrder 'java', 'javax', '', 'eu.avalanche7'
+        removeUnusedImports()
+        indentWithSpaces(4)
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
 }
 
 def rawCommonVersion = (rootProject.findProperty('mod_version') ?: '0.0.0-dev').toString()

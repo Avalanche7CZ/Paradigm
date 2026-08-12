@@ -1,10 +1,10 @@
 package eu.avalanche7.paradigm.modules.commands.admin;
 
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 public class MovementUtilityCommand extends AbstractAdminCommand {
     @Override
@@ -22,7 +22,7 @@ public class MovementUtilityCommand extends AbstractAdminCommand {
     private void registerTop() {
         ICommandBuilder cmd = builder()
                 .literal("top")
-                .requires(src -> allowed(src, "top", PermissionsHandler.TOP_PERMISSION, PermissionsHandler.TOP_PERMISSION_LEVEL)
+                .requires(src -> allowed(src, "top", ParadigmPermissions.TOP)
                         && src.getPlayer() != null)
                 .executes(ctx -> top(ctx.getSource()));
         services.getPlatformAdapter().registerCommand(cmd);
@@ -31,7 +31,7 @@ public class MovementUtilityCommand extends AbstractAdminCommand {
     private void registerJump() {
         ICommandBuilder cmd = builder()
                 .literal("jump")
-                .requires(src -> allowed(src, "jump", PermissionsHandler.JUMP_PERMISSION, PermissionsHandler.JUMP_PERMISSION_LEVEL)
+                .requires(src -> allowed(src, "jump", ParadigmPermissions.JUMP)
                         && src.getPlayer() != null)
                 .executes(ctx -> jump(ctx.getSource(), 8))
                 .then(builder()

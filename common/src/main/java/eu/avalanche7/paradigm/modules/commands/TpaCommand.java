@@ -1,9 +1,17 @@
 package eu.avalanche7.paradigm.modules.commands;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandContext;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
@@ -11,14 +19,6 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.model.StoredLocation;
 import eu.avalanche7.paradigm.utils.CommandCooldowns;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 public class TpaCommand implements ParadigmModule {
     private Services services;
@@ -87,7 +87,7 @@ public class TpaCommand implements ParadigmModule {
                 .literal("tpa")
                 .requires(source -> services.getCommandToggleStore().isEnabled("tpa")
                         && source.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.TPA_PERMISSION, PermissionsHandler.TPA_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), ParadigmPermissions.TPA))
                 .then(platform.createCommandBuilder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
                         .suggests((c, input) -> onlinePlayerNameSuggestions(c.getSource().getPlayer(), input, true))
@@ -100,7 +100,7 @@ public class TpaCommand implements ParadigmModule {
                 .literal("tpahere")
                 .requires(source -> services.getCommandToggleStore().isEnabled("tpahere")
                         && source.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.TPAHERE_PERMISSION, PermissionsHandler.TPAHERE_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), ParadigmPermissions.TPA_HERE))
                 .then(platform.createCommandBuilder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
                         .suggests((c, input) -> onlinePlayerNameSuggestions(c.getSource().getPlayer(), input, true))
@@ -113,7 +113,7 @@ public class TpaCommand implements ParadigmModule {
                 .literal("tpaccept")
                 .requires(source -> services.getCommandToggleStore().isEnabled("tpaccept")
                         && source.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.TPACCEPT_PERMISSION, PermissionsHandler.TPACCEPT_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), ParadigmPermissions.TPA_ACCEPT))
                 .executes(ctx -> executeAccept(ctx.getSource().getPlayer(), null));
 
         ICommandBuilder withPlayer = platform.createCommandBuilder()
@@ -132,7 +132,7 @@ public class TpaCommand implements ParadigmModule {
                 .literal("tpdeny")
                 .requires(source -> services.getCommandToggleStore().isEnabled("tpdeny")
                         && source.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.TPDENY_PERMISSION, PermissionsHandler.TPDENY_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), ParadigmPermissions.TPA_DENY))
                 .executes(ctx -> executeDeny(ctx.getSource().getPlayer(), null));
 
         ICommandBuilder withPlayer = platform.createCommandBuilder()
@@ -151,7 +151,7 @@ public class TpaCommand implements ParadigmModule {
                 .literal("tpcancel")
                 .requires(source -> services.getCommandToggleStore().isEnabled("tpcancel")
                         && source.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.TPCANCEL_PERMISSION, PermissionsHandler.TPCANCEL_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), ParadigmPermissions.TPA_CANCEL))
                 .executes(ctx -> executeCancel(ctx.getSource().getPlayer(), null));
 
         ICommandBuilder withPlayer = platform.createCommandBuilder()

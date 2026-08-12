@@ -1,10 +1,13 @@
 package eu.avalanche7.paradigm.modules.permissions.migration;
 
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.permissions.PermissionAPI;
-import eu.avalanche7.paradigm.modules.permissions.PermissionAssignment;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+
 import net.luckperms.api.LuckPerms;
 import net.luckperms.api.LuckPermsProvider;
 import net.luckperms.api.context.ImmutableContextSet;
@@ -20,14 +23,11 @@ import net.luckperms.api.node.types.PrefixNode;
 import net.luckperms.api.node.types.SuffixNode;
 import net.luckperms.api.node.types.WeightNode;
 
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.PermissionAPI;
+import eu.avalanche7.paradigm.modules.permissions.PermissionAssignment;
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
+import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
 
 /** Explicit, report-oriented LuckPerms migration. Unsupported contexts are never flattened. */
 public final class LuckPermsMigrationService {

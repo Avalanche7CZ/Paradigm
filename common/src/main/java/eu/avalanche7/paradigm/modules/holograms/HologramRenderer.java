@@ -1,14 +1,14 @@
 package eu.avalanche7.paradigm.modules.holograms;
 
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IHologramPlatform;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
-
-import java.util.Map;
-import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 
 public final class HologramRenderer {
     private final Services services;

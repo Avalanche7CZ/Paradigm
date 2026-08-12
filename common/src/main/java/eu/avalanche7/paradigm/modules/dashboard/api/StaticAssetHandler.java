@@ -1,10 +1,10 @@
 package eu.avalanche7.paradigm.modules.dashboard.api;
 
-import eu.avalanche7.paradigm.modules.dashboard.DashboardConfig;
-import eu.avalanche7.paradigm.modules.dashboard.DashboardResponse;
-
 import java.io.InputStream;
 import java.util.Map;
+
+import eu.avalanche7.paradigm.modules.dashboard.DashboardConfig;
+import eu.avalanche7.paradigm.modules.dashboard.DashboardResponse;
 
 public class StaticAssetHandler {
     private final DashboardConfig config;

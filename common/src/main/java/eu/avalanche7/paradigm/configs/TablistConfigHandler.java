@@ -1,15 +1,16 @@
 package eu.avalanche7.paradigm.configs;
 
-import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
-import eu.avalanche7.paradigm.utils.DebugLogger;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.lang.reflect.Field;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import eu.avalanche7.paradigm.utils.DebugLogger;
 
 public final class TablistConfigHandler extends BaseConfigHandler<TablistConfigHandler.Config> {
     private static final Logger LOGGER = LoggerFactory.getLogger(TablistConfigHandler.class);

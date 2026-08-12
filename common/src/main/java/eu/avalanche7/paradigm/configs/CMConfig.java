@@ -1,11 +1,5 @@
 package eu.avalanche7.paradigm.configs;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import eu.avalanche7.paradigm.data.CustomCommand;
-import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
-import eu.avalanche7.paradigm.utils.DebugLogger;
-
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
@@ -16,6 +10,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Stream;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+
+import eu.avalanche7.paradigm.data.CustomCommand;
+import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import eu.avalanche7.paradigm.utils.DebugLogger;
 
 public class CMConfig {
 

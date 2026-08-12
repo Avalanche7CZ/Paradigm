@@ -1,12 +1,12 @@
 package eu.avalanche7.paradigm.modules.commands.admin;
 
+import java.util.List;
+
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-
-import java.util.List;
 
 public class EnchantCommand extends AbstractAdminCommand {
     @Override
@@ -19,7 +19,7 @@ public class EnchantCommand extends AbstractAdminCommand {
         this.services = services;
         ICommandBuilder cmd = builder()
                 .literal("enchant")
-                .requires(src -> allowed(src, "enchant", PermissionsHandler.ENCHANT_PERMISSION, PermissionsHandler.ENCHANT_PERMISSION_LEVEL))
+                .requires(src -> allowed(src, "enchant", ParadigmPermissions.ENCHANT))
                 .then(builder()
                         .argument("enchantment", ICommandBuilder.ArgumentType.WORD)
                         .suggests(List.of("minecraft:sharpness", "minecraft:efficiency", "minecraft:unbreaking", "minecraft:mending"))
@@ -38,7 +38,7 @@ public class EnchantCommand extends AbstractAdminCommand {
             send(source, "admin.player_not_found", "Player not found.");
             return 0;
         }
-        if (!canTargetOther(source.getPlayer(), target, PermissionsHandler.ENCHANT_OTHERS_PERMISSION, PermissionsHandler.ENCHANT_OTHERS_PERMISSION_LEVEL)) {
+        if (!canTargetOther(source.getPlayer(), target, ParadigmPermissions.ENCHANT_OTHERS)) {
             send(source, "admin.no_permission_others", "You do not have permission to affect other players.");
             return 0;
         }

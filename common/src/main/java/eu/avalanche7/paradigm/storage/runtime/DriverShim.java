@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverPropertyInfo;
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.util.Properties;
 import java.util.logging.Logger;
 
@@ -48,7 +49,7 @@ public class DriverShim implements Driver {
     public Logger getParentLogger() {
         try {
             return delegate.getParentLogger();
-        } catch (Throwable ignored) {
+        } catch (SQLFeatureNotSupportedException | RuntimeException | LinkageError ignored) {
             return Logger.getLogger(Logger.GLOBAL_LOGGER_NAME);
         }
     }

@@ -3,9 +3,9 @@ package eu.avalanche7.paradigm.modules.commands;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 public class IgnoreCommand implements ParadigmModule {
     private Services services;
@@ -58,7 +58,7 @@ public class IgnoreCommand implements ParadigmModule {
                 .literal("ignore")
                 .requires(src -> services.getCommandToggleStore().isEnabled("ignore")
                         && src.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), PermissionsHandler.IGNORE_PERMISSION, PermissionsHandler.IGNORE_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), ParadigmPermissions.IGNORE))
                 .then(services.getPlatformAdapter().createCommandBuilder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
                         .executes(ctx -> {
@@ -93,7 +93,7 @@ public class IgnoreCommand implements ParadigmModule {
                 .literal("unignore")
                 .requires(src -> services.getCommandToggleStore().isEnabled("unignore")
                         && src.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), PermissionsHandler.IGNORE_PERMISSION, PermissionsHandler.IGNORE_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), ParadigmPermissions.IGNORE))
                 .then(services.getPlatformAdapter().createCommandBuilder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
                         .executes(ctx -> {

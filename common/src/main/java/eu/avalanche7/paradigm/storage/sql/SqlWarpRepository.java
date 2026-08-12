@@ -1,16 +1,16 @@
 package eu.avalanche7.paradigm.storage.sql;
 
-import eu.avalanche7.paradigm.data.WarpStore;
-import eu.avalanche7.paradigm.storage.identity.StorageContext;
-import eu.avalanche7.paradigm.storage.model.StoredLocation;
-import eu.avalanche7.paradigm.storage.model.StoredWarp;
-import eu.avalanche7.paradigm.storage.repository.WarpRepository;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+
+import eu.avalanche7.paradigm.data.WarpStore;
+import eu.avalanche7.paradigm.storage.identity.StorageContext;
+import eu.avalanche7.paradigm.storage.model.StoredLocation;
+import eu.avalanche7.paradigm.storage.model.StoredWarp;
+import eu.avalanche7.paradigm.storage.repository.WarpRepository;
 
 public class SqlWarpRepository extends SqlRepositorySupport implements WarpRepository {
     private static final String GLOBAL_SPAWN_KEY = "global_spawn";
@@ -24,20 +24,22 @@ public class SqlWarpRepository extends SqlRepositorySupport implements WarpRepos
         String key = warpKey(warp != null ? warp.name() : null);
         if (warp == null || warp.location() == null || key == null) return;
         String displayName = displayName(warp.name(), key);
-        sql.update("DELETE FROM warps WHERE server_id = ? AND LOWER(name) = ?", ps -> {
-            ps.setString(1, serverId());
-            ps.setString(2, key);
-        });
-        sql.update("INSERT INTO warps(server_id, name, world_id, x, y, z, yaw, pitch, permission, description, created_by, created_at_ms, updated_at_ms) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", ps -> {
-            ps.setString(1, serverId());
-            ps.setString(2, displayName);
-            bindLocation(ps, 3, warp.location());
-            ps.setString(9, warp.permission());
-            ps.setString(10, warp.description());
-            ps.setString(11, warp.createdBy());
-            long now = System.currentTimeMillis();
-            ps.setLong(12, warp.createdAtMs() > 0L ? warp.createdAtMs() : now);
-            ps.setLong(13, now);
+        sql.transaction(() -> {
+            sql.update("DELETE FROM warps WHERE server_id = ? AND LOWER(name) = ?", ps -> {
+                ps.setString(1, serverId());
+                ps.setString(2, key);
+            });
+            sql.update("INSERT INTO warps(server_id, name, world_id, x, y, z, yaw, pitch, permission, description, created_by, created_at_ms, updated_at_ms) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", ps -> {
+                ps.setString(1, serverId());
+                ps.setString(2, displayName);
+                bindLocation(ps, 3, warp.location());
+                ps.setString(9, warp.permission());
+                ps.setString(10, warp.description());
+                ps.setString(11, warp.createdBy());
+                long now = System.currentTimeMillis();
+                ps.setLong(12, warp.createdAtMs() > 0L ? warp.createdAtMs() : now);
+                ps.setLong(13, now);
+            });
         });
     }
 
@@ -98,15 +100,17 @@ public class SqlWarpRepository extends SqlRepositorySupport implements WarpRepos
         if (location == null || location.worldId() == null || location.worldId().isBlank()) {
             return;
         }
-        sql.update("DELETE FROM admin_state WHERE server_id = ? AND state_key = ?", ps -> {
-            ps.setString(1, serverId());
-            ps.setString(2, GLOBAL_SPAWN_KEY);
-        });
-        sql.update("INSERT INTO admin_state(server_id, state_key, state_value, updated_at_ms) VALUES(?, ?, ?, ?)", ps -> {
-            ps.setString(1, serverId());
-            ps.setString(2, GLOBAL_SPAWN_KEY);
-            ps.setString(3, encodeLocation(location));
-            ps.setLong(4, System.currentTimeMillis());
+        sql.transaction(() -> {
+            sql.update("DELETE FROM admin_state WHERE server_id = ? AND state_key = ?", ps -> {
+                ps.setString(1, serverId());
+                ps.setString(2, GLOBAL_SPAWN_KEY);
+            });
+            sql.update("INSERT INTO admin_state(server_id, state_key, state_value, updated_at_ms) VALUES(?, ?, ?, ?)", ps -> {
+                ps.setString(1, serverId());
+                ps.setString(2, GLOBAL_SPAWN_KEY);
+                ps.setString(3, encodeLocation(location));
+                ps.setLong(4, System.currentTimeMillis());
+            });
         });
     }
 

@@ -1,12 +1,12 @@
 package eu.avalanche7.paradigm.storage.json;
 
+import java.util.Optional;
+import java.util.Set;
+
 import eu.avalanche7.paradigm.data.AdminUtilityDataStore;
 import eu.avalanche7.paradigm.storage.identity.StorageContext;
 import eu.avalanche7.paradigm.storage.model.StoredAdminState;
 import eu.avalanche7.paradigm.storage.repository.AdminStateRepository;
-
-import java.util.Optional;
-import java.util.Set;
 
 public class JsonAdminStateRepository implements AdminStateRepository {
     private final AdminUtilityDataStore store;

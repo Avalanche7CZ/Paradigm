@@ -1,14 +1,14 @@
 package eu.avalanche7.paradigm.storage.json;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.data.WarpStore;
 import eu.avalanche7.paradigm.storage.model.StoredLocation;
 import eu.avalanche7.paradigm.storage.model.StoredWarp;
 import eu.avalanche7.paradigm.storage.repository.WarpRepository;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
 
 public class JsonWarpRepository implements WarpRepository {
     private final WarpStore store;

@@ -1,12 +1,5 @@
 package eu.avalanche7.paradigm.configs;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
-import eu.avalanche7.paradigm.utils.DebugLogger;
-import eu.avalanche7.paradigm.utils.JsonValidator;
-import org.slf4j.Logger;
-
 import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
@@ -14,6 +7,14 @@ import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import org.slf4j.Logger;
+
+import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import eu.avalanche7.paradigm.utils.DebugLogger;
+import eu.avalanche7.paradigm.utils.JsonValidator;
 
 /**
  * Base config handler that works across platforms (Fabric/Forge).

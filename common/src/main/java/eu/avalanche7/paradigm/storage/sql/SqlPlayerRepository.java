@@ -1,17 +1,17 @@
 package eu.avalanche7.paradigm.storage.sql;
 
-import eu.avalanche7.paradigm.storage.identity.StorageContext;
-import eu.avalanche7.paradigm.storage.model.StoredHome;
-import eu.avalanche7.paradigm.storage.model.StoredLocation;
-import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
-import eu.avalanche7.paradigm.storage.repository.PlayerRepository;
-
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
+
+import eu.avalanche7.paradigm.storage.identity.StorageContext;
+import eu.avalanche7.paradigm.storage.model.StoredHome;
+import eu.avalanche7.paradigm.storage.model.StoredLocation;
+import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
+import eu.avalanche7.paradigm.storage.repository.PlayerRepository;
 
 public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerRepository {
     public SqlPlayerRepository(SqlExecutor sql, StorageContext context) {
@@ -42,12 +42,14 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
     public void upsertProfile(StoredPlayerProfile profile) {
         if (profile == null) return;
         String normalizedUuid = normalize(profile.uuid());
-        sql.update("DELETE FROM players WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid));
-        sql.update("INSERT INTO players(uuid, name, first_seen_ms, last_seen_ms) VALUES(?, ?, ?, ?)", ps -> {
-            ps.setString(1, normalizedUuid);
-            ps.setString(2, profile.name());
-            ps.setLong(3, profile.firstSeenMs());
-            ps.setLong(4, profile.lastSeenMs());
+        sql.transaction(() -> {
+            sql.update("DELETE FROM players WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid));
+            sql.update("INSERT INTO players(uuid, name, first_seen_ms, last_seen_ms) VALUES(?, ?, ?, ?)", ps -> {
+                ps.setString(1, normalizedUuid);
+                ps.setString(2, profile.name());
+                ps.setLong(3, profile.firstSeenMs());
+                ps.setLong(4, profile.lastSeenMs());
+            });
         });
     }
 
@@ -83,19 +85,21 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
     public void saveHome(StoredHome home) {
         if (home == null || home.location() == null) return;
         String normalizedUuid = normalize(home.uuid());
-        sql.update("DELETE FROM player_homes WHERE server_id = ? AND uuid = ? AND home_name = ?", ps -> {
-            ps.setString(1, serverId());
-            ps.setString(2, normalizedUuid);
-            ps.setString(3, home.name());
-        });
-        sql.update("INSERT INTO player_homes(server_id, uuid, home_name, world_id, x, y, z, yaw, pitch, created_at_ms, updated_at_ms) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", ps -> {
-            ps.setString(1, serverId());
-            ps.setString(2, normalizedUuid);
-            ps.setString(3, home.name());
-            bindLocation(ps, 4, home.location());
-            long now = System.currentTimeMillis();
-            ps.setLong(10, home.createdAtMs() > 0L ? home.createdAtMs() : now);
-            ps.setLong(11, now);
+        sql.transaction(() -> {
+            sql.update("DELETE FROM player_homes WHERE server_id = ? AND uuid = ? AND home_name = ?", ps -> {
+                ps.setString(1, serverId());
+                ps.setString(2, normalizedUuid);
+                ps.setString(3, home.name());
+            });
+            sql.update("INSERT INTO player_homes(server_id, uuid, home_name, world_id, x, y, z, yaw, pitch, created_at_ms, updated_at_ms) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", ps -> {
+                ps.setString(1, serverId());
+                ps.setString(2, normalizedUuid);
+                ps.setString(3, home.name());
+                bindLocation(ps, 4, home.location());
+                long now = System.currentTimeMillis();
+                ps.setLong(10, home.createdAtMs() > 0L ? home.createdAtMs() : now);
+                ps.setLong(11, now);
+            });
         });
     }
 
@@ -122,15 +126,17 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
     public void setBackLocation(String uuid, StoredLocation location) {
         if (location == null) return;
         String normalizedUuid = normalize(uuid);
-        sql.update("DELETE FROM player_back_locations WHERE server_id = ? AND uuid = ?", ps -> {
-            ps.setString(1, serverId());
-            ps.setString(2, normalizedUuid);
-        });
-        sql.update("INSERT INTO player_back_locations(server_id, uuid, world_id, x, y, z, yaw, pitch, updated_at_ms) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", ps -> {
-            ps.setString(1, serverId());
-            ps.setString(2, normalizedUuid);
-            bindLocation(ps, 3, location);
-            ps.setLong(9, System.currentTimeMillis());
+        sql.transaction(() -> {
+            sql.update("DELETE FROM player_back_locations WHERE server_id = ? AND uuid = ?", ps -> {
+                ps.setString(1, serverId());
+                ps.setString(2, normalizedUuid);
+            });
+            sql.update("INSERT INTO player_back_locations(server_id, uuid, world_id, x, y, z, yaw, pitch, updated_at_ms) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", ps -> {
+                ps.setString(1, serverId());
+                ps.setString(2, normalizedUuid);
+                bindLocation(ps, 3, location);
+                ps.setLong(9, System.currentTimeMillis());
+            });
         });
     }
 
@@ -151,16 +157,18 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
     public boolean addIgnoredPlayer(String uuid, String ignoredUuid) {
         String normalizedUuid = normalize(uuid);
         String normalizedIgnoredUuid = normalize(ignoredUuid);
-        sql.update("DELETE FROM player_ignored_players WHERE server_id = ? AND uuid = ? AND ignored_uuid = ?", ps -> {
-            ps.setString(1, serverId());
-            ps.setString(2, normalizedUuid);
-            ps.setString(3, normalizedIgnoredUuid);
+        return sql.transaction(() -> {
+            sql.update("DELETE FROM player_ignored_players WHERE server_id = ? AND uuid = ? AND ignored_uuid = ?", ps -> {
+                ps.setString(1, serverId());
+                ps.setString(2, normalizedUuid);
+                ps.setString(3, normalizedIgnoredUuid);
+            });
+            return sql.update("INSERT INTO player_ignored_players(server_id, uuid, ignored_uuid) VALUES(?, ?, ?)", ps -> {
+                ps.setString(1, serverId());
+                ps.setString(2, normalizedUuid);
+                ps.setString(3, normalizedIgnoredUuid);
+            }) > 0;
         });
-        return sql.update("INSERT INTO player_ignored_players(server_id, uuid, ignored_uuid) VALUES(?, ?, ?)", ps -> {
-            ps.setString(1, serverId());
-            ps.setString(2, normalizedUuid);
-            ps.setString(3, normalizedIgnoredUuid);
-        }) > 0;
     }
 
     @Override

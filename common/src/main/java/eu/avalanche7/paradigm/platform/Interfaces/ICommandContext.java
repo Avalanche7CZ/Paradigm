@@ -1,8 +1,8 @@
 package eu.avalanche7.paradigm.platform.Interfaces;
 
-import org.jetbrains.annotations.Nullable;
-
 import java.util.Optional;
+
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Platform-agnostic command execution context.

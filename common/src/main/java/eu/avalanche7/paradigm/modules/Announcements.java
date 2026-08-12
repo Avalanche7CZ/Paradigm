@@ -1,22 +1,22 @@
 package eu.avalanche7.paradigm.modules;
 
-import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
-import eu.avalanche7.paradigm.core.ParadigmModule;
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandContext;
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
-import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+
+import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
+import eu.avalanche7.paradigm.core.ParadigmModule;
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandContext;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
 public class Announcements implements ParadigmModule {
     private static final String NAME = "Announcements";
@@ -73,10 +73,7 @@ public class Announcements implements ParadigmModule {
 
     @Override
     public void onEnable(Services services) {
-        if (platform != null && isEnabled(services) && !announcementsScheduled) {
-            services.getDebugLogger().debugLog(NAME + ": Module enabled, scheduling announcements.");
-            scheduleConfiguredAnnouncements();
-        }
+        services.getDebugLogger().debugLog(NAME + ": Module enabled; announcements are scheduled when the server starts.");
     }
 
     @Override
@@ -142,8 +139,7 @@ public class Announcements implements ParadigmModule {
         IPlayer player = source.getPlayer();
         return player != null && services.getPermissionsHandler().hasPermission(
                 player,
-                PermissionsHandler.BROADCAST_PERMISSION,
-                PermissionsHandler.BROADCAST_PERMISSION_LEVEL
+                ParadigmPermissions.BROADCAST
         );
     }
 
@@ -192,26 +188,23 @@ public class Announcements implements ParadigmModule {
     }
 
     private void cancelAllTasks() {
-        if (globalTask != null && !globalTask.isCancelled()) {
-            globalTask.cancel(false);
-            globalTask = null;
-            services.getDebugLogger().debugLog(NAME + ": Cancelled global messages task.");
+        globalTask = cancelTask(globalTask, "global");
+        actionbarTask = cancelTask(actionbarTask, "actionbar");
+        titleTask = cancelTask(titleTask, "title");
+        bossbarTask = cancelTask(bossbarTask, "bossbar");
+    }
+
+    private ScheduledFuture<?> cancelTask(ScheduledFuture<?> task, String type) {
+        if (task == null) return null;
+        if (!task.isCancelled()) {
+            task.cancel(false);
+            services.getDebugLogger().debugLog(NAME + ": Cancelled " + type + " messages task.");
         }
-        if (actionbarTask != null && !actionbarTask.isCancelled()) {
-            actionbarTask.cancel(false);
-            actionbarTask = null;
-            services.getDebugLogger().debugLog(NAME + ": Cancelled actionbar messages task.");
-        }
-        if (titleTask != null && !titleTask.isCancelled()) {
-            titleTask.cancel(false);
-            titleTask = null;
-            services.getDebugLogger().debugLog(NAME + ": Cancelled title messages task.");
-        }
-        if (bossbarTask != null && !bossbarTask.isCancelled()) {
-            bossbarTask.cancel(false);
-            bossbarTask = null;
-            services.getDebugLogger().debugLog(NAME + ": Cancelled bossbar messages task.");
-        }
+        return null;
+    }
+
+    public boolean isScheduled() {
+        return announcementsScheduled;
     }
 
     private String getNextMessage(List<String> messages, String orderMode, String type) {

@@ -1,8 +1,8 @@
 package eu.avalanche7.paradigm.platform.Interfaces;
 
-import eu.avalanche7.paradigm.modules.holograms.HologramDisplaySettings;
-
 import java.util.Set;
+
+import eu.avalanche7.paradigm.modules.holograms.HologramDisplaySettings;
 
 /** Typed loader boundary for server-side hologram entities. */
 public interface IHologramPlatform {

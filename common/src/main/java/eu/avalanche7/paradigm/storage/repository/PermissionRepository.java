@@ -1,11 +1,11 @@
 package eu.avalanche7.paradigm.storage.repository;
 
+import java.util.List;
+import java.util.Optional;
+
 import eu.avalanche7.paradigm.storage.model.StoredPermissionGroup;
 import eu.avalanche7.paradigm.storage.model.StoredPermissionNode;
 import eu.avalanche7.paradigm.storage.model.StoredUserPermissionData;
-
-import java.util.List;
-import java.util.Optional;
 
 public interface PermissionRepository {
     List<StoredPermissionGroup> listGroups();

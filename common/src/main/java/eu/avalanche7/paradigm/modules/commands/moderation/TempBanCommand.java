@@ -1,17 +1,20 @@
 package eu.avalanche7.paradigm.modules.commands.moderation;
 
+import java.util.List;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
-import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-
-import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 public class TempBanCommand extends AbstractModerationCommand {
+    private volatile ScheduledFuture<?> expiryTask;
+
     @Override
     public String getName() {
         return "TempBan";
@@ -20,9 +23,21 @@ public class TempBanCommand extends AbstractModerationCommand {
     @Override
     public void onServerStarting(Object event, Services services) {
         this.services = services;
+        cancelExpiryTask();
         if (services != null && services.getTaskScheduler() != null) {
-            services.getTaskScheduler().scheduleAtFixedRate(this::expireTempBans, 30L, 60L, TimeUnit.SECONDS);
+            expiryTask = services.getTaskScheduler().scheduleAtFixedRate(this::expireTempBans, 30L, 60L, TimeUnit.SECONDS);
         }
+    }
+
+    @Override
+    public void onServerStopping(Object event, Services services) {
+        cancelExpiryTask();
+    }
+
+    private void cancelExpiryTask() {
+        ScheduledFuture<?> task = expiryTask;
+        expiryTask = null;
+        if (task != null) task.cancel(false);
     }
 
     @Override
@@ -30,7 +45,7 @@ public class TempBanCommand extends AbstractModerationCommand {
         this.services = services;
         ICommandBuilder cmd = builder()
                 .literal("tempban")
-                .requires(src -> allowed(src, "tempban", PermissionsHandler.TEMPBAN_PERMISSION, PermissionsHandler.TEMPBAN_PERMISSION_LEVEL))
+                .requires(src -> allowed(src, "tempban", ParadigmPermissions.TEMP_BAN))
                 .then(builder()
                         .argument("player", ICommandBuilder.ArgumentType.WORD)
                         .then(builder()

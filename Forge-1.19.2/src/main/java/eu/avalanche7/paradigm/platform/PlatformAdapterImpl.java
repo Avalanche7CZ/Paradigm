@@ -76,6 +76,11 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public TaskScheduler getTaskScheduler() {
+        return taskScheduler;
+    }
+
+    @Override
     public void provideMessageParser(MessageParser messageParser) {
         this.messageParser = messageParser;
     }
@@ -162,8 +167,16 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public boolean hasPermission(IPlayer player, String permissionNode, int vanillaLevel) {
         if (hasPermission(player, permissionNode)) return true;
+        return this.hasVanillaPermissionLevel(player, vanillaLevel);
+    }
+
+    @Override
+    public boolean hasVanillaPermissionLevel(IPlayer player, int level) {
+        if (!(player instanceof MinecraftPlayer)) {
+            return false;
+        }
         ServerPlayer mc = ((MinecraftPlayer) player).getHandle();
-        return mc.hasPermissions(vanillaLevel);
+        return mc.hasPermissions(level);
     }
 
     @Override
@@ -473,6 +486,23 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public java.util.Optional<Double> findSafeRtpY(IPlayer player, double x, double z) {
+        if (!(player instanceof MinecraftPlayer mp)) return java.util.Optional.empty();
+        ServerLevel level = (ServerLevel) mp.getHandle().getLevel();
+        int blockX = (int) Math.floor(x);
+        int blockZ = (int) Math.floor(z);
+        level.getChunk(blockX >> 4, blockZ >> 4);
+        int topY = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, blockX, blockZ);
+        net.minecraft.core.BlockPos ground = new net.minecraft.core.BlockPos(blockX, topY - 1, blockZ);
+        net.minecraft.core.BlockPos feet = new net.minecraft.core.BlockPos(blockX, topY, blockZ);
+        net.minecraft.core.BlockPos head = new net.minecraft.core.BlockPos(blockX, topY + 1, blockZ);
+        net.minecraft.world.level.block.state.BlockState groundState = level.getBlockState(ground);
+        if (groundState.isAir() || !groundState.getFluidState().isEmpty()) return java.util.Optional.empty();
+        if (!level.getBlockState(feet).getFluidState().isEmpty() || !level.getBlockState(head).getFluidState().isEmpty()) return java.util.Optional.empty();
+        return java.util.Optional.of((double) topY);
+    }
+
+    @Override
     public boolean jumpPlayerForward(IPlayer player, int distance) {
         if (!(player instanceof MinecraftPlayer mp)) return false;
         ServerPlayer handle = mp.getHandle();
@@ -556,10 +586,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     private void scheduleJvmExitFallback() {
-        taskScheduler.scheduleRaw(() -> {
-            debugLogger.debugLog("PlatformAdapter: Forcing JVM exit with status 1 to trigger auto-restart.");
-            System.exit(1);
-        }, 2, TimeUnit.SECONDS);
+        ServerShutdownWatchdog.arm();
     }
 
     @Override

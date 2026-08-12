@@ -1,18 +1,19 @@
 package eu.avalanche7.paradigm.storage.json;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+import org.slf4j.Logger;
+
 import eu.avalanche7.paradigm.data.PlayerDataStore;
+import eu.avalanche7.paradigm.modules.permissions.PermissionDataStore;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.storage.model.StoredPermissionGroup;
 import eu.avalanche7.paradigm.storage.model.StoredPermissionNode;
 import eu.avalanche7.paradigm.storage.model.StoredUserPermissionData;
 import eu.avalanche7.paradigm.storage.repository.PermissionRepository;
 import eu.avalanche7.paradigm.utils.DebugLogger;
-import eu.avalanche7.paradigm.modules.permissions.PermissionDataStore;
-import org.slf4j.Logger;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
 
 public class JsonPermissionRepository implements PermissionRepository {
     private final PermissionDataStore permissionStore;

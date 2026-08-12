@@ -1,12 +1,13 @@
 package eu.avalanche7.paradigm.modules.chat;
 
+import org.jetbrains.annotations.Nullable;
+
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.PlayerGroupData;
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 import eu.avalanche7.paradigm.platform.Interfaces.*;
 import eu.avalanche7.paradigm.utils.GroupChatManager;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-import org.jetbrains.annotations.Nullable;
 
 public class GroupChat implements ParadigmModule {
 

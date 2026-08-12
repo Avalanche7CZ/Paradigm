@@ -15,8 +15,10 @@ public interface ParadigmModule {
 
     void onServerStopping(Object event, Services services);
 
+    default void onServerStopped(Object event, Services services) {
+    }
+
     void registerCommands(Object dispatcher, Object registryAccess, Services services);
 
     void registerEventListeners(Object eventBus, Services services);
 }
-

@@ -37,4 +37,3 @@ public class Token {
         return "Token(" + type + ", '" + value + "', " + position + ")";
     }
 }
-

@@ -1,10 +1,10 @@
 package eu.avalanche7.paradigm.modules.commands.admin;
 
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 public class RepairCommand extends AbstractAdminCommand {
     @Override
@@ -17,7 +17,7 @@ public class RepairCommand extends AbstractAdminCommand {
         this.services = services;
         ICommandBuilder root = builder()
                 .literal("repair")
-                .requires(src -> allowed(src, "repair", PermissionsHandler.REPAIR_PERMISSION, PermissionsHandler.REPAIR_PERMISSION_LEVEL))
+                .requires(src -> allowed(src, "repair", ParadigmPermissions.REPAIR))
                 .executes(ctx -> repair(ctx.getSource(), ctx.getSource().getPlayer(), false))
                 .then(builder()
                         .literal("all")
@@ -36,7 +36,7 @@ public class RepairCommand extends AbstractAdminCommand {
             send(source, "admin.player_not_found", "Player not found.");
             return 0;
         }
-        if (!canTargetOther(source.getPlayer(), target, PermissionsHandler.REPAIR_OTHERS_PERMISSION, PermissionsHandler.REPAIR_OTHERS_PERMISSION_LEVEL)) {
+        if (!canTargetOther(source.getPlayer(), target, ParadigmPermissions.REPAIR_OTHERS)) {
             send(source, "admin.no_permission_others", "You do not have permission to affect other players.");
             return 0;
         }

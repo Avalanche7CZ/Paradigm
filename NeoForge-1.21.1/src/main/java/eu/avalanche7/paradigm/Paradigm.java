@@ -16,6 +16,7 @@ import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import org.slf4j.Logger;
 
@@ -180,7 +181,16 @@ public class Paradigm {
             }
         });
         if (telemetryReporter != null) telemetryReporter.stop();
-        services.getTaskScheduler().onServerStopping();
+        services.shutdown();
         CooldownConfigHandler.saveCooldowns();
+    }
+
+    @SubscribeEvent
+    public void onServerStopped(ServerStoppedEvent event) {
+        modules.forEach(module -> {
+            if (module.isEnabled(services)) {
+                module.onServerStopped(event, services);
+            }
+        });
     }
 }

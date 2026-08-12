@@ -1,7 +1,5 @@
 package eu.avalanche7.paradigm.modules.dashboard.auth;
 
-import eu.avalanche7.paradigm.modules.dashboard.DashboardConfig;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
@@ -9,6 +7,8 @@ import java.util.Base64;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
+import eu.avalanche7.paradigm.modules.dashboard.DashboardConfig;
 
 public class DashboardAuthService {
     private static final SecureRandom RANDOM = new SecureRandom();

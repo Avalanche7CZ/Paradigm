@@ -1,14 +1,17 @@
 package eu.avalanche7.paradigm.platform;
 
+import com.mojang.logging.LogUtils;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import net.fabricmc.fabric.api.entity.event.v1.ServerLivingEntityEvents;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
+import org.slf4j.Logger;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class MinecraftEventSystem implements IEventSystem {
+    private static final Logger LOGGER = LogUtils.getLogger();
     private final CopyOnWriteArrayList<PlayerJoinEventListener> joinListeners = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<PlayerLeaveEventListener> leaveListeners = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<PlayerDeathEventListener> deathListeners = new CopyOnWriteArrayList<>();
@@ -36,8 +39,8 @@ public class MinecraftEventSystem implements IEventSystem {
             for (PlayerLeaveEventListener listener : leaveListeners) {
                 try {
                     listener.onPlayerLeave(leaveEvent);
-                } catch (Exception e) {
-                    System.err.println("Error in player leave event listener: " + e.getMessage());
+                } catch (Exception failure) {
+                    LOGGER.error("Error in player leave event listener.", failure);
                 }
             }
         });

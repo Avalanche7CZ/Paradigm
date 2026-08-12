@@ -1,29 +1,28 @@
 package eu.avalanche7.paradigm.modules.commands;
 
-import eu.avalanche7.paradigm.ParadigmAPI;
-import eu.avalanche7.paradigm.configs.*;
-import eu.avalanche7.paradigm.core.ParadigmModule;
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.platform.Interfaces.*;
-import eu.avalanche7.paradigm.modules.Announcements;
-import eu.avalanche7.paradigm.modules.CommandManager;
-import eu.avalanche7.paradigm.modules.Restart;
-import eu.avalanche7.paradigm.storage.StorageService;
-import eu.avalanche7.paradigm.storage.migration.StorageMigrationOptions;
-import eu.avalanche7.paradigm.utils.CommandToggleStore;
-import eu.avalanche7.paradigm.modules.commands.permissions.PermissionCommands;
-import eu.avalanche7.paradigm.modules.dashboard.LocalDashboardModule;
-import eu.avalanche7.paradigm.modules.holograms.Holograms;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-import eu.avalanche7.paradigm.modules.commands.moderation.PunishmentCommands;
-import eu.avalanche7.paradigm.modules.tab.Tablist;
-
 import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+
+import eu.avalanche7.paradigm.ParadigmAPI;
+import eu.avalanche7.paradigm.configs.*;
+import eu.avalanche7.paradigm.core.ParadigmModule;
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.Announcements;
+import eu.avalanche7.paradigm.modules.CommandManager;
+import eu.avalanche7.paradigm.modules.Restart;
+import eu.avalanche7.paradigm.modules.commands.moderation.PunishmentCommands;
+import eu.avalanche7.paradigm.modules.commands.permissions.PermissionCommands;
+import eu.avalanche7.paradigm.modules.dashboard.LocalDashboardModule;
+import eu.avalanche7.paradigm.modules.holograms.Holograms;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
+import eu.avalanche7.paradigm.modules.tab.Tablist;
+import eu.avalanche7.paradigm.platform.Interfaces.*;
+import eu.avalanche7.paradigm.storage.StorageService;
+import eu.avalanche7.paradigm.storage.migration.StorageMigrationOptions;
+import eu.avalanche7.paradigm.utils.CommandToggleStore;
 
 public class Reload implements ParadigmModule {
     private static final Map<ParadigmModule, Boolean> LAST_HELP_STATE = new ConcurrentHashMap<>();
@@ -336,8 +335,7 @@ public class Reload implements ParadigmModule {
         IPlayer player = src.getPlayer();
         return player != null && services.getPermissionsHandler().hasPermission(
                 player,
-                PermissionsHandler.RELOAD_PERMISSION,
-                PermissionsHandler.RELOAD_PERMISSION_LEVEL
+                ParadigmPermissions.RELOAD
         );
     }
 
@@ -348,8 +346,7 @@ public class Reload implements ParadigmModule {
         IPlayer player = src.getPlayer();
         return player != null && services.getPermissionsHandler().hasPermission(
                 player,
-                PermissionsHandler.COMMAND_TOGGLE_PERMISSION,
-                PermissionsHandler.COMMAND_TOGGLE_PERMISSION_LEVEL
+                ParadigmPermissions.COMMAND_TOGGLE
         );
     }
 
@@ -360,8 +357,7 @@ public class Reload implements ParadigmModule {
         IPlayer player = src.getPlayer();
         return player != null && services.getPermissionsHandler().hasPermission(
                 player,
-                PermissionsHandler.STORAGE_MANAGE_PERMISSION,
-                PermissionsHandler.STORAGE_MANAGE_PERMISSION_LEVEL
+                ParadigmPermissions.STORAGE_MANAGE
         );
     }
 

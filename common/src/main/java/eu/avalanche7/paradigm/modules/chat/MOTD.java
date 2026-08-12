@@ -1,13 +1,13 @@
 package eu.avalanche7.paradigm.modules.chat;
 
+import java.util.List;
+
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-
-import java.util.List;
 
 public class MOTD implements ParadigmModule {
 

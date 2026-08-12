@@ -1199,7 +1199,8 @@ function wireActionCard(card) {
     const key = input.dataset.actionField;
     action[key] = key === 'text' || key === 'commands' ? input.value.split('\n') : input.type === 'number' ? Number(input.value) : input.value;
     state.commandDirty = true;
-    if (key === 'type') normalizeAction(action);
+    if (key !== 'type') { refreshCommandJson(); return; }
+    normalizeAction(action);
     renderCustomCommandEditor();
   }));
   const parts = path.split('.');

@@ -1,12 +1,5 @@
 package eu.avalanche7.paradigm.data;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
-import eu.avalanche7.paradigm.utils.DebugLogger;
-import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
-import org.slf4j.Logger;
-
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
@@ -18,6 +11,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import org.slf4j.Logger;
+
+import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
+import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import eu.avalanche7.paradigm.utils.DebugLogger;
 
 public class ModerationDataStore {
     private static final String FILE_NAME = "paradigm/moderation.json";

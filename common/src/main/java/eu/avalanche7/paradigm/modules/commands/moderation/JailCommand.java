@@ -1,25 +1,28 @@
 package eu.avalanche7.paradigm.modules.commands.moderation;
 
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.storage.model.StoredJailState;
-import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
-import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
 import eu.avalanche7.paradigm.storage.identity.ServerScope;
+import eu.avalanche7.paradigm.storage.model.StoredJailState;
 import eu.avalanche7.paradigm.storage.model.StoredLocation;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-
-import java.util.List;
-import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 
 public class JailCommand extends AbstractModerationCommand {
+    private volatile ScheduledFuture<?> expiryTask;
+
     @Override
     public String getName() {
         return "Jail";
@@ -28,9 +31,21 @@ public class JailCommand extends AbstractModerationCommand {
     @Override
     public void onServerStarting(Object event, Services services) {
         this.services = services;
+        cancelExpiryTask();
         if (services != null && services.getTaskScheduler() != null) {
-            services.getTaskScheduler().scheduleAtFixedRate(this::expireJails, 30L, 60L, TimeUnit.SECONDS);
+            expiryTask = services.getTaskScheduler().scheduleAtFixedRate(this::expireJails, 30L, 60L, TimeUnit.SECONDS);
         }
+    }
+
+    @Override
+    public void onServerStopping(Object event, Services services) {
+        cancelExpiryTask();
+    }
+
+    private void cancelExpiryTask() {
+        ScheduledFuture<?> task = expiryTask;
+        expiryTask = null;
+        if (task != null) task.cancel(false);
     }
 
     @Override
@@ -81,7 +96,7 @@ public class JailCommand extends AbstractModerationCommand {
     private void registerSetJail() {
         ICommandBuilder cmd = builder()
                 .literal("setjail")
-                .requires(src -> allowed(src, "setjail", PermissionsHandler.JAIL_MANAGE_PERMISSION, PermissionsHandler.JAIL_MANAGE_PERMISSION_LEVEL)
+                .requires(src -> allowed(src, "setjail", ParadigmPermissions.JAIL_MANAGE)
                         && src.getPlayer() != null)
                 .executes(ctx -> setJail(ctx.getSource()));
         services.getPlatformAdapter().registerCommand(cmd);
@@ -90,7 +105,7 @@ public class JailCommand extends AbstractModerationCommand {
     private void registerJail() {
         ICommandBuilder cmd = builder()
                 .literal("jail")
-                .requires(src -> allowed(src, "jail", PermissionsHandler.JAIL_PERMISSION, PermissionsHandler.JAIL_PERMISSION_LEVEL))
+                .requires(src -> allowed(src, "jail", ParadigmPermissions.JAIL))
                 .then(builder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
                         .executes(ctx -> jail(ctx.getSource(), ctx.getPlayerArgument("player"), null, null))
@@ -107,7 +122,7 @@ public class JailCommand extends AbstractModerationCommand {
     private void registerUnjail() {
         ICommandBuilder cmd = builder()
                 .literal("unjail")
-                .requires(src -> allowed(src, "unjail", PermissionsHandler.JAIL_PERMISSION, PermissionsHandler.JAIL_PERMISSION_LEVEL))
+                .requires(src -> allowed(src, "unjail", ParadigmPermissions.JAIL))
                 .then(builder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
                         .executes(ctx -> unjail(ctx.getSource(), ctx.getPlayerArgument("player"))));

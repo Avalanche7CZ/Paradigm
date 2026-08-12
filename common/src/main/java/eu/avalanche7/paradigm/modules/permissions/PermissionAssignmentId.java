@@ -1,9 +1,9 @@
 package eu.avalanche7.paradigm.modules.permissions;
 
-import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
-
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+
+import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
 
 /** Stable IDs for permission assignments, including legacy entries that predate IDs. */
 public final class PermissionAssignmentId {

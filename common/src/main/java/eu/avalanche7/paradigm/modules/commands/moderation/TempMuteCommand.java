@@ -1,16 +1,16 @@
 package eu.avalanche7.paradigm.modules.commands.moderation;
 
+import java.util.List;
+
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.identity.ServerScope;
-import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-
-import java.util.List;
 
 public class TempMuteCommand extends AbstractModerationCommand {
     @Override
@@ -23,7 +23,7 @@ public class TempMuteCommand extends AbstractModerationCommand {
         this.services = services;
         ICommandBuilder cmd = builder()
                 .literal("tempmute")
-                .requires(src -> allowed(src, "tempmute", PermissionsHandler.TEMPMUTE_PERMISSION, PermissionsHandler.TEMPMUTE_PERMISSION_LEVEL))
+                .requires(src -> allowed(src, "tempmute", ParadigmPermissions.TEMP_MUTE))
                 .then(builder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
                         .then(builder()

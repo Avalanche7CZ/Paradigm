@@ -1,13 +1,5 @@
 package eu.avalanche7.paradigm.utils;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonObject;
-import eu.avalanche7.paradigm.configs.MainConfigHandler;
-import eu.avalanche7.paradigm.configs.MOTDConfigHandler;
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -16,7 +8,17 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
+
+import eu.avalanche7.paradigm.configs.MOTDConfigHandler;
+import eu.avalanche7.paradigm.configs.MainConfigHandler;
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 
 public class TelemetryReporter {
 
@@ -24,12 +26,17 @@ public class TelemetryReporter {
     private static final String ENDPOINT = "https://arcturus-official.eu/paradigm/telemetry";
     private final Services services;
     private volatile boolean active = false;
+    private volatile ScheduledFuture<?> reportTask;
 
     public TelemetryReporter(Services services) {
         this.services = services;
     }
 
     public void start() {
+        if (active) {
+            services.getDebugLogger().debugLog("TelemetryReporter: already started");
+            return;
+        }
         if (!MainConfigHandler.getConfig().telemetryEnable.value) {
             services.getDebugLogger().debugLog("TelemetryReporter: disabled in config");
             return;
@@ -50,12 +57,15 @@ public class TelemetryReporter {
         Integer intervalConfig = MainConfigHandler.getConfig().telemetryIntervalSeconds.value;
         int interval = Math.max(60, intervalConfig != null ? intervalConfig : 900);
         active = true;
-        services.getTaskScheduler().scheduleAtFixedRate(this::reportOnceSafe, 10, interval, TimeUnit.SECONDS);
+        reportTask = services.getTaskScheduler().scheduleAtFixedRate(this::reportOnceSafe, 10, interval, TimeUnit.SECONDS);
         services.getDebugLogger().debugLog("TelemetryReporter: started with interval " + interval + "s");
     }
 
     public void stop() {
         active = false;
+        ScheduledFuture<?> task = reportTask;
+        reportTask = null;
+        if (task != null) task.cancel(false);
         services.getDebugLogger().debugLog("TelemetryReporter: stopped");
     }
 

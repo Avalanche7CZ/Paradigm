@@ -1,24 +1,24 @@
 package eu.avalanche7.paradigm.modules.commands;
 
-import eu.avalanche7.paradigm.core.ParadigmModule;
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.data.PlayerDataStore;
-import eu.avalanche7.paradigm.data.WarpStore;
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
-import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
-import eu.avalanche7.paradigm.storage.model.StoredLocation;
-import eu.avalanche7.paradigm.storage.model.StoredWarp;
-import eu.avalanche7.paradigm.utils.CommandCooldowns;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
+
+import eu.avalanche7.paradigm.core.ParadigmModule;
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.data.PlayerDataStore;
+import eu.avalanche7.paradigm.data.WarpStore;
+import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.storage.model.StoredLocation;
+import eu.avalanche7.paradigm.storage.model.StoredWarp;
+import eu.avalanche7.paradigm.utils.CommandCooldowns;
 
 public class WarpCommand implements ParadigmModule {
     private static final Pattern SAFE_NAME = Pattern.compile("[A-Za-z0-9_-]{1,32}");
@@ -125,25 +125,25 @@ public class WarpCommand implements ParadigmModule {
     private boolean canSetWarp(IPlayer player) {
         return player != null
                 && services.getCommandToggleStore().isEnabled("setwarp")
-                && services.getPermissionsHandler().hasPermission(player, PermissionsHandler.WARP_SET_PERMISSION, PermissionsHandler.WARP_SET_PERMISSION_LEVEL);
+                && services.getPermissionsHandler().hasPermission(player, ParadigmPermissions.WARP_SET);
     }
 
     private boolean canDeleteWarp(IPlayer player) {
         return player != null
                 && services.getCommandToggleStore().isEnabled("delwarp")
-                && services.getPermissionsHandler().hasPermission(player, PermissionsHandler.WARP_DELETE_PERMISSION, PermissionsHandler.WARP_DELETE_PERMISSION_LEVEL);
+                && services.getPermissionsHandler().hasPermission(player, ParadigmPermissions.WARP_DELETE);
     }
 
     private boolean canListWarps(IPlayer player) {
         return player != null
                 && services.getCommandToggleStore().isEnabled("warps")
-                && services.getPermissionsHandler().hasPermission(player, PermissionsHandler.WARP_LIST_PERMISSION, PermissionsHandler.WARP_LIST_PERMISSION_LEVEL);
+                && services.getPermissionsHandler().hasPermission(player, ParadigmPermissions.WARP_LIST);
     }
 
     private boolean canWarpInfo(IPlayer player) {
         return player != null
                 && services.getCommandToggleStore().isEnabled("warpinfo")
-                && services.getPermissionsHandler().hasPermission(player, PermissionsHandler.WARP_INFO_PERMISSION, PermissionsHandler.WARP_INFO_PERMISSION_LEVEL);
+                && services.getPermissionsHandler().hasPermission(player, ParadigmPermissions.WARP_INFO);
     }
 
     private void registerWarps() {
@@ -151,7 +151,7 @@ public class WarpCommand implements ParadigmModule {
                 .literal("warps")
                 .requires(source -> services.getCommandToggleStore().isEnabled("warps")
                         && source.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.WARP_LIST_PERMISSION, PermissionsHandler.WARP_LIST_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), ParadigmPermissions.WARP_LIST))
                 .executes(ctx -> executeWarps(ctx.getSource().getPlayer()));
         platform.registerCommand(command);
     }
@@ -161,7 +161,7 @@ public class WarpCommand implements ParadigmModule {
                 .literal("setwarp")
                 .requires(source -> services.getCommandToggleStore().isEnabled("setwarp")
                         && source.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.WARP_SET_PERMISSION, PermissionsHandler.WARP_SET_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), ParadigmPermissions.WARP_SET))
                 .then(platform.createCommandBuilder()
                         .argument("name", ICommandBuilder.ArgumentType.WORD)
                         .executes(ctx -> executeSetWarp(ctx.getSource().getPlayer(), ctx.getStringArgument("name"))));
@@ -173,7 +173,7 @@ public class WarpCommand implements ParadigmModule {
                 .literal("delwarp")
                 .requires(source -> services.getCommandToggleStore().isEnabled("delwarp")
                         && source.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.WARP_DELETE_PERMISSION, PermissionsHandler.WARP_DELETE_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), ParadigmPermissions.WARP_DELETE))
                 .then(platform.createCommandBuilder()
                         .argument("name", ICommandBuilder.ArgumentType.WORD)
                         .suggests((c, input) -> warpSuggestions(input))
@@ -186,7 +186,7 @@ public class WarpCommand implements ParadigmModule {
                 .literal("warpinfo")
                 .requires(source -> services.getCommandToggleStore().isEnabled("warpinfo")
                         && source.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.WARP_INFO_PERMISSION, PermissionsHandler.WARP_INFO_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), ParadigmPermissions.WARP_INFO))
                 .then(platform.createCommandBuilder()
                         .argument("name", ICommandBuilder.ArgumentType.WORD)
                         .suggests((c, input) -> warpSuggestions(input))
@@ -383,7 +383,7 @@ public class WarpCommand implements ParadigmModule {
             specific = WarpStore.defaultPermissionFor(WarpStore.normalizeWarpKey(warpNameInput));
         }
 
-        return services.getPermissionsHandler().hasPermission(player, PermissionsHandler.WARP_WILDCARD_PERMISSION, PermissionsHandler.WARP_WILDCARD_PERMISSION_LEVEL)
+        return services.getPermissionsHandler().hasPermission(player, ParadigmPermissions.WARP_WILDCARD)
                 || (specific != null && services.getPermissionsHandler().hasPermission(player, specific));
     }
 

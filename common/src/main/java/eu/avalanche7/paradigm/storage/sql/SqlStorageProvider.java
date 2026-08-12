@@ -1,5 +1,7 @@
 package eu.avalanche7.paradigm.storage.sql;
 
+import org.slf4j.Logger;
+
 import eu.avalanche7.paradigm.modules.audit.AuditRepository;
 import eu.avalanche7.paradigm.modules.audit.SqlAuditRepository;
 import eu.avalanche7.paradigm.storage.StorageConfig;
@@ -15,7 +17,6 @@ import eu.avalanche7.paradigm.storage.repository.PlayerRepository;
 import eu.avalanche7.paradigm.storage.repository.ServerRepository;
 import eu.avalanche7.paradigm.storage.repository.WarpRepository;
 import eu.avalanche7.paradigm.storage.runtime.RuntimeJdbcDriverProvider;
-import org.slf4j.Logger;
 
 public class SqlStorageProvider implements StorageProvider {
     private final StorageProviderType type;

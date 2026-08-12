@@ -1,13 +1,9 @@
 package eu.avalanche7.paradigm.api;
 
-import eu.avalanche7.paradigm.api.internal.ApiProviderRegistry;
-
 import java.util.Set;
 
-/**
- * Stable server-side integration facade for optional Paradigm companion mods.
- * API version changes only when these public contracts change incompatibly.
- */
+import eu.avalanche7.paradigm.api.internal.ApiProviderRegistry;
+
 public final class ParadigmAPI {
     public static final int API_VERSION = 1;
 

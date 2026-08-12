@@ -1,11 +1,11 @@
 package eu.avalanche7.paradigm.modules.holograms;
 
+import java.util.List;
+
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-
-import java.util.List;
 
 public final class HologramActionExecutor {
     private final Services services;

@@ -2,12 +2,12 @@ package eu.avalanche7.paradigm.modules.commands.moderation;
 
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
 import eu.avalanche7.paradigm.storage.identity.ServerScope;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 public class WarnCommand extends AbstractModerationCommand {
     @Override
@@ -20,7 +20,7 @@ public class WarnCommand extends AbstractModerationCommand {
         this.services = services;
         ICommandBuilder cmd = builder()
                 .literal("warn")
-                .requires(src -> allowed(src, "warn", PermissionsHandler.WARN_PERMISSION, PermissionsHandler.WARN_PERMISSION_LEVEL))
+                .requires(src -> allowed(src, "warn", ParadigmPermissions.WARN))
                 .then(builder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
                         .then(builder()

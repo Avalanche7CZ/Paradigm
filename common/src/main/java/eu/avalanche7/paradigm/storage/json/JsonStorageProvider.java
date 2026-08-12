@@ -1,11 +1,13 @@
 package eu.avalanche7.paradigm.storage.json;
 
-import eu.avalanche7.paradigm.modules.audit.AuditRepository;
-import eu.avalanche7.paradigm.modules.audit.JsonAuditRepository;
+import org.slf4j.Logger;
+
 import eu.avalanche7.paradigm.data.AdminUtilityDataStore;
 import eu.avalanche7.paradigm.data.ModerationDataStore;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.data.WarpStore;
+import eu.avalanche7.paradigm.modules.audit.AuditRepository;
+import eu.avalanche7.paradigm.modules.audit.JsonAuditRepository;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.storage.StorageProvider;
 import eu.avalanche7.paradigm.storage.StorageProviderType;
@@ -18,7 +20,6 @@ import eu.avalanche7.paradigm.storage.repository.PlayerRepository;
 import eu.avalanche7.paradigm.storage.repository.ServerRepository;
 import eu.avalanche7.paradigm.storage.repository.WarpRepository;
 import eu.avalanche7.paradigm.utils.DebugLogger;
-import org.slf4j.Logger;
 
 public class JsonStorageProvider implements StorageProvider {
     private final PlayerRepository players;

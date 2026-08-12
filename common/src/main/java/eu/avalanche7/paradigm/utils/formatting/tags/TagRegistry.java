@@ -1,8 +1,9 @@
 package eu.avalanche7.paradigm.utils.formatting.tags;
 
-import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import java.util.ArrayList;
 import java.util.List;
+
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 
 public class TagRegistry {
     private final List<Tag> tags = new ArrayList<>();

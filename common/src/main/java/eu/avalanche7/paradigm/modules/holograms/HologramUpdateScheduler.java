@@ -1,9 +1,9 @@
 package eu.avalanche7.paradigm.modules.holograms;
 
-import eu.avalanche7.paradigm.utils.TaskScheduler;
-
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+
+import eu.avalanche7.paradigm.utils.TaskScheduler;
 
 public final class HologramUpdateScheduler {
     private final TaskScheduler scheduler;

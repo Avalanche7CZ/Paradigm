@@ -1,22 +1,23 @@
 package eu.avalanche7.paradigm.storage.sql;
 
+import java.sql.Types;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
+
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+
+import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
 import eu.avalanche7.paradigm.storage.identity.ServerScope;
 import eu.avalanche7.paradigm.storage.identity.StorageContext;
 import eu.avalanche7.paradigm.storage.model.StoredJailState;
 import eu.avalanche7.paradigm.storage.model.StoredPunishment;
 import eu.avalanche7.paradigm.storage.model.StoredWarning;
 import eu.avalanche7.paradigm.storage.repository.ModerationRepository;
-import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
-import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
-
-import java.sql.Types;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Optional;
-import java.util.Map;
 
 public class SqlModerationRepository extends SqlRepositorySupport implements ModerationRepository {
     private static final String JAIL_LOCATION_KEY = "jail_location";
@@ -231,15 +232,17 @@ public class SqlModerationRepository extends SqlRepositorySupport implements Mod
     @Override
     public void setJailLocation(eu.avalanche7.paradigm.storage.model.StoredLocation location) {
         if (location == null || location.worldId() == null || location.worldId().isBlank()) return;
-        sql.update("DELETE FROM admin_state WHERE server_id = ? AND state_key = ?", ps -> {
-            ps.setString(1, serverId());
-            ps.setString(2, JAIL_LOCATION_KEY);
-        });
-        sql.update("INSERT INTO admin_state(server_id, state_key, state_value, updated_at_ms) VALUES(?, ?, ?, ?)", ps -> {
-            ps.setString(1, serverId());
-            ps.setString(2, JAIL_LOCATION_KEY);
-            ps.setString(3, encodeLocation(location));
-            ps.setLong(4, System.currentTimeMillis());
+        sql.transaction(() -> {
+            sql.update("DELETE FROM admin_state WHERE server_id = ? AND state_key = ?", ps -> {
+                ps.setString(1, serverId());
+                ps.setString(2, JAIL_LOCATION_KEY);
+            });
+            sql.update("INSERT INTO admin_state(server_id, state_key, state_value, updated_at_ms) VALUES(?, ?, ?, ?)", ps -> {
+                ps.setString(1, serverId());
+                ps.setString(2, JAIL_LOCATION_KEY);
+                ps.setString(3, encodeLocation(location));
+                ps.setLong(4, System.currentTimeMillis());
+            });
         });
     }
 
@@ -259,19 +262,21 @@ public class SqlModerationRepository extends SqlRepositorySupport implements Mod
     @Override
     public void setJailState(StoredJailState jailState) {
         if (jailState == null || jailState.location() == null) return;
-        sql.update("DELETE FROM moderation_jails WHERE server_id = ? AND uuid = ?", ps -> {
-            ps.setString(1, serverId());
-            ps.setString(2, jailState.uuid());
-        });
-        sql.update("INSERT INTO moderation_jails(server_id, uuid, name, reason, actor, world_id, x, y, z, yaw, pitch, created_at_ms, expires_at_ms) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", ps -> {
-            ps.setString(1, serverId());
-            ps.setString(2, jailState.uuid());
-            ps.setString(3, jailState.name());
-            ps.setString(4, jailState.reason());
-            ps.setString(5, jailState.actor());
-            bindLocation(ps, 6, jailState.location());
-            ps.setLong(12, jailState.createdAtMs() > 0L ? jailState.createdAtMs() : System.currentTimeMillis());
-            if (jailState.expiresAtMs() == null) ps.setNull(13, Types.BIGINT); else ps.setLong(13, jailState.expiresAtMs());
+        sql.transaction(() -> {
+            sql.update("DELETE FROM moderation_jails WHERE server_id = ? AND uuid = ?", ps -> {
+                ps.setString(1, serverId());
+                ps.setString(2, jailState.uuid());
+            });
+            sql.update("INSERT INTO moderation_jails(server_id, uuid, name, reason, actor, world_id, x, y, z, yaw, pitch, created_at_ms, expires_at_ms) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", ps -> {
+                ps.setString(1, serverId());
+                ps.setString(2, jailState.uuid());
+                ps.setString(3, jailState.name());
+                ps.setString(4, jailState.reason());
+                ps.setString(5, jailState.actor());
+                bindLocation(ps, 6, jailState.location());
+                ps.setLong(12, jailState.createdAtMs() > 0L ? jailState.createdAtMs() : System.currentTimeMillis());
+                if (jailState.expiresAtMs() == null) ps.setNull(13, Types.BIGINT); else ps.setLong(13, jailState.expiresAtMs());
+            });
         });
     }
 
@@ -302,18 +307,20 @@ public class SqlModerationRepository extends SqlRepositorySupport implements Mod
 
     @Override
     public List<StoredJailState> consumeExpiredJails(long nowMs) {
-        List<StoredJailState> expired = sql.query("SELECT * FROM moderation_jails WHERE server_id = ? AND expires_at_ms IS NOT NULL AND expires_at_ms <= ?", ps -> {
-            ps.setString(1, serverId());
-            ps.setLong(2, nowMs);
-        }, rs -> {
-            List<StoredJailState> result = new ArrayList<>();
-            while (rs.next()) result.add(readJail(rs));
-            return result;
+        return sql.transaction(() -> {
+            List<StoredJailState> expired = sql.query("SELECT * FROM moderation_jails WHERE server_id = ? AND expires_at_ms IS NOT NULL AND expires_at_ms <= ?", ps -> {
+                ps.setString(1, serverId());
+                ps.setLong(2, nowMs);
+            }, rs -> {
+                List<StoredJailState> result = new ArrayList<>();
+                while (rs.next()) result.add(readJail(rs));
+                return result;
+            });
+            for (StoredJailState jail : expired) {
+                clearJailState(jail.uuid());
+            }
+            return expired;
         });
-        for (StoredJailState jail : expired) {
-            clearJailState(jail.uuid());
-        }
-        return expired;
     }
 
     private StoredPunishment readPunishment(java.sql.ResultSet rs) throws java.sql.SQLException {

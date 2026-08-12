@@ -11,6 +11,7 @@ import eu.avalanche7.paradigm.utils.TelemetryReporter;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.event.RegisterCommandsEvent;
 import net.minecraftforge.event.server.ServerStartingEvent;
+import net.minecraftforge.event.server.ServerStoppedEvent;
 import net.minecraftforge.event.server.ServerStoppingEvent;
 import net.minecraftforge.eventbus.api.bus.EventBus;
 import net.minecraftforge.fml.ModList;
@@ -104,6 +105,7 @@ public class Paradigm {
         ServerStartingEvent.BUS.addListener(this::onServerStarting);
         RegisterCommandsEvent.BUS.addListener(this::onRegisterCommands);
         ServerStoppingEvent.BUS.addListener(this::onServerStopping);
+        ServerStoppedEvent.BUS.addListener(this::onServerStopped);
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
@@ -198,8 +200,16 @@ public class Paradigm {
             }
         });
         if (telemetryReporter != null) telemetryReporter.stop();
-        services.getTaskScheduler().onServerStopping();
+        services.shutdown();
         CooldownConfigHandler.saveCooldowns();
+    }
+
+    public void onServerStopped(ServerStoppedEvent event) {
+        modules.forEach(module -> {
+            if (module.isEnabled(services)) {
+                module.onServerStopped(event, services);
+            }
+        });
     }
 
     private void paradigm$applyServerListMotd(net.minecraft.server.MinecraftServer server) {

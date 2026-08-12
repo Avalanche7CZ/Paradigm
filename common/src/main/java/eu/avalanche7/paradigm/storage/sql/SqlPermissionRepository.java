@@ -1,18 +1,18 @@
 package eu.avalanche7.paradigm.storage.sql;
 
-import eu.avalanche7.paradigm.storage.identity.StorageContext;
-import eu.avalanche7.paradigm.storage.model.StoredPermissionGroup;
-import eu.avalanche7.paradigm.storage.model.StoredPermissionNode;
-import eu.avalanche7.paradigm.storage.model.StoredUserPermissionData;
-import eu.avalanche7.paradigm.storage.repository.PermissionRepository;
-import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
-import eu.avalanche7.paradigm.modules.permissions.PermissionAssignmentId;
-
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+
+import eu.avalanche7.paradigm.modules.permissions.PermissionAssignmentId;
+import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
+import eu.avalanche7.paradigm.storage.identity.StorageContext;
+import eu.avalanche7.paradigm.storage.model.StoredPermissionGroup;
+import eu.avalanche7.paradigm.storage.model.StoredPermissionNode;
+import eu.avalanche7.paradigm.storage.model.StoredUserPermissionData;
+import eu.avalanche7.paradigm.storage.repository.PermissionRepository;
 
 public class SqlPermissionRepository extends SqlRepositorySupport implements PermissionRepository {
     public SqlPermissionRepository(SqlExecutor sql, StorageContext context) {
@@ -50,29 +50,35 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
     @Override
     public void saveGroup(StoredPermissionGroup group) {
         if (group == null) return;
-        sql.update("DELETE FROM permission_group_parents WHERE group_name = ?", ps -> ps.setString(1, group.name()));
-        sql.update("DELETE FROM permission_group_permissions WHERE group_name = ?", ps -> ps.setString(1, group.name()));
-        sql.update("DELETE FROM permission_groups WHERE name = ?", ps -> ps.setString(1, group.name()));
-        sql.update("INSERT INTO permission_groups(name, description, prefix, suffix, weight) VALUES(?, ?, ?, ?, ?)", ps -> {
-            ps.setString(1, group.name());
-            ps.setString(2, group.description());
-            ps.setString(3, group.prefix());
-            ps.setString(4, group.suffix());
-            ps.setInt(5, group.weight());
+        sql.transaction(() -> {
+            sql.update("DELETE FROM permission_group_parents WHERE group_name = ?", ps -> ps.setString(1, group.name()));
+            sql.update("DELETE FROM permission_group_permissions WHERE group_name = ?", ps -> ps.setString(1, group.name()));
+            sql.update("DELETE FROM permission_groups WHERE name = ?", ps -> ps.setString(1, group.name()));
+            sql.update("INSERT INTO permission_groups(name, description, prefix, suffix, weight) VALUES(?, ?, ?, ?, ?)", ps -> {
+                ps.setString(1, group.name());
+                ps.setString(2, group.description());
+                ps.setString(3, group.prefix());
+                ps.setString(4, group.suffix());
+                ps.setInt(5, group.weight());
+            });
+            for (String parent : group.parents()) addGroupParent(group.name(), parent);
+            for (StoredPermissionNode node : group.permissions()) addGroupPermission(group.name(), node);
         });
-        for (String parent : group.parents()) addGroupParent(group.name(), parent);
-        for (StoredPermissionNode node : group.permissions()) addGroupPermission(group.name(), node);
     }
 
     @Override public boolean deleteGroup(String groupName) {
-        sql.update("DELETE FROM permission_group_parents WHERE group_name = ? OR parent_name = ?", ps -> { ps.setString(1, groupName); ps.setString(2, groupName); });
-        sql.update("DELETE FROM permission_group_permissions WHERE group_name = ?", ps -> ps.setString(1, groupName));
-        return sql.update("DELETE FROM permission_groups WHERE name = ?", ps -> ps.setString(1, groupName)) > 0;
+        return sql.transaction(() -> {
+            sql.update("DELETE FROM permission_group_parents WHERE group_name = ? OR parent_name = ?", ps -> { ps.setString(1, groupName); ps.setString(2, groupName); });
+            sql.update("DELETE FROM permission_group_permissions WHERE group_name = ?", ps -> ps.setString(1, groupName));
+            return sql.update("DELETE FROM permission_groups WHERE name = ?", ps -> ps.setString(1, groupName)) > 0;
+        });
     }
 
     @Override public void addGroupParent(String groupName, String parentName) {
-        sql.update("DELETE FROM permission_group_parents WHERE group_name = ? AND parent_name = ?", ps -> { ps.setString(1, groupName); ps.setString(2, parentName); });
-        sql.update("INSERT INTO permission_group_parents(group_name, parent_name) VALUES(?, ?)", ps -> { ps.setString(1, groupName); ps.setString(2, parentName); });
+        sql.transaction(() -> {
+            sql.update("DELETE FROM permission_group_parents WHERE group_name = ? AND parent_name = ?", ps -> { ps.setString(1, groupName); ps.setString(2, parentName); });
+            sql.update("INSERT INTO permission_group_parents(group_name, parent_name) VALUES(?, ?)", ps -> { ps.setString(1, groupName); ps.setString(2, parentName); });
+        });
     }
 
     @Override public boolean removeGroupParent(String groupName, String parentName) {
@@ -139,35 +145,35 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
     public void saveUser(StoredUserPermissionData user) {
         if (user == null) return;
         String normalizedUuid = normalize(user.uuid());
-        sql.update("DELETE FROM permission_users WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid));
-        sql.update("INSERT INTO permission_users(uuid, name) VALUES(?, ?)", ps -> {
-            ps.setString(1, normalizedUuid);
-            ps.setString(2, user.name());
+        sql.transaction(() -> {
+            sql.update("DELETE FROM permission_users WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid));
+            sql.update("INSERT INTO permission_users(uuid, name) VALUES(?, ?)", ps -> {
+                ps.setString(1, normalizedUuid);
+                ps.setString(2, user.name());
+            });
+            sql.update("DELETE FROM permission_user_groups WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid));
+            sql.update("DELETE FROM permission_user_permissions WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid));
+            for (StoredUserPermissionData.GroupAssignment group : user.groups()) addUserGroup(normalizedUuid, group);
+            for (StoredPermissionNode permission : user.permissions()) addUserPermission(normalizedUuid, permission);
         });
-        sql.update("DELETE FROM permission_user_groups WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid));
-        sql.update("DELETE FROM permission_user_permissions WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid));
-        for (StoredUserPermissionData.GroupAssignment group : user.groups()) addUserGroup(normalizedUuid, group);
-        for (StoredPermissionNode permission : user.permissions()) addUserPermission(normalizedUuid, permission);
     }
 
     @Override public void addUserGroup(String uuid, StoredUserPermissionData.GroupAssignment assignment) {
         String normalizedUuid = normalize(uuid);
         PermissionContextSet contexts = assignment.contextSet();
-        sql.update("DELETE FROM permission_users WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid));
-        sql.update("INSERT INTO permission_users(uuid, name) VALUES(?, ?)", ps -> {
-            ps.setString(1, normalizedUuid);
-            ps.setString(2, "");
-        });
         String assignmentId = groupId(normalizedUuid, assignment);
-        sql.update("INSERT INTO permission_user_groups(uuid, group_name, expires_at_ms, assigned_by, assigned_at_ms, contexts, context_hash, assignment_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?)", ps -> {
-            ps.setString(1, normalizedUuid);
-            ps.setString(2, assignment.groupName());
-            bindNullableLong(ps, 3, assignment.expiresAtMs());
-            ps.setString(4, assignment.assignedBy());
-            ps.setLong(5, assignment.assignedAtMs());
-            bindNullableString(ps, 6, contexts.toJson());
-            ps.setString(7, contexts.canonical());
-            ps.setString(8, assignmentId);
+        sql.transaction(() -> {
+            ensurePermissionUser(normalizedUuid);
+            sql.update("INSERT INTO permission_user_groups(uuid, group_name, expires_at_ms, assigned_by, assigned_at_ms, contexts, context_hash, assignment_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?)", ps -> {
+                ps.setString(1, normalizedUuid);
+                ps.setString(2, assignment.groupName());
+                bindNullableLong(ps, 3, assignment.expiresAtMs());
+                ps.setString(4, assignment.assignedBy());
+                ps.setLong(5, assignment.assignedAtMs());
+                bindNullableString(ps, 6, contexts.toJson());
+                ps.setString(7, contexts.canonical());
+                ps.setString(8, assignmentId);
+            });
         });
     }
 
@@ -179,21 +185,19 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
     @Override public void addUserPermission(String uuid, StoredPermissionNode permission) {
         String normalizedUuid = normalize(uuid);
         PermissionContextSet contexts = permission.contextSet();
-        sql.update("DELETE FROM permission_users WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid));
-        sql.update("INSERT INTO permission_users(uuid, name) VALUES(?, ?)", ps -> {
-            ps.setString(1, normalizedUuid);
-            ps.setString(2, "");
-        });
         String assignmentId = permissionId("user_permission", normalizedUuid, permission);
-        sql.update("INSERT INTO permission_user_permissions(uuid, server_id, permission, denied, expires_at_ms, contexts, context_hash, assignment_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?)", ps -> {
-            ps.setString(1, normalizedUuid);
-            bindNullableString(ps, 2, permission.serverId());
-            ps.setString(3, permission.permission());
-            ps.setBoolean(4, permission.denied());
-            bindNullableLong(ps, 5, permission.expiresAtMs());
-            bindNullableString(ps, 6, contexts.toJson());
-            ps.setString(7, contexts.canonical());
-            ps.setString(8, assignmentId);
+        sql.transaction(() -> {
+            ensurePermissionUser(normalizedUuid);
+            sql.update("INSERT INTO permission_user_permissions(uuid, server_id, permission, denied, expires_at_ms, contexts, context_hash, assignment_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?)", ps -> {
+                ps.setString(1, normalizedUuid);
+                bindNullableString(ps, 2, permission.serverId());
+                ps.setString(3, permission.permission());
+                ps.setBoolean(4, permission.denied());
+                bindNullableLong(ps, 5, permission.expiresAtMs());
+                bindNullableString(ps, 6, contexts.toJson());
+                ps.setString(7, contexts.canonical());
+                ps.setString(8, assignmentId);
+            });
         });
     }
 
@@ -233,6 +237,16 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
     private Long nullableLong(java.sql.ResultSet rs, String column) throws java.sql.SQLException {
         long value = rs.getLong(column);
         return rs.wasNull() ? null : value;
+    }
+
+    private void ensurePermissionUser(String uuid) {
+        boolean exists = sql.query("SELECT 1 FROM permission_users WHERE uuid = ?", ps -> ps.setString(1, uuid), java.sql.ResultSet::next);
+        if (!exists) {
+            sql.update("INSERT INTO permission_users(uuid, name) VALUES(?, ?)", ps -> {
+                ps.setString(1, uuid);
+                ps.setString(2, "");
+            });
+        }
     }
 
     private static String permissionId(String kind, String subject, StoredPermissionNode node) {

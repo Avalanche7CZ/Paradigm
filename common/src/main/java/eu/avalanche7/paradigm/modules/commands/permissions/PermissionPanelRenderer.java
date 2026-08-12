@@ -1,16 +1,16 @@
 package eu.avalanche7.paradigm.modules.commands.permissions;
 
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.permissions.PermissionAssignment;
-import eu.avalanche7.paradigm.modules.permissions.PermissionDisplayFormatter;
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
-import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
-import eu.avalanche7.paradigm.modules.permissions.PermissionAPI;
-import eu.avalanche7.paradigm.modules.permissions.PermissionNodeRegistry;
-
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.PermissionAPI;
+import eu.avalanche7.paradigm.modules.permissions.PermissionAssignment;
+import eu.avalanche7.paradigm.modules.permissions.PermissionDisplayFormatter;
+import eu.avalanche7.paradigm.modules.permissions.PermissionNodeRegistry;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 
 public final class PermissionPanelRenderer {
     private PermissionPanelRenderer() {

@@ -1,13 +1,13 @@
 package eu.avalanche7.paradigm.utils;
 
+import java.util.*;
+
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.Group;
 import eu.avalanche7.paradigm.data.PlayerGroupData;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
-
-import java.util.*;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
 public class GroupChatManager {
     private final Map<String, Group> groups = new HashMap<>();

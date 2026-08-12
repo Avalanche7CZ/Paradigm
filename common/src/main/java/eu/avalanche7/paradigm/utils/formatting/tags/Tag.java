@@ -26,4 +26,3 @@ public interface Tag {
         return name.equalsIgnoreCase(getName());
     }
 }
-

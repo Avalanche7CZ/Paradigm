@@ -1,9 +1,9 @@
 package eu.avalanche7.paradigm.api.internal;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import eu.avalanche7.paradigm.api.Registration;
 import eu.avalanche7.paradigm.api.RegistrationStatus;
-
-import java.util.concurrent.atomic.AtomicBoolean;
 
 final class SimpleRegistration implements Registration {
     private final String owner;

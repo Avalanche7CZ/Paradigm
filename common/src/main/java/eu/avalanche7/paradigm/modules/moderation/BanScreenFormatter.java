@@ -1,15 +1,15 @@
 package eu.avalanche7.paradigm.modules.moderation;
 
-import eu.avalanche7.paradigm.configs.ModerationConfigHandler;
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
-import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
-
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.Map;
+
+import eu.avalanche7.paradigm.configs.ModerationConfigHandler;
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 
 public final class BanScreenFormatter {
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd MMM yyyy HH:mm").withZone(ZoneId.systemDefault());

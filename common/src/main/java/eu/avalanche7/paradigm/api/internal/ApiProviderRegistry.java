@@ -1,5 +1,10 @@
 package eu.avalanche7.paradigm.api.internal;
 
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
+
 import eu.avalanche7.paradigm.api.ApiCapability;
 import eu.avalanche7.paradigm.api.MessageResult;
 import eu.avalanche7.paradigm.api.MessageService;
@@ -11,11 +16,6 @@ import eu.avalanche7.paradigm.api.PlaceholderService;
 import eu.avalanche7.paradigm.api.PlayerPermissionMeta;
 import eu.avalanche7.paradigm.api.Registration;
 import eu.avalanche7.paradigm.api.RegistrationStatus;
-
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
 
 /** Internal lifecycle holder behind the stable public facade. */
 public final class ApiProviderRegistry {

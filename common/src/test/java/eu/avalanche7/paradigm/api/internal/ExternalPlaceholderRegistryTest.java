@@ -1,13 +1,14 @@
 package eu.avalanche7.paradigm.api.internal;
 
-import eu.avalanche7.paradigm.api.Registration;
-import eu.avalanche7.paradigm.api.RegistrationStatus;
-import org.junit.jupiter.api.Test;
-import org.slf4j.LoggerFactory;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
+
+import eu.avalanche7.paradigm.api.Registration;
+import eu.avalanche7.paradigm.api.RegistrationStatus;
 
 class ExternalPlaceholderRegistryTest {
     @Test

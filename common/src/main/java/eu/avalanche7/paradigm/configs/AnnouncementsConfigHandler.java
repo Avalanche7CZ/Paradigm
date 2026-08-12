@@ -1,12 +1,13 @@
 package eu.avalanche7.paradigm.configs;
 
-import eu.avalanche7.paradigm.ParadigmConstants;
-import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
-import eu.avalanche7.paradigm.utils.DebugLogger;
+import java.util.List;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
+import eu.avalanche7.paradigm.ParadigmConstants;
+import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import eu.avalanche7.paradigm.utils.DebugLogger;
 
 public class AnnouncementsConfigHandler extends BaseConfigHandler<AnnouncementsConfigHandler.Config> {
 

@@ -1,12 +1,12 @@
 package eu.avalanche7.paradigm.storage.sql;
 
-import eu.avalanche7.paradigm.storage.identity.StorageContext;
-import eu.avalanche7.paradigm.storage.model.StoredAdminState;
-import eu.avalanche7.paradigm.storage.repository.AdminStateRepository;
-
 import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
+
+import eu.avalanche7.paradigm.storage.identity.StorageContext;
+import eu.avalanche7.paradigm.storage.model.StoredAdminState;
+import eu.avalanche7.paradigm.storage.repository.AdminStateRepository;
 
 public class SqlAdminStateRepository extends SqlRepositorySupport implements AdminStateRepository {
     public SqlAdminStateRepository(SqlExecutor sql, StorageContext context) {
@@ -30,15 +30,17 @@ public class SqlAdminStateRepository extends SqlRepositorySupport implements Adm
 
     @Override
     public void setState(String key, String value) {
-        sql.update("DELETE FROM admin_state WHERE server_id = ? AND state_key = ?", ps -> {
-            ps.setString(1, serverId());
-            ps.setString(2, key);
-        });
-        sql.update("INSERT INTO admin_state(server_id, state_key, state_value, updated_at_ms) VALUES(?, ?, ?, ?)", ps -> {
-            ps.setString(1, serverId());
-            ps.setString(2, key);
-            ps.setString(3, value);
-            ps.setLong(4, System.currentTimeMillis());
+        sql.transaction(() -> {
+            sql.update("DELETE FROM admin_state WHERE server_id = ? AND state_key = ?", ps -> {
+                ps.setString(1, serverId());
+                ps.setString(2, key);
+            });
+            sql.update("INSERT INTO admin_state(server_id, state_key, state_value, updated_at_ms) VALUES(?, ?, ?, ?)", ps -> {
+                ps.setString(1, serverId());
+                ps.setString(2, key);
+                ps.setString(3, value);
+                ps.setLong(4, System.currentTimeMillis());
+            });
         });
     }
 

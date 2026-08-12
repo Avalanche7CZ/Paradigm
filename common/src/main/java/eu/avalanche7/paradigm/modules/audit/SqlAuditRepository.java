@@ -1,15 +1,16 @@
 package eu.avalanche7.paradigm.modules.audit;
 
-import com.google.gson.reflect.TypeToken;
-import eu.avalanche7.paradigm.modules.dashboard.DashboardJson;
-import eu.avalanche7.paradigm.storage.sql.SqlExecutor;
-
 import java.lang.reflect.Type;
 import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+
+import com.google.gson.reflect.TypeToken;
+
+import eu.avalanche7.paradigm.modules.dashboard.DashboardJson;
+import eu.avalanche7.paradigm.storage.sql.SqlExecutor;
 
 public class SqlAuditRepository implements AuditRepository {
     private static final Type DETAILS_TYPE = new TypeToken<Map<String, String>>() {}.getType();
@@ -85,7 +86,7 @@ public class SqlAuditRepository implements AuditRepository {
         Map<String, String> details;
         try {
             details = DashboardJson.GSON.fromJson(rs.getString("details_json"), DETAILS_TYPE);
-        } catch (Throwable ignored) {
+        } catch (com.google.gson.JsonParseException | java.sql.SQLException ignored) {
             details = Map.of();
         }
         return new AuditEntry(
@@ -116,7 +117,7 @@ public class SqlAuditRepository implements AuditRepository {
     private static <T extends Enum<T>> T enumValue(Class<T> type, String value, T fallback) {
         try {
             return value != null ? Enum.valueOf(type, value) : fallback;
-        } catch (Throwable ignored) {
+        } catch (IllegalArgumentException ignored) {
             return fallback;
         }
     }

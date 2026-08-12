@@ -1,5 +1,15 @@
 package eu.avalanche7.paradigm.configs.schema;
 
+import java.lang.reflect.Field;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+import com.google.gson.Gson;
+
 import eu.avalanche7.paradigm.ParadigmAPI;
 import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
@@ -8,22 +18,12 @@ import eu.avalanche7.paradigm.configs.CooldownConfigHandler;
 import eu.avalanche7.paradigm.configs.MOTDConfigHandler;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.configs.MentionConfigHandler;
-import eu.avalanche7.paradigm.configs.RestartConfigHandler;
 import eu.avalanche7.paradigm.configs.ModerationConfigHandler;
+import eu.avalanche7.paradigm.configs.RestartConfigHandler;
 import eu.avalanche7.paradigm.configs.TablistConfigHandler;
-import com.google.gson.Gson;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardConfig;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPermission;
-import eu.avalanche7.paradigm.storage.StorageProviderType;
-
-import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 
 public class ConfigSchemaRegistry {
     private final Services services;
@@ -586,7 +586,6 @@ public class ConfigSchemaRegistry {
         return "debugEnable".equals(name)
                 || "telemetryEnable".equals(name)
                 || "telemetryServerId".equals(name)
-                || "webEditorTestUrl".equals(name)
                 || "spawnWorld".equals(name)
                 || name != null && name.startsWith("spawn");
     }

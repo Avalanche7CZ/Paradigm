@@ -1,9 +1,5 @@
 package eu.avalanche7.paradigm.utils;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
-
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
@@ -11,12 +7,16 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+
+import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 
 public class CommandToggleStore {
     private static final String FILE_NAME = "paradigm/commands.json";
@@ -246,4 +246,3 @@ public class CommandToggleStore {
         }
     }
 }
-

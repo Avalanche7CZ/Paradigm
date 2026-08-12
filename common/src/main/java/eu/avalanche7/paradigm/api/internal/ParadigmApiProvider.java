@@ -1,5 +1,10 @@
 package eu.avalanche7.paradigm.api.internal;
 
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import eu.avalanche7.paradigm.api.ApiCapability;
 import eu.avalanche7.paradigm.api.MessageResult;
 import eu.avalanche7.paradigm.api.MessageService;
@@ -18,11 +23,6 @@ import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.LiteralPlaceholders;
-
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Adapts stable API contracts to the current internal services. */
 public final class ParadigmApiProvider implements ApiProvider {

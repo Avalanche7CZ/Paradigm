@@ -3,6 +3,7 @@ package eu.avalanche7.paradigm.modules.commands.moderation;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.commands.shared.CommandMessages;
+import eu.avalanche7.paradigm.modules.permissions.PermissionDefinition;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
@@ -46,18 +47,12 @@ public abstract class AbstractModerationCommand implements ParadigmModule {
         return services.getPlatformAdapter().createCommandBuilder();
     }
 
+    protected boolean allowed(ICommandSource source, String root, PermissionDefinition permission) {
+        return permission != null && allowed(source, root, permission.node(), permission.fallbackLevel());
+    }
+
     protected boolean allowed(ICommandSource source, String root, String permission, int level) {
-        if (services == null || services.getCommandToggleStore() == null || !services.getCommandToggleStore().isEnabled(root)) {
-            return false;
-        }
-        if (source == null) {
-            return false;
-        }
-        if (source.isConsole()) {
-            return true;
-        }
-        IPlayer player = source.getPlayer();
-        return player != null && services.getPermissionsHandler().hasPermission(player, permission, level);
+        return services != null && services.getCommandAccess().allowsSource(source, root, permission, level);
     }
 
     protected String actorName(ICommandSource source) {

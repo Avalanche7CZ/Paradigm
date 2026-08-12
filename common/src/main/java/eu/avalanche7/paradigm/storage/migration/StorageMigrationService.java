@@ -1,5 +1,13 @@
 package eu.avalanche7.paradigm.storage.migration;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.function.BooleanSupplier;
+
+import org.slf4j.Logger;
+
 import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
 import eu.avalanche7.paradigm.storage.StorageProvider;
 import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
@@ -11,13 +19,6 @@ import eu.avalanche7.paradigm.storage.model.StoredPunishment;
 import eu.avalanche7.paradigm.storage.model.StoredUserPermissionData;
 import eu.avalanche7.paradigm.storage.model.StoredWarning;
 import eu.avalanche7.paradigm.storage.model.StoredWarp;
-import org.slf4j.Logger;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
-import java.util.function.BooleanSupplier;
 
 public class StorageMigrationService {
     private final Logger logger;
@@ -237,7 +238,7 @@ public class StorageMigrationService {
             } catch (UnsupportedOperationException ex) {
                 counter.skipped++;
                 counter.messages.add("Skipped admin state " + key + ": target does not support generic state writes.");
-            } catch (Throwable t) {
+            } catch (RuntimeException t) {
                 fail(counter, "admin state " + key, t);
             }
         }
@@ -253,7 +254,7 @@ public class StorageMigrationService {
                 writer.run();
             }
             return true;
-        } catch (Throwable t) {
+        } catch (RuntimeException t) {
             fail(counter, item, t);
             return false;
         }

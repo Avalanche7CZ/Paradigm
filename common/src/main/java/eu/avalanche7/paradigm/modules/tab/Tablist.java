@@ -1,16 +1,5 @@
 package eu.avalanche7.paradigm.modules.tab;
 
-import eu.avalanche7.paradigm.configs.TablistConfigHandler;
-import eu.avalanche7.paradigm.core.ParadigmModule;
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -19,6 +8,17 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+
+import eu.avalanche7.paradigm.configs.TablistConfigHandler;
+import eu.avalanche7.paradigm.core.ParadigmModule;
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
 
 public final class Tablist implements ParadigmModule {
     private static final long WORLD_WATCH_INTERVAL_SECONDS = 1L;
@@ -246,7 +246,7 @@ public final class Tablist implements ParadigmModule {
         if (source.hasPermissionLevel(2)) return true;
         IPlayer player = source.getPlayer();
         return player != null && services.getPermissionsHandler().hasPermission(
-                player, PermissionsHandler.TABLIST_MANAGE_PERMISSION, PermissionsHandler.TABLIST_MANAGE_PERMISSION_LEVEL);
+                player, ParadigmPermissions.TABLIST_MANAGE);
     }
 
     private void send(ICommandSource source, Services services, String key, String fallback, String... placeholders) {

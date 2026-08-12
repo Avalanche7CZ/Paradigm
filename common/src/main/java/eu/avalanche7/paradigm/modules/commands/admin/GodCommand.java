@@ -1,14 +1,14 @@
 package eu.avalanche7.paradigm.modules.commands.admin;
 
+import java.util.concurrent.TimeUnit;
+
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-
-import java.util.concurrent.TimeUnit;
 
 public class GodCommand extends AbstractAdminCommand {
     @Override
@@ -21,7 +21,7 @@ public class GodCommand extends AbstractAdminCommand {
         this.services = services;
         ICommandBuilder cmd = builder()
                 .literal("god")
-                .requires(src -> allowed(src, "god", PermissionsHandler.GOD_PERMISSION, PermissionsHandler.GOD_PERMISSION_LEVEL)
+                .requires(src -> allowed(src, "god", ParadigmPermissions.GOD)
                         && (src.isConsole() || src.getPlayer() != null))
                 .executes(ctx -> toggle(ctx.getSource(), ctx.getSource().getPlayer()))
                 .then(builder()
@@ -68,7 +68,7 @@ public class GodCommand extends AbstractAdminCommand {
             send(source, "admin.player_not_found", "Player not found.");
             return 0;
         }
-        if (!canTargetOther(source.getPlayer(), target, PermissionsHandler.GOD_OTHERS_PERMISSION, PermissionsHandler.GOD_OTHERS_PERMISSION_LEVEL)) {
+        if (!canTargetOther(source.getPlayer(), target, ParadigmPermissions.GOD_OTHERS)) {
             send(source, "admin.no_permission_others", "You do not have permission to affect other players.");
             return 0;
         }

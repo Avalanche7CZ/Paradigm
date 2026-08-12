@@ -294,6 +294,11 @@
     "error_load": "Spawn se nepodařilo načíst. Zkus to prosím později.",
     "error_save": "Spawn se nepodařilo uložit. Zkus to prosím později."
   },
+  "rtp": {
+    "location_unavailable": "Nepodařilo se načíst tvoji aktuální pozici.",
+    "teleported": "Teleport na náhodné místo proběhl.",
+    "no_safe_location": "Nepodařilo se najít bezpečné místo. Zkus to prosím znovu."
+  },
   "seen": {
     "online": "{player} je právě online.",
     "need_uuid": "Hráč je offline. Pro přesné hledání použij UUID.",

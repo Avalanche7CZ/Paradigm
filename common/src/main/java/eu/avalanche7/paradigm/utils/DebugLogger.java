@@ -1,8 +1,9 @@
 package eu.avalanche7.paradigm.utils;
 
-import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import eu.avalanche7.paradigm.configs.MainConfigHandler;
 
 public class DebugLogger {
     private static final Logger LOG = LoggerFactory.getLogger("eu.avalanche7.paradigm");

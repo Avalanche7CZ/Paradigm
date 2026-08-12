@@ -97,6 +97,7 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
     private void registerFabricEvents() {
         ServerLifecycleEvents.SERVER_STARTING.register(this::onServerStarting);
         ServerLifecycleEvents.SERVER_STOPPING.register(this::onServerStopping);
+        ServerLifecycleEvents.SERVER_STOPPED.register(this::onServerStopped);
         CommandRegistrationCallback.EVENT.register(this::onRegisterCommands);
     }
 
@@ -153,9 +154,17 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
         }
 
         try {
-            services.getTaskScheduler().onServerStopping();
+            services.shutdown();
         } catch (Throwable ignored) {
         }
+    }
+
+    private void onServerStopped(MinecraftServer server) {
+        modules.forEach(module -> {
+            if (module.isEnabled(services)) {
+                module.onServerStopped(null, services);
+            }
+        });
     }
 
     @Override

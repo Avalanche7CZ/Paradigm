@@ -1,15 +1,18 @@
 package eu.avalanche7.paradigm.storage;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
-import org.slf4j.Logger;
-
+import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonParseException;
+import org.slf4j.Logger;
+
+import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 
 public class StorageConfig {
     private static final String FILE_NAME = "paradigm/storage.json";
@@ -39,7 +42,7 @@ public class StorageConfig {
             StorageConfig merged = merge(defaults, loaded).normalized(logger);
             merged.save(path, logger);
             return merged;
-        } catch (Throwable t) {
+        } catch (IOException | RuntimeException t) {
             if (logger != null) {
                 logger.warn("Paradigm storage: failed to load storage.json, using safe defaults. {}", t.getMessage());
             }
@@ -112,7 +115,7 @@ public class StorageConfig {
             try (Writer writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
                 GSON.toJson(this, writer);
             }
-        } catch (Throwable t) {
+        } catch (IOException | JsonParseException t) {
             if (logger != null) {
                 logger.warn("Paradigm storage: failed to save storage.json: {}", t.getMessage());
             }

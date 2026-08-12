@@ -1,8 +1,5 @@
 package eu.avalanche7.paradigm.modules.permissions.context;
 
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
-
 import java.lang.reflect.Type;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -10,6 +7,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
+
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
 public final class PermissionContextSet {
     private static final Gson GSON = new Gson();

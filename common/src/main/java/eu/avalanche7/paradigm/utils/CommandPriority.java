@@ -1,12 +1,12 @@
 package eu.avalanche7.paradigm.utils;
 
-import eu.avalanche7.paradigm.ParadigmAPI;
-import eu.avalanche7.paradigm.configs.MainConfigHandler;
-
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Locale;
 import java.util.Map;
+
+import eu.avalanche7.paradigm.ParadigmAPI;
+import eu.avalanche7.paradigm.configs.MainConfigHandler;
 
 public final class CommandPriority {
 
@@ -32,7 +32,7 @@ public final class CommandPriority {
             boolean commandEnabled = services == null || services.getCommandToggleStore() == null
                     || services.getCommandToggleStore().isEnabled(normalized);
             return shouldOwnRoot(normalized, forceEnabled, commandEnabled);
-        } catch (Throwable ignored) {
+        } catch (RuntimeException ignored) {
             return false;
         }
     }
@@ -60,7 +60,7 @@ public final class CommandPriority {
             boolean commandEnabled = services == null || services.getCommandToggleStore() == null
                     || services.getCommandToggleStore().isEnabled(normalized);
             return shouldRegisterRoot(normalized, forceEnabled, commandEnabled);
-        } catch (Throwable ignored) {
+        } catch (RuntimeException ignored) {
             // If command state cannot be read, keep normal registration.  The
             // fail-closed policy applies to root replacement, not availability.
             return true;
@@ -82,7 +82,7 @@ public final class CommandPriority {
         try {
             Object root = getRoot(dispatcher);
             return getChild(root, normalized) != null;
-        } catch (Throwable ignored) {
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
             return false;
         }
     }
@@ -107,7 +107,7 @@ public final class CommandPriority {
             removed |= removeFromMap(literalsField.get(rootNode), normalized);
             removed |= removeFromMap(argumentsField.get(rootNode), normalized);
             return removed;
-        } catch (Throwable ignored) {
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
             return false;
         }
     }
@@ -120,7 +120,7 @@ public final class CommandPriority {
         try {
             Object root = getRoot(dispatcher);
             return getChild(root, normalized) == expectedNode;
-        } catch (Throwable ignored) {
+        } catch (ReflectiveOperationException | RuntimeException ignored) {
             return true;
         }
     }

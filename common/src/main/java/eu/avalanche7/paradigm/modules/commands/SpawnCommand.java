@@ -4,11 +4,11 @@ import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.model.StoredLocation;
 import eu.avalanche7.paradigm.utils.CommandCooldowns;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 public class SpawnCommand implements ParadigmModule {
     private Services services;
@@ -61,7 +61,7 @@ public class SpawnCommand implements ParadigmModule {
                 .literal("spawn")
                 .requires(src -> services.getCommandToggleStore().isEnabled("spawn")
                         && src.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), PermissionsHandler.SPAWN_PERMISSION, PermissionsHandler.SPAWN_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), ParadigmPermissions.SPAWN))
                 .executes(ctx -> {
                     IPlayer player = ctx.getSource().getPlayer();
                     if (player == null) {
@@ -101,7 +101,7 @@ public class SpawnCommand implements ParadigmModule {
                 .literal("setspawn")
                 .requires(src -> services.getCommandToggleStore().isEnabled("setspawn")
                         && src.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), PermissionsHandler.SETSPAWN_PERMISSION, PermissionsHandler.SETSPAWN_PERMISSION_LEVEL))
+                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), ParadigmPermissions.SET_SPAWN))
                 .executes(ctx -> {
                     IPlayer player = ctx.getSource().getPlayer();
                     if (player == null) {

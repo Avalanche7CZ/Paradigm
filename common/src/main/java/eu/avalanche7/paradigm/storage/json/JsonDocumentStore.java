@@ -1,16 +1,19 @@
 package eu.avalanche7.paradigm.storage.json;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
-import org.slf4j.Logger;
-
+import java.io.IOException;
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.function.Supplier;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonParseException;
+import org.slf4j.Logger;
+
+import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 
 public class JsonDocumentStore {
     private final Gson gson = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
@@ -30,7 +33,7 @@ public class JsonDocumentStore {
         try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
             T loaded = gson.fromJson(reader, type);
             return loaded != null ? loaded : fallback.get();
-        } catch (Throwable t) {
+        } catch (IOException | JsonParseException t) {
             if (logger != null) logger.warn("Paradigm storage: failed to load {}: {}", relativePath, t.getMessage());
             return fallback.get();
         }
@@ -46,7 +49,7 @@ public class JsonDocumentStore {
             try (Writer writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
                 gson.toJson(value, writer);
             }
-        } catch (Throwable t) {
+        } catch (IOException | JsonParseException t) {
             if (logger != null) logger.warn("Paradigm storage: failed to save {}: {}", relativePath, t.getMessage());
         }
     }

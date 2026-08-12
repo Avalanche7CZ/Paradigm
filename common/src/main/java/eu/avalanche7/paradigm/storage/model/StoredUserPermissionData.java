@@ -1,8 +1,8 @@
 package eu.avalanche7.paradigm.storage.model;
 
-import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
-
 import java.util.List;
+
+import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
 
 public record StoredUserPermissionData(
         String uuid,

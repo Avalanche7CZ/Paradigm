@@ -1,5 +1,15 @@
 package eu.avalanche7.paradigm.modules.dashboard.api;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
+
 import eu.avalanche7.paradigm.modules.audit.AuditActionType;
 import eu.avalanche7.paradigm.modules.audit.AuditResult;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardJson;
@@ -10,16 +20,6 @@ import eu.avalanche7.paradigm.modules.holograms.HologramDefinition;
 import eu.avalanche7.paradigm.modules.holograms.HologramRenderer;
 import eu.avalanche7.paradigm.modules.holograms.HologramService;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-
-import java.util.LinkedHashMap;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.function.Supplier;
 
 public final class HologramApiHandler {
     private final DashboardService dashboard;

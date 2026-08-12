@@ -1,15 +1,15 @@
 package eu.avalanche7.paradigm.modules.commands.admin;
 
-import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
-import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
-import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.modules.permissions.PermissionAPI;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+
+import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
+import eu.avalanche7.paradigm.modules.permissions.PermissionAPI;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
 public class WhoisCommand extends AbstractAdminCommand {
     @Override
@@ -22,7 +22,7 @@ public class WhoisCommand extends AbstractAdminCommand {
         this.services = services;
         ICommandBuilder cmd = builder()
                 .literal("whois")
-                .requires(src -> allowed(src, "whois", PermissionsHandler.WHOIS_PERMISSION, PermissionsHandler.WHOIS_PERMISSION_LEVEL))
+                .requires(src -> allowed(src, "whois", ParadigmPermissions.WHOIS))
                 .then(builder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
                         .executes(ctx -> whois(ctx.getSource(), ctx.getPlayerArgument("player"))));

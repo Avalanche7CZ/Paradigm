@@ -81,4 +81,3 @@ public class CenterTag implements Tag {
         this.centeredContent = content;
     }
 }
-

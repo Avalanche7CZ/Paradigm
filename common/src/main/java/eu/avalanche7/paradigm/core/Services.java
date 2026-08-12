@@ -1,22 +1,22 @@
 package eu.avalanche7.paradigm.core;
 
+import java.util.concurrent.ForkJoinPool;
+
+import org.slf4j.Logger;
+
 import eu.avalanche7.paradigm.configs.*;
 import eu.avalanche7.paradigm.data.AdminUtilityDataStore;
 import eu.avalanche7.paradigm.data.ModerationDataStore;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
+import eu.avalanche7.paradigm.modules.audit.AuditService;
+import eu.avalanche7.paradigm.modules.dashboard.customcommands.CustomCommandAdminService;
+import eu.avalanche7.paradigm.modules.holograms.HologramService;
+import eu.avalanche7.paradigm.modules.moderation.PunishmentService;
+import eu.avalanche7.paradigm.modules.permissions.PermissionAdminService;
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.storage.StorageService;
 import eu.avalanche7.paradigm.utils.*;
-import org.slf4j.Logger;
-import eu.avalanche7.paradigm.modules.webeditor.store.WebEditorStore;
-import eu.avalanche7.paradigm.modules.audit.AuditService;
-import eu.avalanche7.paradigm.modules.permissions.PermissionAdminService;
-import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
-import eu.avalanche7.paradigm.modules.dashboard.customcommands.CustomCommandAdminService;
-import eu.avalanche7.paradigm.modules.moderation.PunishmentService;
-import eu.avalanche7.paradigm.modules.holograms.HologramService;
-
-import java.util.concurrent.ForkJoinPool;
 
 public class Services {
 
@@ -45,12 +45,13 @@ public class Services {
     private final CommandToggleStore commandToggleStoreInstance;
     private final IPlatformAdapter platformAdapter;
 
-    private final WebEditorStore webEditorStore;
     private volatile AuditService auditService;
     private volatile PermissionAdminService permissionAdminService;
     private volatile CustomCommandAdminService customCommandAdminService;
     private volatile PunishmentService punishmentService;
     private volatile HologramService hologramService;
+    private volatile CommandAccess commandAccess;
+    private volatile PlayerMessenger playerMessenger;
 
 
     public Services(
@@ -74,8 +75,7 @@ public class Services {
             AdminUtilityDataStore adminUtilityDataStore,
             StorageService storageService,
             CommandToggleStore commandToggleStore,
-            IPlatformAdapter platformAdapter,
-            WebEditorStore webEditorStore
+            IPlatformAdapter platformAdapter
     ) {
         this.logger = logger;
         this.mainConfig = mainConfig;
@@ -98,7 +98,6 @@ public class Services {
         this.storageServiceInstance = storageService;
         this.commandToggleStoreInstance = commandToggleStore;
         this.platformAdapter = platformAdapter;
-        this.webEditorStore = webEditorStore != null ? webEditorStore : new WebEditorStore();
     }
 
     public void setServer(Object server) {
@@ -113,7 +112,24 @@ public class Services {
             this.platformAdapter.setMinecraftServer(server);
             this.platformAdapter.provideMessageParser(this.messageParserInstance);
         }
+        PunishmentService punishments = this.punishmentService;
+        if (this.server != null && punishments != null) {
+            punishments.start();
+        }
         refreshDiscoveredCommandPermissions();
+    }
+
+    public void shutdown() {
+        PunishmentService punishments = this.punishmentService;
+        if (punishments != null) {
+            try {
+                punishments.stop();
+            } catch (RuntimeException ignored) {
+            }
+        }
+        if (this.taskSchedulerInstance != null) {
+            this.taskSchedulerInstance.onServerStopping();
+        }
     }
 
     /**
@@ -164,6 +180,7 @@ public class Services {
         return permissionsHandlerInstance;
     }
 
+    @Deprecated
     public Placeholders getPlaceholders() {
         return placeholdersInstance;
     }
@@ -176,10 +193,12 @@ public class Services {
         return playerDataStoreInstance;
     }
 
+    @Deprecated
     public ModerationDataStore getModerationDataStore() {
         return moderationDataStoreInstance;
     }
 
+    @Deprecated
     public AdminUtilityDataStore getAdminUtilityDataStore() {
         return adminUtilityDataStoreInstance;
     }
@@ -217,6 +236,7 @@ public class Services {
         return MOTDConfigHandler.getConfig();
     }
 
+    @Deprecated
     public MentionConfigHandler.Config getMentionConfig() {
         return MentionConfigHandler.getConfig();
     }
@@ -229,6 +249,7 @@ public class Services {
         return ChatConfigHandler.getConfig();
     }
 
+    @Deprecated
     public TablistConfigHandler.Config getTablistConfig() {
         return TablistConfigHandler.getConfig();
     }
@@ -237,16 +258,14 @@ public class Services {
         return cmConfigInstance;
     }
 
+    @Deprecated
     public GroupChatManager getGroupChatManager() {
         return groupChatManagerInstance;
     }
 
+    @Deprecated
     public CooldownConfigHandler.Config getCooldownConfig() {
         return CooldownConfigHandler.getConfig();
-    }
-
-    public WebEditorStore getWebEditorStore() {
-        return webEditorStore;
     }
 
     public AuditService getAuditService() {
@@ -271,8 +290,34 @@ public class Services {
         PunishmentService current = punishmentService;
         if (current != null) return current;
         synchronized (this) {
-            if (punishmentService == null) punishmentService = new PunishmentService(this, getAuditService());
+            if (punishmentService == null) {
+                punishmentService = new PunishmentService(this, getAuditService());
+                if (this.server != null) punishmentService.start();
+            }
             return punishmentService;
+        }
+    }
+
+    public CommandAccess getCommandAccess() {
+        CommandAccess current = commandAccess;
+        if (current != null) return current;
+        synchronized (this) {
+            if (commandAccess == null) {
+                commandAccess = new CommandAccess(permissionsHandlerInstance, commandToggleStoreInstance);
+            }
+            return commandAccess;
+        }
+    }
+
+    public PlayerMessenger getPlayerMessenger() {
+        PlayerMessenger current = playerMessenger;
+        if (current != null) return current;
+        synchronized (this) {
+            if (playerMessenger == null) {
+                playerMessenger = new PlayerMessenger(langInstance, messageParserInstance, platformAdapter,
+                        logger, debugLoggerInstance);
+            }
+            return playerMessenger;
         }
     }
 

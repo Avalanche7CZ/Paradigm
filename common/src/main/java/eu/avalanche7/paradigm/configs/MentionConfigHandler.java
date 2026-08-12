@@ -1,10 +1,11 @@
 package eu.avalanche7.paradigm.configs;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import eu.avalanche7.paradigm.ParadigmConstants;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.utils.DebugLogger;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class MentionConfigHandler extends BaseConfigHandler<MentionConfigHandler.Config> {
 

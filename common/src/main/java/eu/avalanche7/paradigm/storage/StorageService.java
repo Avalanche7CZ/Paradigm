@@ -1,17 +1,35 @@
 package eu.avalanche7.paradigm.storage;
 
-import eu.avalanche7.paradigm.modules.audit.AuditRepository;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import java.util.function.Supplier;
+import java.util.stream.Stream;
+
+import org.slf4j.Logger;
+
 import eu.avalanche7.paradigm.data.AdminUtilityDataStore;
 import eu.avalanche7.paradigm.data.ModerationDataStore;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.data.WarpStore;
+import eu.avalanche7.paradigm.modules.audit.AuditRepository;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
 import eu.avalanche7.paradigm.storage.identity.ServerIdentityService;
 import eu.avalanche7.paradigm.storage.identity.StorageContext;
 import eu.avalanche7.paradigm.storage.json.JsonStorageProvider;
-import eu.avalanche7.paradigm.storage.migration.StorageMigrationService;
 import eu.avalanche7.paradigm.storage.migration.StorageMigrationOptions;
+import eu.avalanche7.paradigm.storage.migration.StorageMigrationService;
 import eu.avalanche7.paradigm.storage.mysql.MysqlStorageProvider;
 import eu.avalanche7.paradigm.storage.repository.AdminStateRepository;
 import eu.avalanche7.paradigm.storage.repository.ModerationRepository;
@@ -23,24 +41,10 @@ import eu.avalanche7.paradigm.storage.runtime.RuntimeJdbcDriverProvider;
 import eu.avalanche7.paradigm.storage.runtime.RuntimeLibrary;
 import eu.avalanche7.paradigm.storage.runtime.RuntimeLibraryDownloadResult;
 import eu.avalanche7.paradigm.storage.runtime.RuntimeLibraryManager;
-import eu.avalanche7.paradigm.storage.sqlite.SqliteStorageProvider;
 import eu.avalanche7.paradigm.storage.sql.SqlStorageProvider;
+import eu.avalanche7.paradigm.storage.sqlite.SqliteStorageProvider;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 import eu.avalanche7.paradigm.utils.TaskScheduler;
-import org.slf4j.Logger;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
-import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.function.Consumer;
-import java.util.function.Supplier;
-import java.util.stream.Stream;
 
 public class StorageService implements AutoCloseable {
     private final Logger logger;
@@ -53,6 +57,7 @@ public class StorageService implements AutoCloseable {
     private final JsonStorageProvider jsonProvider;
     private final RuntimeLibraryManager runtimeLibraryManager;
     private final RuntimeJdbcDriverProvider runtimeJdbcDriverProvider;
+    private final Object lifecycleLock = new Object();
 
     private StorageProvider activeProvider;
     private StorageProviderType selectedProviderType;
@@ -60,6 +65,8 @@ public class StorageService implements AutoCloseable {
     private String fallbackReason = "";
     private boolean fallbackDataPresent;
     private StorageTestResult lastTestResult;
+    private volatile boolean closing;
+    private volatile boolean closed;
 
     public StorageService(
             Logger logger,
@@ -104,13 +111,13 @@ public class StorageService implements AutoCloseable {
             };
             activeProvider.initialize();
             fallbackDataPresent = fallbackMarkerExists();
-        } catch (Throwable t) {
+        } catch (Exception | LinkageError t) {
             fallbackReason = t.getMessage() != null ? t.getMessage() : t.toString();
             lastTestResult = new StorageTestResult(false, selectedProviderType.configValue(), false, fallbackReason, 0,
                     stateKey(runtimeJdbcDriverProvider.inspect(RuntimeLibrary.SQLITE, selectedProviderType == StorageProviderType.SQLITE)),
                     stateKey(runtimeJdbcDriverProvider.inspect(RuntimeLibrary.MARIADB, selectedProviderType == StorageProviderType.MYSQL)));
             if (logger != null) {
-                logger.warn("Paradigm storage: {} provider failed: {}", selectedProviderType.configValue(), fallbackReason);
+                logger.warn("Paradigm storage: {} provider failed: {}", selectedProviderType.configValue(), fallbackReason, t);
             }
             if (Boolean.TRUE.equals(config.fallbackToJsonOnSqlFailure)) {
                 fallbackActive = true;
@@ -158,7 +165,7 @@ public class StorageService implements AutoCloseable {
     }
 
     public CompletableFuture<StorageTestResult> testAsync() {
-        return CompletableFuture.supplyAsync(() -> {
+        return submitStorageTask(() -> {
             StorageProvider provider = activeProvider;
             StorageTestResult result;
             if (selectedProviderType == StorageProviderType.JSON) {
@@ -177,7 +184,7 @@ public class StorageService implements AutoCloseable {
                     sqlProvider = createConfiguredSqlProvider();
                     sqlProvider.initialize();
                     result = withDriverStates(sqlProvider.test());
-                } catch (Throwable t) {
+                } catch (Exception | LinkageError t) {
                     result = new StorageTestResult(false, selectedProviderType.configValue(), false, t.getMessage(), 0,
                             stateKey(runtimeJdbcDriverProvider.inspect(RuntimeLibrary.SQLITE, selectedProviderType == StorageProviderType.SQLITE)),
                             stateKey(runtimeJdbcDriverProvider.inspect(RuntimeLibrary.MARIADB, selectedProviderType == StorageProviderType.MYSQL)));
@@ -189,11 +196,11 @@ public class StorageService implements AutoCloseable {
             }
             lastTestResult = result;
             return result;
-        }, executor);
+        });
     }
 
     public CompletableFuture<StorageTestResult> testConfigurationAsync(StorageConfig candidate) {
-        return CompletableFuture.supplyAsync(() -> {
+        return submitStorageTask(() -> {
             StorageConfig effective = candidate != null ? candidate : config;
             StorageProviderType type = effective.providerType(logger);
             if (type == StorageProviderType.JSON) {
@@ -206,14 +213,14 @@ public class StorageService implements AutoCloseable {
                         : new MysqlStorageProvider(effective, context, identityService, logger, runtimeJdbcDriverProvider);
                 provider.initialize();
                 return withDriverStates(provider.test());
-            } catch (Throwable t) {
+            } catch (Exception | LinkageError t) {
                 return new StorageTestResult(false, type.configValue(), false, t.getMessage() != null ? t.getMessage() : "Storage connection failed.", 0,
                         stateKey(runtimeJdbcDriverProvider.inspect(RuntimeLibrary.SQLITE, type == StorageProviderType.SQLITE)),
                         stateKey(runtimeJdbcDriverProvider.inspect(RuntimeLibrary.MARIADB, type == StorageProviderType.MYSQL)));
             } finally {
                 if (provider != null) provider.close();
             }
-        }, executor);
+        });
     }
 
     public CompletableFuture<StorageMigrationService.MigrationSummary> migrateAsync(String source, String target) {
@@ -221,7 +228,7 @@ public class StorageService implements AutoCloseable {
     }
 
     public CompletableFuture<StorageMigrationService.MigrationSummary> migrateAsync(String source, String target, StorageMigrationOptions options) {
-        return CompletableFuture.supplyAsync(() -> migrate(source, target, options), executor);
+        return submitStorageTask(() -> migrate(source, target, options));
     }
 
     public <T> void runAsync(
@@ -231,26 +238,30 @@ public class StorageService implements AutoCloseable {
             Consumer<T> onSuccessOnServerThread,
             Consumer<Throwable> onFailureOnServerThread
     ) {
-        CompletableFuture.supplyAsync(() -> {
+        submitStorageTask(() -> {
             try {
                 return supplier.get();
-            } catch (Throwable t) {
-                throw new StorageException("Storage operation failed: " + safeOperation(operation), t);
+            } catch (Exception failure) {
+                throw new StorageException("Storage operation failed: " + safeOperation(operation), failure);
             }
-        }, executor).whenComplete((result, throwable) -> {
+        }).whenComplete((result, throwable) -> {
+            Throwable failure = throwable != null
+                    ? (throwable.getCause() != null ? throwable.getCause() : throwable)
+                    : null;
+            if (failure != null) {
+                if (logger != null) {
+                    logger.warn("Paradigm storage: operation '{}' failed: {}", safeOperation(operation), failure.getMessage(), failure);
+                }
+                if (debugLogger != null) {
+                    debugLogger.debugLog("Storage operation failed (" + safeOperation(operation) + "): " + failure);
+                }
+            }
             Runnable callback = () -> {
-                if (throwable == null) {
+                if (failure == null) {
                     if (onSuccessOnServerThread != null) {
                         onSuccessOnServerThread.accept(result);
                     }
                     return;
-                }
-                Throwable failure = throwable.getCause() != null ? throwable.getCause() : throwable;
-                if (logger != null) {
-                    logger.warn("Paradigm storage: operation '{}' failed: {}", safeOperation(operation), failure.getMessage());
-                }
-                if (debugLogger != null) {
-                    debugLogger.debugLog("Storage operation failed (" + safeOperation(operation) + "): " + failure);
                 }
                 if (onFailureOnServerThread != null) {
                     onFailureOnServerThread.accept(failure);
@@ -265,18 +276,47 @@ public class StorageService implements AutoCloseable {
     }
 
     public void runStorageAsync(String operation, Runnable work) {
-        CompletableFuture.runAsync(() -> {
+        submitStorageTask(() -> {
             try {
                 work.run();
-            } catch (Throwable t) {
+            } catch (Exception failure) {
                 if (logger != null) {
-                    logger.warn("Paradigm storage: operation '{}' failed: {}", safeOperation(operation), t.getMessage());
+                    logger.warn("Paradigm storage: operation '{}' failed: {}", safeOperation(operation), failure.getMessage(), failure);
                 }
                 if (debugLogger != null) {
-                    debugLogger.debugLog("Storage operation failed (" + safeOperation(operation) + "): " + t);
+                    debugLogger.debugLog("Storage operation failed (" + safeOperation(operation) + "): " + failure);
                 }
             }
-        }, executor);
+            return null;
+        }).exceptionally(failure -> {
+            Throwable reported = failure.getCause() != null ? failure.getCause() : failure;
+            if (logger != null) {
+                logger.warn("Paradigm storage: operation '{}' could not be submitted: {}",
+                        safeOperation(operation), reported.getMessage(), reported);
+            }
+            if (debugLogger != null) {
+                debugLogger.debugLog("Storage operation could not be submitted (" + safeOperation(operation) + "): " + reported);
+            }
+            return null;
+        });
+    }
+
+    private <T> CompletableFuture<T> submitStorageTask(Supplier<T> task) {
+        try {
+            return CompletableFuture.supplyAsync(task, executor);
+        } catch (RejectedExecutionException rejected) {
+            synchronized (lifecycleLock) {
+                if (closed) {
+                    return CompletableFuture.failedFuture(
+                            new StorageException("Storage service is closed.", rejected));
+                }
+                try {
+                    return CompletableFuture.completedFuture(task.get());
+                } catch (Throwable failure) {
+                    return CompletableFuture.failedFuture(failure);
+                }
+            }
+        }
     }
 
     private static String safeOperation(String operation) {
@@ -381,8 +421,8 @@ public class StorageService implements AutoCloseable {
                 Files.copy(path, destination, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.COPY_ATTRIBUTES);
             }
             return backupRoot.toString();
-        } catch (Throwable t) {
-            throw new StorageException("Could not create JSON backup before storage migration: " + t.getMessage(), t);
+        } catch (IOException failure) {
+            throw new StorageException("Could not create JSON backup before storage migration: " + failure.getMessage(), failure);
         }
     }
 
@@ -452,7 +492,10 @@ public class StorageService implements AutoCloseable {
     private boolean fallbackMarkerExists() {
         try {
             return platformConfig != null && Files.exists(platformConfig.resolveConfigPath("paradigm/data/json-fallback-active.marker"));
-        } catch (Throwable ignored) {
+        } catch (RuntimeException unreadablePath) {
+            if (debugLogger != null) {
+                debugLogger.debugLog("Could not probe the JSON fallback marker: " + unreadablePath);
+            }
             return false;
         }
     }
@@ -465,32 +508,74 @@ public class StorageService implements AutoCloseable {
             Path marker = platformConfig.resolveConfigPath("paradigm/data/json-fallback-active.marker");
             Files.createDirectories(marker.getParent());
             Files.writeString(marker, "JSON fallback was activated at " + System.currentTimeMillis() + System.lineSeparator());
-        } catch (Throwable t) {
+        } catch (IOException | RuntimeException failure) {
             if (debugLogger != null) {
-                debugLogger.debugLog("Failed to write fallback marker: " + t.getMessage());
+                debugLogger.debugLog("Failed to write fallback marker: " + failure);
             }
         }
     }
 
     @Override
     public void close() {
-        try {
-            if (activeProvider != null) {
-                activeProvider.close();
+        synchronized (lifecycleLock) {
+            if (closing || closed) {
+                return;
             }
-        } catch (Throwable t) {
-            if (debugLogger != null) {
-                debugLogger.debugLog("StorageService close failed: " + t);
+            executor.shutdown();
+            closing = true;
+        }
+
+        boolean interrupted = false;
+        try {
+            if (!executor.awaitTermination(10, TimeUnit.SECONDS)) {
+                int discarded = executor.shutdownNow().size();
+                if (logger != null) {
+                    logger.warn("Paradigm storage: forced executor shutdown after timeout; {} queued operation(s) were cancelled.", discarded);
+                }
+                if (!executor.awaitTermination(5, TimeUnit.SECONDS) && logger != null) {
+                    logger.warn("Paradigm storage: executor did not terminate after forced shutdown.");
+                }
+            }
+        } catch (InterruptedException failure) {
+            interrupted = true;
+            int discarded = executor.shutdownNow().size();
+            if (logger != null) {
+                logger.warn("Paradigm storage: executor shutdown was interrupted; {} queued operation(s) were cancelled.", discarded);
             }
         }
-        try {
-            runtimeJdbcDriverProvider.close();
-        } catch (Throwable t) {
-            if (debugLogger != null) {
-                debugLogger.debugLog("Runtime JDBC close failed: " + t);
+
+        synchronized (lifecycleLock) {
+            try {
+                if (activeProvider != null) {
+                    activeProvider.close();
+                }
+            } catch (Exception failure) {
+                if (debugLogger != null) {
+                    debugLogger.debugLog("StorageService close failed: " + failure);
+                }
             }
+            try {
+                runtimeJdbcDriverProvider.close();
+            } catch (Exception failure) {
+                if (debugLogger != null) {
+                    debugLogger.debugLog("Runtime JDBC close failed: " + failure);
+                }
+            }
+            closed = true;
+            closing = false;
         }
-        executor.shutdownNow();
+
+        if (interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    boolean isClosing() {
+        return closing;
+    }
+
+    boolean isClosed() {
+        return closed;
     }
 
     private StorageTestResult withDriverStates(StorageTestResult result) {
