@@ -43,53 +43,30 @@ public class GradientTag implements Tag {
         Object gradientBaseStyle = context.getCurrentStyle();
         context.popStyle();
 
-        if (gradientContent == null || colors == null || colors.length < 2) {
-            if (gradientContent != null) {
-                context.popComponent();
-            }
+        if (gradientContent == null) {
             return;
         }
-
-        String fullText = gradientContent.getRawText();
-        if (fullText == null || fullText.isEmpty()) {
+        if (colors == null || colors.length < 2) {
             context.popComponent();
             return;
         }
 
-        IComponent result = platformAdapter.createComponentFromLiteral("");
-        int charCount = fullText.length();
+        StyledText.appendRecolored(context, platformAdapter, gradientContent, gradientBaseStyle, this::colorAt);
+    }
 
-        for (int i = 0; i < charCount; i++) {
-            char c = fullText.charAt(i);
-            float progress = (float) i / Math.max(1, charCount - 1);
+    private int colorAt(int index, int charCount) {
+        float progress = (float) index / Math.max(1, charCount - 1);
 
-            int color;
-            if (hardGradient) {
-                int colorIndex = (int) (progress * (colors.length - 1));
-                colorIndex = Math.min(colorIndex, colors.length - 1);
-                color = colors[colorIndex];
-            } else {
-                int colorBefore = (int) (progress * (colors.length - 1));
-                int colorAfter = Math.min(colorBefore + 1, colors.length - 1);
-
-                if (colorBefore == colorAfter) {
-                    color = colors[colorBefore];
-                } else {
-                    float localProgress = progress * (colors.length - 1) - colorBefore;
-                    color = interpolateColor(colors[colorBefore], colors[colorAfter], localProgress);
-                }
-            }
-
-            IComponent part = platformAdapter.createComponentFromLiteral(String.valueOf(c));
-            if (gradientBaseStyle != null) {
-                part.setStyle(gradientBaseStyle);
-            }
-            part = part.withColor(color);
-            result.append(part);
+        if (hardGradient) {
+            return colors[Math.min((int) (progress * (colors.length - 1)), colors.length - 1)];
         }
 
-        context.popComponent();
-        context.getCurrentComponent().append(result);
+        int colorBefore = (int) (progress * (colors.length - 1));
+        int colorAfter = Math.min(colorBefore + 1, colors.length - 1);
+        if (colorBefore == colorAfter) {
+            return colors[colorBefore];
+        }
+        return interpolateColor(colors[colorBefore], colors[colorAfter], progress * (colors.length - 1) - colorBefore);
     }
 
     @Override

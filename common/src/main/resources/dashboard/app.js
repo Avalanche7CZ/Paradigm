@@ -26,6 +26,8 @@ const state = {
   openPreviews: new Set(),
   pendingConfirm: null,
   tablistActiveEditor: 'tablist-player-format',
+  chatNameSample: { player_name: 'Alex', player_group: 'admin', player_world: 'minecraft:overworld', player_ping: '42' },
+  hoverLineFocus: null,
   hologramData: null,
   selectedHologram: null,
   hologramDraft: null
@@ -414,15 +416,254 @@ function wireDragRows(root, selector, keyOf, indexOf, onDrop) {
 function clone(value) { return value == null ? value : JSON.parse(JSON.stringify(value)); }
 function display(value) { return Array.isArray(value) ? `${value.length} items` : value == null || value === '' ? '-' : String(value); }
 
+const PLAYER_NAME_KEYS = ['chat.enablePlayerNameHover', 'chat.playerNameFormat', 'chat.playerNameHover', 'chat.playerNameHoverVariants', 'chat.playerNameClickAction', 'chat.playerNameClickValue'];
+const NAME_MARK = '\u0001';
+
 function renderChat() {
   const fields = fieldsFor(['chat']);
   const root = $('chat-fields');
-  const featureFields = fields.filter(field => !isFormattedChatField(field));
-  const formattedFields = fields.filter(isFormattedChatField);
-  root.innerHTML = `${featureFields.length ? `<section class="config-section"><h2>Features</h2>${featureFields.map(field => configRow(field, 'chat')).join('')}</section>` : ''}<section class="config-section formatted-fields-section"><h2>Formatting and Messages</h2>${formattedFields.map(chatFormatRow).join('')}</section>`;
+  const rest = fields.filter(field => !PLAYER_NAME_KEYS.includes(field.key));
+  const featureFields = rest.filter(field => !isFormattedChatField(field));
+  const formattedFields = rest.filter(isFormattedChatField);
+  root.innerHTML = `${featureFields.length ? `<section class="config-section"><h2>Features</h2>${featureFields.map(field => configRow(field, 'chat')).join('')}</section>` : ''}<section class="config-section formatted-fields-section"><h2>Formatting and Messages</h2>${formattedFields.map(chatFormatRow).join('')}</section>${playerNameEditor(fields)}`;
   wireConfigControls(root, 'chat');
   wireFormattingEditors(root, 'chat', renderChatFieldPreview);
   wirePreviewDisclosures(root, renderChatFieldPreview);
+  wirePlayerNameEditor(root);
+}
+
+function playerNameEditor(fields) {
+  const field = key => fields.find(item => item.key === key);
+  const enable = field('chat.enablePlayerNameHover');
+  const nameFormat = field('chat.playerNameFormat');
+  const hover = field('chat.playerNameHover');
+  const action = field('chat.playerNameClickAction');
+  const command = field('chat.playerNameClickValue');
+  const variants = field('chat.playerNameHoverVariants');
+  if (!enable || !nameFormat || !hover) return '';
+  return `<section class="config-section player-name-editor" id="player-name-editor">
+    <h2>Player Name</h2>
+    <p>The player name inside the chat format is rendered as its own component, so it can carry hover text and one click action. It needs custom chat formatting to be enabled.</p>
+    ${configRow(enable, 'chat')}
+    ${chatFormatRow(nameFormat)}
+    <div class="config-row" data-field-row="${attr(hover.key)}">
+      <div class="config-label"><strong>Hover Lines</strong><small>${esc(hover.help || '')}</small></div>
+      <div class="config-control formatted-control">${formattingToolbar(hover.key, chatPlaceholders(hover))}${listControl(hover, listValue(hover.key))}</div>
+    </div>
+    ${clickActionRow(action, command)}
+    ${hoverVariantEditor(variants)}
+    <div class="config-row player-name-sample">
+      <div class="config-label"><strong>Sample Player</strong><small>Only affects this preview. Nothing is saved.</small></div>
+      <div class="config-control"><div class="compact-form">
+        <label>Name<input data-name-sample="player_name" value="${attr(nameSample().player_name)}"></label>
+        <label>Group<input data-name-sample="player_group" value="${attr(nameSample().player_group)}"></label>
+        <label>World<input data-name-sample="player_world" value="${attr(nameSample().player_world)}"></label>
+        <label>Ping<input data-name-sample="player_ping" value="${attr(nameSample().player_ping)}"></label>
+      </div></div>
+    </div>
+    <div class="player-name-preview" id="player-name-preview">
+      <div class="player-name-preview-block"><span class="preview-caption">Chat line</span><div class="minecraft-preview" id="player-name-line-preview"></div></div>
+      <div class="player-name-preview-block"><span class="preview-caption">Hover card (default lines)</span><div class="minecraft-preview preview-hover-card" id="player-name-hover-preview"></div></div>
+    </div>
+    <div class="player-name-issues" id="player-name-issues"></div>
+  </section>`;
+}
+
+function clickActionRow(action, command) {
+  if (!action || !command) return '';
+  const selected = String(valueOf(action.key) ?? 'none');
+  const disabled = selected === 'none';
+  return `<div class="config-row player-name-click-row" data-field-row="${attr(action.key)}">
+    <div class="config-label"><strong>Click Action</strong><small>${esc(action.help || '')}</small></div>
+    <div class="config-control"><div class="compact-form">
+      <label>Type<select data-config-key="${attr(action.key)}" data-config-type="ENUM">${(action.options || []).map(option => `<option ${option === selected ? 'selected' : ''}>${esc(option)}</option>`).join('')}</select></label>
+      <label>Command<input data-config-key="${attr(command.key)}" data-config-type="STRING" ${disabled ? 'disabled' : ''} value="${attr(valueOf(command.key) ?? '')}"></label>
+    </div></div>
+  </div>`;
+}
+
+function hoverVariantEditor(field) {
+  if (!field) return '';
+  const variants = parseHoverVariants(listValue(field.key));
+  const rows = variants.map((variant, index) => `<div class="hover-variant-row" data-variant-index="${index}">
+    <div class="compact-form"><label>Permission<input data-variant-permission="${index}" value="${attr(variant.permission || '')}"></label><button type="button" data-variant-remove="${index}" title="Delete variant">&#215;</button></div>
+    <textarea class="format-editor auto-grow" rows="2" data-variant-hover="${index}">${esc((variant.hover || []).join('\n'))}</textarea>
+  </div>`).join('');
+  return `<div class="config-row" data-field-row="${attr(field.key)}">
+    <div class="config-label"><strong>Hover Variants</strong><small>${esc(field.help || '')}</small></div>
+    <div class="config-control"><div class="hover-variant-list">${rows || '<div class="reorder-empty">No variants. Everyone sees the hover lines above.</div>'}<button type="button" class="reorder-add" id="hover-variant-add">Add Variant</button></div></div>
+  </div>`;
+}
+
+function parseHoverVariants(rows) {
+  return (rows || []).map(row => { try { return JSON.parse(row); } catch (_) { return null; } }).filter(Boolean);
+}
+
+function mutateHoverVariants(mutation, rerender = true) {
+  const variants = parseHoverVariants(listValue('chat.playerNameHoverVariants'));
+  mutation(variants);
+  setEdit('chat.playerNameHoverVariants', variants.map(variant => JSON.stringify(variant)), 'chat', rerender);
+}
+
+function nameSample() {
+  return state.chatNameSample;
+}
+
+function chatSampleValues() {
+  const sample = nameSample();
+  return {
+    player: sample.player_name, player_name: sample.player_name, player_uuid: '3f8a1c22-0000-4000-8000-1d2e3f4a5b6c',
+    player_group: sample.player_group, player_groups: sample.player_group, player_primary_group: sample.player_group,
+    group: sample.player_group, prefix: `[${sample.player_group}] `, suffix: '',
+    player_prefix: `[${sample.player_group}] `, player_suffix: '',
+    player_world: sample.player_world, player_dimension: String(sample.player_world).split(':').pop(),
+    player_ping: sample.player_ping, player_level: '12', player_health: '20.0', max_player_health: '20.0',
+    message: 'Hello'
+  };
+}
+
+function wireHoverLineToolbar(root) {
+  const toolbar = root.querySelector('[data-format-for="chat.playerNameHover"]');
+  if (!toolbar) return;
+  const lines = [...root.querySelectorAll('[data-list-key="chat.playerNameHover"]')];
+  if (!lines.length) return;
+  lines.forEach(input => input.addEventListener('focus', () => { state.hoverLineFocus = input; }));
+  const target = () => (state.hoverLineFocus && root.contains(state.hoverLineFocus) ? state.hoverLineFocus : lines[lines.length - 1]);
+  toolbar.querySelectorAll('[data-format-tag]').forEach(button => button.addEventListener('click', () => applyFormatInput(target(), button.dataset.formatTag)));
+  toolbar.querySelectorAll('[data-placeholder-for]').forEach(select => select.addEventListener('change', () => {
+    if (!select.value) return;
+    const input = target();
+    insertAtCursor(input, select.value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.focus();
+    select.value = '';
+  }));
+}
+
+function wirePlayerNameEditor(root) {
+  wireHoverLineToolbar(root);
+  root.querySelectorAll('[data-name-sample]').forEach(input => input.addEventListener('input', () => {
+    state.chatNameSample[input.dataset.nameSample] = input.value;
+    refreshPlayerNamePreview();
+  }));
+  root.querySelectorAll('[data-variant-permission]').forEach(input => input.addEventListener('input', () => {
+    mutateHoverVariants(variants => { variants[Number(input.dataset.variantPermission)].permission = input.value; }, false);
+    refreshPlayerNamePreview();
+  }));
+  root.querySelectorAll('[data-variant-hover]').forEach(input => input.addEventListener('input', () => {
+    mutateHoverVariants(variants => { variants[Number(input.dataset.variantHover)].hover = input.value.split('\n'); }, false);
+    refreshPlayerNamePreview();
+  }));
+  root.querySelectorAll('[data-variant-remove]').forEach(button => button.addEventListener('click', () =>
+    mutateHoverVariants(variants => variants.splice(Number(button.dataset.variantRemove), 1))));
+  $('hover-variant-add')?.addEventListener('click', () =>
+    mutateHoverVariants(variants => variants.push({ permission: 'paradigm.chat.staff-hover', hover: ['<red>Staff</red>', '{player_name}'] })));
+  root.querySelectorAll('#player-name-editor [data-config-key], #player-name-editor [data-list-key]')
+    .forEach(input => input.addEventListener('input', refreshPlayerNamePreview));
+  refreshPlayerNamePreview();
+}
+
+function refreshPlayerNamePreview() {
+  renderPlayerNameLinePreview($('player-name-line-preview'));
+  renderPlayerNameHoverPreview($('player-name-hover-preview'));
+  renderPlayerNameIssues($('player-name-issues'));
+}
+
+function activeHoverLines() {
+  return listValue('chat.playerNameHover');
+}
+
+function playerNameHoverEnabled() {
+  return valueOf('chat.enablePlayerNameHover') === true && valueOf('chat.enableCustomChatFormat') !== false;
+}
+
+function renderPlayerNameLinePreview(panel) {
+  if (!panel) return;
+  const samples = chatSampleValues();
+  const format = String(valueOf('chat.customChatFormat') || '');
+  const line = format.replaceAll('{player_name}', NAME_MARK).replaceAll('{player}', NAME_MARK);
+  const fragment = buildMinecraftPreview(line, samples);
+  const interactive = playerNameHoverEnabled() || String(valueOf('chat.playerNameClickAction') || 'none') !== 'none';
+  spliceNameMark(fragment, buildPlayerNameChip(samples, interactive));
+  panel.replaceChildren(fragment);
+}
+
+function buildPlayerNameChip(samples, interactive) {
+  const chip = document.createElement('span');
+  chip.className = interactive ? 'preview-interactive' : '';
+  chip.append(buildMinecraftPreview(String(valueOf('chat.playerNameFormat') || '{player_name}'), samples));
+  if (interactive) chip.title = 'Interactive: this segment carries the hover and click action.';
+  return chip;
+}
+
+function spliceNameMark(fragment, replacement) {
+  const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_TEXT);
+  const hits = [];
+  while (walker.nextNode()) if (walker.currentNode.nodeValue.includes(NAME_MARK)) hits.push(walker.currentNode);
+  hits.forEach(node => {
+    const parts = node.nodeValue.split(NAME_MARK);
+    const replaced = document.createDocumentFragment();
+    parts.forEach((part, index) => {
+      if (index) replaced.append(replacement.cloneNode(true));
+      replaced.append(document.createTextNode(part));
+    });
+    node.replaceWith(replaced);
+  });
+}
+
+function renderPlayerNameHoverPreview(panel) {
+  if (!panel) return;
+  if (!playerNameHoverEnabled()) {
+    panel.replaceChildren(document.createTextNode('Hover is disabled. Chat renders exactly as it did before.'));
+    return;
+  }
+  renderMinecraftPreview(panel, activeHoverLines(), chatSampleValues());
+}
+
+function renderPlayerNameIssues(panel) {
+  if (!panel) return;
+  const issues = playerNameIssues();
+  panel.replaceChildren();
+  issues.forEach(issue => {
+    const row = document.createElement('div');
+    row.className = 'field-error';
+    row.textContent = issue;
+    panel.append(row);
+  });
+  panel.classList.toggle('hidden', !issues.length);
+}
+
+function playerNameIssues() {
+  const issues = [];
+  const format = String(valueOf('chat.customChatFormat') || '');
+  if (!format.includes('{player_name}') && !format.includes('{player}')) {
+    issues.push('The chat format has no {player_name}, so there is no name to attach hover or click behavior to.');
+  }
+  if (valueOf('chat.enableCustomChatFormat') === false) {
+    issues.push('Custom chat formatting is disabled, so the player name settings have no effect.');
+  }
+  const action = String(valueOf('chat.playerNameClickAction') || 'none');
+  if (action !== 'none') {
+    const command = String(valueOf('chat.playerNameClickValue') ?? '');
+    if (!command.trim()) issues.push('The click action needs a command value.');
+    else if (/[<>§\n\r]/.test(command)) issues.push('The click command cannot contain formatting markup or line breaks.');
+    else if (command.length > 256) issues.push('The click command must be at most 256 characters.');
+    else if (command.trim().replace(/^\/+/, '') === '') issues.push('The click command needs a command name after the slash.');
+    else if (!command.trimStart().startsWith('/')) issues.push('The click command will be saved with a leading slash so clients run it as a command.');
+  }
+  const hover = listValue('chat.playerNameHover');
+  if (hover.length > 16) issues.push('A hover template supports at most 16 lines.');
+  if (hover.some(line => String(line).length > 256)) issues.push('Hover lines must be at most 256 characters.');
+  const permissions = new Set();
+  parseHoverVariants(listValue('chat.playerNameHoverVariants')).forEach(variant => {
+    const permission = String(variant.permission || '').trim();
+    if (!permission) issues.push('Every hover variant needs a permission node.');
+    else if (!/^[A-Za-z0-9_.*-]+$/.test(permission)) issues.push(`Variant permission "${permission}" may only use letters, digits, dot, dash, underscore, and *.`);
+    else if (permissions.has(permission.toLowerCase())) issues.push(`Variant permission "${permission}" is used more than once.`);
+    else permissions.add(permission.toLowerCase());
+    if (!(variant.hover || []).some(line => String(line).trim())) issues.push('Every hover variant needs at least one hover line.');
+  });
+  return issues;
 }
 
 function isFormattedChatField(field) {
@@ -447,8 +688,7 @@ function renderChatFieldPreview(panel, previewKey) {
   let value = String(valueOf(key) || '');
   const positional = /privateMessageTo/i.test(key) ? ['Morgan', 'Hello world'] : /privateMessageFrom|staffChat/i.test(key) ? ['Alex', 'Hello world'] : [];
   positional.forEach(sample => { value = value.replace('%s', sample); });
-  const samples = { player: 'Alex', player_name: 'Alex', player_uuid: '0000-0000', player_level: '12', player_health: '20', max_player_health: '20', player_prefix: '[Member] ', player_suffix: '', player_group: 'member', player_groups: 'member', prefix: '[Member] ', suffix: '', group: 'member', message: 'Hello world' };
-  renderMinecraftPreview(panel, value || field?.label || '', samples);
+  renderMinecraftPreview(panel, value || field?.label || '', chatSampleValues());
 }
 
 function formattingToolbar(key, placeholders = []) {

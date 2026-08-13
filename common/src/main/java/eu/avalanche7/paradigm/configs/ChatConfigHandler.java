@@ -1,5 +1,8 @@
 package eu.avalanche7.paradigm.configs;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -117,7 +120,49 @@ public class ChatConfigHandler extends BaseConfigHandler<ChatConfigHandler.Confi
         );
         public ConfigEntry<String> customChatFormat = new ConfigEntry<>(
                 "{prefix}<color:aqua>{player_name}</color> <color:dark_gray>»</color> <color:white>{message}</color>",
-                "Custom chat message format. Supports TAG formatting and placeholders: {player_name}, {player_uuid}, {player_level}, {player_prefix}, {player_suffix}, {player_group}, {player_groups}, {prefix}, {suffix}, {group}, {player_health}, {max_player_health}. Use {message} for the chat text. Note: to preserve colors from permission prefix/suffix, do not wrap {prefix}/{suffix} in an outer color tag."
+                "Custom chat message format. Supports TAG formatting and placeholders: {player_name}, {player_uuid}, {player_level}, {player_prefix}, {player_suffix}, {player_group}, {player_groups}, {prefix}, {suffix}, {group}, {player_health}, {max_player_health}, {player_world}, {player_dimension}, {player_ping}. Use {message} for the chat text. Note: to preserve colors from permission prefix/suffix, do not wrap {prefix}/{suffix} in an outer color tag."
         );
+        public ConfigEntry<Boolean> enablePlayerNameHover = new ConfigEntry<>(
+                true,
+                "Shows playerNameHover text when a player hovers the sender name in a custom-formatted chat message. Requires enableCustomChatFormat."
+        );
+        public ConfigEntry<String> playerNameFormat = new ConfigEntry<>(
+                "{player_name}",
+                "How the interactive name itself is rendered inside customChatFormat. Supports TAG formatting and the same placeholders as customChatFormat."
+        );
+        public ConfigEntry<List<String>> playerNameHover = new ConfigEntry<>(
+                new ArrayList<>(List.of(
+                        "<color:aqua><bold>{player_name}</bold></color>",
+                        "<color:dark_gray><strikethrough>                    </strikethrough></color>",
+                        "<color:gray>Group</color> <color:dark_gray>»</color> <color:white>{player_group}</color>",
+                        "<color:gray>World</color> <color:dark_gray>»</color> <color:white>{player_dimension}</color>",
+                        "<color:gray>Ping</color> <color:dark_gray>»</color> <color:white>{player_ping}ms</color>")),
+                "Hover lines shown over the player name. One entry per line. Supports TAG formatting and placeholders: {player_name}, {player_uuid}, {player_group}, {player_groups}, {player_prefix}, {player_suffix}, {player_world}, {player_dimension}, {player_ping}, {player_level}, {player_health}, {max_player_health}."
+        );
+        public ConfigEntry<List<PlayerNameHoverVariant>> playerNameHoverVariants = new ConfigEntry<>(
+                new ArrayList<>(),
+                "Optional permission-gated hover overrides, evaluated in order. The first variant whose permission the sender holds wins; otherwise playerNameHover is used."
+        );
+        public ConfigEntry<String> playerNameClickAction = new ConfigEntry<>(
+                "suggest_command",
+                "Click action attached to the player name: none, run_command, or suggest_command."
+        );
+        public ConfigEntry<String> playerNameClickValue = new ConfigEntry<>(
+                "/msg {player_name} ",
+                "Command used by playerNameClickAction. Must start with / and supports placeholders such as {player_name}. Ignored when the action is none."
+        );
+    }
+
+    public static class PlayerNameHoverVariant {
+        public String permission = "";
+        public List<String> hover = new ArrayList<>();
+
+        public PlayerNameHoverVariant() {
+        }
+
+        public PlayerNameHoverVariant(String permission, List<String> hover) {
+            this.permission = permission != null ? permission : "";
+            this.hover = hover != null ? new ArrayList<>(hover) : new ArrayList<>();
+        }
     }
 }

@@ -315,6 +315,23 @@ public class LocalDashboardModule implements ParadigmModule {
                         .onClickCopyToClipboard(url)
                         .onHoverText(tr("dashboard.token.copy_link_hover", "Copy the one-time dashboard login link.")));
         platform.sendSuccess(source, message, false);
+        warnLoopbackLink(source);
+    }
+
+    private void warnLoopbackLink(ICommandSource source) {
+        if (source == null || source.isConsole() || config == null || !config.loopbackOnly()) {
+            return;
+        }
+        if (config.publicBaseUrl != null && !config.publicBaseUrl.isBlank()) {
+            return;
+        }
+        IPlatformAdapter platform = services.getPlatformAdapter();
+        platform.sendSuccess(source, platform.createComponentFromLiteral(
+                tr("dashboard.token.loopback_warning",
+                        "Note: the dashboard is bound to " + config.host + ", so this link only works in a browser "
+                                + "on the server machine. To open it elsewhere, set host, allowRemoteAccess and "
+                                + "publicBaseUrl in paradigm/dashboard.json, or use an SSH tunnel."))
+                .withColorHex("FBBF24"), false);
     }
 
     private String tr(String key, String fallback) {

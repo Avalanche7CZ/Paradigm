@@ -9,6 +9,7 @@ import eu.avalanche7.paradigm.data.AdminUtilityDataStore;
 import eu.avalanche7.paradigm.data.ModerationDataStore;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.modules.audit.AuditService;
+import eu.avalanche7.paradigm.modules.chat.ChatFormatter;
 import eu.avalanche7.paradigm.modules.dashboard.customcommands.CustomCommandAdminService;
 import eu.avalanche7.paradigm.modules.holograms.HologramService;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentService;
@@ -52,6 +53,7 @@ public class Services {
     private volatile HologramService hologramService;
     private volatile CommandAccess commandAccess;
     private volatile PlayerMessenger playerMessenger;
+    private volatile ChatFormatter chatFormatter;
 
 
     public Services(
@@ -247,6 +249,15 @@ public class Services {
 
     public ChatConfigHandler.Config getChatConfig() {
         return ChatConfigHandler.getConfig();
+    }
+
+    public ChatFormatter getChatFormatter() {
+        ChatFormatter current = chatFormatter;
+        if (current != null) return current;
+        synchronized (this) {
+            if (chatFormatter == null) chatFormatter = new ChatFormatter(this);
+            return chatFormatter;
+        }
     }
 
     @Deprecated

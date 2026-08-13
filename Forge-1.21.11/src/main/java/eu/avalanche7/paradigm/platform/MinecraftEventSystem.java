@@ -165,19 +165,15 @@ public class MinecraftEventSystem implements IEventSystem {
                 return false;
             }
 
-            String customFormat = cfg.customChatFormat.get();
-            if (customFormat == null || customFormat.isBlank()) {
+            IPlayer sender = chatEvent.getPlayer();
+            IComponent parsedComponent = services.getChatFormatter().format(sender, chatEvent.getMessage());
+            if (parsedComponent == null) {
                 return false;
             }
 
-            IPlayer sender = chatEvent.getPlayer();
-            String messageText = chatEvent.getMessage();
-            String formattedText = customFormat.replace("{message}", messageText != null ? messageText : "");
-            IComponent parsedComponent = services.getMessageParser().parseMessage(formattedText, sender);
-
             net.minecraft.network.chat.Component finalMessage = parsedComponent instanceof MinecraftComponent mc
                     ? mc.getHandle()
-                    : net.minecraft.network.chat.Component.literal(formattedText);
+                    : net.minecraft.network.chat.Component.literal(parsedComponent.getRawText());
 
             MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
             if (server == null) {

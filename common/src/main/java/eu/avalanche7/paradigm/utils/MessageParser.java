@@ -9,9 +9,13 @@ import java.util.regex.Pattern;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.utils.formatting.ComponentSlots;
 import eu.avalanche7.paradigm.utils.formatting.FormattingParser;
 
 public class MessageParser {
+    private static final Pattern HEX_COLOR_PATTERN = Pattern.compile("§#([A-Fa-f0-9]{6})");
+    private static final Pattern LEGACY_CODE_PATTERN = Pattern.compile("§([0-9a-fA-Fk-oK-OrR])");
+
     private final Map<String, IComponent> messageCache = new ConcurrentHashMap<>();
     private final Placeholders placeholders;
     private final IPlatformAdapter platformAdapter;
@@ -24,17 +28,22 @@ public class MessageParser {
     }
 
     public IComponent parseMessage(String rawMessage, IPlayer player) {
+        return parseMessage(rawMessage, player, ComponentSlots.none());
+    }
+
+    public IComponent parseMessage(String rawMessage, IPlayer player, ComponentSlots slots) {
         if (rawMessage == null) {
             return platformAdapter.createLiteralComponent("");
         }
+        ComponentSlots activeSlots = slots != null ? slots : ComponentSlots.none();
 
-        final boolean cacheable = !rawMessage.contains("{");
-        final String cacheKey = rawMessage + "_player_" + (player != null ? player.getUUID() : "null");
+        final boolean cacheable = !rawMessage.contains("{") && activeSlots.isEmpty();
+        final String cacheKey = cacheable ? rawMessage + "_player_" + (player != null ? player.getUUID() : "null") : null;
         if (cacheable && messageCache.containsKey(cacheKey)) {
             return messageCache.get(cacheKey).copy();
         }
 
-        IComponent parsed = parseTagBasedMessage(rawMessage, player);
+        IComponent parsed = parseTagBasedMessage(rawMessage, player, null, activeSlots);
 
 
         if (cacheable) {
@@ -43,10 +52,17 @@ public class MessageParser {
         return parsed.copy();
     }
 
-    private IComponent parseTagBasedMessage(String rawMessage, IPlayer player) {
+    public IComponent parseNested(String rawMessage, IPlayer player, Object baseStyle) {
+        if (rawMessage == null) {
+            return platformAdapter.createLiteralComponent("");
+        }
+        return parseTagBasedMessage(rawMessage, player, baseStyle, ComponentSlots.none());
+    }
+
+    private IComponent parseTagBasedMessage(String rawMessage, IPlayer player, Object baseStyle, ComponentSlots slots) {
         String processedMessage = platformAdapter.replacePlaceholders(rawMessage, player);
         processedMessage = convertLegacyToNewFormat(processedMessage);
-        return formattingParser.parse(processedMessage, player);
+        return formattingParser.parse(processedMessage, player, baseStyle, slots);
     }
 
     private String convertLegacyToNewFormat(String text) {
@@ -65,8 +81,7 @@ public class MessageParser {
         text = text.replace("&", "§");
         text = text.replace(literalAmpersand, '&');
 
-        Pattern hexColorPattern = Pattern.compile("§#([A-Fa-f0-9]{6})");
-        Matcher hexMatcher = hexColorPattern.matcher(text);
+        Matcher hexMatcher = HEX_COLOR_PATTERN.matcher(text);
         StringBuilder hexResult = new StringBuilder();
         while (hexMatcher.find()) {
             String hexColor = hexMatcher.group(1);
@@ -75,8 +90,7 @@ public class MessageParser {
         hexMatcher.appendTail(hexResult);
         text = hexResult.toString();
 
-        Pattern legacyPattern = Pattern.compile("§([0-9a-fA-Fk-oK-OrR])");
-        Matcher matcher = legacyPattern.matcher(text);
+        Matcher matcher = LEGACY_CODE_PATTERN.matcher(text);
 
         StringBuilder result = new StringBuilder();
         boolean hasBold = false;
@@ -166,6 +180,7 @@ public class MessageParser {
     public List<String> availablePlaceholderTokens() {
         return List.of(
                 "{player}", "{player_name}", "{player_uuid}", "{player_level}", "{player_health}", "{max_player_health}",
+                "{player_world}", "{player_dimension}", "{player_ping}",
                 "{player_prefix}", "{player_suffix}", "{player_group}", "{player_primary_group}", "{player_groups}",
                 "{prefix}", "{suffix}", "{group}");
     }

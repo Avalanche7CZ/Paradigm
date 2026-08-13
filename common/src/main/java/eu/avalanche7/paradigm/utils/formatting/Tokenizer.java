@@ -55,8 +55,7 @@ public class Tokenizer {
                     }
                 }
             } else {
-                int nextTag = input.indexOf('<', position);
-                int textEnd = nextTag == -1 ? input.length() : nextTag;
+                int textEnd = findTextEnd(position);
                 String textContent = input.substring(position, textEnd);
                 if (!textContent.isEmpty()) {
                     tokens.add(new Token(Token.TokenType.TEXT, textContent, position));
@@ -67,6 +66,22 @@ public class Tokenizer {
 
         tokens.add(new Token(Token.TokenType.EOF, "", position));
         return tokens;
+    }
+
+    private int findTextEnd(int startPos) {
+        for (int scan = startPos; scan < input.length(); scan++) {
+            char current = input.charAt(scan);
+            if (current == '<') {
+                return scan;
+            }
+            if (current == '\\' && scan + 1 < input.length()) {
+                char next = input.charAt(scan + 1);
+                if (next == '<' || next == '\\') {
+                    return scan;
+                }
+            }
+        }
+        return input.length();
     }
 
     private int findMatchingBracket(int startPos) {

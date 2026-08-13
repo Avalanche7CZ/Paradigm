@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -17,6 +18,7 @@ import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 public class DashboardConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     private static final String FILE_NAME = "paradigm/dashboard.json";
+    private static final Set<String> LOOPBACK_HOSTS = Set.of("127.0.0.1", "localhost", "::1", "[::1]");
 
     public boolean enabled = false;
     public String host = "127.0.0.1";
@@ -67,12 +69,16 @@ public class DashboardConfig {
         if (allowRemoteAccess) {
             return true;
         }
-        String normalized = host != null ? host.trim().toLowerCase() : "";
-        return !normalized.isBlank()
-                && !"127.0.0.1".equals(normalized)
-                && !"localhost".equals(normalized)
-                && !"::1".equals(normalized)
-                && !"[::1]".equals(normalized);
+        String normalized = normalizedHost();
+        return !normalized.isBlank() && !LOOPBACK_HOSTS.contains(normalized);
+    }
+
+    public boolean loopbackOnly() {
+        return LOOPBACK_HOSTS.contains(normalizedHost());
+    }
+
+    private String normalizedHost() {
+        return host != null ? host.trim().toLowerCase() : "";
     }
 
     public String localBaseUrl() {

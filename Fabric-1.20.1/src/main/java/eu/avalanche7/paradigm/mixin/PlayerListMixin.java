@@ -56,25 +56,16 @@ public abstract class PlayerListMixin {
         }
 
         try {
-            String messageText = message.getContent().getString();
-            String customFormat = cfg.customChatFormat.value;
-
-            if (customFormat == null || customFormat.isEmpty()) {
-                return;
-            }
-
             IPlayer wrappedSender = services.getPlatformAdapter().wrapPlayer(sender);
             if (wrappedSender == null) {
                 return;
             }
 
-            String formattedText = customFormat
-                    .replace("{message}", messageText)
-                    .replace("{player}", wrappedSender.getName())
-                    .replace("{player_name}", wrappedSender.getName())
-                    .replace("{player_uuid}", wrappedSender.getUUID());
-
-            IComponent parsedComponent = services.getMessageParser().parseMessage(formattedText, wrappedSender);
+            IComponent parsedComponent = services.getChatFormatter()
+                    .format(wrappedSender, message.getContent().getString());
+            if (parsedComponent == null) {
+                return;
+            }
 
             Object nativeObj = parsedComponent.getOriginalText();
             Text finalMessage = nativeObj instanceof Text t ? t : Text.literal(String.valueOf(nativeObj));

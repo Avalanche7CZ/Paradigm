@@ -2,6 +2,7 @@ package eu.avalanche7.paradigm.utils;
 
 import java.util.List;
 import java.util.function.Function;
+import java.util.function.ToIntFunction;
 
 import eu.avalanche7.paradigm.api.internal.ApiProviderRegistry;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
@@ -11,12 +12,17 @@ public class Placeholders {
     private Object luckPerms;
     private Boolean luckPermsAvailable = null;
     private static volatile Function<IPlayer, PermissionMeta> permissionMetaResolver;
+    private static volatile ToIntFunction<IPlayer> pingResolver;
 
     public Placeholders() {
     }
 
     public static void setPermissionMetaResolver(Function<IPlayer, PermissionMeta> resolver) {
         permissionMetaResolver = resolver;
+    }
+
+    public static void setPingResolver(ToIntFunction<IPlayer> resolver) {
+        pingResolver = resolver;
     }
 
     private void initLuckPerms() {
@@ -60,6 +66,12 @@ public class Placeholders {
                 Double mhp = player.getMaxHealth();
                 replacedText = replacedText.replace("{max_player_health}", mhp != null ? format1(mhp) : "");
             }
+            if (replacedText.contains("{player_world}") || replacedText.contains("{player_dimension}")) {
+                replacedText = replaceWorldPlaceholders(replacedText, player.getWorldId());
+            }
+            if (replacedText.contains("{player_ping}")) {
+                replacedText = replacedText.replace("{player_ping}", resolvePing(player));
+            }
 
             initLuckPerms();
             if (luckPermsAvailable != null && luckPermsAvailable) {
@@ -76,6 +88,7 @@ public class Placeholders {
         replacedText = replacedText.replace("{player_level}", "");
         replacedText = replacedText.replace("{player_health}", "");
         replacedText = replacedText.replace("{max_player_health}", "");
+        replacedText = stripRuntimePlaceholders(replacedText);
         replacedText = stripLuckPermsPlaceholders(replacedText);
         replacedText = stripInternalGroupPlaceholders(replacedText);
         return resolveExternal(replacedText, null);
@@ -145,6 +158,7 @@ public class Placeholders {
             if (replacedText.contains("{max_player_health}")) {
                 replacedText = replacedText.replace("{max_player_health}", safe(maxHealth));
             }
+            replacedText = stripRuntimePlaceholders(replacedText);
 
             initLuckPerms();
 
@@ -180,6 +194,35 @@ public class Placeholders {
         } catch (IllegalArgumentException ignored) {
         }
         return ApiProviderRegistry.resolveExternalPlaceholders(text, uuid);
+    }
+
+    private static String replaceWorldPlaceholders(String text, String worldId) {
+        if (!text.contains("{player_world}") && !text.contains("{player_dimension}")) {
+            return text;
+        }
+        String world = safe(worldId);
+        int separator = world.indexOf(':');
+        String dimension = separator >= 0 && separator + 1 < world.length() ? world.substring(separator + 1) : world;
+        return text.replace("{player_world}", world).replace("{player_dimension}", dimension);
+    }
+
+    private static String resolvePing(IPlayer player) {
+        ToIntFunction<IPlayer> resolver = pingResolver;
+        if (resolver == null) {
+            return "";
+        }
+        try {
+            return Integer.toString(Math.max(0, resolver.applyAsInt(player)));
+        } catch (RuntimeException | LinkageError unavailable) {
+            return "";
+        }
+    }
+
+    private static String stripRuntimePlaceholders(String text) {
+        return text
+                .replace("{player_world}", "")
+                .replace("{player_dimension}", "")
+                .replace("{player_ping}", "");
     }
 
     private String stripLuckPermsPlaceholders(String text) {

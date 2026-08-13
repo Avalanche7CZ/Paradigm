@@ -13,6 +13,7 @@ public class FormattingContext {
     private Object currentStyle;
     private int nestingLevel;
     private FormattingParser parser;
+    private ComponentSlots slots = ComponentSlots.none();
     private final Stack<IComponent> componentStack = new Stack<>();
     private final Stack<CenterTag> centerStack = new Stack<>();
     private final Stack<Object> styleStack = new Stack<>();
@@ -86,6 +87,14 @@ public class FormattingContext {
 
     public void setParser(FormattingParser parser) {
         this.parser = parser;
+    }
+
+    public ComponentSlots getSlots() {
+        return slots;
+    }
+
+    public void setSlots(ComponentSlots slots) {
+        this.slots = slots != null ? slots : ComponentSlots.none();
     }
 
     public FormattingParser getParser() {

@@ -22,6 +22,7 @@ import eu.avalanche7.paradigm.configs.ModerationConfigHandler;
 import eu.avalanche7.paradigm.configs.RestartConfigHandler;
 import eu.avalanche7.paradigm.configs.TablistConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.chat.PlayerNameClickAction;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardConfig;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPermission;
 
@@ -95,6 +96,38 @@ public class ConfigSchemaRegistry {
         ChatConfigHandler.Config current = ChatConfigHandler.getConfig();
         ChatConfigHandler.Config defaults = new ChatConfigHandler.Config();
         addConfigEntries(fields, "chat", "chat", ChatConfigHandler.Config.class, current, defaults, "chat.json", ConfigReloadBehavior.RELOAD_REQUIRED);
+
+        fields.removeIf(field -> List.of("chat.playerNameHover", "chat.playerNameClickAction",
+                "chat.playerNameClickValue", "chat.playerNameHoverVariants").contains(field.key()));
+        fields.add(stringListField("chat.playerNameHover", "chat", "Player Name Hover Lines", current.playerNameHover.description,
+                current.playerNameHover.value, defaults.playerNameHover.value,
+                "chat.json", true, ConfigReloadBehavior.RELOAD_REQUIRED));
+        fields.add(simpleField("chat.playerNameClickAction", "chat", "Player Name Click Action", current.playerNameClickAction.description,
+                ConfigFieldType.ENUM, current.playerNameClickAction.value, defaults.playerNameClickAction.value,
+                "chat.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.SAFE,
+                null, null, null, PlayerNameClickAction.TYPES, null, true, true, false, "", true, false));
+        fields.add(simpleField("chat.playerNameClickValue", "chat", "Player Name Click Command", current.playerNameClickValue.description,
+                ConfigFieldType.STRING, current.playerNameClickValue.value, defaults.playerNameClickValue.value,
+                "chat.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.SAFE,
+                null, null, null, List.of(), null, true, false, true, "", false, false));
+        fields.add(stringListField("chat.playerNameHoverVariants", "chat", "Player Name Hover Variants",
+                current.playerNameHoverVariants.description,
+                encodeHoverVariants(current.playerNameHoverVariants.value), encodeHoverVariants(defaults.playerNameHoverVariants.value),
+                "chat.json", false, ConfigReloadBehavior.RELOAD_REQUIRED));
+    }
+
+    private static List<String> encodeHoverVariants(List<ChatConfigHandler.PlayerNameHoverVariant> variants) {
+        if (variants == null || variants.isEmpty()) {
+            return List.of();
+        }
+        Gson gson = new Gson();
+        List<String> encoded = new ArrayList<>(variants.size());
+        for (ChatConfigHandler.PlayerNameHoverVariant variant : variants) {
+            if (variant != null) {
+                encoded.add(gson.toJson(variant));
+            }
+        }
+        return encoded;
     }
 
     private void addMentionFields(List<ConfigField> fields) {

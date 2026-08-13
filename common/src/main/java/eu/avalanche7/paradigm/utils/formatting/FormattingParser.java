@@ -40,8 +40,16 @@ public class FormattingParser {
     }
 
     public IComponent parse(String rawMessage, IPlayer player) {
+        return parse(rawMessage, player, null, ComponentSlots.none());
+    }
+
+    public IComponent parse(String rawMessage, IPlayer player, Object baseStyle, ComponentSlots slots) {
         if (rawMessage == null || rawMessage.isEmpty()) {
-            return platformAdapter.createComponentFromLiteral("");
+            IComponent empty = platformAdapter.createComponentFromLiteral("");
+            if (baseStyle != null) {
+                empty.setStyle(baseStyle);
+            }
+            return empty;
         }
 
         String processedMessage = placeholders != null
@@ -61,8 +69,12 @@ public class FormattingParser {
         List<Token> tokens = tokenizer.tokenize();
 
         IComponent rootComponent = platformAdapter.createComponentFromLiteral("");
-        FormattingContext context = new FormattingContext(rootComponent, player, null);
+        if (baseStyle != null) {
+            rootComponent.setStyle(baseStyle);
+        }
+        FormattingContext context = new FormattingContext(rootComponent, player, baseStyle);
         context.setParser(this);
+        context.setSlots(slots);
         Stack<TagState> tagStack = new Stack<>();
 
         for (Token token : tokens) {
@@ -112,6 +124,52 @@ public class FormattingParser {
     }
 
     private void appendText(IComponent parent, String text, FormattingContext context) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+
+        ComponentSlots slots = context.getSlots();
+        if (slots.isEmpty() || text.indexOf(ComponentSlots.MARKER_START) < 0) {
+            appendPlainText(parent, text, context);
+            return;
+        }
+
+        int cursor = 0;
+        while (cursor < text.length()) {
+            int markerStart = text.indexOf(ComponentSlots.MARKER_START, cursor);
+            if (markerStart < 0) {
+                break;
+            }
+            int markerEnd = text.indexOf(ComponentSlots.MARKER_END, markerStart + 1);
+            if (markerEnd < 0) {
+                break;
+            }
+
+            appendPlainText(parent, text.substring(cursor, markerStart), context);
+            appendSlot(parent, text.substring(markerStart + 1, markerEnd), context);
+            cursor = markerEnd + 1;
+        }
+        appendPlainText(parent, text.substring(cursor), context);
+    }
+
+    private void appendSlot(IComponent parent, String rawIndex, FormattingContext context) {
+        int index;
+        try {
+            index = Integer.parseInt(rawIndex);
+        } catch (NumberFormatException malformed) {
+            return;
+        }
+        ComponentSlot slot = context.getSlots().at(index);
+        if (slot == null) {
+            return;
+        }
+        IComponent rendered = slot.render(context.getCurrentStyle());
+        if (rendered != null) {
+            parent.append(rendered);
+        }
+    }
+
+    private void appendPlainText(IComponent parent, String text, FormattingContext context) {
         if (text == null || text.isEmpty()) {
             return;
         }

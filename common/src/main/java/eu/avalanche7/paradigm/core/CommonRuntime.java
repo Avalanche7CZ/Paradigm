@@ -52,6 +52,7 @@ public final class CommonRuntime {
         cmConfig.loadCommands();
 
         Placeholders placeholders = new Placeholders();
+        Placeholders.setPingResolver(platformAdapter::getPlayerPing);
         TaskScheduler taskScheduler = adoptPlatformScheduler(logger, platformAdapter, debugLogger);
         PlayerDataStore playerDataStore = new PlayerDataStore(logger, debugLogger, platformAdapter.getConfig());
         ModerationDataStore moderationDataStore = new ModerationDataStore(logger, debugLogger, platformAdapter.getConfig());

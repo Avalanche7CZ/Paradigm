@@ -40,28 +40,15 @@ public class RainbowTag implements Tag {
 
     @Override
     public void close(FormattingContext context) {
+        Object rainbowBaseStyle = context.getCurrentStyle();
         context.popStyle();
 
-        if (rainbowContent != null) {
-            String text = rainbowContent.getRawText();
-            if (text != null && !text.isEmpty()) {
-                IComponent result = platformAdapter.createComponentFromLiteral("");
-
-                for (int i = 0; i < text.length(); i++) {
-                    char c = text.charAt(i);
-                    float hue = (i * frequency + offset) % 1.0f;
-                    int color = hsvToRgb(hue, saturation, 1.0f);
-
-                    IComponent part = platformAdapter.createComponentFromLiteral(String.valueOf(c)).withColor(color);
-                    result.append(part);
-                }
-
-                context.popComponent();
-                context.getCurrentComponent().append(result);
-            } else {
-                context.popComponent();
-            }
+        if (rainbowContent == null) {
+            return;
         }
+
+        StyledText.appendRecolored(context, platformAdapter, rainbowContent, rainbowBaseStyle,
+                (index, charCount) -> hsvToRgb((index * frequency + offset) % 1.0f, saturation, 1.0f));
     }
 
     @Override

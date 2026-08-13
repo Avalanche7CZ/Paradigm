@@ -70,21 +70,16 @@ public abstract class PlayerListMixin {
         }
 
         try {
-            String messageText = playerChatMessage.signedContent().plain();
-            String customFormat = cfg.customChatFormat.get();
-
-            if (customFormat == null || customFormat.isEmpty()) {
+            IComponent parsedComponent = services.getChatFormatter()
+                    .format(new MinecraftPlayer(sender), playerChatMessage.signedContent().plain());
+            if (parsedComponent == null) {
                 return;
             }
-
-            String formattedText = customFormat.replace("{message}", messageText);
-            IComponent parsedComponent = services.getMessageParser().parseMessage(formattedText, new MinecraftPlayer(sender));
-
             Component finalMessage;
             if (parsedComponent instanceof MinecraftComponent mc) {
                 finalMessage = mc.getHandle();
             } else {
-                finalMessage = Component.literal(formattedText);
+                finalMessage = Component.literal(parsedComponent.getRawText());
             }
 
             PlayerList playerList = (PlayerList) (Object) this;

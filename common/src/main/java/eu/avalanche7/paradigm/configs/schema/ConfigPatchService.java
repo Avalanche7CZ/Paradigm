@@ -23,6 +23,7 @@ import eu.avalanche7.paradigm.configs.ModerationConfigHandler;
 import eu.avalanche7.paradigm.configs.RestartConfigHandler;
 import eu.avalanche7.paradigm.configs.TablistConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.chat.PlayerNameClickAction;
 import eu.avalanche7.paradigm.modules.commands.Reload;
 import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardConfig;
@@ -31,6 +32,10 @@ import eu.avalanche7.paradigm.modules.tab.Tablist;
 public class ConfigPatchService {
     private static final Pattern HEX_COLOR = Pattern.compile("#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})");
     private static final Pattern NAMED_COLOR = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
+    private static final Pattern PERMISSION_NODE = Pattern.compile("[A-Za-z0-9_.*-]+");
+    private static final int MAX_HOVER_LINES = 16;
+    private static final int MAX_HOVER_LINE_LENGTH = 256;
+    private static final int MAX_HOVER_VARIANTS = 8;
 
     private final Services services;
     private final ConfigSchemaRegistry registry;
@@ -90,7 +95,7 @@ public class ConfigPatchService {
                     mainChanged = true;
                     result.accept(key);
                 } else if (key.startsWith("chat.")) {
-                    applyConfigEntry(ChatConfigHandler.Config.class, ChatConfigHandler.getConfig(), key.substring("chat.".length()), value);
+                    applyChat(key.substring("chat.".length()), value);
                     chatChanged = true;
                     result.accept(key);
                 } else if (key.startsWith("mentions.")) {
@@ -260,6 +265,79 @@ public class ConfigPatchService {
             return;
         }
         applyConfigEntry(RestartConfigHandler.Config.class, RestartConfigHandler.getConfig(), fieldName, value);
+    }
+
+    private void applyChat(String fieldName, Object value) throws Exception {
+        ChatConfigHandler.Config config = ChatConfigHandler.getConfig();
+        if ("playerNameHoverVariants".equals(fieldName)) {
+            config.playerNameHoverVariants.value = parseHoverVariants(stringList(value));
+            return;
+        }
+        if ("playerNameClickAction".equals(fieldName)) {
+            PlayerNameClickAction.validate(String.valueOf(value), config.playerNameClickValue.get());
+            config.playerNameClickAction.value = String.valueOf(value);
+            return;
+        }
+        if ("playerNameClickValue".equals(fieldName)) {
+            config.playerNameClickValue.value = PlayerNameClickAction.validateValueSyntax(String.valueOf(value));
+            return;
+        }
+        if ("playerNameHover".equals(fieldName)) {
+            config.playerNameHover.value = new ArrayList<>(validateHoverLines(stringList(value)));
+            return;
+        }
+        applyConfigEntry(ChatConfigHandler.Config.class, config, fieldName, value);
+    }
+
+    static List<String> validateHoverLines(List<String> lines) {
+        if (lines.size() > MAX_HOVER_LINES) {
+            throw new IllegalArgumentException("A hover template supports at most " + MAX_HOVER_LINES + " lines.");
+        }
+        for (String line : lines) {
+            if (line != null && line.length() > MAX_HOVER_LINE_LENGTH) {
+                throw new IllegalArgumentException("Hover lines must be at most " + MAX_HOVER_LINE_LENGTH + " characters.");
+            }
+        }
+        return lines;
+    }
+
+    static List<ChatConfigHandler.PlayerNameHoverVariant> parseHoverVariants(List<String> rows) {
+        List<ChatConfigHandler.PlayerNameHoverVariant> variants = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        Gson gson = new Gson();
+        for (String raw : rows) {
+            JsonObject row;
+            try {
+                row = gson.fromJson(raw, JsonObject.class);
+            } catch (RuntimeException exception) {
+                throw new IllegalArgumentException("Hover variant data is invalid.");
+            }
+            if (row == null) {
+                throw new IllegalArgumentException("Hover variant data is invalid.");
+            }
+            String permission = row.has("permission") && !row.get("permission").isJsonNull()
+                    ? row.get("permission").getAsString().trim() : "";
+            if (permission.isEmpty() || permission.length() > 128) {
+                throw new IllegalArgumentException("Hover variants require a permission node of 1 to 128 characters.");
+            }
+            if (!PERMISSION_NODE.matcher(permission).matches()) {
+                throw new IllegalArgumentException("Hover variant permission nodes may only use letters, digits, dot, dash, underscore, and *.");
+            }
+            if (!seen.add(permission.toLowerCase(Locale.ROOT))) {
+                throw new IllegalArgumentException("Hover variant permissions must be unique.");
+            }
+            List<String> hover = row.has("hover") && !row.get("hover").isJsonNull()
+                    ? gson.fromJson(row.get("hover"), new com.google.gson.reflect.TypeToken<List<String>>() { }.getType())
+                    : List.of();
+            if (hover == null || hover.isEmpty()) {
+                throw new IllegalArgumentException("Hover variants require at least one hover line.");
+            }
+            variants.add(new ChatConfigHandler.PlayerNameHoverVariant(permission, validateHoverLines(hover)));
+        }
+        if (variants.size() > MAX_HOVER_VARIANTS) {
+            throw new IllegalArgumentException("At most " + MAX_HOVER_VARIANTS + " hover variants are supported.");
+        }
+        return variants;
     }
 
     private void applyTablist(String fieldName, Object value) throws Exception {

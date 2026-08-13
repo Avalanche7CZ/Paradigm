@@ -93,19 +93,16 @@ public abstract class PlayerListMixin {
             Component senderMessage = function.apply(sender);
             String messageText = paradigm$extractMessageText(senderMessage.getString(), sender.getName().getString());
 
-            String customFormat = cfg.customChatFormat.get();
-            if (customFormat == null || customFormat.isEmpty()) {
+            IComponent parsedComponent = services.getChatFormatter().format(new MinecraftPlayer(sender), messageText);
+            if (parsedComponent == null) {
                 return;
             }
-
-            String formattedText = customFormat.replace("{message}", messageText);
-            IComponent parsedComponent = services.getMessageParser().parseMessage(formattedText, new MinecraftPlayer(sender));
 
             Component finalMessage;
             if (parsedComponent instanceof MinecraftComponent mc) {
                 finalMessage = mc.getHandle();
             } else {
-                finalMessage = new net.minecraft.network.chat.TextComponent(formattedText);
+                finalMessage = new net.minecraft.network.chat.TextComponent(parsedComponent.getRawText());
             }
 
             for (ServerPlayer player : playerList.getPlayers()) {

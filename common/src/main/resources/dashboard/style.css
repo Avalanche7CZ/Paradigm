@@ -1340,6 +1340,19 @@ body.show-advanced .advanced-detail { display: block; }
 .tablist-preview-header, .tablist-preview-footer { padding: 8px; }
 .tablist-preview-players { display: grid; grid-template-columns: repeat(2, minmax(150px, 1fr)); gap: 5px 24px; padding: 16px; border-top: 1px solid #555; border-bottom: 1px solid #555; text-align: left; }
 .tablist-preview-players > div { min-height: 22px; }
+.player-name-editor .player-name-preview { display: grid; grid-template-columns: repeat(2, minmax(240px, 1fr)); gap: 14px; margin-top: 14px; }
+.player-name-preview-block { display: grid; gap: 6px; min-width: 0; }
+.player-name-preview-block .preview-caption { color: #fff; font-weight: 800; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; }
+.player-name-preview-block .minecraft-preview { min-height: 62px; }
+.minecraft-preview .preview-interactive { border-bottom: 2px dotted var(--pd-accent); background: rgba(255, 232, 74, 0.14); padding: 0 2px; cursor: help; }
+.minecraft-preview.preview-hover-card { border-color: var(--pd-accent); background: #101010; white-space: pre-wrap; }
+.hover-variant-list { display: grid; gap: 10px; }
+.hover-variant-row { display: grid; gap: 8px; padding: 10px; border: 2px solid #000; background: #0b143a; }
+.hover-variant-row textarea { width: 100%; min-width: 0; min-height: 58px; max-height: 168px; }
+.player-name-click-row .compact-form label:last-of-type { flex: 1 1 260px; }
+.player-name-click-row .compact-form input { width: 100%; min-width: 0; }
+.player-name-issues { display: grid; gap: 4px; margin-top: 12px; }
+.player-name-sample .compact-form input { min-width: 130px; }
 .tablist-worlds { display: grid; gap: 12px; margin-top: 14px; }
 .tablist-world-card { display: grid; gap: 10px; padding: 12px; border: 2px solid #000; background: #0b143a; }
 .tablist-world-heading label { display: grid; gap: 4px; min-width: min(460px, 70%); color: #fff; font-weight: 800; }
@@ -1391,6 +1404,7 @@ body.show-advanced .advanced-detail { display: block; }
   .tablist-switch-row, .tablist-world-heading { flex-direction: column; }
   .tablist-world-heading label { min-width: 100%; width: 100%; }
   .tablist-preview-players { grid-template-columns: 1fr; }
+  .player-name-editor .player-name-preview { grid-template-columns: 1fr; }
   .hologram-subject-header { position: static; align-items: stretch; flex-direction: column; }
   .hologram-field-grid { grid-template-columns: 1fr; }
 }
