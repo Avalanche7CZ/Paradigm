@@ -8,6 +8,8 @@ import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.modules.permissions.PermissionNodeRegistry;
+import net.minecraft.advancements.Advancement;
+import net.minecraft.advancements.DisplayInfo;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -15,6 +17,7 @@ import net.minecraft.network.chat.MutableComponent;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.event.CommandEvent;
 import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
+import net.neoforged.neoforge.event.entity.player.AdvancementEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.ServerChatEvent;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -33,6 +36,7 @@ public class MinecraftEventSystem implements IEventSystem {
     private final CopyOnWriteArrayList<PlayerLeaveEventListener> leaveListeners = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<PlayerDeathEventListener> deathListeners = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<PlayerCommandEventListener> commandListeners = new CopyOnWriteArrayList<>();
+    private final CopyOnWriteArrayList<PlayerAdvancementEventListener> advancementListeners = new CopyOnWriteArrayList<>();
 
     @Override
     public void onPlayerChat(ChatEventListener listener) {
@@ -57,6 +61,11 @@ public class MinecraftEventSystem implements IEventSystem {
     @Override
     public void onPlayerCommand(PlayerCommandEventListener listener) {
         if (listener != null) commandListeners.add(listener);
+    }
+
+    @Override
+    public void onPlayerAdvancement(PlayerAdvancementEventListener listener) {
+        if (listener != null) advancementListeners.add(listener);
     }
 
     public static final class DispatchResult {
@@ -107,8 +116,8 @@ public class MinecraftEventSystem implements IEventSystem {
         for (PlayerJoinEventListener listener : joinListeners) {
             try {
                 listener.onPlayerJoin(joinEvent);
-            } catch (Exception e) {
-                System.err.println("[Paradigm-NeoForge] Error in player join event listener: " + e.getMessage());
+            } catch (Exception failure) {
+                LOGGER.error("[Paradigm] Player lifecycle: join event listener failed.", failure);
             }
         }
 
@@ -129,12 +138,15 @@ public class MinecraftEventSystem implements IEventSystem {
                     }
                 }
             }
-        } catch (Throwable ignored) {
+        } catch (Throwable failure) {
+            LOGGER.warn("[Paradigm] Player lifecycle: failed to broadcast the custom join message.", failure);
         }
 
         try {
             System.out.println("[Paradigm-NeoForge] Join event fired for: " + joinEvent.getPlayer().getName());
-        } catch (Throwable ignored) {}
+        } catch (Throwable failure) {
+            LOGGER.debug("[Paradigm] Player lifecycle: could not resolve join diagnostics context.", failure);
+        }
     }
 
     public void dispatchLeave(PlayerEvent.PlayerLoggedOutEvent event) {
@@ -160,22 +172,31 @@ public class MinecraftEventSystem implements IEventSystem {
                     }
                 }
             }
-        } catch (Throwable ignored) {
+        } catch (Throwable failure) {
+            LOGGER.warn("[Paradigm] Player lifecycle: failed to broadcast the custom leave message.", failure);
         }
 
         try {
             System.out.println("[Paradigm-NeoForge] Leave event fired for: " + leaveEvent.getPlayer().getName());
-        } catch (Throwable ignored) {}
+        } catch (Throwable failure) {
+            LOGGER.debug("[Paradigm] Player lifecycle: could not resolve leave diagnostics context.", failure);
+        }
     }
 
     public void dispatchDeath(LivingDeathEvent event) {
         if (deathListeners.isEmpty() || !(event.getEntity() instanceof ServerPlayer player)) return;
-        MinecraftPlayerDeathEvent deathEvent = new MinecraftPlayerDeathEvent(player);
+        String deathMessage = null;
+        try {
+            deathMessage = event.getSource().getLocalizedDeathMessage(player).getString();
+        } catch (Throwable failure) {
+            LOGGER.warn("[Paradigm] Player lifecycle: failed to resolve the death message.", failure);
+        }
+        MinecraftPlayerDeathEvent deathEvent = new MinecraftPlayerDeathEvent(player, deathMessage);
         for (PlayerDeathEventListener listener : deathListeners) {
             try {
                 listener.onPlayerDeath(deathEvent);
-            } catch (Exception e) {
-                System.err.println("[Paradigm-NeoForge] Error in player death event listener: " + e.getMessage());
+            } catch (Exception failure) {
+                LOGGER.error("[Paradigm] Player lifecycle: death event listener failed.", failure);
             }
         }
     }
@@ -219,6 +240,23 @@ public class MinecraftEventSystem implements IEventSystem {
     }
 
     @SubscribeEvent
+    public void onAdvancement(AdvancementEvent.AdvancementEarnEvent event) {
+        if (advancementListeners.isEmpty() || !(event.getEntity() instanceof ServerPlayer player)) return;
+        Advancement advancement = event.getAdvancement().value();
+        DisplayInfo display = advancement.display().orElse(null);
+        if (display == null || !display.shouldAnnounceChat()) return;
+        MinecraftPlayerAdvancementEvent advancementEvent = new MinecraftPlayerAdvancementEvent(
+                player, display.getTitle().getString(), display.getDescription().getString());
+        for (PlayerAdvancementEventListener listener : advancementListeners) {
+            try {
+                listener.onPlayerAdvancement(advancementEvent);
+            } catch (Exception failure) {
+                LOGGER.error("[Paradigm] Player lifecycle: advancement event listener failed.", failure);
+            }
+        }
+    }
+
+    @SubscribeEvent
     public void onPermissionHandler(PermissionGatherEvent.Handler event) {
         Services services = Paradigm.getServices();
         if (services == null || services.getPermissionsHandler() == null || !services.getPermissionsHandler().shouldRegisterForgePermissionHandler()) {
@@ -240,9 +278,8 @@ public class MinecraftEventSystem implements IEventSystem {
         String raw = event.getMessage().getString();
         DispatchResult result = dispatchChatRaw(sp, raw);
 
-        try {
-            System.out.println("[Paradigm-NeoForge] Chat: " + (sp != null ? sp.getGameProfile().getName() : "<null>") + " raw='" + raw + "' -> msg='" + result.message + "' cancelled=" + result.cancelled);
-        } catch (Throwable ignored) {}
+        LOGGER.debug("[Paradigm] Chat: player={}, modified={}, cancelled={}.",
+                sp != null ? sp.getGameProfile().getName() : "<null>", !raw.equals(result.message), result.cancelled);
 
         // If a module cancelled or modified the message, cancel the original NeoForge chat event.
         if (result.cancelled || !raw.equals(result.message)) {
@@ -258,7 +295,8 @@ public class MinecraftEventSystem implements IEventSystem {
                     MutableComponent comp = net.minecraft.network.chat.Component.literal(result.message);
                     server.getPlayerList().broadcastSystemMessage(comp, false);
                 }
-            } catch (Throwable ignored) {
+            } catch (Throwable failure) {
+                LOGGER.warn("[Paradigm] Chat: failed to broadcast a modified chat message.", failure);
             }
         }
     }
@@ -295,12 +333,34 @@ public class MinecraftEventSystem implements IEventSystem {
 
     private static class MinecraftPlayerDeathEvent implements PlayerDeathEvent {
         private final IPlayer player;
+        private final String deathMessage;
 
-        public MinecraftPlayerDeathEvent(ServerPlayer player) {
+        public MinecraftPlayerDeathEvent(ServerPlayer player, String deathMessage) {
             this.player = MinecraftPlayer.of(player);
+            this.deathMessage = deathMessage;
         }
 
         @Override public IPlayer getPlayer() { return player; }
+
+        @Override public String getDeathMessage() { return deathMessage; }
+    }
+
+    private static class MinecraftPlayerAdvancementEvent implements PlayerAdvancementEvent {
+        private final IPlayer player;
+        private final String advancementName;
+        private final String advancementDescription;
+
+        public MinecraftPlayerAdvancementEvent(ServerPlayer player, String advancementName, String advancementDescription) {
+            this.player = MinecraftPlayer.of(player);
+            this.advancementName = advancementName;
+            this.advancementDescription = advancementDescription;
+        }
+
+        @Override public IPlayer getPlayer() { return player; }
+
+        @Override public String getAdvancementName() { return advancementName; }
+
+        @Override public String getAdvancementDescription() { return advancementDescription; }
     }
 
     private static ServerPlayer commandPlayer(CommandEvent event) {

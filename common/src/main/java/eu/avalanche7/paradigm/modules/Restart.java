@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import eu.avalanche7.paradigm.configs.RestartConfigHandler;
+import eu.avalanche7.paradigm.core.ParadigmEvents;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
@@ -78,7 +79,12 @@ public class Restart implements ParadigmModule {
     }
 
     private void cancelAndCleanup() {
+        cancelAndCleanup(false);
+    }
+
+    private void cancelAndCleanup(boolean announceCancellation) {
         services.getDebugLogger().debugLog(NAME + ": Initiating cleanup process.");
+        boolean wasInProgress = restartInProgress.get();
         if (mainTaskFuture != null && !mainTaskFuture.isDone()) {
             mainTaskFuture.cancel(false);
             services.getDebugLogger().debugLog(NAME + ": Main restart task future cancelled.");
@@ -109,6 +115,17 @@ public class Restart implements ParadigmModule {
         if (services != null && platform != null) {
             platform.removeRestartBossBar();
         }
+        if (announceCancellation && wasInProgress) {
+            publish(ParadigmEvents::restartCancelled);
+        }
+    }
+
+    private void publish(java.util.function.Consumer<ParadigmEvents> action) {
+        if (services == null) return;
+        try {
+            action.accept(services.getParadigmEvents());
+        } catch (RuntimeException | LinkageError ignored) {
+        }
     }
 
     @Override
@@ -134,7 +151,7 @@ public class Restart implements ParadigmModule {
                         .executes(context -> {
                             services.getDebugLogger().debugLog(NAME + ": /restart cancel command executed");
                             if (restartInProgress.get()) {
-                                cancelAndCleanup();
+                                cancelAndCleanup(true);
                                 scheduleNextRestart(services);
                                 platform.sendSuccess(context.getSource(), platform.createLiteralComponent("The active server restart has been cancelled."), true);
                             } else {
@@ -249,6 +266,7 @@ public class Restart implements ParadigmModule {
         services.getDebugLogger().debugLog(NAME + ": Initiating restart sequence. Total duration: " + totalIntervalSeconds + " seconds.");
         long totalIntervalMillis = (long) (totalIntervalSeconds * 1000);
         long restartAtMillis = System.currentTimeMillis() + totalIntervalMillis;
+        publish(events -> events.restartScheduled(restartAtMillis));
         java.util.List<Integer> broadcastTimes = new java.util.ArrayList<>(config.timerBroadcast.value);
         broadcastTimes.sort(java.util.Collections.reverseOrder());
 
@@ -360,6 +378,7 @@ public class Restart implements ParadigmModule {
             return;
         }
         services.getDebugLogger().debugLog(NAME + ": Sending restart warning. Time left: " + timeLeftSeconds + "s.");
+        publish(events -> events.restartCountdown(timeLeftSeconds));
 
         List<eu.avalanche7.paradigm.platform.Interfaces.IPlayer> players = platform.getOnlinePlayers();
 
@@ -394,6 +413,7 @@ public class Restart implements ParadigmModule {
     private void performShutdown(Services services, RestartConfigHandler.Config config) {
         if (!restartInProgress.get()) return;
         services.getDebugLogger().debugLog(NAME + ": Initiating final shutdown procedure.");
+        publish(ParadigmEvents::restartImminent);
         restartInProgress.set(false);
         if (bossBarFuture != null && !bossBarFuture.isDone()) {
             bossBarFuture.cancel(false);

@@ -11,6 +11,7 @@ import eu.avalanche7.paradigm.storage.StorageService;
 import eu.avalanche7.paradigm.storage.identity.ServerIdentityService;
 import eu.avalanche7.paradigm.storage.identity.StorageContext;
 import eu.avalanche7.paradigm.storage.repository.AdminStateRepository;
+import eu.avalanche7.paradigm.storage.repository.ManagedConfigRepository;
 import eu.avalanche7.paradigm.storage.repository.ModerationRepository;
 import eu.avalanche7.paradigm.storage.repository.PermissionRepository;
 import eu.avalanche7.paradigm.storage.repository.PlayerRepository;
@@ -34,6 +35,7 @@ public class SqlStorageProvider implements StorageProvider {
     private ModerationRepository moderation;
     private AdminStateRepository adminState;
     private ServerRepository servers;
+    private ManagedConfigRepository managedConfig;
     private AuditRepository audit;
     private boolean serverRegistered;
 
@@ -65,6 +67,7 @@ public class SqlStorageProvider implements StorageProvider {
         this.moderation = new SqlModerationRepository(executor, context);
         this.adminState = new SqlAdminStateRepository(executor, context);
         this.servers = new SqlServerRepository(executor);
+        this.managedConfig = new SqlManagedConfigRepository(executor);
         this.audit = new SqlAuditRepository(executor);
         if (identityService != null) {
             serverRegistered = identityService.registerWith(servers);
@@ -82,6 +85,7 @@ public class SqlStorageProvider implements StorageProvider {
     @Override public ModerationRepository moderation() { return moderation; }
     @Override public AdminStateRepository adminState() { return adminState; }
     @Override public ServerRepository servers() { return servers; }
+    @Override public ManagedConfigRepository managedConfig() { return managedConfig; }
     @Override public AuditRepository audit() { return audit; }
 
     @Override

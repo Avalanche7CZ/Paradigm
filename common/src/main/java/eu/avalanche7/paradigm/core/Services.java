@@ -11,6 +11,7 @@ import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.modules.audit.AuditService;
 import eu.avalanche7.paradigm.modules.chat.ChatFormatter;
 import eu.avalanche7.paradigm.modules.dashboard.customcommands.CustomCommandAdminService;
+import eu.avalanche7.paradigm.modules.discord.DiscordService;
 import eu.avalanche7.paradigm.modules.holograms.HologramService;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentService;
 import eu.avalanche7.paradigm.modules.permissions.PermissionAdminService;
@@ -54,6 +55,10 @@ public class Services {
     private volatile CommandAccess commandAccess;
     private volatile PlayerMessenger playerMessenger;
     private volatile ChatFormatter chatFormatter;
+    private volatile ParadigmEvents paradigmEvents;
+    private volatile DiscordService discordService;
+    private volatile eu.avalanche7.paradigm.modules.network.ManagedConfigSyncService managedConfigSyncService;
+    private volatile eu.avalanche7.paradigm.modules.network.ServerHeartbeatPublisher serverHeartbeatPublisher;
 
 
     public Services(
@@ -126,7 +131,11 @@ public class Services {
         if (punishments != null) {
             try {
                 punishments.stop();
-            } catch (RuntimeException ignored) {
+            } catch (RuntimeException failure) {
+                if (logger != null) {
+                    logger.warn("[Paradigm] Shutdown: failed to stop the punishment cache refresher; scheduler shutdown will continue.",
+                            failure);
+                }
             }
         }
         if (this.taskSchedulerInstance != null) {
@@ -332,12 +341,48 @@ public class Services {
         }
     }
 
+    public ParadigmEvents getParadigmEvents() {
+        ParadigmEvents current = paradigmEvents;
+        if (current != null) return current;
+        synchronized (this) {
+            if (paradigmEvents == null) paradigmEvents = new ParadigmEvents();
+            return paradigmEvents;
+        }
+    }
+
+    public DiscordService getDiscordService() {
+        DiscordService current = discordService;
+        if (current != null) return current;
+        synchronized (this) {
+            if (discordService == null) discordService = new DiscordService(this);
+            return discordService;
+        }
+    }
+
     public CustomCommandAdminService getCustomCommandAdminService() {
         CustomCommandAdminService current = customCommandAdminService;
         if (current != null) return current;
         synchronized (this) {
             if (customCommandAdminService == null) customCommandAdminService = new CustomCommandAdminService(this);
             return customCommandAdminService;
+        }
+    }
+
+    public eu.avalanche7.paradigm.modules.network.ManagedConfigSyncService getManagedConfigSyncService() {
+        eu.avalanche7.paradigm.modules.network.ManagedConfigSyncService current = managedConfigSyncService;
+        if (current != null) return current;
+        synchronized (this) {
+            if (managedConfigSyncService == null) managedConfigSyncService = new eu.avalanche7.paradigm.modules.network.ManagedConfigSyncService(this);
+            return managedConfigSyncService;
+        }
+    }
+
+    public eu.avalanche7.paradigm.modules.network.ServerHeartbeatPublisher getServerHeartbeatPublisher() {
+        eu.avalanche7.paradigm.modules.network.ServerHeartbeatPublisher current = serverHeartbeatPublisher;
+        if (current != null) return current;
+        synchronized (this) {
+            if (serverHeartbeatPublisher == null) serverHeartbeatPublisher = new eu.avalanche7.paradigm.modules.network.ServerHeartbeatPublisher(this);
+            return serverHeartbeatPublisher;
         }
     }
 }

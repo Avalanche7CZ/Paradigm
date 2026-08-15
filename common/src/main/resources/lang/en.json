@@ -561,6 +561,25 @@
       "rate_limited": "Too many dashboard requests."
     }
   },
+  "discord": {
+    "status": {
+      "state": "Discord: {state}",
+      "relay": "Relay: Minecraft to Discord {out}, Discord to Minecraft {in}",
+      "queue": "Queue: {depth} pending, {sent} sent, {dropped} dropped, {failed} failed",
+      "heartbeat": "Heartbeat: {heartbeat}"
+    },
+    "reconnect": {
+      "requested": "Reconnecting to Discord."
+    },
+    "test": {
+      "queued": "Test message queued for the {destination} destination.",
+      "failed": "Could not queue the Discord test message.",
+      "unknown_destination": "Unknown destination. Use chat, moderation or notifications."
+    },
+    "error": {
+      "disabled": "Discord integration is disabled or incompletely configured."
+    }
+  },
   "audit": {
     "recent": {
       "header": "Recent audit entries:",

@@ -22,6 +22,8 @@ import eu.avalanche7.paradigm.storage.StorageProviderType;
 import eu.avalanche7.paradigm.storage.StorageService;
 import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
 import eu.avalanche7.paradigm.storage.identity.ServerScope;
+import eu.avalanche7.paradigm.storage.json.JsonManagedConfigRepository;
+import eu.avalanche7.paradigm.storage.managedconfig.ServerInstanceInfo;
 import eu.avalanche7.paradigm.storage.model.StoredAdminState;
 import eu.avalanche7.paradigm.storage.model.StoredHome;
 import eu.avalanche7.paradigm.storage.model.StoredJailState;
@@ -34,6 +36,7 @@ import eu.avalanche7.paradigm.storage.model.StoredUserPermissionData;
 import eu.avalanche7.paradigm.storage.model.StoredWarning;
 import eu.avalanche7.paradigm.storage.model.StoredWarp;
 import eu.avalanche7.paradigm.storage.repository.AdminStateRepository;
+import eu.avalanche7.paradigm.storage.repository.ManagedConfigRepository;
 import eu.avalanche7.paradigm.storage.repository.ModerationRepository;
 import eu.avalanche7.paradigm.storage.repository.PermissionRepository;
 import eu.avalanche7.paradigm.storage.repository.PlayerRepository;
@@ -128,6 +131,7 @@ class StorageMigrationServiceTest {
         private final FakeModerationRepository moderation = new FakeModerationRepository();
         private final FakeAdminStateRepository adminState = new FakeAdminStateRepository();
         private final FakeServerRepository servers = new FakeServerRepository();
+        private final ManagedConfigRepository managedConfig = new JsonManagedConfigRepository();
 
         @Override public StorageProviderType type() { return StorageProviderType.JSON; }
         @Override public String displayName() { return "fake"; }
@@ -138,6 +142,7 @@ class StorageMigrationServiceTest {
         @Override public ModerationRepository moderation() { return moderation; }
         @Override public AdminStateRepository adminState() { return adminState; }
         @Override public ServerRepository servers() { return servers; }
+        @Override public ManagedConfigRepository managedConfig() { return managedConfig; }
         @Override public StorageService.StorageTestResult test() { return new StorageService.StorageTestResult(true, "fake", true, "ok", 0, "not_needed", "not_needed"); }
         @Override public int migrationVersion() { return 0; }
     }
@@ -252,5 +257,8 @@ class StorageMigrationServiceTest {
         @Override public void updateLastSeen(ServerIdentity identity) {}
         @Override public List<ServerIdentity> listServers() { return List.of(); }
         @Override public Optional<ServerIdentity> getServer(String serverId) { return Optional.empty(); }
+        @Override public void publishHeartbeat(ServerInstanceInfo info) {}
+        @Override public List<ServerInstanceInfo> listServerInstances() { return List.of(); }
+        @Override public Optional<ServerInstanceInfo> getServerInstance(String serverId) { return Optional.empty(); }
     }
 }

@@ -30,6 +30,7 @@ dependencies {
     compileOnly 'com.google.code.gson:gson:2.10.1'
 
     compileOnly 'org.slf4j:slf4j-api:2.0.9'
+    compileOnly 'org.apache.logging.log4j:log4j-core:2.17.1'
 
     // LuckPerms API
     compileOnly('net.luckperms:api:5.4')
@@ -40,6 +41,7 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testImplementation 'com.google.code.gson:gson:2.10.1'
     testImplementation 'org.slf4j:slf4j-api:2.0.9'
+    testImplementation 'org.apache.logging.log4j:log4j-core:2.17.1'
     testRuntimeOnly 'org.xerial:sqlite-jdbc:3.46.1.3'
 }
 

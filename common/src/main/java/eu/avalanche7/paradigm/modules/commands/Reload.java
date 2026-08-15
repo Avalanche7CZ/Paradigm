@@ -16,6 +16,7 @@ import eu.avalanche7.paradigm.modules.Restart;
 import eu.avalanche7.paradigm.modules.commands.moderation.PunishmentCommands;
 import eu.avalanche7.paradigm.modules.commands.permissions.PermissionCommands;
 import eu.avalanche7.paradigm.modules.dashboard.LocalDashboardModule;
+import eu.avalanche7.paradigm.modules.discord.DiscordModule;
 import eu.avalanche7.paradigm.modules.holograms.Holograms;
 import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.modules.tab.Tablist;
@@ -63,6 +64,7 @@ public class Reload implements ParadigmModule {
                                 case "restart" -> { RestartConfigHandler.reload(); msg = "Restart config reloaded."; }
                                 case "moderation" -> { ModerationConfigHandler.reload(); services.getPunishmentService().refreshAsync(); msg = "Moderation config reloaded."; }
                                 case "tablist" -> { TablistConfigHandler.reload(); msg = "Tablist config reloaded."; }
+                                case "discord" -> { DiscordConfigHandler.reload(); msg = "Discord config reloaded."; }
                                 case "customcommands" -> {
                                     CommandManager.reloadCustomCommands(services);
                                     msg = "Custom commands config reloaded.";
@@ -76,6 +78,7 @@ public class Reload implements ParadigmModule {
                                     RestartConfigHandler.reload();
                                     ModerationConfigHandler.reload();
                                     TablistConfigHandler.reload();
+                                    DiscordConfigHandler.reload();
                                     CommandManager.reloadCustomCommands(services);
                                     msg = "All configs reloaded.";
                                 }
@@ -99,6 +102,9 @@ public class Reload implements ParadigmModule {
                             if ("tablist".equals(cfg) || "all".equals(cfg)) {
                                 Tablist tablist = Tablist.current();
                                 if (tablist != null) tablist.reload();
+                            }
+                            if ("discord".equals(cfg) || "all".equals(cfg)) {
+                                services.getDiscordService().reload();
                             }
 
                             platform.sendSuccess(ctx.getSource(), platform.createLiteralComponent("§a" + msg), true);
@@ -126,6 +132,11 @@ public class Reload implements ParadigmModule {
         Holograms holograms = Holograms.current();
         if (holograms != null) {
             paradigm = paradigm.then(holograms.buildCommandBranch());
+        }
+
+        DiscordModule discord = DiscordModule.current();
+        if (discord != null) {
+            paradigm = paradigm.then(discord.buildCommandBranch(platform, services));
         }
 
         if (services.getPermissionsHandler().isInternalPermissionsEnabled()) {

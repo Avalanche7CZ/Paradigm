@@ -1,6 +1,7 @@
 package eu.avalanche7.paradigm.modules.dashboard;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -15,12 +16,21 @@ import com.google.gson.JsonObject;
 import eu.avalanche7.paradigm.ParadigmAPI;
 import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
+import eu.avalanche7.paradigm.configs.DiscordConfigHandler;
 import eu.avalanche7.paradigm.configs.MOTDConfigHandler;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.configs.MentionConfigHandler;
 import eu.avalanche7.paradigm.configs.RestartConfigHandler;
+import eu.avalanche7.paradigm.configs.schema.ConfigField;
+import eu.avalanche7.paradigm.configs.schema.ConfigPatchOperation;
 import eu.avalanche7.paradigm.configs.schema.ConfigPatchService;
 import eu.avalanche7.paradigm.configs.schema.ConfigSchemaRegistry;
+import eu.avalanche7.paradigm.configs.schema.ConfigSnapshot;
+import eu.avalanche7.paradigm.configs.schema.ConfigValidationResult;
+import eu.avalanche7.paradigm.configs.schema.RemoteConfigEligibility;
+import eu.avalanche7.paradigm.configs.schema.RemoteConfigField;
+import eu.avalanche7.paradigm.configs.schema.RemoteConfigSnapshot;
+import eu.avalanche7.paradigm.configs.schema.RemoteConfigValidationService;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.Announcements;
@@ -45,12 +55,23 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.StorageConfig;
 import eu.avalanche7.paradigm.storage.StorageProviderType;
 import eu.avalanche7.paradigm.storage.StorageService;
+import eu.avalanche7.paradigm.storage.identity.ServerScope;
+import eu.avalanche7.paradigm.storage.managedconfig.ManagedConfigAppliedState;
+import eu.avalanche7.paradigm.storage.managedconfig.ManagedConfigEntry;
+import eu.avalanche7.paradigm.storage.managedconfig.ManagedConfigUpsertResult;
+import eu.avalanche7.paradigm.storage.managedconfig.ServerInstanceInfo;
 import eu.avalanche7.paradigm.storage.migration.StorageMigrationOptions;
 import eu.avalanche7.paradigm.storage.model.StoredJailState;
 import eu.avalanche7.paradigm.storage.model.StoredPermissionNode;
 import eu.avalanche7.paradigm.storage.model.StoredUserPermissionData;
 
 public class DashboardService implements AutoCloseable {
+    public static final class SchemaIncompatibleException extends IllegalStateException {
+        public SchemaIncompatibleException(String message) {
+            super(message);
+        }
+    }
+
     private final Services services;
     private final DashboardAuthService authService = new DashboardAuthService();
     private final AuditService auditService;
@@ -171,6 +192,10 @@ public class DashboardService implements AutoCloseable {
                     }
                     case "motd" -> MOTDConfigHandler.reload();
                     case "commands" -> services.getPlatformAdapter().refreshAllPlayerCommandTrees();
+                    case "discord" -> {
+                        DiscordConfigHandler.reload();
+                        services.getDiscordService().reload();
+                    }
                     default -> throw new IllegalArgumentException("This page does not support a live module reload.");
                 }
                 result.complete(Map.of("page", page, "message", "Reload applied for " + page + "."));
@@ -181,6 +206,16 @@ public class DashboardService implements AutoCloseable {
         if (services.getTaskScheduler() != null) services.getTaskScheduler().schedule(apply, 0L, java.util.concurrent.TimeUnit.MILLISECONDS);
         else apply.run();
         return result;
+    }
+
+    public boolean requiresNetworkManage(String scope, String targetServerId) {
+        if ("NETWORK".equalsIgnoreCase(scope) || "GLOBAL".equalsIgnoreCase(scope)) {
+            return true;
+        }
+        StorageService storage = services.getStorageService();
+        var identity = storage != null ? storage.context().serverIdentity() : null;
+        String self = identity != null ? identity.serverId() : "default";
+        return targetServerId == null || targetServerId.isBlank() || !targetServerId.equalsIgnoreCase(self);
     }
 
     public boolean hasDashboardPermission(DashboardPrincipal principal) {
@@ -259,8 +294,348 @@ public class DashboardService implements AutoCloseable {
     public CompletableFuture<Object> serversAsync() {
         return CompletableFuture.supplyAsync(() -> {
             List<Map<String, Object>> result = heartbeatService.list(config, running());
-            return Map.of("servers", result, "sqlBacked", services.getStorageService().isSqlActive());
+            return Map.of("servers", result, "networkActive", services.getStorageService().isMysqlActive());
         }, executor);
+    }
+
+    public boolean isManagedLocally(String category) {
+        return services.getManagedConfigSyncService().isManaged(category);
+    }
+
+    public ConfigValidationResult upsertSelfManagedField(String category, String key, Object value) {
+        StorageService storage = services.getStorageService();
+        ConfigValidationResult result = new ConfigValidationResult();
+        if (storage == null || !storage.isMysqlActive()) {
+            result.reject(key, "Managed config storage is unavailable.");
+            return result;
+        }
+        var identity = storage.context().serverIdentity();
+        String networkId = identity != null ? identity.networkId() : "default";
+        String selfServerId = identity != null ? identity.serverId() : "default";
+
+        ConfigField field = schemaRegistry().snapshot().fields().stream()
+                .filter(f -> f.key().equals(key)).findFirst().orElse(null);
+        if (field == null || !field.category().equals(category) || !RemoteConfigEligibility.isRemoteEligible(field)) {
+            result.reject(key, "Field is not centrally manageable.");
+            return result;
+        }
+        Object validated;
+        try {
+            validated = RemoteConfigValidationService.validateFieldValue(field, value);
+        } catch (IllegalArgumentException invalid) {
+            result.reject(key, invalid.getMessage());
+            return result;
+        }
+
+        String fingerprint = schemaRegistry().structuralFingerprint();
+        ManagedConfigEntry current = storage.managedConfig().get(networkId, ServerScope.SERVER, selfServerId, category).orElse(null);
+        Map<String, Object> merged = new LinkedHashMap<>(current != null ? current.data() : Map.of());
+        merged.put(key, validated);
+        long expected = current != null ? current.revision() : 0L;
+        ManagedConfigUpsertResult upsertResult = storage.managedConfig().upsert(networkId, ServerScope.SERVER, selfServerId, category,
+                merged, fingerprint, expected, null, null, selfServerId);
+        if (upsertResult.ok()) {
+            result.accept(key);
+            return result;
+        }
+        result.reject(key, "Managed config changed concurrently; reload and try again.");
+        return result;
+    }
+
+    public CompletableFuture<Object> remoteConfigSnapshotAsync(String serverId, String categoriesCsv) {
+        return CompletableFuture.supplyAsync(() -> buildRemoteSnapshot(serverId, categoriesCsv), executor);
+    }
+
+    private RemoteConfigSnapshot buildRemoteSnapshot(String rawServerId, String categoriesCsv) {
+        StorageService storage = services.getStorageService();
+        if (storage == null || !storage.isMysqlActive()) {
+            throw new IllegalStateException("Remote server management requires shared MySQL storage.");
+        }
+        String serverId = safeText(rawServerId);
+        if (serverId.isBlank()) throw new IllegalArgumentException("serverId is required.");
+        var identity = storage.context().serverIdentity();
+        String networkId = identity != null ? identity.networkId() : "default";
+
+        ServerInstanceInfo instance = storage.servers().getServerInstance(serverId).orElse(null);
+        long now = System.currentTimeMillis();
+        boolean online = instance != null && instance.lastSeenMs() > 0 && now - instance.lastSeenMs() <= 90_000L;
+        long lastSeenMs = instance != null ? instance.lastSeenMs() : 0L;
+
+        ConfigSchemaRegistry registry = schemaRegistry();
+        String hostFingerprint = registry.structuralFingerprint();
+        String targetFingerprint = instance != null ? instance.schemaFingerprint() : null;
+        boolean schemaCompatible = targetFingerprint != null && !targetFingerprint.isBlank() && targetFingerprint.equals(hostFingerprint);
+
+        ConfigSnapshot snapshot = registry.snapshot();
+        Set<String> categoryFilter = parseCategories(categoriesCsv);
+
+        Map<String, ManagedConfigEntry> globalBySection = new HashMap<>();
+        Map<String, ManagedConfigEntry> serverBySection = new HashMap<>();
+        for (ManagedConfigEntry entry : storage.managedConfig().listForNetwork(networkId)) {
+            if (entry.scope() == ServerScope.GLOBAL) {
+                globalBySection.put(entry.section(), entry);
+            } else if (serverId.equals(entry.serverId())) {
+                serverBySection.put(entry.section(), entry);
+            }
+        }
+        Map<String, ManagedConfigAppliedState> appliedBySection = new HashMap<>();
+        for (ManagedConfigAppliedState state : storage.managedConfig().listApplied(networkId, serverId)) {
+            appliedBySection.put(state.section(), state);
+        }
+
+        List<RemoteConfigField> fields = new ArrayList<>();
+        for (ConfigField field : snapshot.fields()) {
+            if (!RemoteConfigEligibility.isManagedCategory(field.category())) continue;
+            if (categoryFilter != null && !categoryFilter.contains(field.category())) continue;
+            ManagedConfigEntry serverEntry = serverBySection.get(field.category());
+            ManagedConfigEntry globalEntry = globalBySection.get(field.category());
+            ManagedConfigAppliedState applied = appliedBySection.get(field.category());
+            boolean hasServerValue = serverEntry != null && serverEntry.data().containsKey(field.key());
+            boolean hasNetworkValue = globalEntry != null && globalEntry.data().containsKey(field.key());
+            boolean hasBaselineValue = applied != null && applied.baseline() != null
+                    && applied.baseline().containsKey(field.key());
+            Object serverValue = hasServerValue ? serverEntry.data().get(field.key()) : null;
+            Object networkValue = hasNetworkValue ? globalEntry.data().get(field.key()) : null;
+            Object baselineValue = hasBaselineValue ? applied.baseline().get(field.key()) : null;
+            if (serverEntry != null && serverEntry.data().containsKey(field.key())) {
+                fields.add(RemoteConfigField.of(field, serverValue, true, "server",
+                        networkValue, hasNetworkValue, serverValue, true, baselineValue, hasBaselineValue));
+            } else if (globalEntry != null && globalEntry.data().containsKey(field.key())) {
+                fields.add(RemoteConfigField.of(field, networkValue, true, "network",
+                        networkValue, true, serverValue, false, baselineValue, hasBaselineValue));
+            } else if (applied != null && applied.baseline() != null && applied.baseline().containsKey(field.key())) {
+                fields.add(RemoteConfigField.of(field, baselineValue, true, "unmanaged",
+                        networkValue, false, serverValue, false, baselineValue, true));
+            } else {
+                fields.add(RemoteConfigField.of(field, null, false, "unmanaged",
+                        null, false, null, false, null, false));
+            }
+        }
+
+        List<eu.avalanche7.paradigm.configs.schema.ConfigCategory> categories = snapshot.categories().stream()
+                .filter(c -> RemoteConfigEligibility.isManagedCategory(c.id()))
+                .filter(c -> categoryFilter == null || categoryFilter.contains(c.id()))
+                .toList();
+
+        Set<String> allEligibleCategories = snapshot.fields().stream()
+                .map(ConfigField::category)
+                .filter(RemoteConfigEligibility::isManagedCategory)
+                .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+        List<RemoteConfigSnapshot.SectionStatus> sections = new ArrayList<>();
+        for (String category : allEligibleCategories) {
+            if (categoryFilter != null && !categoryFilter.contains(category)) continue;
+            ManagedConfigEntry g = globalBySection.get(category);
+            ManagedConfigEntry s = serverBySection.get(category);
+            ManagedConfigAppliedState applied = appliedBySection.get(category);
+            sections.add(new RemoteConfigSnapshot.SectionStatus(
+                    category, g != null || s != null,
+                    g != null ? g.revision() : 0L,
+                    s != null ? s.revision() : 0L,
+                    applied != null ? applied.appliedGlobalRevision() : 0L,
+                    applied != null ? applied.appliedServerRevision() : 0L,
+                    applied != null ? applied.appliedAtMs() : 0L,
+                    applied != null ? applied.lastError() : ""
+            ));
+        }
+
+        return new RemoteConfigSnapshot(serverId, networkId, online, lastSeenMs, schemaCompatible, categories, fields, sections);
+    }
+
+    public CompletableFuture<RemoteConfigPatchOutcome> remoteConfigPatchAsync(DashboardPrincipal actor, RemoteConfigPatchRequest request) {
+        return CompletableFuture.supplyAsync(() -> applyRemotePatch(actor, request), executor);
+    }
+
+    public record RemoteConfigPatchOutcome(ConfigValidationResult result, long revision, boolean saved) {
+    }
+
+    private RemoteConfigPatchOutcome applyRemotePatch(DashboardPrincipal actor, RemoteConfigPatchRequest request) {
+        StorageService storage = services.getStorageService();
+        if (storage == null || !storage.isMysqlActive()) {
+            throw new IllegalStateException("Remote server management requires shared MySQL storage.");
+        }
+        if (request == null) throw new IllegalArgumentException("Request body is required.");
+        ServerScope scope = "NETWORK".equalsIgnoreCase(request.scope) ? ServerScope.GLOBAL : ServerScope.SERVER;
+        String targetServerId = storageId(request.serverId, "serverId");
+        String section = storageId(request.section, "section");
+        if (!RemoteConfigEligibility.isManagedCategory(section)) {
+            throw new IllegalArgumentException("Section cannot be centrally managed.");
+        }
+
+        var identity = storage.context().serverIdentity();
+        String networkId = identity != null ? identity.networkId() : "default";
+        String selfServerId = identity != null ? identity.serverId() : "default";
+
+        String hostFingerprint = schemaRegistry().structuralFingerprint();
+        String fingerprint = hostFingerprint;
+        if (scope == ServerScope.SERVER) {
+            ServerInstanceInfo instance = storage.servers().getServerInstance(targetServerId).orElse(null);
+            String targetFingerprint = instance != null ? instance.schemaFingerprint() : null;
+            if (targetFingerprint == null || targetFingerprint.isBlank() || !targetFingerprint.equals(hostFingerprint)) {
+                ConfigValidationResult result = new ConfigValidationResult();
+                result.reject("<schema>", "Target server schema is unknown or incompatible; remote editing is disabled until versions match.");
+                return new RemoteConfigPatchOutcome(result, 0L, false);
+            }
+            fingerprint = targetFingerprint;
+        }
+
+        RemoteConfigValidationService validation = new RemoteConfigValidationService(schemaRegistry());
+        var outcome = validation.validate(section, request.operations);
+        ConfigValidationResult result = new ConfigValidationResult();
+        for (var rejection : outcome.rejected()) {
+            result.reject(rejection.key(), rejection.reason());
+        }
+        if (!outcome.ok()) {
+            return new RemoteConfigPatchOutcome(result, 0L, false);
+        }
+
+        String effectiveServerId = scope == ServerScope.GLOBAL ? "" : targetServerId;
+        ManagedConfigEntry current = storage.managedConfig().get(networkId, scope, effectiveServerId, section).orElse(null);
+        long expected = current != null ? current.revision() : 0L;
+        if (request.expectedRevision != expected) {
+            result.reject("<revision>", "Managed config changed while the dashboard was open. Reload and try again.");
+            return new RemoteConfigPatchOutcome(result, expected, false);
+        }
+
+        Map<String, Object> merged = new LinkedHashMap<>(current != null ? current.data() : Map.of());
+        for (var op : outcome.accepted()) {
+            merged.put(op.key(), op.value());
+        }
+
+        ManagedConfigUpsertResult upsertResult = storage.managedConfig().upsert(networkId, scope, effectiveServerId, section, merged,
+                fingerprint, request.expectedRevision, actor != null ? actor.uuid() : null, actor != null ? actor.name() : null, selfServerId);
+        if (!upsertResult.ok()) {
+            result.reject("<revision>", "Managed config changed while the dashboard was open. Reload and try again.");
+            return new RemoteConfigPatchOutcome(result, upsertResult.revision(), false);
+        }
+        for (var op : outcome.accepted()) {
+            result.accept(op.key());
+        }
+        result.newRevision(String.valueOf(upsertResult.revision()));
+
+        if (scope == ServerScope.GLOBAL || targetServerId.equals(selfServerId)) {
+            services.getManagedConfigSyncService().triggerImmediateSync();
+        }
+        return new RemoteConfigPatchOutcome(result, upsertResult.revision(), true);
+    }
+
+    public CompletableFuture<Object> remoteConfigCopyAsync(DashboardPrincipal actor, RemoteConfigCopyRequest request) {
+        return CompletableFuture.supplyAsync(() -> copyRemoteSection(actor, request), executor);
+    }
+
+    private Object copyRemoteSection(DashboardPrincipal actor, RemoteConfigCopyRequest request) {
+        StorageService storage = services.getStorageService();
+        if (storage == null || !storage.isMysqlActive()) {
+            throw new IllegalStateException("Remote server management requires shared MySQL storage.");
+        }
+        if (request == null) throw new IllegalArgumentException("Request body is required.");
+        String fromServerId = storageId(request.fromServerId, "fromServerId");
+        String toServerId = storageId(request.toServerId, "toServerId");
+        String section = storageId(request.section, "section");
+        if (!RemoteConfigEligibility.isManagedCategory(section)) {
+            throw new IllegalArgumentException("Section cannot be centrally managed.");
+        }
+
+        var identity = storage.context().serverIdentity();
+        String networkId = identity != null ? identity.networkId() : "default";
+        String selfServerId = identity != null ? identity.serverId() : "default";
+
+        ManagedConfigEntry source = storage.managedConfig().get(networkId, ServerScope.SERVER, fromServerId, section).orElse(null);
+        if (source == null) {
+            throw new IllegalArgumentException("Source server has no SERVER-scope override for this section.");
+        }
+        ManagedConfigEntry target = storage.managedConfig().get(networkId, ServerScope.SERVER, toServerId, section).orElse(null);
+        long expected = target != null ? target.revision() : 0L;
+
+        ServerInstanceInfo targetInstance = storage.servers().getServerInstance(toServerId).orElse(null);
+        String hostFingerprint = schemaRegistry().structuralFingerprint();
+        String targetFingerprint = targetInstance != null ? targetInstance.schemaFingerprint() : null;
+        if (targetFingerprint == null || targetFingerprint.isBlank() || !targetFingerprint.equals(hostFingerprint)) {
+            throw new SchemaIncompatibleException("Target server schema is unknown or incompatible.");
+        }
+
+        List<ConfigPatchOperation> sourceOperations = source.data().entrySet().stream()
+                .map(entry -> new ConfigPatchOperation(entry.getKey(), entry.getValue())).toList();
+        var validated = new RemoteConfigValidationService(schemaRegistry()).validate(section, sourceOperations);
+        if (!validated.ok()) {
+            String reasons = validated.rejected().stream()
+                    .map(error -> error.key() + ": " + error.reason())
+                    .collect(java.util.stream.Collectors.joining("; "));
+            throw new IllegalArgumentException("Source data is not valid against the current schema: " + reasons);
+        }
+        Map<String, Object> validatedData = new LinkedHashMap<>();
+        validated.accepted().forEach(op -> validatedData.put(op.key(), op.value()));
+
+        ManagedConfigUpsertResult result = storage.managedConfig().upsert(networkId, ServerScope.SERVER, toServerId, section, validatedData,
+                targetFingerprint, expected, actor != null ? actor.uuid() : null, actor != null ? actor.name() : null, selfServerId);
+        if (result.ok() && toServerId.equals(selfServerId)) {
+            services.getManagedConfigSyncService().triggerImmediateSync();
+        }
+        return Map.of("ok", result.ok(), "revision", result.revision(), "reason", result.conflictReason() != null ? result.conflictReason() : "");
+    }
+
+    public CompletableFuture<Object> adoptSectionAsync(DashboardPrincipal actor, RemoteConfigAdoptRequest request) {
+        return CompletableFuture.supplyAsync(() -> adoptSection(actor, request), executor);
+    }
+
+    private Object adoptSection(DashboardPrincipal actor, RemoteConfigAdoptRequest request) {
+        StorageService storage = services.getStorageService();
+        if (storage == null || !storage.isMysqlActive()) {
+            throw new IllegalStateException("Remote server management requires shared MySQL storage.");
+        }
+        if (request == null) throw new IllegalArgumentException("Request body is required.");
+        String section = storageId(request.section, "section");
+        if (!RemoteConfigEligibility.isManagedCategory(section)) {
+            throw new IllegalArgumentException("Section cannot be centrally managed.");
+        }
+        ServerScope scope = "NETWORK".equalsIgnoreCase(request.scope) ? ServerScope.GLOBAL : ServerScope.SERVER;
+        var identity = storage.context().serverIdentity();
+        String networkId = identity != null ? identity.networkId() : "default";
+        String selfServerId = identity != null ? identity.serverId() : "default";
+        String targetServerId = storageId(request.serverId, "serverId");
+
+        String fingerprint = schemaRegistry().structuralFingerprint();
+
+        if (scope == ServerScope.GLOBAL) {
+            Map<String, Object> values = currentEligibleValues(section);
+            ManagedConfigUpsertResult result = storage.managedConfig().upsert(networkId, ServerScope.GLOBAL, "", section, values,
+                    fingerprint, 0L, actor != null ? actor.uuid() : null, actor != null ? actor.name() : null, selfServerId);
+            if (result.ok()) services.getManagedConfigSyncService().triggerImmediateSync();
+            return Map.of("ok", result.ok(), "revision", result.revision(), "reason", result.conflictReason() != null ? result.conflictReason() : "");
+        }
+
+        if (targetServerId.equals(selfServerId)) {
+            ManagedConfigUpsertResult result = storage.managedConfig().upsert(networkId, ServerScope.SERVER, selfServerId, section, Map.of(),
+                    fingerprint, 0L, actor != null ? actor.uuid() : null, actor != null ? actor.name() : null, selfServerId);
+            if (result.ok()) {
+                storage.managedConfig().upsertApplied(networkId, selfServerId, section, 0L, result.revision(), "", currentEligibleValues(section));
+                services.getManagedConfigSyncService().triggerImmediateSync();
+            }
+            return Map.of("ok", result.ok(), "revision", result.revision(), "reason", result.conflictReason() != null ? result.conflictReason() : "");
+        }
+
+        storage.managedConfig().createAdoptionRequest(networkId, targetServerId, section,
+                actor != null ? actor.uuid() : null, actor != null ? actor.name() : null);
+        return Map.of("ok", true, "pending", true);
+    }
+
+    private Map<String, Object> currentEligibleValues(String section) {
+        Map<String, Object> values = new LinkedHashMap<>();
+        for (ConfigField field : schemaRegistry().snapshot().fields()) {
+            if (field.category().equals(section) && RemoteConfigEligibility.isRemoteEligible(field)) {
+                values.put(field.key(), field.value() != null ? field.value().value() : null);
+            }
+        }
+        return values;
+    }
+
+    private static Set<String> parseCategories(String csv) {
+        if (csv == null || csv.isBlank()) return null;
+        Set<String> out = new java.util.LinkedHashSet<>();
+        for (String part : csv.split(",")) {
+            String trimmed = part.trim();
+            if (!trimmed.isEmpty()) out.add(trimmed);
+        }
+        return out.isEmpty() ? null : out;
     }
 
     public CompletableFuture<Object> storageStatusAsync() {

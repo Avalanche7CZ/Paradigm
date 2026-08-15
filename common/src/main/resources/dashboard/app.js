@@ -30,10 +30,134 @@ const state = {
   hoverLineFocus: null,
   hologramData: null,
   selectedHologram: null,
-  hologramDraft: null
+  hologramDraft: null,
+  discordStatus: null,
+  confirmReturnFocus: null,
+  confirmMode: 'confirm',
+  servers: [],
+  networkActive: false,
+  remote: {
+    serverId: null,
+    snapshot: null,
+    section: null,
+    scopes: new Map(),
+    edits: new Map(),
+    editPages: new Map(),
+    errors: new Map()
+  }
 };
 
 const $ = id => document.getElementById(id);
+const themeStorageKey = 'paradigm-dashboard-theme';
+const sidebarStorageKey = 'paradigm-dashboard-sidebar-collapsed';
+const advancedStorageKey = 'paradigm-dashboard-advanced-details';
+let mountedPageAction = null;
+let mountedPageToolbar = null;
+
+function restorePageAction() {
+  if (mountedPageAction && mountedPageToolbar) mountedPageToolbar.appendChild(mountedPageAction);
+  mountedPageAction = null;
+  mountedPageToolbar = null;
+  const mount = $('page-actions');
+  if (mount) mount.replaceChildren();
+}
+
+function syncThemeLayout() {
+  restorePageAction();
+  if (document.documentElement.dataset.theme !== 'dark') return;
+  const toolbar = document.querySelector('.page.active > .page-toolbar');
+  const action = toolbar?.children[1];
+  const mount = $('page-actions');
+  if (!toolbar || !action || !mount) return;
+  mountedPageAction = action;
+  mountedPageToolbar = toolbar;
+  mount.appendChild(action);
+}
+
+function setNavigationOpen(open) {
+  const mobile = window.matchMedia('(max-width: 980px)').matches;
+  const effectiveOpen = mobile && open;
+  document.body.classList.toggle('nav-open', effectiveOpen);
+  const toggle = $('nav-toggle');
+  const sidebar = document.querySelector('.sidebar');
+  const scrim = $('nav-scrim');
+  if (toggle) {
+    toggle.setAttribute('aria-expanded', String(effectiveOpen));
+    toggle.setAttribute('aria-label', effectiveOpen ? 'Close navigation' : 'Open navigation');
+  }
+  if (sidebar) sidebar.inert = mobile && !effectiveOpen;
+  if (scrim) {
+    scrim.setAttribute('aria-hidden', String(!effectiveOpen));
+    scrim.tabIndex = effectiveOpen ? 0 : -1;
+  }
+}
+
+function setSidebarCollapsed(collapsed, persist = false) {
+  document.body.classList.toggle('sidebar-collapsed', collapsed);
+  const toggle = $('nav-toggle');
+  const collapse = $('sidebar-collapse');
+  if (toggle && !window.matchMedia('(max-width: 980px)').matches) {
+    toggle.setAttribute('aria-label', collapsed ? 'Show navigation' : 'Navigation is visible');
+    toggle.setAttribute('aria-expanded', String(!collapsed));
+  }
+  if (collapse) collapse.setAttribute('aria-label', collapsed ? 'Show navigation' : 'Hide navigation');
+  if (persist) localStorage.setItem(sidebarStorageKey, String(collapsed));
+}
+
+function toggleNavigation() {
+  if (window.matchMedia('(max-width: 980px)').matches) {
+    setNavigationOpen(!document.body.classList.contains('nav-open'));
+    return;
+  }
+  setSidebarCollapsed(!document.body.classList.contains('sidebar-collapsed'), true);
+}
+
+function filterNavigation(query) {
+  const needle = query.trim().toLocaleLowerCase();
+  let totalVisible = 0;
+  document.querySelectorAll('.nav-group').forEach(group => {
+    let visible = 0;
+    group.querySelectorAll('[data-page-target]').forEach(button => {
+      const matches = !needle || button.textContent.toLocaleLowerCase().includes(needle);
+      button.classList.toggle('nav-filtered', !matches);
+      if (matches) {
+        visible += 1;
+        totalVisible += 1;
+      }
+    });
+    group.classList.toggle('nav-filtered', visible === 0);
+  });
+  $('nav-empty')?.classList.toggle('hidden', totalVisible !== 0);
+}
+
+function setTheme(theme, persist = false) {
+  const next = theme === 'dark' ? 'dark' : 'classic';
+  document.documentElement.dataset.theme = next;
+  const toggle = $('theme-toggle');
+  if (toggle) {
+    toggle.textContent = next === 'dark' ? 'Classic' : 'Dark';
+    toggle.setAttribute('aria-label', `Switch to ${next === 'dark' ? 'classic' : 'dark'} theme`);
+    toggle.setAttribute('aria-pressed', String(next === 'dark'));
+  }
+  if (persist) localStorage.setItem(themeStorageKey, next);
+  syncThemeLayout();
+}
+
+function setAdvancedShown(show, persist = false) {
+  state.advanced = Boolean(show);
+  document.body.classList.toggle('show-advanced', state.advanced);
+  document.querySelectorAll('.advanced-toggle').forEach(button => {
+    button.textContent = state.advanced ? 'Hide advanced details' : 'Advanced details';
+    button.setAttribute('aria-pressed', String(state.advanced));
+  });
+  if (persist) localStorage.setItem(advancedStorageKey, String(state.advanced));
+}
+
+setTheme(localStorage.getItem(themeStorageKey) || 'classic');
+setSidebarCollapsed(localStorage.getItem(sidebarStorageKey) === 'true');
+setNavigationOpen(false);
+setAdvancedShown(localStorage.getItem(advancedStorageKey) === 'true');
+
 const pageInfo = {
   overview: ['Overview', 'Server administration at a glance.'],
   servers: ['Servers', 'Local identity and observed network heartbeats.'],
@@ -51,6 +175,7 @@ const pageInfo = {
   commands: ['Command Settings', 'Built-in command availability.'],
   cooldowns: ['Cooldowns', 'Cooldown and warmup timing.'],
   dashboard: ['Dashboard', 'Local dashboard security and runtime settings.'],
+  discord: ['Discord', 'Chat relay, event notifications, and connection state.'],
   permissions: ['Permission Editor', 'Groups, users, assignments, and nodes.'],
   moderation: ['Moderation', 'Player history and moderation actions.'],
   storageConfig: ['Storage Configuration', 'Provider settings and masked connection state.']
@@ -93,12 +218,19 @@ async function checkAuth() {
 }
 
 function showLogin() {
+  document.body.classList.remove('is-authenticated');
+  restorePageAction();
+  setNavigationOpen(false);
   $('login-panel').classList.remove('hidden');
   $('app-panel').classList.add('hidden');
   $('session-state').textContent = 'Not logged in';
+  $('page-title').textContent = 'Dashboard Login';
+  $('page-subtitle').textContent = 'Authenticate with a one-time in-game link.';
+  document.title = 'Login · Paradigm Dashboard';
 }
 
 function showApp(principal) {
+  document.body.classList.add('is-authenticated');
   $('login-panel').classList.add('hidden');
   $('app-panel').classList.remove('hidden');
   $('session-state').textContent = principal?.name ? principal.name : 'Local Admin';
@@ -132,12 +264,19 @@ function validPage(page) { return Object.prototype.hasOwnProperty.call(pageInfo,
 function navigate(page, updateHash = true) {
   if (!validPage(page)) page = 'overview';
   state.page = page;
-  document.querySelectorAll('[data-page-target]').forEach(button => button.classList.toggle('active', button.dataset.pageTarget === page));
+  document.querySelectorAll('[data-page-target]').forEach(button => {
+    const active = button.dataset.pageTarget === page;
+    button.classList.toggle('active', active);
+    if (active) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
   document.querySelectorAll('.page').forEach(section => section.classList.toggle('active', section.dataset.page === page));
   $('page-title').textContent = pageInfo[page][0];
   $('page-subtitle').textContent = pageInfo[page][1];
+  document.title = `${pageInfo[page][0]} · Paradigm Dashboard`;
   if (updateHash && location.hash !== `#${page}`) history.pushState({ page }, '', `#${page}`);
-  document.body.classList.remove('nav-open');
+  setNavigationOpen(false);
+  syncThemeLayout();
   loadPage(page);
   updateSaveBar();
 }
@@ -155,6 +294,7 @@ async function loadPage(page) {
   if (page === 'servers') await loadServers();
   if (page === 'storage') await loadStorage();
   if (page === 'storageConfig') await loadStorageConfiguration();
+  if (page === 'discord') await loadDiscord();
   if (page === 'permissions') await loadPermissions();
   if (page === 'customCommands') await loadCustomCommands();
   if (page === 'holograms') await loadHolograms();
@@ -164,7 +304,7 @@ async function loadPage(page) {
 }
 
 async function loadConfigSnapshot(force = false) {
-  if (state.edits.size && force && !window.confirm('Discard unsaved dashboard changes and reload from disk?')) return;
+  if (state.edits.size && force && !await confirmAction('Discard unsaved dashboard changes and reload from disk?', true)) return;
   try {
     state.snapshot = await api('/api/config/snapshot');
     if (force) clearEdits();
@@ -201,6 +341,7 @@ function renderConfiguration() {
   renderConfigContainer('command-fields', filterByInput(fieldsFor(['commands']), 'command-search'), 'commands');
   renderConfigContainer('cooldown-fields', filterByInput(fieldsFor(['cooldowns']), 'cooldown-search'), 'cooldowns');
   renderConfigContainer('dashboard-fields', fieldsFor(['dashboard']), 'dashboard');
+  renderDiscord();
   updateSaveBar();
 }
 
@@ -214,7 +355,7 @@ function renderConfigContainer(id, fields, page, options = {}) {
     groups.get(group).push(field);
   });
   root.innerHTML = groups.size ? [...groups].map(([name, rows]) => `<section class="config-section"><h2>${esc(name)}</h2>${rows.map(field => configRow(field, page, options)).join('')}</section>`).join('') : empty('No settings found.');
-  wireConfigControls(root, page);
+  wireConfigControls(root, page, options.store || state);
 }
 
 function readableGroup(field) {
@@ -230,13 +371,15 @@ function categoryTitle(value) {
 }
 
 function configRow(field, page, options = {}) {
-  const value = state.edits.has(field.key) ? state.edits.get(field.key) : clone(field.value?.value);
-  const dirty = state.edits.has(field.key);
-  const error = state.errors.get(field.key);
+  const store = options.store || state;
+  const value = store.edits.has(field.key) ? store.edits.get(field.key) : clone(field.value?.value);
+  const dirty = store.edits.has(field.key);
+  const error = store.errors.get(field.key);
   const control = configControl(field, value, options);
   const reload = field.reloadBehavior === 'RESTART_REQUIRED' ? 'Server restart required' : field.reloadBehavior === 'RELOAD_REQUIRED' ? 'Apply reload after saving' : '';
+  const origin = field.origin ? `<span class="origin-badge origin-${attr(field.origin)}">${esc(field.origin)}</span>` : '';
   return `<div class="config-row ${dirty ? 'is-dirty' : ''} ${error ? 'has-error' : ''}" data-field-row="${attr(field.key)}">
-    <div class="config-label"><strong>${esc(humanLabel(field))}</strong><small>${esc(field.help || '')}</small>${reload ? `<span class="reload-note">${esc(reload)}</span>` : ''}<span class="advanced-detail">${esc(field.key)} · ${esc(field.owner || '')} · ${esc(field.type)} · default ${esc(display(field.defaultValue?.value))}</span>${error ? `<div class="field-error">${esc(error)}</div>` : ''}</div>
+    <div class="config-label"><strong>${esc(humanLabel(field))}</strong>${origin}<small>${esc(field.help || '')}</small>${reload ? `<span class="reload-note">${esc(reload)}</span>` : ''}<span class="advanced-detail">${esc(field.key)} · ${esc(field.owner || '')} · ${esc(field.type)} · default ${esc(display(field.defaultValue?.value))}</span>${error ? `<div class="field-error">${esc(error)}</div>` : ''}</div>
     <div class="config-control"><div class="config-control-line">${control}${field.editable ? `<button type="button" data-reset-field="${attr(field.key)}" title="Reset to default">Reset</button>` : ''}</div></div>
   </div>`;
 }
@@ -248,37 +391,41 @@ function humanLabel(field) {
 }
 
 function configControl(field, value, options = {}) {
+  const label = attr(humanLabel(field));
   if (!field.editable || field.type === 'READ_ONLY_TEXT') return `<div class="readonly-value">${esc(display(value))}</div>`;
   if (field.type === 'SECRET_MASKED') return `<div class="readonly-value">${field.value?.set ? 'Configured' : 'Not configured'}</div>`;
-  if (field.type === 'BOOLEAN') return `<label class="switch"><input data-config-key="${attr(field.key)}" data-config-type="BOOLEAN" type="checkbox" ${value ? 'checked' : ''}><span></span></label>`;
-  if (field.type === 'ENUM') return `<select data-config-key="${attr(field.key)}" data-config-type="ENUM">${(field.options || []).map(option => `<option ${option === value ? 'selected' : ''}>${esc(option)}</option>`).join('')}</select>`;
-  if (field.type === 'INTEGER' || field.type === 'DOUBLE' || field.type === 'DURATION') return `<input data-config-key="${attr(field.key)}" data-config-type="${attr(field.type)}" type="number" min="${attr(field.min ?? '')}" max="${attr(field.max ?? '')}" step="${attr(field.step ?? (field.type === 'DOUBLE' ? 0.1 : 1))}" value="${attr(value ?? '')}">`;
+  if (field.type === 'BOOLEAN') return `<label class="switch"><input data-config-key="${attr(field.key)}" data-config-type="BOOLEAN" type="checkbox" aria-label="${label}" ${value ? 'checked' : ''}><span aria-hidden="true"></span></label>`;
+  if (field.type === 'ENUM') return `<select data-config-key="${attr(field.key)}" data-config-type="ENUM" aria-label="${label}">${(field.options || []).map(option => `<option ${option === value ? 'selected' : ''}>${esc(option)}</option>`).join('')}</select>`;
+  if (field.type === 'INTEGER' || field.type === 'DOUBLE' || field.type === 'DURATION') return `<input data-config-key="${attr(field.key)}" data-config-type="${attr(field.type)}" type="number" aria-label="${label}" min="${attr(field.min ?? '')}" max="${attr(field.max ?? '')}" step="${attr(field.step ?? (field.type === 'DOUBLE' ? 0.1 : 1))}" value="${attr(value ?? '')}">`;
   if (field.type === 'STRING_LIST') return listControl(field, Array.isArray(value) ? value : []);
   const large = options.largeStrings || field.multiline || String(value || '').length > 70;
-  return large ? `<textarea data-config-key="${attr(field.key)}" data-config-type="STRING">${esc(value ?? '')}</textarea>` : `<input data-config-key="${attr(field.key)}" data-config-type="STRING" value="${attr(value ?? '')}">`;
+  return large ? `<textarea data-config-key="${attr(field.key)}" data-config-type="STRING" aria-label="${label}">${esc(value ?? '')}</textarea>` : `<input data-config-key="${attr(field.key)}" data-config-type="STRING" aria-label="${label}" value="${attr(value ?? '')}">`;
 }
 
 function listControl(field, values) {
-  const rows = values.map((value, index) => `<div class="reorder-row" draggable="true" data-drag-key="${attr(field.key)}" data-drag-index="${index}"><span class="reorder-handle" title="Drag to reorder">::</span><textarea class="reorder-editor" rows="1" data-list-key="${attr(field.key)}" data-list-index="${index}">${esc(value)}</textarea><div class="reorder-actions"><button data-list-move="up" data-key="${attr(field.key)}" data-index="${index}" title="Move up">&#8593;</button><button data-list-move="down" data-key="${attr(field.key)}" data-index="${index}" title="Move down">&#8595;</button><button data-list-duplicate data-key="${attr(field.key)}" data-index="${index}" title="Duplicate">+</button><button data-list-remove data-key="${attr(field.key)}" data-index="${index}" title="Delete">&#215;</button></div></div>`).join('');
+  const rows = values.map((value, index) => `<div class="reorder-row" draggable="true" data-drag-key="${attr(field.key)}" data-drag-index="${index}"><span class="reorder-handle" title="Drag to reorder" aria-hidden="true">::</span><textarea class="reorder-editor" rows="1" data-list-key="${attr(field.key)}" data-list-index="${index}" aria-label="${attr(humanLabel(field))} item ${index + 1}">${esc(value)}</textarea><div class="reorder-actions"><button data-list-move="up" data-key="${attr(field.key)}" data-index="${index}" title="Move up" aria-label="Move up">&#8593;</button><button data-list-move="down" data-key="${attr(field.key)}" data-index="${index}" title="Move down" aria-label="Move down">&#8595;</button><button data-list-duplicate data-key="${attr(field.key)}" data-index="${index}" title="Duplicate" aria-label="Duplicate">+</button><button data-list-remove data-key="${attr(field.key)}" data-index="${index}" title="Delete" aria-label="Delete">&#215;</button></div></div>`).join('');
   return `<div class="reorder-list" data-list-control="${attr(field.key)}">${rows || '<div class="reorder-empty">No messages configured.</div>'}<button class="reorder-add" data-list-add data-key="${attr(field.key)}">Add Item</button></div>`;
 }
 
-function wireConfigControls(root, page) {
+function wireConfigControls(root, page, store = state) {
   root.querySelectorAll('[data-config-key]').forEach(input => input.addEventListener('input', () => {
-    setEdit(input.dataset.configKey, readInput(input, input.dataset.configType), page, false);
+    setEdit(input.dataset.configKey, readInput(input, input.dataset.configType), page, false, store);
     input.closest('.config-row')?.classList.add('is-dirty');
   }));
-  root.querySelectorAll('[data-reset-field]').forEach(button => button.addEventListener('click', () => resetField(button.dataset.resetField, page)));
-  root.querySelectorAll('[data-list-key]').forEach(input => input.addEventListener('input', () => {
-    const values = listValue(input.dataset.listKey);
-    values[Number(input.dataset.listIndex)] = input.value;
-    setEdit(input.dataset.listKey, values, page, false);
+  root.querySelectorAll('[data-reset-field]').forEach(button => button.addEventListener('click', () => {
+    if (store === state.remote) clearRemoteEdit(button.dataset.resetField);
+    else resetField(button.dataset.resetField, page);
   }));
-  root.querySelectorAll('[data-list-add]').forEach(button => button.addEventListener('click', () => mutateList(button.dataset.key, page, values => values.push(''))));
-  root.querySelectorAll('[data-list-remove]').forEach(button => button.addEventListener('click', () => mutateList(button.dataset.key, page, values => values.splice(Number(button.dataset.index), 1))));
-  root.querySelectorAll('[data-list-duplicate]').forEach(button => button.addEventListener('click', () => mutateList(button.dataset.key, page, values => values.splice(Number(button.dataset.index) + 1, 0, values[Number(button.dataset.index)]))));
-  root.querySelectorAll('[data-list-move]').forEach(button => button.addEventListener('click', () => mutateList(button.dataset.key, page, values => move(values, Number(button.dataset.index), button.dataset.listMove === 'up' ? -1 : 1))));
-  wireDragRows(root, '[data-drag-key]', row => row.dataset.dragKey, row => Number(row.dataset.dragIndex), (key, from, to) => mutateList(key, page, values => moveTo(values, from, to)));
+  root.querySelectorAll('[data-list-key]').forEach(input => input.addEventListener('input', () => {
+    const values = listValue(input.dataset.listKey, store);
+    values[Number(input.dataset.listIndex)] = input.value;
+    setEdit(input.dataset.listKey, values, page, false, store);
+  }));
+  root.querySelectorAll('[data-list-add]').forEach(button => button.addEventListener('click', () => mutateList(button.dataset.key, page, values => values.push(''), store)));
+  root.querySelectorAll('[data-list-remove]').forEach(button => button.addEventListener('click', () => mutateList(button.dataset.key, page, values => values.splice(Number(button.dataset.index), 1), store)));
+  root.querySelectorAll('[data-list-duplicate]').forEach(button => button.addEventListener('click', () => mutateList(button.dataset.key, page, values => values.splice(Number(button.dataset.index) + 1, 0, values[Number(button.dataset.index)]), store)));
+  root.querySelectorAll('[data-list-move]').forEach(button => button.addEventListener('click', () => mutateList(button.dataset.key, page, values => move(values, Number(button.dataset.index), button.dataset.listMove === 'up' ? -1 : 1), store)));
+  wireDragRows(root, '[data-drag-key]', row => row.dataset.dragKey, row => Number(row.dataset.dragIndex), (key, from, to) => mutateList(key, page, values => moveTo(values, from, to), store));
   wireAutoGrow(root);
 }
 
@@ -292,7 +439,7 @@ function wireAutoGrow(root) {
 
 function collapsiblePreview(key, classes = '') {
   const open = state.openPreviews.has(key);
-  return `<div class="preview-disclosure ${open ? 'is-open' : ''}" data-preview-disclosure="${attr(key)}"><button type="button" class="preview-toggle" data-preview-toggle="${attr(key)}" aria-expanded="${open}">${open ? '&#9660;' : '&#9654;'} Preview</button><div class="minecraft-preview ${classes} ${open ? '' : 'hidden'}" data-preview-panel="${attr(key)}"></div></div>`;
+  return `<div class="preview-disclosure ${open ? 'is-open' : ''}" data-preview-disclosure="${attr(key)}"><button type="button" class="preview-toggle" data-preview-toggle="${attr(key)}" aria-expanded="${open}">${open ? '&#9660;' : '&#9654;'} Preview</button><div class="minecraft-preview ${classes} ${open ? '' : 'hidden'}" data-preview-panel="${attr(key)}" role="region" aria-label="Rendered Minecraft preview" aria-hidden="${!open}"></div></div>`;
 }
 
 function wirePreviewDisclosures(root, renderer) {
@@ -304,17 +451,21 @@ function wirePreviewDisclosures(root, renderer) {
     disclosure.classList.toggle('is-open', open);
     button.setAttribute('aria-expanded', String(open));
     button.innerHTML = `${open ? '&#9660;' : '&#9654;'} Preview`;
-    disclosure.querySelector('[data-preview-panel]').classList.toggle('hidden', !open);
-    if (open) renderer(disclosure.querySelector('[data-preview-panel]'), key);
+    const panel = disclosure.querySelector('[data-preview-panel]');
+    panel.classList.toggle('hidden', !open);
+    panel.setAttribute('aria-hidden', String(!open));
+    if (open) renderer(panel, key);
   }));
   root.querySelectorAll('.preview-disclosure.is-open [data-preview-panel]').forEach(panel => renderer(panel, panel.dataset.previewPanel));
 }
 
-function setEdit(key, value, page, rerender = true) {
-  state.edits.set(key, clone(value));
-  state.editPages.set(key, page);
-  state.errors.delete(key);
-  if (rerender) renderConfiguration(); else {
+function setEdit(key, value, page, rerender = true, store = state) {
+  store.edits.set(key, clone(value));
+  store.editPages.set(key, page);
+  store.errors.delete(key);
+  if (store === state.remote) {
+    if (rerender) renderRemoteConfig(); else updateRemoteSaveBar();
+  } else if (rerender) renderConfiguration(); else {
     updateSaveBar();
   }
 }
@@ -325,18 +476,29 @@ function resetField(key, page) {
   setEdit(key, clone(field.defaultValue?.value), page);
 }
 
-function mutateList(key, page, mutation) {
-  const values = listValue(key);
+function clearRemoteEdit(key) {
+  state.remote.edits.delete(key);
+  state.remote.editPages.delete(key);
+  state.remote.errors.delete(key);
+  renderRemoteConfig();
+}
+
+function mutateList(key, page, mutation, store = state) {
+  const values = listValue(key, store);
   mutation(values);
-  setEdit(key, values, page);
+  setEdit(key, values, page, true, store);
 }
 
-function listValue(key) {
-  const field = findField(key);
-  return clone(state.edits.has(key) ? state.edits.get(key) : (field?.value?.value || []));
+function listValue(key, store = state) {
+  let field = store === state.remote ? findField(key, state.remote.snapshot) : findField(key);
+  if (store === state.remote && field) {
+    const section = (state.remote.snapshot?.sections || []).find(item => item.section === field.category);
+    field = remoteFieldForScope(field, remoteSectionScope(section));
+  }
+  return clone(store.edits.has(key) ? store.edits.get(key) : (field?.value?.value || []));
 }
 
-function findField(key) { return state.snapshot?.fields?.find(field => field.key === key); }
+function findField(key, snapshot = state.snapshot) { return snapshot?.fields?.find(field => field.key === key); }
 function readInput(input, type) {
   if (type === 'BOOLEAN') return input.checked;
   if (type === 'INTEGER' || type === 'DURATION') return input.value === '' ? null : Number.parseInt(input.value, 10);
@@ -691,8 +853,119 @@ function renderChatFieldPreview(panel, previewKey) {
   renderMinecraftPreview(panel, value || field?.label || '', chatSampleValues());
 }
 
+function renderDiscord() {
+  const root = $('discord-fields');
+  if (!root) return;
+  const fields = fieldsFor(['discord']);
+  root.innerHTML = fields.length
+    ? `<section class="config-section"><h2>Discord</h2>${fields.map(field => isDiscordMessageField(field) ? discordMessageRow(field) : configRow(field, 'discord')).join('')}</section>`
+    : empty('No Discord settings found.');
+  root.querySelectorAll('.discord-template-preview').forEach(panel => panel.setAttribute('aria-label', 'Rendered Discord message preview'));
+  wireConfigControls(root, 'discord');
+  wirePreviewDisclosures(root, renderDiscordFieldPreview);
+  root.querySelectorAll('.discord-format-editor[data-config-key]').forEach(input => input.addEventListener('input', () => {
+    const previewKey = `discord:${input.dataset.configKey}`;
+    const panel = root.querySelector(`[data-preview-panel="${CSS.escape(previewKey)}"]`);
+    if (panel && state.openPreviews.has(previewKey)) renderDiscordFieldPreview(panel, previewKey);
+  }));
+}
+
+function isDiscordMessageField(field) {
+  return field.type === 'STRING' && /Format$/.test(field.key) && !/\.presenceFormat$/.test(field.key);
+}
+
+function discordMessageRow(field) {
+  const value = state.edits.has(field.key) ? state.edits.get(field.key) : field.value?.value;
+  const dirty = state.edits.has(field.key);
+  const error = state.errors.get(field.key);
+  const reload = field.reloadBehavior === 'RESTART_REQUIRED' ? 'Server restart required' : field.reloadBehavior === 'RELOAD_REQUIRED' ? 'Apply reload after saving' : '';
+  const previewClass = isMinecraftDiscordFormat(field.key) ? 'compact-preview' : 'compact-preview discord-template-preview';
+  return `<div class="config-row formatted-config-row ${dirty ? 'is-dirty' : ''} ${error ? 'has-error' : ''}" data-field-row="${attr(field.key)}">
+    <div class="config-label"><strong>${esc(humanLabel(field))}</strong><small>${esc(field.help || '')}</small>${reload ? `<span class="reload-note">${esc(reload)}</span>` : ''}<span class="advanced-detail">${esc(field.key)} · ${esc(field.owner || '')} · ${esc(field.type)} · default ${esc(display(field.defaultValue?.value))}</span>${error ? `<div class="field-error">${esc(error)}</div>` : ''}</div>
+    <div class="config-control formatted-control"><div class="config-control-line"><textarea class="discord-format-editor auto-grow" rows="3" data-config-key="${attr(field.key)}" data-config-type="STRING" aria-label="${attr(humanLabel(field))}">${esc(value ?? '')}</textarea><button type="button" data-reset-field="${attr(field.key)}" title="Reset to default">Reset</button></div>${collapsiblePreview(`discord:${field.key}`, previewClass)}</div>
+  </div>`;
+}
+
+function isMinecraftDiscordFormat(key) {
+  return /^discord\.minecraft(?:Chat|Reply|Edit|Delete)Format$/.test(key);
+}
+
+function renderDiscordFieldPreview(panel, previewKey) {
+  if (!panel) return;
+  const key = previewKey.replace(/^discord:/, '');
+  const raw = String(valueOf(key) ?? '');
+  const samples = discordPreviewSamples(key);
+  if (isMinecraftDiscordFormat(key)) {
+    panel.classList.remove('discord-message-preview');
+    renderMinecraftPreview(panel, raw, samples);
+    return;
+  }
+  renderDiscordMessagePreview(panel, raw, samples);
+}
+
+function discordPreviewSamples(key) {
+  const samples = {
+    player: 'Alex', message: 'Hello from Minecraft!', name: 'Alex', reply_name: 'Morgan',
+    reply_message: 'Are you joining us?', online: '12', max: '100', prefix: '[Admin] ', suffix: '', group: 'admin',
+    advancement: 'Stone Age', description: 'Mine stone with your new pickaxe', sender: 'Alex', command: 'spawn',
+    command_root: 'spawn', icon: '🔨', action: 'Ban', target: 'Morgan', actor: 'Moderator', reason: 'Griefing',
+    duration: '7 days', duration_suffix: ' for 7 days', punishment_id: 'P-0123456789ABCDEF',
+    expiry: '22 August 2026', time: '30 seconds', seconds: '30'
+  };
+  if (/deathFormat$/.test(key)) samples.message = 'Alex fell from a high place';
+  return samples;
+}
+
+function renderDiscordMessagePreview(panel, raw, samples) {
+  panel.classList.add('discord-message-preview');
+  panel.replaceChildren();
+
+  const avatar = document.createElement('div');
+  avatar.className = 'discord-preview-avatar';
+  avatar.textContent = 'P';
+
+  const body = document.createElement('div');
+  body.className = 'discord-preview-body';
+  const header = document.createElement('div');
+  header.className = 'discord-preview-header';
+  const author = document.createElement('strong');
+  author.textContent = 'Paradigm';
+  const bot = document.createElement('span');
+  bot.className = 'discord-preview-bot';
+  bot.textContent = 'APP';
+  const time = document.createElement('span');
+  time.className = 'discord-preview-time';
+  time.textContent = 'Today at 12:00';
+  header.append(author, bot, time);
+
+  const content = document.createElement('div');
+  content.className = 'discord-preview-content';
+  const rendered = replacePreviewSamples(String(raw || ''), samples);
+  rendered.split('\n').forEach((line, index) => {
+    if (index) content.append(document.createElement('br'));
+    appendDiscordMarkdown(content, line);
+  });
+  if (!rendered) content.textContent = 'Empty messages are not sent.';
+
+  body.append(header, content);
+  panel.append(avatar, body);
+}
+
+function appendDiscordMarkdown(parent, text) {
+  const pattern = /\*\*([^*\n]+)\*\*|__([^_\n]+)__|~~([^~\n]+)~~|`([^`\n]+)`|\*([^*\n]+)\*|_([^_\n]+)_/g;
+  let offset = 0;
+  for (const match of text.matchAll(pattern)) {
+    parent.append(document.createTextNode(text.slice(offset, match.index)));
+    const element = document.createElement(match[1] ? 'strong' : match[2] ? 'u' : match[3] ? 's' : match[4] ? 'code' : 'em');
+    element.textContent = match.slice(1).find(value => value !== undefined) || '';
+    parent.append(element);
+    offset = match.index + match[0].length;
+  }
+  parent.append(document.createTextNode(text.slice(offset)));
+}
+
 function formattingToolbar(key, placeholders = []) {
-  return `<div class="format-toolbar compact-format-toolbar" data-format-for="${attr(key)}"><button type="button" data-format-tag="bold" title="Bold"><strong>B</strong></button><button type="button" data-format-tag="italic" title="Italic"><em>I</em></button><button type="button" data-format-tag="underline" title="Underline"><u>U</u></button><button type="button" data-format-tag="strikethrough" title="Strikethrough"><s>S</s></button><button type="button" data-format-tag="color:#55FFFF">Color</button><button type="button" data-format-tag="gradient:#22D3EE:#A78BFA">Gradient</button><button type="button" data-format-tag="rainbow">Rainbow</button>${placeholders.length ? `<select data-placeholder-for="${attr(key)}"><option value="">Insert placeholder</option>${placeholders.map(value => `<option value="${attr(value)}">${esc(value)}</option>`).join('')}</select>` : ''}</div>`;
+  return `<div class="format-toolbar compact-format-toolbar" data-format-for="${attr(key)}" aria-label="Formatting controls"><button type="button" data-format-tag="bold" title="Bold" aria-label="Bold"><strong>B</strong></button><button type="button" data-format-tag="italic" title="Italic" aria-label="Italic"><em>I</em></button><button type="button" data-format-tag="underline" title="Underline" aria-label="Underline"><u>U</u></button><button type="button" data-format-tag="strikethrough" title="Strikethrough" aria-label="Strikethrough"><s>S</s></button><button type="button" data-format-tag="color:#55FFFF">Color</button><button type="button" data-format-tag="gradient:#22D3EE:#A78BFA">Gradient</button><button type="button" data-format-tag="rainbow">Rainbow</button>${placeholders.length ? `<select data-placeholder-for="${attr(key)}" aria-label="Insert placeholder"><option value="">Insert placeholder</option>${placeholders.map(value => `<option value="${attr(value)}">${esc(value)}</option>`).join('')}</select>` : ''}</div>`;
 }
 
 function wireFormattingEditors(root, page, previewRenderer) {
@@ -794,7 +1067,7 @@ function restartScheduleEditor() {
   const realtime = mode.toLowerCase() === 'realtime';
   const duration = hoursToDuration(valueOf('restart.restartInterval'));
   const times = listValue('restart.realTimeInterval');
-  return `<section class="config-section restart-schedule-section"><h2>Schedule</h2><div class="restart-mode-row"><label>Restart mode<select id="restart-mode"><option value="Fixed" ${fixed ? 'selected' : ''}>Fixed interval</option><option value="Realtime" ${realtime ? 'selected' : ''}>Real time</option><option value="None" ${!fixed && !realtime ? 'selected' : ''}>Disabled</option></select></label></div><div id="restart-fixed-schedule" class="mode-schedule ${fixed ? '' : 'hidden'}"><h3>Fixed interval</h3><div class="duration-editor"><span>Restart every</span><input id="restart-fixed-value" type="number" min="0.01" step="0.25" value="${attr(duration.value)}"><select id="restart-fixed-unit"><option value="seconds" ${duration.unit === 'seconds' ? 'selected' : ''}>seconds</option><option value="minutes" ${duration.unit === 'minutes' ? 'selected' : ''}>minutes</option><option value="hours" ${duration.unit === 'hours' ? 'selected' : ''}>hours</option><option value="days" ${duration.unit === 'days' ? 'selected' : ''}>days</option></select></div><p class="schedule-summary" id="restart-fixed-summary"></p></div><div id="restart-realtime-schedule" class="mode-schedule ${realtime ? '' : 'hidden'}"><h3>Real-time restart times</h3><div class="reorder-list">${times.map((time, index) => `<div class="reorder-row realtime-row" draggable="true" data-realtime-drag="${index}"><span class="reorder-handle">::</span><label>Restart time<input type="time" data-realtime-index="${index}" value="${attr(time)}"></label><div class="reorder-actions"><button data-realtime-move="up" data-index="${index}">&#8593;</button><button data-realtime-move="down" data-index="${index}">&#8595;</button><button data-realtime-remove data-index="${index}">&#215;</button></div></div>`).join('') || '<div class="reorder-empty">No real-time restart times configured.</div>'}<button id="restart-realtime-add" class="reorder-add">Add Time</button></div></div><div id="restart-disabled-schedule" class="mode-schedule ${!fixed && !realtime ? '' : 'hidden'}"><p>Automatic restart scheduling is disabled. Fixed and real-time settings remain stored.</p></div></section>`;
+  return `<section class="config-section restart-schedule-section"><h2>Schedule</h2><div class="restart-mode-row"><label>Restart mode<select id="restart-mode"><option value="Fixed" ${fixed ? 'selected' : ''}>Fixed interval</option><option value="Realtime" ${realtime ? 'selected' : ''}>Real time</option><option value="None" ${!fixed && !realtime ? 'selected' : ''}>Disabled</option></select></label></div><div id="restart-fixed-schedule" class="mode-schedule ${fixed ? '' : 'hidden'}"><h3>Fixed interval</h3><div class="duration-editor"><span>Restart every</span><input id="restart-fixed-value" type="number" min="0.01" step="0.25" value="${attr(duration.value)}"><select id="restart-fixed-unit"><option value="seconds" ${duration.unit === 'seconds' ? 'selected' : ''}>seconds</option><option value="minutes" ${duration.unit === 'minutes' ? 'selected' : ''}>minutes</option><option value="hours" ${duration.unit === 'hours' ? 'selected' : ''}>hours</option><option value="days" ${duration.unit === 'days' ? 'selected' : ''}>days</option></select></div><p class="schedule-summary" id="restart-fixed-summary"></p></div><div id="restart-realtime-schedule" class="mode-schedule ${realtime ? '' : 'hidden'}"><h3>Real-time restart times</h3><div class="reorder-list">${times.map((time, index) => `<div class="reorder-row realtime-row" draggable="true" data-realtime-drag="${index}"><span class="reorder-handle" aria-hidden="true">::</span><label>Restart time<input type="time" data-realtime-index="${index}" value="${attr(time)}"></label><div class="reorder-actions"><button data-realtime-move="up" data-index="${index}" title="Move up" aria-label="Move restart time up">&#8593;</button><button data-realtime-move="down" data-index="${index}" title="Move down" aria-label="Move restart time down">&#8595;</button><button data-realtime-remove data-index="${index}" title="Delete" aria-label="Delete restart time">&#215;</button></div></div>`).join('') || '<div class="reorder-empty">No real-time restart times configured.</div>'}<button id="restart-realtime-add" class="reorder-add">Add Time</button></div></div><div id="restart-disabled-schedule" class="mode-schedule ${!fixed && !realtime ? '' : 'hidden'}"><p>Automatic restart scheduling is disabled. Fixed and real-time settings remain stored.</p></div></section>`;
 }
 
 function wireRestartSchedule(root) {
@@ -1016,11 +1289,11 @@ function renderTablist() {
 }
 
 function tablistToolbar(target) {
-  return `<div class="format-toolbar compact-format-toolbar" data-tab-target="${target}"><button type="button" data-tab-format="bold">B</button><button type="button" data-tab-format="italic">I</button><button type="button" data-tab-format="underline">U</button><button type="button" data-tab-format="strikethrough">S</button><button type="button" data-tab-format="color:#55FFFF">Color</button><button type="button" data-tab-format="gradient:#22D3EE:#A78BFA">Gradient</button><button type="button" data-tab-format="rainbow">Rainbow</button></div>`;
+  return `<div class="format-toolbar compact-format-toolbar" data-tab-target="${target}" aria-label="Formatting controls"><button type="button" data-tab-format="bold" title="Bold" aria-label="Bold">B</button><button type="button" data-tab-format="italic" title="Italic" aria-label="Italic">I</button><button type="button" data-tab-format="underline" title="Underline" aria-label="Underline">U</button><button type="button" data-tab-format="strikethrough" title="Strikethrough" aria-label="Strikethrough">S</button><button type="button" data-tab-format="color:#55FFFF">Color</button><button type="button" data-tab-format="gradient:#22D3EE:#A78BFA">Gradient</button><button type="button" data-tab-format="rainbow">Rainbow</button></div>`;
 }
 
 function tablistSortRow(rule, index) {
-  return `<div class="reorder-row"><span class="reorder-handle">::</span><select data-tab-sort-index="${index}">${TABLIST_SORT_RULES.map(option => `<option ${option === rule ? 'selected' : ''}>${option}</option>`).join('')}</select><div class="reorder-actions"><button data-tab-sort-move="up" data-index="${index}">&#8593;</button><button data-tab-sort-move="down" data-index="${index}">&#8595;</button><button data-tab-sort-remove data-index="${index}">&#215;</button></div></div>`;
+  return `<div class="reorder-row"><span class="reorder-handle" aria-hidden="true">::</span><select data-tab-sort-index="${index}" aria-label="Sort rule ${index + 1}">${TABLIST_SORT_RULES.map(option => `<option ${option === rule ? 'selected' : ''}>${option}</option>`).join('')}</select><div class="reorder-actions"><button data-tab-sort-move="up" data-index="${index}" title="Move up" aria-label="Move sort rule up">&#8593;</button><button data-tab-sort-move="down" data-index="${index}" title="Move down" aria-label="Move sort rule down">&#8595;</button><button data-tab-sort-remove data-index="${index}" title="Delete" aria-label="Delete sort rule">&#215;</button></div></div>`;
 }
 
 function tablistValidationIssues(worlds, refreshInterval) {
@@ -1166,11 +1439,11 @@ function parsePreviewLine(text) {
   let offset = 0;
   for (const match of text.matchAll(tokenPattern)) {
     appendLegacyPreviewText(stack.at(-1).node, text.slice(offset, match.index));
-    let token = previewTag(match[0]);
-    if (token && !token.close && !token.standalone && !text.slice(match.index + match[0].length).toLowerCase().includes(`</${token.name}>`)) token = null;
+    const token = previewTag(match[0]);
     if (!token) appendLegacyPreviewText(stack.at(-1).node, match[0]);
     else if (token.close) {
-      if (stack.length > 1 && stack.at(-1).name === token.name) stack.pop();
+      const matching = stack.findLastIndex(entry => entry.name === token.name);
+      if (matching > 0) stack.splice(matching);
       else appendLegacyPreviewText(stack.at(-1).node, match[0]);
     } else if (token.standalone) stack.at(-1).node.append(token.node);
     else { stack.at(-1).node.append(token.node); stack.push({ name: token.name, node: token.node }); }
@@ -1190,13 +1463,13 @@ function previewTag(raw) {
   const element = document.createElement(name === 'bold' ? 'strong' : name === 'italic' ? 'em' : name === 'underline' ? 'u' : name === 'strikethrough' ? 's' : 'span');
   if (name === 'color') {
     const color = value.slice(6).toLowerCase();
-    const resolved = PREVIEW_COLORS[color] || (/^#[0-9a-f]{6}$/i.test(color) ? color : null);
+    const resolved = resolvePreviewColor(color);
     if (!resolved) return null;
     element.style.color = resolved;
   } else if (PREVIEW_COLORS[name] || /^#[0-9a-f]{6}$/i.test(name)) {
     element.style.color = PREVIEW_COLORS[name] || name;
   } else if (name === 'gradient') {
-    const colors = value.split(':').slice(1).filter(color => /^#[0-9a-f]{6}$/i.test(color));
+    const colors = value.split(':').slice(1).map(resolvePreviewColor).filter(Boolean);
     if (colors.length < 2) return null;
     element.className = 'preview-gradient';
     element.style.backgroundImage = `linear-gradient(90deg, ${colors.join(', ')})`;
@@ -1206,6 +1479,11 @@ function previewTag(raw) {
   else if (name === 'hover') { element.className = 'preview-hover'; element.title = value.split(':').slice(2).join(':') || value.split(':').slice(1).join(':'); }
   else if (!['bold','italic','underline','strikethrough'].includes(name)) return null;
   return { name, close: false, standalone: false, node: element };
+}
+
+function resolvePreviewColor(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  return PREVIEW_COLORS[normalized] || (/^#[0-9a-f]{6}$/i.test(normalized) ? normalized : null);
 }
 
 function appendLegacyPreviewText(parent, text) {
@@ -1245,9 +1523,175 @@ async function loadOverview() {
 async function loadServers() {
   try {
     const data = await api('/api/servers');
-    const rows = (data.servers || []).map(server => [server.serverName || server.serverId, server.networkId, server.loader || '-', server.local ? 'Local editable' : server.state || 'Observed', server.onlinePlayers ?? '-', relativeTime(server.lastHeartbeatMs)]);
-    $('servers-table').innerHTML = dataTable(['Server', 'Network', 'Loader', 'State', 'Players', 'Last heartbeat'], rows);
+    state.servers = data.servers || [];
+    state.networkActive = Boolean(data.networkActive);
+    const rows = state.servers.map(server => [server.serverName || server.serverId, server.networkId, server.loader || '-', server.current ? 'Current' : (server.online ? 'Online' : 'Offline'), server.onlinePlayers ?? '-', relativeTime(server.lastSeenMs)]);
+    $('servers-table').innerHTML = dataTable(['Server', 'Network', 'Loader', 'State', 'Players', 'Last seen'], rows);
+    renderRemoteServerSelect();
+    if (state.networkActive && state.remote.serverId) await loadRemoteConfigSnapshot();
   } catch (error) { renderError('servers-table', error.message); }
+}
+
+function renderRemoteServerSelect() {
+  const wrap = $('remote-config-panel');
+  if (!wrap) return;
+  if (!state.networkActive) {
+    wrap.classList.add('hidden');
+    return;
+  }
+  wrap.classList.remove('hidden');
+  const select = $('remote-server-select');
+  if (!select) return;
+  const current = state.remote.serverId;
+  select.innerHTML = state.servers.map(server => `<option value="${attr(server.serverId)}" ${server.serverId === current ? 'selected' : ''}>${esc(server.serverName || server.serverId)}${server.current ? ' (this server)' : ''} ${server.online ? '' : '- offline'}</option>`).join('');
+  if (!current && state.servers.length) {
+    state.remote.serverId = state.servers[0].serverId;
+    select.value = state.remote.serverId;
+  }
+  const server = state.servers.find(s => s.serverId === state.remote.serverId);
+  const status = $('remote-server-status');
+  if (status) status.textContent = server ? `${server.online ? 'Online' : 'Offline'} · last seen ${relativeTime(server.lastSeenMs)}` : '';
+}
+
+async function selectRemoteServer(serverId) {
+  state.remote.serverId = serverId;
+  state.remote.scopes.clear();
+  state.remote.edits.clear();
+  state.remote.editPages.clear();
+  state.remote.errors.clear();
+  renderRemoteServerSelect();
+  await loadRemoteConfigSnapshot();
+}
+
+async function loadRemoteConfigSnapshot() {
+  if (!state.remote.serverId) return;
+  try {
+    state.remote.snapshot = await api(`/api/remote-config/snapshot?serverId=${encodeURIComponent(state.remote.serverId)}`);
+    if (!state.remote.section && state.remote.snapshot.categories?.length) {
+      state.remote.section = state.remote.snapshot.categories[0].id;
+    }
+    renderRemoteConfig();
+  } catch (error) {
+    renderError('remote-config-fields', error.message);
+  }
+}
+
+function renderRemoteConfig() {
+  const snapshot = state.remote.snapshot;
+  const tabs = $('remote-section-tabs');
+  if (tabs && snapshot) {
+    tabs.innerHTML = (snapshot.categories || []).map(category => `<button type="button" class="${category.id === state.remote.section ? 'active' : ''}" data-remote-section="${attr(category.id)}">${esc(category.label)}</button>`).join('');
+    tabs.querySelectorAll('[data-remote-section]').forEach(button => button.addEventListener('click', () => {
+      state.remote.section = button.dataset.remoteSection;
+      renderRemoteConfig();
+    }));
+  }
+  const banner = $('remote-schema-banner');
+  if (banner) banner.classList.toggle('hidden', !snapshot || snapshot.schemaCompatible);
+
+  const section = (snapshot?.sections || []).find(s => s.section === state.remote.section);
+  const scope = remoteSectionScope(section);
+  const scopeSelect = $('remote-scope-select');
+  if (scopeSelect) scopeSelect.value = scope;
+  const adopt = $('remote-adopt-banner');
+  if (adopt) adopt.classList.toggle('hidden', !section || section.adopted);
+  const status = $('remote-section-status');
+  if (status && section) {
+    status.textContent = section.lastError
+      ? `Apply error: ${section.lastError}`
+      : `Editing ${scope === 'NETWORK' ? 'network default' : 'server override'} · network rev ${section.networkRevision} · server rev ${section.serverRevision} · applied global ${section.appliedGlobalRevision} / server ${section.appliedServerRevision}`;
+  } else if (status) status.textContent = '';
+
+  if (!snapshot || !state.remote.section) return;
+  const fields = snapshot.fields.filter(field => field.category === state.remote.section).map(field => remoteFieldForScope(field, scope));
+  renderConfigContainer('remote-config-fields', fields, 'remoteConfig', { store: state.remote });
+  updateRemoteSaveBar();
+}
+
+function remoteSectionScope(section) {
+  if (!section) return 'SERVER';
+  let scope = state.remote.scopes.get(section.section);
+  if (!scope) {
+    scope = section.serverRevision > 0 ? 'SERVER' : (section.networkRevision > 0 ? 'NETWORK' : 'SERVER');
+    state.remote.scopes.set(section.section, scope);
+  }
+  return scope;
+}
+
+function remoteFieldForScope(field, scope) {
+  if (scope === 'NETWORK') {
+    const value = field.networkValue?.set ? field.networkValue : (field.baselineValue?.set ? field.baselineValue : field.value);
+    return { ...field, value, origin: field.networkValue?.set ? 'network' : 'unmanaged' };
+  }
+  const value = field.serverValue?.set ? field.serverValue
+    : (field.networkValue?.set ? field.networkValue : (field.baselineValue?.set ? field.baselineValue : field.value));
+  const origin = field.serverValue?.set ? 'server' : (field.networkValue?.set ? 'network' : 'unmanaged');
+  return { ...field, value, origin };
+}
+
+function selectRemoteScope(scope) {
+  const section = state.remote.section;
+  if (!section || (scope !== 'SERVER' && scope !== 'NETWORK')) return;
+  state.remote.scopes.set(section, scope);
+  for (const key of [...state.remote.edits.keys()]) {
+    if (findField(key, state.remote.snapshot)?.category === section) {
+      state.remote.edits.delete(key);
+      state.remote.editPages.delete(key);
+      state.remote.errors.delete(key);
+    }
+  }
+  renderRemoteConfig();
+}
+
+function updateRemoteSaveBar() {
+  const count = [...state.remote.editPages.values()].filter(page => page === 'remoteConfig').length;
+  const bar = $('remote-save-bar');
+  if (!bar) return;
+  bar.classList.toggle('hidden', count === 0);
+  const label = $('remote-unsaved-count');
+  if (label) label.textContent = count;
+  const button = $('remote-save-changes');
+  if (button) button.disabled = count === 0;
+}
+
+async function saveRemoteSection() {
+  const section = state.remote.section;
+  const operations = [...state.remote.edits].filter(([key]) => state.remote.editPages.get(key) === 'remoteConfig' && findField(key, state.remote.snapshot)?.category === section).map(([key, value]) => ({ key, value }));
+  if (!operations.length || !section) return;
+  const sectionStatus = (state.remote.snapshot?.sections || []).find(s => s.section === section);
+  const scope = remoteSectionScope(sectionStatus);
+  try {
+    await api('/api/remote-config/patch', {
+      method: 'POST',
+      body: JSON.stringify({
+        serverId: state.remote.serverId,
+        scope,
+        section,
+        expectedRevision: scope === 'NETWORK' ? (sectionStatus?.networkRevision || 0) : (sectionStatus?.serverRevision || 0),
+        operations
+      })
+    });
+    operations.forEach(({ key }) => { state.remote.edits.delete(key); state.remote.editPages.delete(key); state.remote.errors.delete(key); });
+    notice(`Saved ${operations.length} change${operations.length === 1 ? '' : 's'} to the ${scope === 'NETWORK' ? 'network default' : 'server override'}.`);
+    await loadRemoteConfigSnapshot();
+  } catch (error) {
+    if (error.code === 'stale_revision') notice('Managed configuration changed since this section loaded. Reload and try again.', true);
+    else if (error.code === 'schema_incompatible') notice('Target server is running an incompatible Paradigm build; remote editing is disabled until versions match.', true);
+    (error.data?.rejected || []).forEach(item => state.remote.errors.set(item.key, item.reason));
+    renderRemoteConfig();
+    if (!error.data?.rejected?.length) notice(error.message, true);
+  }
+}
+
+async function adoptRemoteSection(scope) {
+  const section = state.remote.section;
+  if (!section) return;
+  try {
+    await api('/api/remote-config/adopt', { method: 'POST', body: JSON.stringify({ serverId: state.remote.serverId, scope, section }) });
+    state.remote.scopes.set(section, scope);
+    notice(scope === 'NETWORK' ? 'Section adopted as a network default.' : 'Section adopted for this server.');
+    await loadRemoteConfigSnapshot();
+  } catch (error) { notice(error.message, true); }
 }
 
 async function loadStorage() {
@@ -1300,6 +1744,71 @@ async function loadStorageConfiguration() {
 }
 
 function storageField(label, id, control, help) { return `<div class="config-row"><div class="config-label"><strong>${esc(label)}</strong><small>${esc(help)}</small></div><div class="config-control">${control}</div></div>`; }
+
+async function loadDiscord() {
+  try {
+    const status = await api('/api/discord/status');
+    state.discordStatus = status;
+    const warnings = Array.isArray(status.warnings) ? status.warnings : [];
+    $('discord-connection').innerHTML = `<h2>Connection</h2>
+      <div class="metric-grid discord-connection-grid">
+        <div class="card"><span class="label">State</span><span class="value">${esc(status.summary || status.state || 'Unknown')}</span></div>
+        <div class="card"><span class="label">Bot</span><span class="value">${esc(status.botUsername || 'Not connected')}</span></div>
+        <div class="card"><span class="label">Queue</span><span class="value">${esc(String(status.queueDepth ?? 0))}</span></div>
+        <div class="card"><span class="label">Sent</span><span class="value">${esc(String(status.sentCount ?? 0))}</span></div>
+        <div class="card"><span class="label">Dropped</span><span class="value">${esc(String(status.droppedCount ?? 0))}</span></div>
+        <div class="card"><span class="label">Heartbeat</span><span class="value">${esc(discordHeartbeatLabel(status))}</span></div>
+      </div>
+      ${warnings.map(warning => `<div class="notice-inline">${esc(warning)}</div>`).join('')}
+      ${status.lastError ? `<div class="field-error">${esc(status.lastError)}</div>` : ''}
+      ${storageField('Replace Bot Token', 'discord-token', `<input id="discord-token" type="password" autocomplete="new-password" placeholder="${status.botTokenSet ? 'Token configured; leave blank to keep' : 'Enter bot token'}">`, 'The stored token is never returned to the browser.')}
+      ${storageField('Test Destination', 'discord-test-destination', `<select id="discord-test-destination"><option value="chat">Chat</option><option value="moderation">Moderation</option><option value="notifications">Notifications</option></select>`, 'Which configured channel the test message is sent to.')}
+      <div class="button-row"><button id="discord-save-token">Save Token</button><button id="discord-clear-token">Clear Token</button><button id="discord-test">Send Test Message</button><button id="discord-reconnect">Reconnect</button></div>`;
+    $('discord-save-token').addEventListener('click', () => saveDiscordToken(false));
+    $('discord-clear-token').addEventListener('click', () => saveDiscordToken(true));
+    $('discord-test').addEventListener('click', testDiscord);
+    $('discord-reconnect').addEventListener('click', reconnectDiscord);
+  } catch (error) { renderError('discord-connection', error.message); }
+}
+
+function discordHeartbeatLabel(status) {
+  if (status.state !== 'CONNECTED') return 'Not connected';
+  if (status.heartbeatOutstanding) return 'Awaiting ACK';
+  if (!status.lastHeartbeatAckMs) return 'No ACK yet';
+  return `${Math.max(0, Math.round((Date.now() - status.lastHeartbeatAckMs) / 1000))}s ago`;
+}
+
+async function saveDiscordToken(clear) {
+  if (clear && !await confirmAction('Clear the stored Discord bot token? The integration will disconnect.', true)) return;
+  const input = $('discord-token');
+  const botToken = input ? input.value : '';
+  if (!clear && !botToken.trim()) { notice('Enter a bot token, or use Clear Token to remove the stored one.', true); return; }
+  try {
+    const result = await api('/api/discord/token', { method: 'POST', body: JSON.stringify({ botToken, clear }) });
+    if (input) input.value = '';
+    notice(result.changed ? (clear ? 'Discord bot token cleared.' : 'Discord bot token saved.') : 'Existing Discord bot token kept.');
+    await loadDiscord();
+    await loadConfigSnapshot();
+  } catch (error) { notice(error.message, true); }
+}
+
+async function testDiscord() {
+  const select = $('discord-test-destination');
+  const destination = select ? select.value : 'chat';
+  try {
+    await api('/api/discord/test', { method: 'POST', body: JSON.stringify({ destination }) });
+    notice(`Test message queued for the ${destination} destination.`);
+    await loadDiscord();
+  } catch (error) { notice(error.message, true); }
+}
+
+async function reconnectDiscord() {
+  try {
+    await api('/api/discord/reconnect', { method: 'POST', body: '{}' });
+    notice('Reconnecting to Discord.');
+    await loadDiscord();
+  } catch (error) { notice(error.message, true); }
+}
 
 function readStorageConfiguration() {
   return {
@@ -1363,9 +1872,9 @@ function renderCustomCommandEditor() {
   const root = $('custom-command-editor');
   const command = state.commandDraft;
   if (!command) { root.className = 'detail-editor empty-detail'; root.textContent = 'Select a command or create one.'; return; }
-  root.className = 'detail-editor';
+  root.className = 'detail-editor command-editor';
   root.innerHTML = `<div class="detail-header"><div><h2>${state.commandIsNew ? 'Create Command' : `/${esc(command.name)}`}</h2><span>${state.commandIsNew ? 'New definition' : 'Loaded from a restricted command file'}</span></div><div class="detail-header-actions">${state.commandIsNew ? '' : '<button id="command-duplicate">Duplicate</button><button id="command-delete" class="danger">Delete</button>'}<button id="command-save">${state.commandIsNew ? 'Create' : 'Save'}</button></div></div>
-    <section class="config-section"><h2>Command</h2>
+    <section class="config-section command-section"><div class="section-heading"><div><h2>Command</h2><p>Identity, access, and cooldown behavior.</p></div></div>
       ${commandField('Name', 'name', command.name, 'text', 'Lowercase command root without /')}
       ${commandField('Description', 'description', command.description || '', 'textarea', 'Shown in command help.')}
       ${commandField('Permission', 'permission', command.permission || '', 'text', 'Existing Paradigm permission syntax.')}
@@ -1374,27 +1883,27 @@ function renderCustomCommandEditor() {
       ${commandField('Cooldown Seconds', 'cooldown_seconds', command.cooldown_seconds ?? 0, 'number', 'Zero disables the cooldown.')}
       ${commandField('Cooldown Message', 'cooldown_message', command.cooldown_message || '', 'textarea', 'Use {remaining_time}.')}
     </section>
-    <section class="config-section"><h2>Arguments</h2><div id="command-arguments">${renderCommandArguments(command.arguments || [])}</div><button id="command-add-argument">Add Argument</button></section>
-    <section class="config-section"><h2>Actions</h2><div id="command-actions">${renderActions(command.actions || [], 'actions')}</div><button data-add-action-path="actions">Add Action</button></section>
-    <section class="config-section"><h2>Area Restriction</h2><label class="checkbox-line"><input id="command-area-enabled" type="checkbox" ${command.area_restriction ? 'checked' : ''}> Restrict this command to an area</label><div id="command-area">${renderArea(command.area_restriction)}</div></section>
-    <details><summary>Advanced JSON preview</summary><textarea class="command-json" readonly>${esc(JSON.stringify(command, null, 2))}</textarea></details>`;
+    <section class="config-section command-section"><div class="section-heading"><div><h2>Arguments</h2><p>Values parsed from the command input.</p></div><button id="command-add-argument">Add Argument</button></div><div id="command-arguments" class="command-section-body">${renderCommandArguments(command.arguments || [])}</div></section>
+    <section class="config-section command-section"><div class="section-heading"><div><h2>Actions</h2><p>Operations run from top to bottom.</p></div><button data-add-action-path="actions">Add Action</button></div><div id="command-actions" class="command-section-body">${renderActions(command.actions || [], 'actions')}</div></section>
+    <section class="config-section command-section command-area-section"><div class="section-heading"><div><h2>Area Restriction</h2><p>Optionally limit execution to one cuboid.</p></div><label class="command-section-toggle"><span>Enabled</span><span class="switch"><input id="command-area-enabled" type="checkbox" ${command.area_restriction ? 'checked' : ''}><span aria-hidden="true"></span></span></label></div><div id="command-area" class="command-section-body">${renderArea(command.area_restriction)}</div></section>
+    <details class="editor-disclosure command-json-disclosure"><summary><span>Advanced JSON preview</span><small>Read-only representation of the command definition.</small></summary><div class="editor-disclosure-body"><textarea class="command-json" readonly aria-label="Command JSON preview">${esc(JSON.stringify(command, null, 2))}</textarea></div></details>`;
   wireCustomCommandEditor(root);
 }
 
 function commandField(label, key, value, type, help) {
   let control;
-  if (type === 'checkbox') control = `<label class="switch"><input data-command-field="${attr(key)}" type="checkbox" ${value ? 'checked' : ''}><span></span></label>`;
-  else if (type === 'textarea') control = `<textarea data-command-field="${attr(key)}">${esc(value)}</textarea>`;
-  else control = `<input data-command-field="${attr(key)}" type="${type}" value="${attr(value)}">`;
+  if (type === 'checkbox') control = `<label class="switch"><input data-command-field="${attr(key)}" type="checkbox" aria-label="${attr(label)}" ${value ? 'checked' : ''}><span aria-hidden="true"></span></label>`;
+  else if (type === 'textarea') control = `<textarea data-command-field="${attr(key)}" aria-label="${attr(label)}">${esc(value)}</textarea>`;
+  else control = `<input data-command-field="${attr(key)}" type="${type}" aria-label="${attr(label)}" value="${attr(value)}">`;
   return `<div class="config-row"><div class="config-label"><strong>${esc(label)}</strong><small>${esc(help)}</small></div><div class="config-control">${control}</div></div>`;
 }
 
 function renderCommandArguments(argumentsList) {
-  return argumentsList.map((argument, index) => `<div class="command-action" data-argument-index="${index}"><div class="command-action-grid"><label>Name<input data-argument-field="name" value="${attr(argument.name || '')}"></label><label>Type<select data-argument-field="type">${['string','integer','boolean','player','world','gamemode','custom'].map(type => `<option ${type === argument.type ? 'selected' : ''}>${type}</option>`).join('')}</select></label><label>Required<input data-argument-field="required" type="checkbox" ${argument.required ? 'checked' : ''}></label><label>Error message<input data-argument-field="errorMessage" value="${attr(argument.errorMessage || '')}"></label></div><div class="button-row"><button data-argument-move="up">Move Up</button><button data-argument-move="down">Move Down</button><button data-argument-duplicate>Duplicate</button><button data-argument-remove class="danger">Delete</button></div></div>`).join('');
+  return argumentsList.map((argument, index) => `<div class="command-action" data-argument-index="${index}"><div class="command-action-grid"><label>Name<input data-argument-field="name" value="${attr(argument.name || '')}"></label><label>Type<select data-argument-field="type">${['string','integer','boolean','player','world','gamemode','custom'].map(type => `<option ${type === argument.type ? 'selected' : ''}>${type}</option>`).join('')}</select></label><label class="check-field"><input data-argument-field="required" type="checkbox" ${argument.required ? 'checked' : ''}><span>Required</span></label><label>Error message<input data-argument-field="errorMessage" value="${attr(argument.errorMessage || '')}"></label></div><div class="button-row"><button data-argument-move="up">Move Up</button><button data-argument-move="down">Move Down</button><button data-argument-duplicate>Duplicate</button><button data-argument-remove class="danger">Delete</button></div></div>`).join('') || '<div class="empty-state">No arguments. Players can run this command without parameters.</div>';
 }
 
 function renderActions(actions, path) {
-  return actions.map((action, index) => {
+  const rows = actions.map((action, index) => {
     const actionPath = `${path}.${index}`;
     const type = action.type || 'message';
     let fields = '';
@@ -1402,8 +1911,9 @@ function renderActions(actions, path) {
     else if (type === 'teleport') fields = `<div class="compact-form"><label>X<input data-action-field="x" type="number" value="${attr(action.x ?? 0)}"></label><label>Y<input data-action-field="y" type="number" value="${attr(action.y ?? 64)}"></label><label>Z<input data-action-field="z" type="number" value="${attr(action.z ?? 0)}"></label></div>`;
     else if (type === 'conditional') fields = `<h3>Conditions</h3><div data-condition-list>${renderConditions(action.conditions || [])}</div><button data-add-condition>Add Condition</button><h3>On Success</h3><div>${renderActions(action.on_success || [], `${actionPath}.on_success`)}</div><button data-add-action-path="${actionPath}.on_success">Add Success Action</button><h3>On Failure</h3><div>${renderActions(action.on_failure || [], `${actionPath}.on_failure`)}</div><button data-add-action-path="${actionPath}.on_failure">Add Failure Action</button>`;
     else fields = `<label>Commands, one per line<textarea data-action-field="commands">${esc((action.commands || []).join('\n'))}</textarea></label>`;
-    return `<div class="command-action" data-action-path="${attr(actionPath)}"><div class="detail-header"><label>Action type<select data-action-field="type">${['message','teleport','run_command','run_console','conditional'].map(option => `<option ${option === type ? 'selected' : ''}>${option}</option>`).join('')}</select></label><div class="detail-header-actions"><button data-action-move="up">&#8593;</button><button data-action-move="down">&#8595;</button><button data-action-duplicate>Duplicate</button><button data-action-remove class="danger">Delete</button></div></div>${fields}</div>`;
+    return `<div class="command-action" data-action-path="${attr(actionPath)}"><div class="detail-header"><label>Action type<select data-action-field="type">${['message','teleport','run_command','run_console','conditional'].map(option => `<option ${option === type ? 'selected' : ''}>${option}</option>`).join('')}</select></label><div class="detail-header-actions"><button data-action-move="up" title="Move up" aria-label="Move action up">&#8593;</button><button data-action-move="down" title="Move down" aria-label="Move action down">&#8595;</button><button data-action-duplicate>Duplicate</button><button data-action-remove class="danger">Delete</button></div></div>${fields}</div>`;
   }).join('');
+  return rows || '<div class="empty-state">No actions configured.</div>';
 }
 
 function renderConditions(conditions) {
@@ -1411,8 +1921,8 @@ function renderConditions(conditions) {
 }
 
 function renderArea(area) {
-  if (!area) return '';
-  return `<div class="compact-form"><label>World<input data-area-field="world" value="${attr(area.world || '')}"></label><label>Corner 1<input data-area-field="corner1" value="${attr((area.corner1 || []).join(', '))}"></label><label>Corner 2<input data-area-field="corner2" value="${attr((area.corner2 || []).join(', '))}"></label></div><label>Restriction message<textarea data-area-field="restriction_message">${esc(area.restriction_message || '')}</textarea></label>`;
+  if (!area) return '<div class="empty-state">Area restriction is disabled.</div>';
+  return `<div class="command-area-grid"><label>World<input data-area-field="world" value="${attr(area.world || '')}"></label><label>Corner 1<input data-area-field="corner1" value="${attr((area.corner1 || []).join(', '))}" placeholder="0, 64, 0"></label><label>Corner 2<input data-area-field="corner2" value="${attr((area.corner2 || []).join(', '))}" placeholder="10, 80, 10"></label></div><label class="command-area-message">Restriction message<textarea data-area-field="restriction_message" rows="3">${esc(area.restriction_message || '')}</textarea></label>`;
 }
 
 function wireCustomCommandEditor(root) {
@@ -1508,7 +2018,7 @@ async function deleteCustomCommand() {
 }
 
 async function duplicateCustomCommand() {
-  const requested = window.prompt('Name for the duplicate command:', `${state.selectedCommand}_copy`);
+  const requested = await promptAction('Duplicate Command', 'Choose the root players will use for the duplicate.', `${state.selectedCommand}_copy`, 'Command name');
   if (!requested) return;
   try { const result = await api('/api/custom-commands/duplicate', { method: 'POST', body: JSON.stringify({ originalName: state.selectedCommand, name: requested }) }); state.selectedCommand = result.name; state.commandDraft = null; await loadCustomCommands(); await selectCustomCommand(result.name); notice('Custom command duplicated.'); }
   catch (error) { notice(error.message, true); }
@@ -1527,7 +2037,6 @@ async function loadPermissions() {
     const [summary, data] = await Promise.all([summaryPromise, dataPromise]);
     state.permissionData.summary = summary;
     state.permissionData[state.permissionView] = data[state.permissionView] || [];
-    if (state.permissionView === 'nodes') $('known-permission-nodes').innerHTML = state.permissionData.nodes.map(node => `<option value="${attr(node.node)}"></option>`).join('');
     state.permissionData.total = data.total ?? state.permissionData[state.permissionView].length;
     $('permissions-summary').textContent = `${summary.groups} groups · ${summary.users} configured permission subjects · ${summary.nodes} nodes`;
     document.querySelectorAll('[data-permission-view]').forEach(button => button.classList.toggle('active', button.dataset.permissionView === state.permissionView));
@@ -1633,7 +2142,12 @@ function renderUserEditor(user) {
     <section class="permission-section permission-add-section"><h2>Add Direct Permission</h2>${permissionAddForm('user')}</section>
     <section class="permission-section effective-permissions-section"><div class="detail-header"><h2>Effective Permissions</h2><input id="effective-search" placeholder="Filter effective nodes"></div><div id="effective-permissions">Loading effective permissions...</div></section>`;
   wireAssignmentRemoval(root, user.uuid);
-  $('user-group-add').addEventListener('click', () => permissionMutation('user_group_add', { user: user.uuid, group: $('user-group-select').value, ...readContextExpiry('user-group') }));
+  wireContextExpiryForm('user-group');
+  $('user-group-add').addEventListener('click', () => {
+    const error = contextExpiryError('user-group');
+    if (error) return notice(error, true);
+    permissionMutation('user_group_add', { user: user.uuid, group: $('user-group-select').value, ...readContextExpiry('user-group') });
+  });
   wirePermissionAddForm(root, 'user', user.uuid);
   loadEffectivePermissions(user.uuid);
   loadPermissionUserDetails(user.uuid);
@@ -1658,11 +2172,15 @@ function renderNodeEditor(node) {
 }
 
 function permissionAddForm(prefix, fixedNode = '') {
-  return `<div class="compact-form">${fixedNode ? '' : `<label>Permission node<input id="${prefix}-permission-node" list="known-permission-nodes" placeholder="paradigm.fly"></label>`}<label>Value<select id="${prefix}-permission-value"><option value="false">Allow</option><option value="true">Deny</option></select></label>${contextExpiryForm(prefix)}<button id="${prefix}-permission-add">Add Permission</button></div>`;
+  return `<div class="permission-add-form">${fixedNode ? '' : permissionNodePicker(prefix)}<label>Value<select id="${prefix}-permission-value"><option value="false">Allow</option><option value="true">Deny</option></select></label>${contextExpiryForm(prefix)}<button id="${prefix}-permission-add">Add Permission</button></div>`;
+}
+
+function permissionNodePicker(prefix) {
+  return `<label class="permission-node-field">Permission node<div class="permission-node-picker"><input id="${prefix}-permission-node" placeholder="paradigm.fly" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="${prefix}-permission-suggestions"><div id="${prefix}-permission-suggestions" class="permission-suggestions hidden" role="listbox"></div></div></label>`;
 }
 
 function contextExpiryForm(prefix) {
-  return `<label>Scope<select id="${prefix}-scope"><option value="global">Global</option><option value="current_server">Current server</option><option value="current_network">Current network</option><option value="custom">Custom context</option></select></label><label>Context key<input id="${prefix}-context-key" placeholder="world"></label><label>Context value<input id="${prefix}-context-value" placeholder="minecraft:overworld"></label><label>Expiry<select id="${prefix}-expiry-mode"><option value="permanent">Permanent</option><option value="duration">Duration</option><option value="exact">Exact date/time</option></select></label><label>Duration<input id="${prefix}-duration" placeholder="7d"></label><label>Exact expiry<input id="${prefix}-exact" type="datetime-local"></label>`;
+  return `<label>Scope<select id="${prefix}-scope"><option value="global">Global</option><option value="current_server">Current server</option><option value="current_network">Current network</option><option value="custom">Custom context</option></select></label><label class="hidden" data-context-custom="${prefix}">Context key<input id="${prefix}-context-key" placeholder="world"></label><label class="hidden" data-context-custom="${prefix}">Context value<input id="${prefix}-context-value" placeholder="minecraft:overworld"></label><label>Expiry<select id="${prefix}-expiry-mode"><option value="permanent">Permanent</option><option value="duration">Duration</option><option value="exact">Exact date/time</option></select></label><label class="hidden" data-expiry-duration="${prefix}">Duration<input id="${prefix}-duration" placeholder="7d or 1d12h"></label><label class="hidden" data-expiry-exact="${prefix}">Exact expiry<input id="${prefix}-exact" type="datetime-local"></label>`;
 }
 
 function readContextExpiry(prefix) {
@@ -1681,8 +2199,13 @@ function readContextExpiry(prefix) {
 }
 
 function wirePermissionAddForm(root, prefix, target, fixedNode = '') {
+  wireContextExpiryForm(prefix);
+  if (!fixedNode) wirePermissionNodePicker(prefix);
   $(`${prefix}-permission-add`)?.addEventListener('click', async () => {
     const node = fixedNode || $(`${prefix}-permission-node`).value.trim();
+    const expiryError = contextExpiryError(prefix);
+    if (!node) return notice('Enter a permission node.', true);
+    if (expiryError) return notice(expiryError, true);
     const denied = $(`${prefix}-permission-value`).value === 'true';
     let action;
     let body = { permission: node, denied, ...readContextExpiry(prefix), confirmed: false };
@@ -1701,6 +2224,78 @@ function wirePermissionAddForm(root, prefix, target, fixedNode = '') {
     }
     permissionMutation(action, body);
   });
+}
+
+function wireContextExpiryForm(prefix) {
+  const scope = $(`${prefix}-scope`);
+  const expiry = $(`${prefix}-expiry-mode`);
+  const update = () => {
+    document.querySelectorAll(`[data-context-custom="${CSS.escape(prefix)}"]`).forEach(label => label.classList.toggle('hidden', scope?.value !== 'custom'));
+    document.querySelectorAll(`[data-expiry-duration="${CSS.escape(prefix)}"]`).forEach(label => label.classList.toggle('hidden', expiry?.value !== 'duration'));
+    document.querySelectorAll(`[data-expiry-exact="${CSS.escape(prefix)}"]`).forEach(label => label.classList.toggle('hidden', expiry?.value !== 'exact'));
+  };
+  scope?.addEventListener('change', update);
+  expiry?.addEventListener('change', update);
+  update();
+}
+
+function contextExpiryError(prefix) {
+  const scope = $(`${prefix}-scope`)?.value;
+  if (scope === 'custom' && (!$(`${prefix}-context-key`)?.value.trim() || !$(`${prefix}-context-value`)?.value.trim())) return 'Custom context needs both a key and a value.';
+  const mode = $(`${prefix}-expiry-mode`)?.value;
+  if (mode === 'duration' && parseDurationInput($(`${prefix}-duration`)?.value) <= 0) return 'Enter a valid duration such as 30m, 7d, or 1d12h.';
+  if (mode === 'exact') {
+    const exact = new Date($(`${prefix}-exact`)?.value).getTime();
+    if (!Number.isFinite(exact) || exact <= Date.now()) return 'Choose an exact expiry in the future.';
+  }
+  return '';
+}
+
+function wirePermissionNodePicker(prefix) {
+  const input = $(`${prefix}-permission-node`);
+  const menu = $(`${prefix}-permission-suggestions`);
+  if (!input || !menu) return;
+  let request = 0;
+  let active = -1;
+  const close = () => { menu.classList.add('hidden'); input.setAttribute('aria-expanded', 'false'); active = -1; };
+  const activate = index => {
+    const options = [...menu.querySelectorAll('[role="option"]')];
+    active = Math.max(-1, Math.min(index, options.length - 1));
+    options.forEach((option, optionIndex) => option.classList.toggle('active', optionIndex === active));
+    options[active]?.scrollIntoView({ block: 'nearest' });
+  };
+  const choose = option => {
+    input.value = option.dataset.permissionSuggestion;
+    close();
+    input.focus();
+  };
+  const render = nodes => {
+    menu.innerHTML = nodes.slice(0, 10).map(node => `<button type="button" role="option" data-permission-suggestion="${attr(node.node)}"><strong>${esc(node.node)}</strong><small>${esc(node.description || node.source || '')}</small></button>`).join('');
+    menu.classList.toggle('hidden', !nodes.length);
+    input.setAttribute('aria-expanded', String(nodes.length > 0));
+    active = -1;
+  };
+  const update = debounce(async () => {
+    const query = input.value.trim();
+    const current = ++request;
+    if (!query) return close();
+    try {
+      const data = await api(`/api/permissions/nodes?query=${encodeURIComponent(query)}&page=1&pageSize=10`);
+      if (current === request && document.activeElement === input) render(data.nodes || []);
+    } catch (_) { if (current === request) close(); }
+  }, 140);
+  input.addEventListener('input', update);
+  input.addEventListener('focus', update);
+  input.addEventListener('blur', () => setTimeout(close, 100));
+  input.addEventListener('keydown', event => {
+    const options = [...menu.querySelectorAll('[role="option"]')];
+    if (event.key === 'ArrowDown' && options.length) { event.preventDefault(); activate(active + 1); }
+    else if (event.key === 'ArrowUp' && options.length) { event.preventDefault(); activate(active <= 0 ? options.length - 1 : active - 1); }
+    else if (event.key === 'Enter' && active >= 0) { event.preventDefault(); choose(options[active]); }
+    else if (event.key === 'Escape') close();
+  });
+  menu.addEventListener('mousedown', event => event.preventDefault());
+  menu.addEventListener('click', event => { const option = event.target.closest('[data-permission-suggestion]'); if (option) choose(option); });
 }
 
 function assignmentTable(assignments) {
@@ -1729,16 +2324,49 @@ async function permissionMutation(action, body) {
       user_group_add: 'user/group/add', user_group_remove: 'user/group/remove'
     })[action];
     const result = await api(`/api/permissions/${path}`, { method: 'POST', body: JSON.stringify(body) });
+    if (!result.applied && result.confirmationRequired) {
+      if (body.confirmed) {
+        notice('The server did not accept the confirmed permission change. Reload the page and try again.', true);
+        return null;
+      }
+      if (!await confirmAction(permissionConfirmationMessage(action, body), true)) return null;
+      return permissionMutation(action, { ...body, confirmed: true });
+    }
     notice(result.message || 'Permission change applied.');
     await loadPermissions();
-  } catch (error) { notice(error.message, true); }
+    return result;
+  } catch (error) {
+    notice(error.message, true);
+    return null;
+  }
+}
+
+function permissionConfirmationMessage(action, body) {
+  const group = body.group || 'the selected group';
+  const permission = body.permission || 'the selected permission';
+  return ({
+    group_create: `Create the privileged group "${group}"? Members may receive administrative access.`,
+    group_delete: `Delete the privileged group "${group}"?`,
+    group_update: `Change metadata for the privileged group "${group}"?`,
+    group_parent_add: `Add "${body.parent || 'this group'}" as a parent of "${group}"? Members may inherit administrative access.`,
+    group_parent_remove: `Remove the privileged parent "${body.parent || 'this group'}" from "${group}"?`,
+    group_permission_add: `Add the broad or administrative permission "${permission}" to "${group}"?`,
+    group_permission_remove: `Remove this permission assignment from the privileged group "${group}"?`,
+    user_permission_add: `Add the broad or administrative permission "${permission}" to this user?`,
+    user_permission_remove: 'Remove this broad or administrative permission from the user?',
+    user_group_add: `Add this user to the privileged group "${group}"?`,
+    user_group_remove: `Remove this user from the privileged group "${group}"?`
+  })[action] || 'Apply this broad or administrative permission change?';
 }
 
 async function createPermissionGroup() {
-  const name = window.prompt('New group name:');
+  const name = await promptAction('Create Permission Group', 'Choose a stable group name. You can configure inheritance and nodes after creation.', '', 'Group name');
   if (!name) return;
-  await permissionMutation('group_create', { group: name, confirmed: true });
+  const result = await permissionMutation('group_create', { group: name, confirmed: false });
+  if (!result?.applied) return;
   state.selectedPermissionTarget = { kind: 'group', id: name };
+  renderPermissionTargetList();
+  renderPermissionEditor();
 }
 
 async function loadEffectivePermissions(user) {
@@ -1787,7 +2415,7 @@ function renderHologramSettings() {
   const config = state.hologramData?.config;
   if (!root || !config) return;
   root.innerHTML = `<div class="detail-header"><div><h2>Global Settings</h2><span>Rendering mode: ${esc(config.renderMode || 'auto')}</span></div><button id="hologram-settings-save">Save Settings</button></div>
-    <div class="compact-form">
+    <div class="hologram-global-form">
       <label class="switch-label"><input id="hologram-global-enabled" type="checkbox" ${config.enabled ? 'checked' : ''}> Enabled</label>
       <label>Default view distance<input id="hologram-default-distance" type="number" min="1" max="512" step="1" value="${attr(config.defaultViewDistance)}"></label>
       <label>Default refresh interval<input id="hologram-default-refresh" type="number" min="1" max="3600" step="1" value="${attr(config.defaultRefreshIntervalSeconds)}"></label>
@@ -1844,8 +2472,9 @@ function renderHologramEditor() {
   const definition = state.hologramDraft;
   if (!root || !definition || !state.selectedHologram) {
     if (root) {
-      root.className = 'detail-editor empty-detail';
-      root.textContent = 'Select a hologram or create one.';
+      root.className = 'detail-editor empty-detail empty-detail-action';
+      root.innerHTML = '<div><h2>Create your first hologram</h2><p>Choose a stable ID, then configure its location, lines, visibility, and interactions.</p><button id="hologram-empty-create">New Hologram</button></div>';
+      $('hologram-empty-create').addEventListener('click', createHologram);
     }
     return;
   }
@@ -1901,7 +2530,7 @@ function hologramLineEditor(text, index) {
       ${formattingToolbar(`hologram-line-${index}`, hologramPlaceholders())}
       <textarea class="reorder-editor format-editor" data-hologram-line="${index}" data-config-key="hologram-line-${index}">${esc(text)}</textarea>
     </div>
-    <div class="reorder-actions"><button data-hologram-line-up="${index}" ${index === 0 ? 'disabled' : ''}>↑</button><button data-hologram-line-down="${index}" ${index === state.hologramDraft.lines.length - 1 ? 'disabled' : ''}>↓</button><button data-hologram-line-delete="${index}">×</button></div>
+    <div class="reorder-actions"><button data-hologram-line-up="${index}" title="Move up" aria-label="Move hologram line up" ${index === 0 ? 'disabled' : ''}>↑</button><button data-hologram-line-down="${index}" title="Move down" aria-label="Move hologram line down" ${index === state.hologramDraft.lines.length - 1 ? 'disabled' : ''}>↓</button><button data-hologram-line-delete="${index}" title="Delete" aria-label="Delete hologram line">×</button></div>
   </div>`;
 }
 
@@ -1915,7 +2544,7 @@ function hologramVisibilityEditor(definition) {
     <label>Start<input data-condition-field="startTime" data-condition-index="${index}" type="number" min="0" max="23999" value="${attr(condition.startTime ?? '')}"></label>
     <label>End<input data-condition-field="endTime" data-condition-index="${index}" type="number" min="0" max="23999" value="${attr(condition.endTime ?? '')}"></label>
     <label class="switch-label"><input data-condition-field="negate" data-condition-index="${index}" type="checkbox" ${condition.negate ? 'checked' : ''}> Not</label>
-    <button data-condition-remove="${index}" class="danger">×</button></div>`).join('') || '<div class="reorder-empty">Visible to every player.</div>';
+    <button data-condition-remove="${index}" class="danger" title="Delete" aria-label="Delete visibility condition">×</button></div>`).join('') || '<div class="reorder-empty">Visible to every player.</div>';
   return `<section class="hologram-section"><div class="detail-header"><div><h3>Visibility conditions</h3><span>Rules are evaluated for each viewer.</span></div><button id="hologram-condition-add">Add condition</button></div>
     <div class="compact-form"><label>Match<select data-hologram-path="visibility.mode"><option value="all" ${visibility.mode !== 'any' ? 'selected' : ''}>All conditions</option><option value="any" ${visibility.mode === 'any' ? 'selected' : ''}>Any condition</option></select></label><label class="switch-label"><input data-hologram-path="visibility.negate" type="checkbox" ${visibility.negate ? 'checked' : ''}> Negate group</label></div>
     <div class="hologram-condition-list">${rows}</div></section>`;
@@ -1930,12 +2559,12 @@ function hologramInteractionEditor(definition) {
 }
 
 function hologramInteractionConditions(group) {
-  const rows = (group.conditions || []).map((condition, index) => `<div class="hologram-condition-row"><select data-interaction-condition-field="type" data-interaction-condition-index="${index}">${['permission','group','operator','world','distance','time','weather'].map(type => `<option value="${type}" ${condition.type === type ? 'selected' : ''}>${type}</option>`).join('')}</select><input data-interaction-condition-field="value" data-interaction-condition-index="${index}" placeholder="Value / world / group / weather" value="${attr(condition.value || '')}"><label>Min<input data-interaction-condition-field="minDistance" data-interaction-condition-index="${index}" type="number" value="${attr(condition.minDistance ?? '')}"></label><label>Max<input data-interaction-condition-field="maxDistance" data-interaction-condition-index="${index}" type="number" value="${attr(condition.maxDistance ?? '')}"></label><label>Start<input data-interaction-condition-field="startTime" data-interaction-condition-index="${index}" type="number" min="0" max="23999" value="${attr(condition.startTime ?? '')}"></label><label>End<input data-interaction-condition-field="endTime" data-interaction-condition-index="${index}" type="number" min="0" max="23999" value="${attr(condition.endTime ?? '')}"></label><label class="switch-label"><input data-interaction-condition-field="negate" data-interaction-condition-index="${index}" type="checkbox" ${condition.negate ? 'checked' : ''}> Not</label><button data-interaction-condition-remove="${index}" class="danger">×</button></div>`).join('') || '<div class="reorder-empty">No additional interaction restrictions.</div>';
+  const rows = (group.conditions || []).map((condition, index) => `<div class="hologram-condition-row"><select data-interaction-condition-field="type" data-interaction-condition-index="${index}" aria-label="Condition type">${['permission','group','operator','world','distance','time','weather'].map(type => `<option value="${type}" ${condition.type === type ? 'selected' : ''}>${type}</option>`).join('')}</select><input data-interaction-condition-field="value" data-interaction-condition-index="${index}" aria-label="Condition value" placeholder="Value / world / group / weather" value="${attr(condition.value || '')}"><label>Min<input data-interaction-condition-field="minDistance" data-interaction-condition-index="${index}" type="number" value="${attr(condition.minDistance ?? '')}"></label><label>Max<input data-interaction-condition-field="maxDistance" data-interaction-condition-index="${index}" type="number" value="${attr(condition.maxDistance ?? '')}"></label><label>Start<input data-interaction-condition-field="startTime" data-interaction-condition-index="${index}" type="number" min="0" max="23999" value="${attr(condition.startTime ?? '')}"></label><label>End<input data-interaction-condition-field="endTime" data-interaction-condition-index="${index}" type="number" min="0" max="23999" value="${attr(condition.endTime ?? '')}"></label><label class="switch-label"><input data-interaction-condition-field="negate" data-interaction-condition-index="${index}" type="checkbox" ${condition.negate ? 'checked' : ''}> Not</label><button data-interaction-condition-remove="${index}" class="danger" title="Delete" aria-label="Delete interaction condition">×</button></div>`).join('') || '<div class="reorder-empty">No additional interaction restrictions.</div>';
   return `<div class="hologram-action-list"><div class="detail-header"><h4>Interaction conditions</h4><button id="hologram-interaction-condition-add">Add condition</button></div><div class="compact-form"><label>Match<select data-hologram-path="interaction.conditions.mode"><option value="all" ${group.mode !== 'any' ? 'selected' : ''}>All conditions</option><option value="any" ${group.mode === 'any' ? 'selected' : ''}>Any condition</option></select></label><label class="switch-label"><input data-hologram-path="interaction.conditions.negate" type="checkbox" ${group.negate ? 'checked' : ''}> Negate group</label></div>${rows}</div>`;
 }
 
 function hologramActionList(kind, actions) {
-  return `<div class="hologram-action-list"><div class="detail-header"><h4>${kind === 'interact' ? 'Right-click actions' : 'Left-click actions'}</h4><button data-action-add="${kind}">Add action</button></div>${actions.map((action, index) => `<div class="hologram-action-row"><select data-action-field="type" data-action-kind="${kind}" data-action-index="${index}">${['message','actionbar','title','sound','player_command','console_command'].map(type => `<option value="${type}" ${action.type === type ? 'selected' : ''}>${type}</option>`).join('')}</select><input data-action-field="text" data-action-kind="${kind}" data-action-index="${index}" placeholder="Text / title" value="${attr(action.text || '')}"><input data-action-field="subtitle" data-action-kind="${kind}" data-action-index="${index}" placeholder="Subtitle" value="${attr(action.subtitle || '')}"><input data-action-field="sound" data-action-kind="${kind}" data-action-index="${index}" placeholder="Sound id" value="${attr(action.sound || '')}"><select data-action-field="soundCategory" data-action-kind="${kind}" data-action-index="${index}">${['master','music','records','weather','blocks','hostile','neutral','players','ambient','voice'].map(category => `<option value="${category}" ${(action.soundCategory || 'master') === category ? 'selected' : ''}>${category}</option>`).join('')}</select><input data-action-field="volume" data-action-kind="${kind}" data-action-index="${index}" type="number" min="0" max="10" step="0.1" placeholder="Volume" value="${attr(action.volume ?? 1)}"><input data-action-field="pitch" data-action-kind="${kind}" data-action-index="${index}" type="number" min="0" max="4" step="0.1" placeholder="Pitch" value="${attr(action.pitch ?? 1)}"><input data-action-field="command" data-action-kind="${kind}" data-action-index="${index}" placeholder="Command" value="${attr(action.command || '')}"><button data-action-remove="${kind}:${index}" class="danger">×</button></div>`).join('') || '<div class="reorder-empty">No actions.</div>'}</div>`;
+  return `<div class="hologram-action-list"><div class="detail-header"><h4>${kind === 'interact' ? 'Right-click actions' : 'Left-click actions'}</h4><button data-action-add="${kind}">Add action</button></div>${actions.map((action, index) => `<div class="hologram-action-row"><select data-action-field="type" data-action-kind="${kind}" data-action-index="${index}" aria-label="Action type">${['message','actionbar','title','sound','player_command','console_command'].map(type => `<option value="${type}" ${action.type === type ? 'selected' : ''}>${type}</option>`).join('')}</select><input data-action-field="text" data-action-kind="${kind}" data-action-index="${index}" aria-label="Action text or title" placeholder="Text / title" value="${attr(action.text || '')}"><input data-action-field="subtitle" data-action-kind="${kind}" data-action-index="${index}" aria-label="Action subtitle" placeholder="Subtitle" value="${attr(action.subtitle || '')}"><input data-action-field="sound" data-action-kind="${kind}" data-action-index="${index}" aria-label="Sound ID" placeholder="Sound id" value="${attr(action.sound || '')}"><select data-action-field="soundCategory" data-action-kind="${kind}" data-action-index="${index}" aria-label="Sound category">${['master','music','records','weather','blocks','hostile','neutral','players','ambient','voice'].map(category => `<option value="${category}" ${(action.soundCategory || 'master') === category ? 'selected' : ''}>${category}</option>`).join('')}</select><input data-action-field="volume" data-action-kind="${kind}" data-action-index="${index}" type="number" min="0" max="10" step="0.1" aria-label="Sound volume" placeholder="Volume" value="${attr(action.volume ?? 1)}"><input data-action-field="pitch" data-action-kind="${kind}" data-action-index="${index}" type="number" min="0" max="4" step="0.1" aria-label="Sound pitch" placeholder="Pitch" value="${attr(action.pitch ?? 1)}"><input data-action-field="command" data-action-kind="${kind}" data-action-index="${index}" aria-label="Command" placeholder="Command" value="${attr(action.command || '')}"><button data-action-remove="${kind}:${index}" class="danger" title="Delete" aria-label="Delete action">×</button></div>`).join('') || '<div class="reorder-empty">No actions.</div>'}</div>`;
 }
 
 function playerLocationControl() {
@@ -2120,7 +2749,7 @@ async function saveSelectedHologram() {
 }
 
 async function createHologram() {
-  const id = window.prompt('New hologram id (a-z, 0-9, _ or -):');
+  const id = await promptAction('Create Hologram', 'Use lowercase letters, numbers, underscores, or hyphens.', '', 'Hologram ID');
   if (!id) return;
   const config = state.hologramData?.config || {};
   const player = state.hologramData?.onlinePlayers?.[0];
@@ -2148,13 +2777,13 @@ async function createHologram() {
 }
 
 async function duplicateSelectedHologram() {
-  const id = window.prompt('Duplicate hologram as:', `${state.selectedHologram}_copy`);
+  const id = await promptAction('Duplicate Hologram', 'Choose an ID for the new hologram.', `${state.selectedHologram}_copy`, 'Hologram ID');
   if (!id) return;
   await runHologramOperation('duplicate', { originalId: state.selectedHologram, id }, id.toLowerCase());
 }
 
 async function renameSelectedHologram() {
-  const id = window.prompt('Rename hologram to:', state.selectedHologram);
+  const id = await promptAction('Rename Hologram', 'References to the old ID may need to be updated separately.', state.selectedHologram, 'New hologram ID');
   if (!id || id === state.selectedHologram) return;
   await runHologramOperation('rename', { originalId: state.selectedHologram, id }, id.toLowerCase());
 }
@@ -2213,12 +2842,13 @@ async function loadModerationPlayer(player) {
     const punishments = data.punishments || [];
     const active = punishments.filter(item => item.status === 'ACTIVE');
     root.innerHTML = `<div class="detail-header moderation-subject-header"><div><h2>${esc(identity.name || target)}</h2><span>${esc(identity.uuid || '')}</span></div></div>
-      <section class="permission-section"><h2>Create Punishment</h2><div class="compact-form moderation-action-form"><label>Type<select id="moderation-action"><option value="warn">Warning</option><option value="mute">Mute</option><option value="tempmute">Temporary mute</option><option value="ban">Ban</option><option value="tempban">Temporary ban</option><option value="ipban">IP ban</option><option value="tempipban">Temporary IP ban</option><option value="jail">Jail</option></select></label><label>Scope<select id="moderation-scope"><option value="network">Network</option><option value="server">Current server</option></select></label><label>Duration<input id="moderation-duration" placeholder="Permanent or 7d"></label><label>Reason<input id="moderation-reason" placeholder="Reason"></label><label>Explicit IP<input id="moderation-ip" placeholder="Online player or literal IP"></label><button id="moderation-apply">Apply</button></div></section>
+      <section class="permission-section"><h2>Create Punishment</h2><div class="moderation-action-form"><label>Type<select id="moderation-action"><option value="warn">Warning</option><option value="mute">Mute</option><option value="ban">Ban</option><option value="ipban">IP ban</option><option value="jail">Jail</option></select></label><label>Scope<select id="moderation-scope"><option value="network">Network</option><option value="server">Current server</option></select></label><label class="moderation-duration-field">Duration<input id="moderation-duration" placeholder="Permanent"><small id="moderation-duration-help">Leave empty for a permanent punishment.</small></label><label>Reason<input id="moderation-reason" placeholder="Reason"></label><label class="moderation-ip-field hidden">Explicit IP<input id="moderation-ip" placeholder="Online player or literal IP"></label><button id="moderation-apply">Apply Punishment</button></div></section>
       <section class="permission-section"><h2>Active Punishments</h2><div id="moderation-active">${punishmentTable(active, true)}</div></section>
       <section class="permission-section"><div class="detail-header"><h2>Punishment History</h2><div class="compact-form"><label>Type<select id="moderation-filter-type"><option value="">All</option><option>BAN</option><option>IP_BAN</option><option>MUTE</option><option>WARN</option><option>JAIL</option></select></label><label>Status<select id="moderation-filter-status"><option value="">All</option><option>ACTIVE</option><option>EXPIRED</option><option>REVOKED</option></select></label><label>Scope<select id="moderation-filter-scope"><option value="">All</option><option>GLOBAL</option><option>SERVER</option></select></label><label>From<input id="moderation-filter-from" type="date"></label><label>To<input id="moderation-filter-to" type="date"></label></div></div><div id="moderation-history"></div><div id="moderation-pagination"></div></section>
       <section id="moderation-ban-screen" class="permission-section"></section>
       <section id="moderation-detail" class="permission-section hidden"></section>`;
     $('moderation-apply').addEventListener('click', () => applyModeration(target));
+    wireModerationActionForm();
     root.querySelectorAll('[data-revoke-id]').forEach(button => button.addEventListener('click', () => applyModeration(target, 'revoke', button.dataset.revokeId)));
     const renderHistory = () => {
       const type = $('moderation-filter-type').value, status = $('moderation-filter-status').value, scope = $('moderation-filter-scope').value;
@@ -2277,17 +2907,52 @@ async function loadPunishmentDetail(id) {
 }
 
 async function applyModeration(target, forcedAction = '', punishmentId = '') {
-  const action = forcedAction || $('moderation-action').value;
+  const requestedAction = forcedAction || $('moderation-action').value;
+  const durationValue = $('moderation-duration')?.value.trim() || '';
+  const action = moderationActionForDuration(requestedAction, durationValue);
+  const usesDuration = ['tempmute','tempban','tempipban','jail'].includes(action);
+  if (usesDuration && durationValue && !['permanent','perm'].includes(durationValue.toLowerCase()) && parseDurationInput(durationValue) <= 0) {
+    return notice('Enter a valid duration such as 30m, 1d, or 1d12h.', true);
+  }
   const destructive = ['ban','tempban','ipban','tempipban','jail','revoke'].includes(action);
-  if (destructive && !await confirmAction(`Apply ${action} to ${target}?`, true)) return;
+  const durationDescription = action.startsWith('temp') ? ` for ${durationValue}` : action === 'jail' && durationValue && !['permanent','perm'].includes(durationValue.toLowerCase()) ? ` for ${durationValue}` : '';
+  if (destructive && !await confirmAction(`Apply ${readableModerationAction(action)} to ${target}${durationDescription}?`, true)) return;
   try {
     const uuid = state.moderationIdentity?.uuid || (/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(target) ? target : '');
     const player = state.moderationIdentity?.name || target;
-    const body = { player, uuid, punishmentId, reason: $('moderation-reason')?.value || '', duration: $('moderation-duration')?.value || '', ipAddress: $('moderation-ip')?.value || '', scope: $('moderation-scope')?.value || 'network', confirmed: true };
+    const body = { player, uuid, punishmentId, reason: $('moderation-reason')?.value || '', duration: usesDuration ? durationValue : '', ipAddress: $('moderation-ip')?.value || '', scope: $('moderation-scope')?.value || 'network', confirmed: true };
     const result = await api(`/api/moderation/${action}`, { method: 'POST', body: JSON.stringify(body) });
     notice(result.message || `Moderation action ${action} applied.`);
     await loadModerationPlayer(target);
   } catch (error) { notice(error.message, true); }
+}
+
+function moderationActionForDuration(action, durationValue) {
+  const temporary = durationValue && !['permanent','perm'].includes(durationValue.toLowerCase());
+  if (!temporary) return action;
+  return ({ mute: 'tempmute', ban: 'tempban', ipban: 'tempipban' })[action] || action;
+}
+
+function readableModerationAction(action) {
+  return ({ tempmute: 'a temporary mute', tempban: 'a temporary ban', tempipban: 'a temporary IP ban', ipban: 'an IP ban', ban: 'a permanent ban', jail: 'jail', revoke: 'this revocation' })[action] || action;
+}
+
+function wireModerationActionForm() {
+  const action = $('moderation-action');
+  const duration = $('moderation-duration');
+  const durationField = document.querySelector('.moderation-duration-field');
+  const ipField = document.querySelector('.moderation-ip-field');
+  const update = () => {
+    const warning = action.value === 'warn';
+    durationField?.classList.toggle('hidden', warning);
+    ipField?.classList.toggle('hidden', action.value !== 'ipban');
+    if (duration) {
+      duration.placeholder = action.value === 'jail' ? 'Permanent or 7d' : 'Permanent, 7d, 1d12h…';
+      if (warning) duration.value = '';
+    }
+  };
+  action?.addEventListener('change', update);
+  update();
 }
 
 async function loadAudit() {
@@ -2328,21 +2993,61 @@ function renderPagination(id, page, total, pageSize, onPage) {
   root.querySelector('[data-page-next]').addEventListener('click', () => onPage(Math.min(pages, page + 1)));
 }
 
-function confirmAction(message, danger = false) {
+function openDialog({ title, message, danger = false, prompt = false, value = '', label = 'Value', acceptLabel = 'Confirm' }) {
   return new Promise(resolve => {
     state.pendingConfirm = resolve;
-    $('confirm-title').textContent = danger ? 'Confirm Important Action' : 'Confirm Action';
+    state.confirmReturnFocus = document.activeElement;
+    state.confirmMode = prompt ? 'prompt' : 'confirm';
+    $('confirm-title').textContent = title;
     $('confirm-message').textContent = message;
+    $('confirm-prompt-wrap').classList.toggle('hidden', !prompt);
+    $('confirm-prompt-label').textContent = label;
+    $('confirm-prompt-input').value = value;
+    $('confirm-accept').textContent = acceptLabel;
     $('confirm-accept').classList.toggle('danger', danger);
+    $('confirm-modal').querySelector('.pd-modal').setAttribute('role', danger ? 'alertdialog' : 'dialog');
     $('confirm-modal').classList.remove('hidden');
+    if (prompt) {
+      $('confirm-prompt-input').focus();
+      $('confirm-prompt-input').select();
+    } else $('confirm-accept').focus();
   });
+}
+
+function confirmAction(message, danger = false) {
+  return openDialog({ title: danger ? 'Confirm Important Action' : 'Confirm Action', message, danger });
+}
+
+function promptAction(title, message, value = '', label = 'Value') {
+  return openDialog({ title, message, prompt: true, value, label, acceptLabel: 'Continue' });
 }
 
 function resolveConfirm(value) {
   $('confirm-modal').classList.add('hidden');
   const resolve = state.pendingConfirm;
+  const returnFocus = state.confirmReturnFocus;
+  const result = state.confirmMode === 'prompt' ? (value ? $('confirm-prompt-input').value.trim() || null : null) : Boolean(value);
   state.pendingConfirm = null;
-  if (resolve) resolve(value);
+  state.confirmReturnFocus = null;
+  state.confirmMode = 'confirm';
+  $('confirm-prompt-wrap').classList.add('hidden');
+  if (resolve) resolve(result);
+  if (returnFocus instanceof HTMLElement && returnFocus.isConnected) returnFocus.focus();
+}
+
+function trapDialogFocus(event) {
+  if (event.key !== 'Tab' || $('confirm-modal').classList.contains('hidden')) return;
+  const focusable = [...$('confirm-modal').querySelectorAll('button:not([disabled]), input:not([disabled])')].filter(element => element.getClientRects().length);
+  if (!focusable.length) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function notice(message, bad = false, action = null, persistent = false) {
@@ -2360,6 +3065,21 @@ function renderError(id, message) { const root = $(id); if (root) root.innerHTML
 function empty(message) { return `<div class="empty-state">${esc(message)}</div>`; }
 function formatTime(value) { if (!value) return '-'; const date = new Date(value); return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString(); }
 function relativeTime(value) { if (!value) return '-'; const difference = Number(value) - Date.now(); const absolute = Math.abs(difference); const unit = absolute >= 86400000 ? [86400000, 'day'] : absolute >= 3600000 ? [3600000, 'hour'] : absolute >= 60000 ? [60000, 'minute'] : [1000, 'second']; const amount = Math.max(1, Math.round(absolute / unit[0])); return difference > 0 ? `in ${amount} ${unit[1]}${amount === 1 ? '' : 's'}` : `${amount} ${unit[1]}${amount === 1 ? '' : 's'} ago`; }
+function parseDurationInput(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) return -1;
+  const pattern = /(\d+)([smhdw])/g;
+  const units = { s: 1000, m: 60000, h: 3600000, d: 86400000, w: 604800000 };
+  let consumed = 0;
+  let total = 0;
+  for (const match of normalized.matchAll(pattern)) {
+    if (match.index !== consumed || Number(match[1]) <= 0) return -1;
+    total += Number(match[1]) * units[match[2]];
+    if (!Number.isSafeInteger(total)) return -1;
+    consumed = match.index + match[0].length;
+  }
+  return consumed === normalized.length && total > 0 ? total : -1;
+}
 function duration(value) { const seconds = Math.max(0, Math.floor(Number(value || 0) / 1000)); const days = Math.floor(seconds / 86400); const hours = Math.floor((seconds % 86400) / 3600); const minutes = Math.floor((seconds % 3600) / 60); return days ? `${days}d ${hours}h` : hours ? `${hours}h ${minutes}m` : `${minutes}m`; }
 function debounce(fn, wait) { let timer; return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), wait); }; }
 function esc(value) { return String(value ?? '').replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[character]); }
@@ -2370,13 +3090,25 @@ function bindEvents() {
   $('login-token').addEventListener('keydown', event => { if (event.key === 'Enter') login(false); });
   $('logout-btn').addEventListener('click', logout);
   $('reload-config').addEventListener('click', () => loadConfigSnapshot(true));
-  $('nav-toggle').addEventListener('click', () => document.body.classList.toggle('nav-open'));
+  $('theme-toggle').addEventListener('click', () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'classic' : 'dark', true));
+  $('nav-toggle').addEventListener('click', toggleNavigation);
+  $('sidebar-collapse').addEventListener('click', () => {
+    if (window.matchMedia('(max-width: 980px)').matches) setNavigationOpen(false);
+    else setSidebarCollapsed(true, true);
+  });
+  $('nav-scrim').addEventListener('click', () => setNavigationOpen(false));
+  $('nav-search').addEventListener('input', event => filterNavigation(event.target.value));
   document.querySelectorAll('[data-page-target]').forEach(button => button.addEventListener('click', () => requestNavigate(button.dataset.pageTarget)));
   document.querySelectorAll('[data-refresh]').forEach(button => button.addEventListener('click', () => loadPage(button.dataset.refresh)));
-  document.querySelectorAll('.advanced-toggle').forEach(button => button.addEventListener('click', () => { state.advanced = !state.advanced; document.body.classList.toggle('show-advanced', state.advanced); button.textContent = state.advanced ? 'Hide advanced details' : 'Advanced details'; }));
+  document.querySelectorAll('.advanced-toggle').forEach(button => button.addEventListener('click', () => setAdvancedShown(!state.advanced, true)));
   document.querySelectorAll('.format-toolbar').forEach(toolbar => toolbar.querySelectorAll('[data-wrap]').forEach(button => button.addEventListener('click', () => applyFormat(toolbar.dataset.editorTarget === 'motd' ? 'motd-lines' : 'chat-fields', button.dataset.wrap))));
   $('save-changes').addEventListener('click', saveCurrentPage);
   $('discard-changes').addEventListener('click', discardCurrentPage);
+  $('remote-server-select')?.addEventListener('change', event => selectRemoteServer(event.target.value));
+  $('remote-scope-select')?.addEventListener('change', event => selectRemoteScope(event.target.value));
+  $('remote-save-changes')?.addEventListener('click', saveRemoteSection);
+  $('remote-adopt-server')?.addEventListener('click', () => adoptRemoteSection('SERVER'));
+  $('remote-adopt-network')?.addEventListener('click', () => adoptRemoteSection('NETWORK'));
   $('storage-test-btn').addEventListener('click', testStorage);
   $('migration-dry-run-btn').addEventListener('click', migrationDryRun);
   $('motd-add-line').addEventListener('click', () => mutateMotd(values => values.push('')));
@@ -2396,6 +3128,8 @@ function bindEvents() {
   ['audit-actor','audit-type','audit-target','audit-result','audit-source','audit-from','audit-to'].forEach(id => $(id).addEventListener('input', debounce(() => { state.auditPage = 1; loadAudit(); }, 250)));
   $('confirm-cancel').addEventListener('click', () => resolveConfirm(false));
   $('confirm-accept').addEventListener('click', () => resolveConfirm(true));
+  $('confirm-prompt-input').addEventListener('keydown', event => { if (event.key === 'Enter') resolveConfirm(true); });
+  $('confirm-modal').addEventListener('click', event => { if (event.target === $('confirm-modal')) resolveConfirm(false); });
   window.addEventListener('hashchange', async () => {
     const next = validPage(location.hash.slice(1)) ? location.hash.slice(1) : 'overview';
     if (next === state.page) return;
@@ -2407,6 +3141,40 @@ function bindEvents() {
     if (dirty) discardCurrentPage();
     state.commandDirty = false;
     navigate(next, false);
+  });
+  window.addEventListener('keydown', event => {
+    trapDialogFocus(event);
+    if (event.key === 'Escape') {
+      if (!$('confirm-modal').classList.contains('hidden')) {
+        resolveConfirm(false);
+        return;
+      }
+      if (document.body.classList.contains('nav-open')) {
+        setNavigationOpen(false);
+        $('nav-toggle').focus();
+        return;
+      }
+      if (document.activeElement === $('nav-search') && $('nav-search').value) {
+        $('nav-search').value = '';
+        filterNavigation('');
+        return;
+      }
+    }
+    if (!$('confirm-modal').classList.contains('hidden') && (event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === 'k') {
+      event.preventDefault();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase() === 'k') {
+      event.preventDefault();
+      if (window.matchMedia('(max-width: 980px)').matches) setNavigationOpen(true);
+      else setSidebarCollapsed(false, true);
+      $('nav-search').focus();
+      $('nav-search').select();
+    }
+  });
+  window.addEventListener('resize', () => {
+    setNavigationOpen(false);
+    if (!window.matchMedia('(max-width: 980px)').matches) setSidebarCollapsed(document.body.classList.contains('sidebar-collapsed'));
   });
   window.addEventListener('beforeunload', event => { if (state.edits.size || state.commandDirty) { event.preventDefault(); event.returnValue = ''; } });
 }

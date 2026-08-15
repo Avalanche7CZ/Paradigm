@@ -4,13 +4,16 @@ import com.mojang.authlib.GameProfile;
 import eu.avalanche7.paradigm.ParadigmAPI;
 import eu.avalanche7.paradigm.configs.MOTDConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.utils.ServerStatusDiagnostics;
+import eu.avalanche7.paradigm.utils.ServerStatusIconCache;
 import net.minecraft.network.ClientConnection;
+import net.minecraft.network.PacketCallbacks;
 import net.minecraft.network.packet.c2s.query.QueryRequestC2SPacket;
 import net.minecraft.network.packet.s2c.query.QueryResponseS2CPacket;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.ServerMetadata;
 import net.minecraft.server.network.ServerQueryNetworkHandler;
 import net.minecraft.text.Text;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -18,69 +21,56 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.*;
 
 @Mixin(ServerQueryNetworkHandler.class)
 public abstract class ServerStatusMixin {
 
     @Shadow
+    @Final
     private ClientConnection connection;
 
-    @Unique
-    private static final Map<String, ServerMetadata.Favicon> paradigm$iconCache = new HashMap<>();
+    @Shadow
+    @Final
+    private ServerMetadata metadata;
 
-    @Unique
-    private static final List<String> paradigm$availableIcons = new ArrayList<>();
-
-    @Unique
-    private static boolean paradigm$iconsLoaded = false;
+    @Shadow
+    private boolean responseSent;
 
     @Inject(method = "onRequest", at = @At("HEAD"), cancellable = true)
     private void paradigm$modifyStatusRequest(QueryRequestC2SPacket packet, CallbackInfo ci) {
         Services services = ParadigmAPI.getServices();
         if (services == null) {
-            return;
-        }
-
-        services.getDebugLogger().debugLog("ServerStatusMixin: onRequest called");
-
-        MinecraftServer server = (MinecraftServer) services.getPlatformAdapter().getMinecraftServer();
-        if (server == null) {
-            services.getDebugLogger().debugLog("ServerStatusMixin: Server is NULL");
+            ServerStatusDiagnostics.servicesUnavailable("Fabric-1.21.1");
             return;
         }
 
         MOTDConfigHandler.Config cfg = services.getMotdConfig();
-        if (cfg == null) {
-            services.getDebugLogger().debugLog("ServerStatusMixin: Config is NULL");
+        boolean enabled = cfg != null && Boolean.TRUE.equals(cfg.serverlistMotdEnabled.value);
+        List<MOTDConfigHandler.ServerListMOTD> motds = cfg != null ? cfg.motds.value : null;
+        String remoteAddress = String.valueOf(this.connection.getAddress());
+        ServerStatusDiagnostics.received(services, "Fabric-1.21.1", remoteAddress, enabled,
+                motds != null ? motds.size() : 0);
+        if (!enabled) {
+            ServerStatusDiagnostics.vanillaFallback(services, "Fabric-1.21.1", remoteAddress,
+                    cfg == null ? "MOTD config unavailable" : "custom MOTD disabled");
             return;
         }
-
-        services.getDebugLogger().debugLog("ServerStatusMixin: serverlistMotdEnabled = " + cfg.serverlistMotdEnabled.value);
-
-        if (!cfg.serverlistMotdEnabled.value) {
-            return;
-        }
-
-        List<MOTDConfigHandler.ServerListMOTD> motds = cfg.motds.value;
         if (motds == null || motds.isEmpty()) {
-            services.getDebugLogger().debugLog("ServerStatusMixin: MOTDs list is empty or NULL");
+            ServerStatusDiagnostics.vanillaFallback(services, "Fabric-1.21.1", remoteAddress, "no MOTDs configured");
             return;
         }
-
-        services.getDebugLogger().debugLog("ServerStatusMixin: Processing " + motds.size() + " MOTD entries");
+        if (this.responseSent) {
+            ServerStatusDiagnostics.vanillaFallback(services, "Fabric-1.21.1", remoteAddress,
+                    "vanilla duplicate-request handling");
+            return;
+        }
 
         try {
-            ServerMetadata originalMetadata = server.getServerMetadata();
+            ServerMetadata originalMetadata = this.metadata;
             if (originalMetadata == null) {
+                ServerStatusDiagnostics.vanillaFallback(services, "Fabric-1.21.1", remoteAddress,
+                        "vanilla status unavailable");
                 return;
             }
 
@@ -127,11 +117,26 @@ public abstract class ServerStatusMixin {
                 originalMetadata.secureChatEnforced()
             );
 
-            this.connection.send(new QueryResponseS2CPacket(modifiedMetadata));
-            services.getDebugLogger().debugLog("ServerStatusMixin: Custom MOTD sent successfully!");
+            ServerStatusDiagnostics.constructed(services, "Fabric-1.21.1", remoteAddress);
+            this.connection.send(new QueryResponseS2CPacket(modifiedMetadata), new PacketCallbacks() {
+                @Override
+                public void onSuccess() {
+                    ServerStatusDiagnostics.sent(services, "Fabric-1.21.1", remoteAddress);
+                }
+
+                @Override
+                public net.minecraft.network.packet.Packet<?> getFailurePacket() {
+                    ServerStatusDiagnostics.sendFailed(services, "Fabric-1.21.1", remoteAddress, null);
+                    return new QueryResponseS2CPacket(originalMetadata);
+                }
+            });
+            this.responseSent = true;
+            ServerStatusDiagnostics.queued(services, "Fabric-1.21.1", remoteAddress);
             ci.cancel();
-        } catch (Exception e) {
-            services.getDebugLogger().debugLog("ServerStatusMixin: Error - " + e.getMessage(), e);
+        } catch (Throwable failure) {
+            ServerStatusDiagnostics.customizationFailed(services, "Fabric-1.21.1", remoteAddress, failure);
+            ServerStatusDiagnostics.vanillaFallback(services, "Fabric-1.21.1", remoteAddress,
+                    "custom response construction or enqueue failed");
         }
     }
 
@@ -190,79 +195,7 @@ public abstract class ServerStatusMixin {
 
     @Unique
     private Optional<ServerMetadata.Favicon> paradigm$loadIcon(String iconName) {
-        if (iconName == null || iconName.trim().isEmpty()) {
-            return Optional.empty();
-        }
-
-        if (!paradigm$iconsLoaded) {
-            paradigm$loadAvailableIcons();
-        }
-
-        String cachedKey = iconName.toLowerCase();
-        if (paradigm$iconCache.containsKey(cachedKey)) {
-            return Optional.of(paradigm$iconCache.get(cachedKey));
-        }
-
-        Path configDir = Paths.get("config", "paradigm", "icons");
-        if (!Files.exists(configDir)) {
-            try {
-                Files.createDirectories(configDir);
-            } catch (IOException e) {
-                return Optional.empty();
-            }
-        }
-
-        Path iconPath = configDir.resolve(iconName + ".png");
-        if (!Files.exists(iconPath)) {
-            iconPath = configDir.resolve(iconName);
-            if (!Files.exists(iconPath)) {
-                return Optional.empty();
-            }
-        }
-
-        try {
-            BufferedImage image = ImageIO.read(iconPath.toFile());
-            if (image == null) {
-                return Optional.empty();
-            }
-
-            if (image.getWidth() != 64 || image.getHeight() != 64) {
-                return Optional.empty();
-            }
-
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            ImageIO.write(image, "PNG", baos);
-            byte[] imageBytes = baos.toByteArray();
-
-            ServerMetadata.Favicon favicon = new ServerMetadata.Favicon(imageBytes);
-            paradigm$iconCache.put(cachedKey, favicon);
-            return Optional.of(favicon);
-        } catch (IOException e) {
-            return Optional.empty();
-        }
-    }
-
-    @Unique
-    private void paradigm$loadAvailableIcons() {
-        paradigm$availableIcons.clear();
-        Path configDir = Paths.get("config", "paradigm", "icons");
-
-        if (!Files.exists(configDir)) {
-            paradigm$iconsLoaded = true;
-            return;
-        }
-
-        try (DirectoryStream<Path> stream = Files.newDirectoryStream(configDir, "*.png")) {
-            for (Path entry : stream) {
-                String fileName = entry.getFileName().toString();
-                String iconName = fileName.substring(0, fileName.lastIndexOf('.'));
-                paradigm$availableIcons.add(iconName);
-            }
-        } catch (IOException e) {
-            // Ignore
-        }
-
-        paradigm$iconsLoaded = true;
+        return ServerStatusIconCache.resolveBytes(iconName).map(ServerMetadata.Favicon::new);
     }
 
     @Unique

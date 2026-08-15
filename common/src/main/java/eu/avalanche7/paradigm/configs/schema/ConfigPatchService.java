@@ -16,6 +16,7 @@ import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.configs.ConfigEntry;
 import eu.avalanche7.paradigm.configs.CooldownConfigHandler;
+import eu.avalanche7.paradigm.configs.DiscordConfigHandler;
 import eu.avalanche7.paradigm.configs.MOTDConfigHandler;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.configs.MentionConfigHandler;
@@ -75,6 +76,7 @@ public class ConfigPatchService {
         boolean commandsChanged = false;
         boolean cooldownsChanged = false;
         boolean tablistChanged = false;
+        boolean discordChanged = false;
 
         for (ConfigPatchOperation op : patch.operations()) {
             String key = op != null ? normalizeKey(op.key()) : null;
@@ -125,6 +127,10 @@ public class ConfigPatchService {
                 } else if (key.startsWith("tablist.")) {
                     applyTablist(key.substring("tablist.".length()), value);
                     tablistChanged = true;
+                    result.accept(key);
+                } else if (key.startsWith("discord.")) {
+                    applyDiscord(key.substring("discord.".length()), value);
+                    discordChanged = true;
                     result.accept(key);
                 } else if (key.startsWith("commands.")) {
                     applyCommand(key.substring("commands.".length()), value, result, key);
@@ -188,6 +194,11 @@ public class ConfigPatchService {
         }
         if (cooldownsChanged) {
             CooldownConfigHandler.persistConfig();
+        }
+        if (discordChanged) {
+            DiscordConfigHandler.persistConfig();
+            scheduleServerThread(() -> services.getDiscordService().reload());
+            result.warn("Discord settings were saved and the connection was restarted.");
         }
         if (tablistChanged) {
             TablistConfigHandler.persistConfig();
@@ -406,6 +417,74 @@ public class ConfigPatchService {
             result.add(seconds);
         }
         return result;
+    }
+
+    private void applyDiscord(String fieldName, Object value) throws Exception {
+        if ("botToken".equals(fieldName)) {
+            throw new IllegalArgumentException("The Discord bot token cannot be set through a config patch.");
+        }
+        DiscordConfigHandler.Config config = DiscordConfigHandler.getConfig();
+        switch (fieldName) {
+            case "guildId", "chatChannelId", "moderationChannelId", "notificationChannelId",
+                    "serverChannelId", "deathsChannelId", "advancementsChannelId", "commandLogChannelId",
+                    "consoleChannelId" ->
+                    applyConfigEntry(DiscordConfigHandler.Config.class, config, fieldName,
+                            validateSnowflake(fieldName, value));
+            case "presenceType" -> applyConfigEntry(DiscordConfigHandler.Config.class, config, fieldName,
+                    validatePresenceType(value));
+            case "presenceUpdateSeconds" -> applyConfigEntry(DiscordConfigHandler.Config.class, config, fieldName,
+                    requireRange(fieldName, value, 15, 3_600));
+            case "outboundQueueSize" -> applyConfigEntry(DiscordConfigHandler.Config.class, config, fieldName,
+                    requireRange(fieldName, value, 16, 10_000));
+            case "shutdownFlushMillis" -> applyConfigEntry(DiscordConfigHandler.Config.class, config, fieldName,
+                    requireRange(fieldName, value, 0, 10_000));
+            case "countdownAnnounceSeconds" -> applyConfigEntry(DiscordConfigHandler.Config.class, config, fieldName,
+                    requireRange(fieldName, value, 0, 86_400));
+            case "consoleLogMinimumLevel" -> applyConfigEntry(DiscordConfigHandler.Config.class, config, fieldName,
+                    validateLogLevel(value));
+            case "consoleLogFlushSeconds" -> applyConfigEntry(DiscordConfigHandler.Config.class, config, fieldName,
+                    requireRange(fieldName, value, 1, 30));
+            default -> applyConfigEntry(DiscordConfigHandler.Config.class, config, fieldName, value);
+        }
+    }
+
+    static String validatePresenceType(Object value) {
+        String text = value != null ? value.toString().trim().toLowerCase(java.util.Locale.ROOT) : "";
+        return switch (text) {
+            case "custom", "playing", "watching", "listening", "competing" -> text;
+            default -> throw new IllegalArgumentException(
+                    "Discord presenceType must be custom, playing, watching, listening or competing.");
+        };
+    }
+
+    static String validateSnowflake(String fieldName, Object value) {
+        String text = value != null ? value.toString().trim() : "";
+        if (text.isEmpty()) {
+            return "";
+        }
+        if (!text.matches("\\d{5,25}")) {
+            throw new IllegalArgumentException("Discord " + fieldName + " must be a numeric ID (snowflake).");
+        }
+        return text;
+    }
+
+    static String validateLogLevel(Object value) {
+        String text = value != null ? value.toString().trim().toUpperCase(Locale.ROOT) : "";
+        return switch (text) {
+            case "TRACE", "DEBUG", "INFO", "WARN", "ERROR" -> text;
+            default -> throw new IllegalArgumentException(
+                    "Discord consoleLogMinimumLevel must be TRACE, DEBUG, INFO, WARN or ERROR.");
+        };
+    }
+
+    private static Integer requireRange(String fieldName, Object value, int min, int max) {
+        if (!(value instanceof Integer number)) {
+            throw new IllegalArgumentException("Discord " + fieldName + " must be a whole number.");
+        }
+        if (number < min || number > max) {
+            throw new IllegalArgumentException("Discord " + fieldName + " must be between " + min + " and " + max + ".");
+        }
+        return number;
     }
 
     private void applyDashboard(String fieldName, Object value) {

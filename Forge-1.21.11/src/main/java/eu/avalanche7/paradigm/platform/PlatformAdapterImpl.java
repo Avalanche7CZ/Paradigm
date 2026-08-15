@@ -781,10 +781,13 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public Object getConsoleCommandSource() {
+        return server != null ? server.createCommandSourceStack() : null;
+    }
+
     public void executeCommandAsConsole(String command) {
         if (server == null || command == null) return;
-        CommandSourceStack console = server.createCommandSourceStack();
-        server.getCommands().performPrefixedCommand(console, command);
+        server.getCommands().performPrefixedCommand((CommandSourceStack) getConsoleCommandSource(), command);
     }
 
     @Override

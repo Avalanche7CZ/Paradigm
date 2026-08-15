@@ -23,6 +23,10 @@ public class AuditService {
         try {
             active = services.getStorageService().audit();
         } catch (RuntimeException storageUnavailable) {
+            if (services.getLogger() != null) {
+                services.getLogger().warn("[Paradigm] Audit: active storage repository is unavailable; "
+                        + "falling back to the JSON audit log.", storageUnavailable);
+            }
             active = new JsonAuditRepository(services.getPlatformAdapter().getConfig(), services.getLogger());
         }
         this.repository = active;
@@ -30,6 +34,10 @@ public class AuditService {
 
     public void dashboard(DashboardPrincipal actor, AuditActionType type, AuditResult result, String message, Map<String, String> details) {
         append(entry(actor != null ? actor.uuid() : "", actor != null ? actor.name() : "", AuditSource.DASHBOARD, type, result, message, details));
+    }
+
+    public void discord(String actorId, String actorName, AuditActionType type, AuditResult result, String message, Map<String, String> details) {
+        append(entry(actorId != null ? actorId : "", actorName != null ? actorName : "", AuditSource.DISCORD, type, result, message, details));
     }
 
     public void command(ICommandSource source, AuditActionType type, AuditResult result, String message, Map<String, String> details) {
@@ -67,7 +75,15 @@ public class AuditService {
     }
 
     private void append(AuditEntry entry) {
-        CompletableFuture.runAsync(() -> repository.append(entry), executor);
+        CompletableFuture.runAsync(() -> repository.append(entry), executor)
+                .exceptionally(failure -> {
+                    Throwable reported = failure.getCause() != null ? failure.getCause() : failure;
+                    if (services.getLogger() != null) {
+                        services.getLogger().warn("[Paradigm] Audit: asynchronous append failed; audit entry {} was not persisted.",
+                                entry.id(), reported);
+                    }
+                    return null;
+                });
     }
 
     private AuditEntry entry(String actorUuid, String actorName, AuditSource source, AuditActionType type, AuditResult result, String message, Map<String, String> details) {

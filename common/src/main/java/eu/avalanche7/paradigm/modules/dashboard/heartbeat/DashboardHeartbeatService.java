@@ -17,11 +17,13 @@ import com.google.gson.reflect.TypeToken;
 import org.slf4j.Logger;
 
 import eu.avalanche7.paradigm.ParadigmAPI;
+import eu.avalanche7.paradigm.configs.schema.ConfigSchemaRegistry;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardConfig;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.storage.StorageService;
+import eu.avalanche7.paradigm.storage.managedconfig.ServerInstanceInfo;
 
 public class DashboardHeartbeatService {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
@@ -56,32 +58,35 @@ public class DashboardHeartbeatService {
         synchronized (lock) {
             snapshots = loadLocked();
         }
-        snapshots.put(local.serverId(), local);
 
         StorageService storage = services.getStorageService();
-        if (storage != null && storage.isSqlActive()) {
+        if (storage != null && storage.isMysqlActive()) {
             try {
-                for (var identity : storage.servers().listServers()) {
-                    snapshots.putIfAbsent(identity.serverId(), new DashboardHeartbeat(
-                            identity.serverId(),
-                            identity.networkId(),
-                            identity.serverName(),
-                            ParadigmAPI.getModVersion(),
+                for (ServerInstanceInfo instance : storage.servers().listServerInstances()) {
+                    snapshots.put(instance.serverId(), new DashboardHeartbeat(
+                            instance.serverId(),
+                            instance.networkId(),
+                            instance.serverName(),
+                            instance.modVersion(),
+                            instance.minecraftVersion(),
+                            instance.loader(),
+                            instance.schemaFingerprint(),
                             "sql",
                             "unknown",
                             false,
                             0,
                             0,
                             0,
-                            0L
+                            instance.lastSeenMs()
                     ));
                 }
             } catch (Throwable t) {
                 if (logger != null) {
-                    logger.warn("Paradigm Dashboard: failed to list SQL server identities for heartbeat view: {}", t.getMessage());
+                    logger.warn("Paradigm Dashboard: failed to list SQL server instances for heartbeat view: {}", t.getMessage());
                 }
             }
         }
+        snapshots.put(local.serverId(), local);
 
         long now = System.currentTimeMillis();
         List<Map<String, Object>> rows = new ArrayList<>();
@@ -94,6 +99,9 @@ public class DashboardHeartbeatService {
             row.put("networkId", hb.networkId());
             row.put("serverName", hb.serverName());
             row.put("version", hb.version());
+            row.put("minecraftVersion", hb.minecraftVersion());
+            row.put("loader", hb.loader());
+            row.put("schemaFingerprint", hb.schemaFingerprint());
             row.put("activeProvider", hb.activeProvider());
             row.put("storageHealth", hb.storageHealth());
             row.put("dashboardEnabled", hb.dashboardEnabled());
@@ -127,6 +135,9 @@ public class DashboardHeartbeatService {
                 storage.serverIdentity().networkId(),
                 storage.serverIdentity().serverName(),
                 ParadigmAPI.getModVersion(),
+                safeMinecraftVersion(),
+                safeLoaderName(),
+                new ConfigSchemaRegistry(services).structuralFingerprint(),
                 storage.activeProvider(),
                 storage.repositoriesAvailable() ? "available" : "unavailable",
                 dashboardConfig != null && (dashboardConfig.enabled || dashboardRunning),
@@ -135,6 +146,22 @@ public class DashboardHeartbeatService {
                 enabled,
                 System.currentTimeMillis()
         );
+    }
+
+    private String safeMinecraftVersion() {
+        try {
+            return services.getPlatformAdapter().getMinecraftVersion();
+        } catch (Throwable ignored) {
+            return "";
+        }
+    }
+
+    private String safeLoaderName() {
+        try {
+            return services.getPlatformAdapter().getLoaderName();
+        } catch (Throwable ignored) {
+            return "";
+        }
     }
 
     private int safeOnlinePlayers() {

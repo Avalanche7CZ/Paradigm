@@ -82,13 +82,7 @@ public class ClickTag implements Tag {
             value = value.substring(1, value.length() - 1);
         }
 
-        if (action == ClickAction.RUN_COMMAND || action == ClickAction.RUN_COMMAND_ALT) {
-            while (value.startsWith("/")) {
-                value = value.substring(1);
-            }
-        }
-
-        if ((action == ClickAction.EXECUTE || action == ClickAction.EXECUTE_ALT) && !value.startsWith("/")) {
+        if ("RUN_COMMAND".equals(action.getActionName()) && !value.startsWith("/")) {
             value = "/" + value;
         }
 

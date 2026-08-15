@@ -440,6 +440,7 @@ public class StorageService implements AutoCloseable {
     public ModerationRepository moderation() { return requireProvider().moderation(); }
     public AdminStateRepository adminState() { return requireProvider().adminState(); }
     public ServerRepository servers() { return requireProvider().servers(); }
+    public eu.avalanche7.paradigm.storage.repository.ManagedConfigRepository managedConfig() { return requireProvider().managedConfig(); }
     public AuditRepository audit() { return requireProvider().audit(); }
     public StorageContext context() { return context; }
     public StorageConfig config() { return config; }
@@ -447,6 +448,11 @@ public class StorageService implements AutoCloseable {
     public boolean isSqlActive() {
         StorageProvider provider = activeProvider;
         return provider != null && provider.type() != StorageProviderType.JSON;
+    }
+
+    public boolean isMysqlActive() {
+        StorageProvider provider = activeProvider;
+        return provider != null && provider.type() == StorageProviderType.MYSQL;
     }
 
     private StorageProvider requireProvider() {
@@ -550,6 +556,10 @@ public class StorageService implements AutoCloseable {
                     activeProvider.close();
                 }
             } catch (Exception failure) {
+                if (logger != null) {
+                    logger.warn("[Paradigm] Storage shutdown: failed to close the active {} provider.",
+                            activeProvider != null ? activeProvider.type().configValue() : "unknown", failure);
+                }
                 if (debugLogger != null) {
                     debugLogger.debugLog("StorageService close failed: " + failure);
                 }
@@ -557,6 +567,9 @@ public class StorageService implements AutoCloseable {
             try {
                 runtimeJdbcDriverProvider.close();
             } catch (Exception failure) {
+                if (logger != null) {
+                    logger.warn("[Paradigm] Storage shutdown: failed to close the runtime JDBC driver provider.", failure);
+                }
                 if (debugLogger != null) {
                     debugLogger.debugLog("Runtime JDBC close failed: " + failure);
                 }

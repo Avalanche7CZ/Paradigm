@@ -38,6 +38,8 @@ public final class ParadigmPermissions {
             def("paradigm.tablist.manage", OP, "Allows viewing status and forcing refresh/reload of the Paradigm tablist with /paradigm tablist.");
     public static final PermissionDefinition GROUP_MANAGE =
             def("paradigm.group.manage", OP, "Allows managing internal permission groups via /paradigm group.");
+    public static final PermissionDefinition DISCORD_MANAGE =
+            def("paradigm.discord.manage", OP, "Allows viewing status, reconnecting and sending test messages for the Discord integration with /paradigm discord.");
     public static final PermissionDefinition PRIVATE_MESSAGE =
             def("paradigm.msg", EVERYONE, "Allows sending private messages with /msg.");
     public static final PermissionDefinition PRIVATE_REPLY =
@@ -174,7 +176,7 @@ public final class ParadigmPermissions {
 
     private static final List<PermissionDefinition> ALL = List.of(
             STAFF_CHAT, MENTION_EVERYONE, MENTION_PLAYER, RESTART_MANAGE, BROADCAST, GROUP_CHAT,
-            RELOAD, COMMAND_TOGGLE, HOLOGRAM_MANAGE, STORAGE_MANAGE, TABLIST_MANAGE, GROUP_MANAGE,
+            RELOAD, COMMAND_TOGGLE, HOLOGRAM_MANAGE, STORAGE_MANAGE, TABLIST_MANAGE, GROUP_MANAGE, DISCORD_MANAGE,
             PRIVATE_MESSAGE, PRIVATE_REPLY, SOCIAL_SPY, SPAWN, SET_SPAWN, SEEN, IGNORE,
             GAMEMODE, GAMEMODE_OTHERS, FLY, FLY_OTHERS, CLEAR_INVENTORY, CLEAR_INVENTORY_OTHERS,
             TIME, WEATHER, SPEED, SPEED_OTHERS, FEED, FEED_OTHERS, HEAL, HEAL_OTHERS,

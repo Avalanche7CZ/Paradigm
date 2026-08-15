@@ -47,6 +47,7 @@ import eu.avalanche7.paradigm.modules.commands.moderation.TempBanCommand;
 import eu.avalanche7.paradigm.modules.commands.moderation.TempMuteCommand;
 import eu.avalanche7.paradigm.modules.commands.moderation.WarnCommand;
 import eu.avalanche7.paradigm.modules.dashboard.LocalDashboardModule;
+import eu.avalanche7.paradigm.modules.discord.DiscordModule;
 import eu.avalanche7.paradigm.modules.holograms.Holograms;
 import eu.avalanche7.paradigm.modules.tab.Tablist;
 import eu.avalanche7.paradigm.utils.GroupChatManager;
@@ -81,6 +82,7 @@ public final class ParadigmModules {
         modules.add(new PrivateMessages());
         modules.add(new GroupChat(groupChatManager));
         modules.add(new JoinLeaveMessages());
+        modules.add(new DiscordModule());
     }
 
     private static void playerCommands(List<ParadigmModule> modules) {

@@ -561,6 +561,25 @@
       "rate_limited": "Слишком много запросов к панели."
     }
   },
+  "discord": {
+    "status": {
+      "state": "Discord: {state}",
+      "relay": "Ретрансляция: Minecraft в Discord {out}, Discord в Minecraft {in}",
+      "queue": "Очередь: {depth} в ожидании, {sent} отправлено, {dropped} отброшено, {failed} с ошибкой",
+      "heartbeat": "Heartbeat: {heartbeat}"
+    },
+    "reconnect": {
+      "requested": "Переподключаюсь к Discord."
+    },
+    "test": {
+      "queued": "Тестовое сообщение поставлено в очередь для назначения {destination}.",
+      "failed": "Не удалось поставить тестовое сообщение Discord в очередь.",
+      "unknown_destination": "Неизвестное назначение. Используйте chat, moderation или notifications."
+    },
+    "error": {
+      "disabled": "Интеграция с Discord отключена или настроена не полностью."
+    }
+  },
   "audit": {
     "recent": {
       "header": "Последние записи аудита:",

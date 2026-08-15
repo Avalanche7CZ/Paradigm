@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
 import eu.avalanche7.paradigm.storage.identity.StorageContext;
+import eu.avalanche7.paradigm.storage.managedconfig.ServerInstanceInfo;
 import eu.avalanche7.paradigm.storage.repository.ServerRepository;
 
 public class JsonServerRepository implements ServerRepository {
@@ -25,5 +26,17 @@ public class JsonServerRepository implements ServerRepository {
     @Override
     public Optional<ServerIdentity> getServer(String serverId) {
         return listServers().stream().filter(server -> server.serverId().equalsIgnoreCase(serverId)).findFirst();
+    }
+
+    @Override public void publishHeartbeat(ServerInstanceInfo info) {}
+
+    @Override
+    public List<ServerInstanceInfo> listServerInstances() {
+        return List.of();
+    }
+
+    @Override
+    public Optional<ServerInstanceInfo> getServerInstance(String serverId) {
+        return Optional.empty();
     }
 }

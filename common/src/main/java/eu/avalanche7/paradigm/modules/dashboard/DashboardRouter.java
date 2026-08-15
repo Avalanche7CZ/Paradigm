@@ -6,10 +6,12 @@ import eu.avalanche7.paradigm.modules.dashboard.api.AuditApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.AuthApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.ConfigApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.CustomCommandApiHandler;
+import eu.avalanche7.paradigm.modules.dashboard.api.DiscordApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.HologramApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.ModerationApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.OverviewApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.PermissionsApiHandler;
+import eu.avalanche7.paradigm.modules.dashboard.api.RemoteConfigApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.ServerApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.StaticAssetHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.StorageApiHandler;
@@ -25,7 +27,9 @@ public class DashboardRouter {
     private final OverviewApiHandler overview;
     private final ServerApiHandler servers;
     private final StorageApiHandler storage;
+    private final DiscordApiHandler discord;
     private final ConfigApiHandler config;
+    private final RemoteConfigApiHandler remoteConfig;
     private final CustomCommandApiHandler customCommands;
     private final PermissionsApiHandler permissions;
     private final ModerationApiHandler moderation;
@@ -39,7 +43,9 @@ public class DashboardRouter {
         this.overview = new OverviewApiHandler(dashboard);
         this.servers = new ServerApiHandler(dashboard);
         this.storage = new StorageApiHandler(dashboard);
+        this.discord = new DiscordApiHandler(dashboard);
         this.config = new ConfigApiHandler(dashboard);
+        this.remoteConfig = new RemoteConfigApiHandler(dashboard);
         this.customCommands = new CustomCommandApiHandler(dashboard);
         this.permissions = new PermissionsApiHandler(dashboard);
         this.moderation = new ModerationApiHandler(dashboard);
@@ -85,6 +91,14 @@ public class DashboardRouter {
                 if ("GET".equals(method) && "/api/storage/configuration".equals(path)) return storage.configuration(ctx);
                 if ("POST".equals(method) && "/api/storage/configuration".equals(path)) return storage.saveConfiguration(ctx);
                 if ("POST".equals(method) && "/api/storage/configuration/test".equals(path)) return storage.testConfiguration(ctx);
+                if (path.startsWith("/api/discord")
+                        && !dashboard.hasPermission(ctx.principal(), ParadigmPermissions.DISCORD_MANAGE)) {
+                    return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to manage the Discord integration.");
+                }
+                if ("GET".equals(method) && "/api/discord/status".equals(path)) return discord.status(ctx);
+                if ("POST".equals(method) && "/api/discord/token".equals(path)) return discord.saveToken(ctx);
+                if ("POST".equals(method) && "/api/discord/test".equals(path)) return discord.test(ctx);
+                if ("POST".equals(method) && "/api/discord/reconnect".equals(path)) return discord.reconnect(ctx);
                 if (path.startsWith("/api/config/") && mutating(method)
                         && !dashboard.hasPermission(ctx.principal(), DashboardPermission.CONFIG_EDIT, 4)) {
                     return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to edit configuration.");
@@ -92,6 +106,15 @@ public class DashboardRouter {
                 if ("GET".equals(method) && "/api/config/snapshot".equals(path)) return config.snapshot(ctx);
                 if ("POST".equals(method) && "/api/config/patch".equals(path)) return config.patch(ctx);
                 if ("POST".equals(method) && "/api/config/apply".equals(path)) return config.apply(ctx);
+
+                if (path.startsWith("/api/remote-config/") && !dashboard.services().getStorageService().isMysqlActive()) {
+                    return DashboardResponse.apiError(409, "sql_required", "Remote server management requires shared MySQL storage.");
+                }
+                if ("GET".equals(method) && "/api/remote-config/snapshot".equals(path)) return remoteConfig.snapshot(ctx);
+                if ("POST".equals(method) && "/api/remote-config/patch".equals(path)) return remoteConfig.patch(ctx);
+                if ("POST".equals(method) && "/api/remote-config/copy".equals(path)) return remoteConfig.copy(ctx);
+                if ("POST".equals(method) && "/api/remote-config/adopt".equals(path)) return remoteConfig.adopt(ctx);
+
                 if ("GET".equals(method) && "/api/audit/recent".equals(path)) return audit.recent(ctx);
 
                 if (path.startsWith("/api/holograms")

@@ -5,6 +5,7 @@
   "mixins": [
     "PlayerManagerMixin",
     "ServerPlayNetworkHandlerMixin",
+    "PlayerAdvancementMixin",
     "ServerStatusMixin",
     "PlayerListMixin",
     "ServerPlayerTablistMixin",

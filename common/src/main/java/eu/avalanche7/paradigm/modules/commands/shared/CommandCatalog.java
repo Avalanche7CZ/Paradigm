@@ -105,7 +105,8 @@ public final class CommandCatalog {
             entry("reload", true, false, true, "reload"),
             entry("paradigm.help", true, false, false, "help"),
             entry("paradigm.command", true, true, false, "command", "commands"),
-            entry("paradigm.dashboard", true, true, false, "dashboard")
+            entry("paradigm.dashboard", true, true, false, "dashboard"),
+            entry("paradigm.discord", true, true, false, "discord")
     );
 
     private static final Set<String> OWNED_ROOTS;

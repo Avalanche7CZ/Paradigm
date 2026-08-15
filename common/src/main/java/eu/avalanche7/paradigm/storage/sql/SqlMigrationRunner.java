@@ -113,6 +113,8 @@ public class SqlMigrationRunner implements MigrationRunner {
                 case 4 -> "audit";
                 case 5 -> "permission_assignments";
                 case 6 -> "punishment_ledger";
+                case 7 -> "managed_config";
+                case 8 -> "server_instances_metadata";
                 default -> "migration";
             } + ".sql";
             String sql = resourceText(resource);

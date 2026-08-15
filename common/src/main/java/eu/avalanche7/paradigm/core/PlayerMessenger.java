@@ -51,6 +51,10 @@ public final class PlayerMessenger {
         try {
             platform.sendSystemMessage(player, parser.parseMessage(formatted, player));
         } catch (RuntimeException failure) {
+            if (logger != null) {
+                logger.warn("[Paradigm] Messaging: failed to parse or send a system message to player {}.",
+                        player.getName(), failure);
+            }
             if (debugLogger != null) {
                 debugLogger.debugLog("Failed to send command message to player: " + failure);
             }

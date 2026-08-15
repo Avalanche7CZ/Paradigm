@@ -561,6 +561,25 @@
       "rate_limited": "Příliš mnoho požadavků na dashboard."
     }
   },
+  "discord": {
+    "status": {
+      "state": "Discord: {state}",
+      "relay": "Přenos: Minecraft do Discordu {out}, Discord do Minecraftu {in}",
+      "queue": "Fronta: {depth} čeká, {sent} odesláno, {dropped} zahozeno, {failed} selhalo",
+      "heartbeat": "Heartbeat: {heartbeat}"
+    },
+    "reconnect": {
+      "requested": "Znovu se připojuji k Discordu."
+    },
+    "test": {
+      "queued": "Testovací zpráva byla zařazena pro cíl {destination}.",
+      "failed": "Testovací zprávu pro Discord se nepodařilo zařadit.",
+      "unknown_destination": "Neznámý cíl. Použij chat, moderation nebo notifications."
+    },
+    "error": {
+      "disabled": "Integrace s Discordem je vypnutá nebo není plně nastavená."
+    }
+  },
   "audit": {
     "recent": {
       "header": "Poslední audit záznamy:",

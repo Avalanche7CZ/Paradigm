@@ -64,6 +64,10 @@ public interface IPlatformAdapter {
         return null;
     }
 
+    default Object getConsoleCommandSource() {
+        return null;
+    }
+
     default ICommandSource createCommandSourceForPlayer(IPlayer player) {
         return null;
     }

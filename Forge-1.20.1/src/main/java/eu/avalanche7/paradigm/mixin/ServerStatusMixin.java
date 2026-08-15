@@ -1,311 +1,213 @@
 package eu.avalanche7.paradigm.mixin;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
+
+import com.mojang.authlib.GameProfile;
 import eu.avalanche7.paradigm.Paradigm;
 import eu.avalanche7.paradigm.configs.MOTDConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.platform.MinecraftComponent;
+import eu.avalanche7.paradigm.utils.ServerStatusDiagnostics;
+import eu.avalanche7.paradigm.utils.ServerStatusIconCache;
 import net.minecraft.network.Connection;
+import net.minecraft.network.PacketSendListener;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.status.ClientboundStatusResponsePacket;
 import net.minecraft.network.protocol.status.ServerStatus;
 import net.minecraft.network.protocol.status.ServerboundStatusRequestPacket;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerStatusPacketListenerImpl;
-import net.minecraftforge.fml.loading.FMLPaths;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.lang.reflect.Field;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.*;
-
 @Mixin(ServerStatusPacketListenerImpl.class)
 public abstract class ServerStatusMixin {
+    @Shadow(remap = false)
+    private boolean hasRequestedStatus;
 
     @Unique
-    private Connection paradigm$getConnection() {
-        try {
-            for (Field field : ServerStatusPacketListenerImpl.class.getDeclaredFields()) {
-                if (Connection.class.isAssignableFrom(field.getType())) {
-                    field.setAccessible(true);
-                    return (Connection) field.get(this);
-                }
-            }
-        } catch (Exception e) {
-        }
-        return null;
+    private Connection paradigm$connection;
+
+    @Unique
+    private ServerStatus paradigm$status;
+
+    @Inject(method = "<init>(Lnet/minecraft/network/protocol/status/ServerStatus;Lnet/minecraft/network/Connection;)V",
+            at = @At("RETURN"), remap = false)
+    private void paradigm$captureConnection(ServerStatus status, Connection connection, CallbackInfo ci) {
+        this.paradigm$status = status;
+        this.paradigm$connection = connection;
     }
 
-    @Unique
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private Optional paradigm$getForgeDataSafe(ServerStatus status) {
-        try {
-            try {
-                Object result = ServerStatus.class.getMethod("forgeData").invoke(status);
-                if (result instanceof Optional) {
-                    return (Optional) result;
-                }
-            } catch (NoSuchMethodException ignored) {}
-
-            for (Field field : ServerStatus.class.getDeclaredFields()) {
-                field.setAccessible(true);
-                Object value = field.get(status);
-                if (value instanceof Optional) {
-                    Optional opt = (Optional) value;
-                    if (opt.isPresent()) {
-                        Object obj = opt.get();
-                        String className = obj.getClass().getName();
-                        if (className.toLowerCase().contains("forge")) {
-                            return opt;
-                        }
-                    }
-                }
-            }
-        } catch (Exception e) {
-        }
-        return Optional.empty();
+    @Inject(method = "<init>(Lnet/minecraft/network/protocol/status/ServerStatus;Lnet/minecraft/network/Connection;Ljava/lang/String;)V",
+            at = @At("RETURN"), remap = false)
+    private void paradigm$captureCachedConnection(ServerStatus status, Connection connection, String statusCache,
+                                                   CallbackInfo ci) {
+        this.paradigm$status = status;
+        this.paradigm$connection = connection;
     }
 
-    @Unique
-    private static final Map<String, ServerStatus.Favicon> paradigm$iconCache = new HashMap<>();
-
-    @Unique
-    private static final List<String> paradigm$availableIcons = new ArrayList<>();
-
-    @Unique
-    private static boolean paradigm$iconsLoaded = false;
-
-    @Inject(method = "*(Lnet/minecraft/network/protocol/status/ServerboundStatusRequestPacket;)V", at = @At("HEAD"), cancellable = true, remap = false)
+    @Inject(method = "*(Lnet/minecraft/network/protocol/status/ServerboundStatusRequestPacket;)V",
+            at = @At("HEAD"), cancellable = true, remap = false)
     private void paradigm$modifyStatusRequest(ServerboundStatusRequestPacket packet, CallbackInfo ci) {
         Services services = Paradigm.getServices();
         if (services == null) {
+            ServerStatusDiagnostics.servicesUnavailable("Forge-1.20.1");
             return;
         }
 
-        MOTDConfigHandler.Config cfg = services.getMotdConfig();
-        if (cfg == null) {
+        Connection connection = this.paradigm$connection;
+        if (connection == null) {
+            ServerStatusDiagnostics.customizationFailed(services, "Forge-1.20.1", "unknown",
+                    new IllegalStateException("status listener connection was not captured"));
             return;
         }
-
-        if (!Boolean.TRUE.equals(cfg.serverlistMotdEnabled.get())) {
+        MOTDConfigHandler.Config config = services.getMotdConfig();
+        boolean enabled = config != null && Boolean.TRUE.equals(config.serverlistMotdEnabled.value);
+        List<MOTDConfigHandler.ServerListMOTD> motds = config != null ? config.motds.value : null;
+        String remoteAddress = String.valueOf(connection.getRemoteAddress());
+        ServerStatusDiagnostics.received(services, "Forge-1.20.1", remoteAddress, enabled,
+                motds != null ? motds.size() : 0);
+        if (!enabled) {
+            ServerStatusDiagnostics.vanillaFallback(services, "Forge-1.20.1", remoteAddress,
+                    config == null ? "MOTD config unavailable" : "custom MOTD disabled");
             return;
         }
-
-        java.util.List<MOTDConfigHandler.ServerListMOTD> motds = cfg.motds.get();
         if (motds == null || motds.isEmpty()) {
+            ServerStatusDiagnostics.vanillaFallback(services, "Forge-1.20.1", remoteAddress, "no MOTDs configured");
             return;
         }
-
+        if (this.hasRequestedStatus) {
+            ServerStatusDiagnostics.vanillaFallback(services, "Forge-1.20.1", remoteAddress,
+                    "vanilla duplicate-request handling");
+            return;
+        }
         try {
-            MinecraftServer server = (MinecraftServer) services.getPlatformAdapter().getMinecraftServer();
-
-            if (server == null) {
+            ServerStatus original = this.paradigm$status;
+            if (original == null) {
+                ServerStatusDiagnostics.vanillaFallback(services, "Forge-1.20.1", remoteAddress,
+                        "vanilla status unavailable");
                 return;
             }
+            MOTDConfigHandler.ServerListMOTD selected = motds.get(ThreadLocalRandom.current().nextInt(motds.size()));
+            String line1 = selected.line1 != null ? selected.line1 : "";
+            String line2 = selected.line2 != null ? selected.line2 : "";
+            Optional<ServerStatus.Favicon> favicon = Boolean.TRUE.equals(config.iconEnabled.value)
+                    ? ServerStatusIconCache.resolveBytes(selected.icon).map(ServerStatus.Favicon::new)
+                    : Optional.empty();
 
-            ServerStatus originalStatus = server.getStatus();
-            if (originalStatus == null) {
-                return;
-            }
+            ServerStatus modified = new ServerStatus(
+                    paradigm$buildMotd(services, line1, line2),
+                    paradigm$customPlayers(selected.playerCount, original.players(), services),
+                    original.version(),
+                    favicon.isPresent() ? favicon : original.favicon(),
+                    original.enforcesSecureChat(),
+                    original.forgeData());
 
-            MOTDConfigHandler.ServerListMOTD selectedMotd = motds.get(new Random().nextInt(motds.size()));
-
-            String line1 = selectedMotd.line1 != null ? selectedMotd.line1 : "";
-            String line2 = selectedMotd.line2 != null ? selectedMotd.line2 : "";
-
-            Component motdComponent;
-            try {
-                eu.avalanche7.paradigm.platform.Interfaces.IComponent parsedLine1 = services.getMessageParser().parseMessage(line1, null);
-                eu.avalanche7.paradigm.platform.Interfaces.IComponent parsedLine2 = services.getMessageParser().parseMessage(line2, null);
-
-                if (parsedLine1 instanceof eu.avalanche7.paradigm.platform.MinecraftComponent mc1 &&
-                    parsedLine2 instanceof eu.avalanche7.paradigm.platform.MinecraftComponent mc2) {
-                    motdComponent = mc1.getHandle().copy().append(Component.literal("\n")).append(mc2.getHandle());
-                } else {
-                    motdComponent = Component.literal(line1).append("\n").append(Component.literal(line2));
+            ServerStatusDiagnostics.constructed(services, "Forge-1.20.1", remoteAddress);
+            connection.send(new ClientboundStatusResponsePacket(modified), new PacketSendListener() {
+                @Override
+                public void onSuccess() {
+                    ServerStatusDiagnostics.sent(services, "Forge-1.20.1", remoteAddress);
                 }
-            } catch (Exception parseError) {
-                motdComponent = Component.literal(line1).append("\n").append(Component.literal(line2));
-            }
 
-            Optional<ServerStatus.Favicon> favicon = Optional.empty();
-
-            if (Boolean.TRUE.equals(cfg.iconEnabled.get())) {
-                favicon = paradigm$loadIcon(selectedMotd.icon);
-            }
-
-            if (favicon.isEmpty()) {
-                favicon = originalStatus.favicon();
-            }
-
-            Optional<ServerStatus.Players> players = originalStatus.players();
-            if (selectedMotd.playerCount != null) {
-                players = paradigm$createCustomPlayerCount(selectedMotd.playerCount, originalStatus.players(), services);
-            }
-
-            ServerStatus modifiedStatus = new ServerStatus(
-                motdComponent,
-                players,
-                originalStatus.version(),
-                favicon,
-                originalStatus.enforcesSecureChat(),
-                paradigm$getForgeDataSafe(originalStatus)
-            );
-
-            Connection conn = paradigm$getConnection();
-            if (conn != null) {
-                conn.send(new ClientboundStatusResponsePacket(modifiedStatus));
-                ci.cancel();
-            }
-        } catch (Exception e) {
+                @Override
+                public net.minecraft.network.protocol.Packet<?> onFailure() {
+                    ServerStatusDiagnostics.sendFailed(services, "Forge-1.20.1", remoteAddress, null);
+                    return new ClientboundStatusResponsePacket(original);
+                }
+            });
+            this.hasRequestedStatus = true;
+            ServerStatusDiagnostics.queued(services, "Forge-1.20.1", remoteAddress);
+            ci.cancel();
+        } catch (Throwable failure) {
+            ServerStatusDiagnostics.customizationFailed(services, "Forge-1.20.1", remoteAddress, failure);
+            ServerStatusDiagnostics.vanillaFallback(services, "Forge-1.20.1", remoteAddress,
+                    "custom response construction or enqueue failed");
         }
     }
 
     @Unique
-    private void paradigm$setDescription(ServerStatus status, Component description) {
+    private Component paradigm$buildMotd(Services services, String line1, String line2) {
         try {
-            for (Field field : ServerStatus.class.getDeclaredFields()) {
-                if (field.getType() == Component.class) {
-                    field.setAccessible(true);
-                    field.set(status, description);
-                    return;
-                }
+            var parsed1 = services.getMessageParser().parseMessage(line1, null);
+            var parsed2 = services.getMessageParser().parseMessage(line2, null);
+            if (parsed1 instanceof MinecraftComponent first && parsed2 instanceof MinecraftComponent second) {
+                return first.getHandle().copy().append(Component.literal("\n")).append(second.getHandle());
             }
-        } catch (Exception e) {
+        } catch (RuntimeException parseFailure) {
+            services.getDebugLogger().debugLog("Server status [Forge-1.20.1]: MOTD parsing failed; using literal text.");
         }
+        return Component.literal(line1).append("\n").append(Component.literal(line2));
     }
 
     @Unique
-    private void paradigm$setFavicon(ServerStatus status, ServerStatus.Favicon favicon) {
-        try {
-            for (Field field : ServerStatus.class.getDeclaredFields()) {
-                field.setAccessible(true);
-                Object value = field.get(status);
-                if (value instanceof Optional) {
-                    Optional<?> opt = (Optional<?>) value;
-                    if (opt.isEmpty() || opt.get() instanceof ServerStatus.Favicon) {
-                        field.set(status, Optional.of(favicon));
-                        return;
-                    }
-                }
-            }
-        } catch (Exception e) {
+    private Optional<ServerStatus.Players> paradigm$customPlayers(MOTDConfigHandler.PlayerCountDisplay custom,
+                                                                   Optional<ServerStatus.Players> original,
+                                                                   Services services) {
+        if (custom == null) {
+            return original;
         }
+        int online = original.map(ServerStatus.Players::online).orElse(0);
+        int max = custom.maxPlayers != null ? custom.maxPlayers : original.map(ServerStatus.Players::max).orElse(100);
+        List<GameProfile> sample = new ArrayList<>();
+        if (custom.hoverText != null && !custom.hoverText.isEmpty()) {
+            for (String line : custom.hoverText.split("\\n")) {
+                if (line == null || line.isEmpty()) {
+                    continue;
+                }
+                sample.add(new GameProfile(UUID.randomUUID(), paradigm$sampleText(services, line)));
+            }
+        } else {
+            original.ifPresent(players -> sample.addAll(players.sample()));
+        }
+        return Optional.of(new ServerStatus.Players(max,
+                custom.showActualCount ? online : Math.max(0, max - 1), sample));
     }
 
     @Unique
-    private void paradigm$setPlayers(ServerStatus status, ServerStatus.Players players) {
+    private String paradigm$sampleText(Services services, String line) {
         try {
-            for (Field field : ServerStatus.class.getDeclaredFields()) {
-                if (field.getType().getName().contains("Players") || field.getType().getSimpleName().equals("Players")) {
-                    field.setAccessible(true);
-                    Object value = field.get(status);
-                    if (value instanceof Optional) {
-                        field.set(status, Optional.of(players));
-                    } else {
-                        field.set(status, players);
-                    }
-                    return;
-                }
+            var parsed = services.getMessageParser().parseMessage(line, null);
+            if (parsed instanceof MinecraftComponent component) {
+                return paradigm$componentToLegacyText(component.getHandle());
             }
-        } catch (Exception e) {
-        }
-    }
-
-    @Unique
-    private Optional<ServerStatus.Players> paradigm$createCustomPlayerCount(
-            MOTDConfigHandler.PlayerCountDisplay customDisplay,
-            Optional<ServerStatus.Players> originalPlayers,
-            Services services) {
-
-        if (customDisplay == null) {
-            return originalPlayers;
-        }
-
-        try {
-            int onlineCount = originalPlayers.map(ServerStatus.Players::online).orElse(0);
-            int maxCount = customDisplay.maxPlayers != null ? customDisplay.maxPlayers :
-                          originalPlayers.map(ServerStatus.Players::max).orElse(100);
-
-            List<com.mojang.authlib.GameProfile> playerSample = new ArrayList<>();
-
-            if (customDisplay.hoverText != null && !customDisplay.hoverText.isEmpty()) {
-                String[] lines = customDisplay.hoverText.split("\\n");
-
-                for (String line : lines) {
-                    if (line.isEmpty()) continue;
-
-                    eu.avalanche7.paradigm.platform.Interfaces.IComponent parsedLine =
-                        services.getMessageParser().parseMessage(line, null);
-
-                    Component lineComponent;
-                    if (parsedLine instanceof eu.avalanche7.paradigm.platform.MinecraftComponent mc) {
-                        lineComponent = mc.getHandle();
-                    } else {
-                        lineComponent = Component.literal(line);
-                    }
-
-                    String plainText = paradigm$componentToLegacyText(lineComponent);
-                    playerSample.add(new com.mojang.authlib.GameProfile(java.util.UUID.randomUUID(), plainText));
-                }
-            } else if (originalPlayers.isPresent()) {
-                List<com.mojang.authlib.GameProfile> originalSample = originalPlayers.get().sample();
-                if (originalSample != null && !originalSample.isEmpty()) {
-                    playerSample = new ArrayList<>(originalSample);
-                }
-            }
-
-            int displayCount = customDisplay.showActualCount ? onlineCount : Math.max(0, maxCount - 1);
-
-            return Optional.of(new ServerStatus.Players(
-                maxCount,
-                displayCount,
-                playerSample
-            ));
-        } catch (Exception e) {
-            return originalPlayers;
+            return parsed.getRawText();
+        } catch (RuntimeException parseFailure) {
+            return line;
         }
     }
 
     @Unique
     private String paradigm$componentToLegacyText(Component component) {
         StringBuilder result = new StringBuilder();
-        paradigm$appendComponentLegacy(component, result);
+        component.visit((style, text) -> {
+            net.minecraft.network.chat.TextColor color = style.getColor();
+            if (color != null) {
+                net.minecraft.ChatFormatting formatting = paradigm$formattingForColor(color.getValue());
+                result.append('§').append(formatting != null
+                        ? formatting.getChar()
+                        : paradigm$nearestFormattingCode(color.getValue()));
+            }
+            if (style.isBold()) result.append("§l");
+            if (style.isItalic()) result.append("§o");
+            if (style.isUnderlined()) result.append("§n");
+            if (style.isStrikethrough()) result.append("§m");
+            if (style.isObfuscated()) result.append("§k");
+            result.append(text);
+            return Optional.empty();
+        }, net.minecraft.network.chat.Style.EMPTY);
         return result.toString();
     }
 
     @Unique
-    private void paradigm$appendComponentLegacy(Component component, StringBuilder builder) {
-        component.visit((style, text) -> {
-            net.minecraft.network.chat.TextColor color = style.getColor();
-            if (color != null) {
-                net.minecraft.ChatFormatting formatting = paradigm$getFormattingForColor(color.getValue());
-                if (formatting != null) {
-                    builder.append('§').append(formatting.getChar());
-                }
-            }
-
-            if (style.isBold()) builder.append("§l");
-            if (style.isItalic()) builder.append("§o");
-            if (style.isUnderlined()) builder.append("§n");
-            if (style.isStrikethrough()) builder.append("§m");
-            if (style.isObfuscated()) builder.append("§k");
-
-            builder.append(text);
-            return Optional.empty();
-        }, component.getStyle());
-    }
-
-    @Unique
-    private net.minecraft.ChatFormatting paradigm$getFormattingForColor(int rgb) {
+    private net.minecraft.ChatFormatting paradigm$formattingForColor(int rgb) {
         for (net.minecraft.ChatFormatting formatting : net.minecraft.ChatFormatting.values()) {
             if (formatting.isColor() && formatting.getColor() != null && formatting.getColor() == rgb) {
                 return formatting;
@@ -315,76 +217,14 @@ public abstract class ServerStatusMixin {
     }
 
     @Unique
-    private Optional<ServerStatus.Favicon> paradigm$loadIcon(String iconName) {
-        if (iconName == null || iconName.isEmpty()) {
-            return Optional.empty();
-        }
-
-        if (!paradigm$iconsLoaded) {
-            paradigm$loadAvailableIcons();
-            paradigm$iconsLoaded = true;
-        }
-
-        if ("random".equalsIgnoreCase(iconName)) {
-            if (paradigm$availableIcons.isEmpty()) {
-                return Optional.empty();
-            }
-            iconName = paradigm$availableIcons.get(new Random().nextInt(paradigm$availableIcons.size()));
-        }
-
-        if (paradigm$iconCache.containsKey(iconName)) {
-            return Optional.of(paradigm$iconCache.get(iconName));
-        }
-
-        Path iconsDir = FMLPaths.CONFIGDIR.get().resolve("paradigm/icons");
-        Path iconPath = iconsDir.resolve(iconName + ".png");
-
-        if (!Files.exists(iconPath)) {
-            return Optional.empty();
-        }
-
-        try {
-            BufferedImage image = ImageIO.read(iconPath.toFile());
-            if (image == null) {
-                return Optional.empty();
-            }
-
-            if (image.getWidth() != 64 || image.getHeight() != 64) {
-                return Optional.empty();
-            }
-
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            ImageIO.write(image, "PNG", baos);
-            byte[] iconBytes = baos.toByteArray();
-
-            ServerStatus.Favicon favicon = new ServerStatus.Favicon(iconBytes);
-            paradigm$iconCache.put(iconName, favicon);
-
-            return Optional.of(favicon);
-        } catch (IOException e) {
-            return Optional.empty();
-        }
-    }
-
-    @Unique
-    private void paradigm$loadAvailableIcons() {
-        Path iconsDir = FMLPaths.CONFIGDIR.get().resolve("paradigm/icons");
-
-        try {
-            if (!Files.exists(iconsDir)) {
-                Files.createDirectories(iconsDir);
-                return;
-            }
-
-            try (DirectoryStream<Path> stream = Files.newDirectoryStream(iconsDir, "*.png")) {
-                for (Path entry : stream) {
-                    String fileName = entry.getFileName().toString();
-                    String iconName = fileName.substring(0, fileName.length() - 4);
-                    paradigm$availableIcons.add(iconName);
-                }
-            }
-        } catch (IOException e) {
-        }
+    private char paradigm$nearestFormattingCode(int rgb) {
+        int red = (rgb >> 16) & 0xFF;
+        int green = (rgb >> 8) & 0xFF;
+        int blue = rgb & 0xFF;
+        int brightness = (red + green + blue) / 3;
+        if (red > green && red > blue) return 'c';
+        if (green > red && green > blue) return 'a';
+        if (blue > red && blue > green) return 'b';
+        return brightness > 128 ? 'f' : '7';
     }
 }
-

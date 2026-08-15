@@ -12,8 +12,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class TaskScheduler {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(TaskScheduler.class);
     private static final int POOL_SIZE = 2;
     private static final String THREAD_NAME_PREFIX = "paradigm-scheduler-";
     private static final ScheduledFuture<?> REJECTED_FUTURE = new RejectedScheduledFuture();
@@ -48,7 +52,8 @@ public class TaskScheduler {
         ThreadFactory factory = runnable -> {
             Thread thread = new Thread(runnable, THREAD_NAME_PREFIX + threadIndex.incrementAndGet());
             thread.setDaemon(true);
-            thread.setUncaughtExceptionHandler((t, error) -> debug("TaskScheduler: Uncaught error on " + t.getName() + ": " + error));
+            thread.setUncaughtExceptionHandler((t, error) ->
+                    LOGGER.error("[Paradigm] Task scheduler: uncaught failure on thread '{}'.", t.getName(), error));
             return thread;
         };
         ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(POOL_SIZE, factory);
@@ -118,7 +123,7 @@ public class TaskScheduler {
             try {
                 exec.accept(() -> runSafely(task, "main thread executor"));
             } catch (RuntimeException t) {
-                debug("TaskScheduler: Failed to enqueue task on main thread executor: " + t.getMessage());
+                LOGGER.error("[Paradigm] Task scheduler: failed to enqueue a task on the Minecraft main thread.", t);
             }
             return;
         }
@@ -134,15 +139,15 @@ public class TaskScheduler {
             Method m = currentServer.getClass().getMethod("execute", Runnable.class);
             m.invoke(currentServer, (Runnable) () -> runSafely(task, "server main thread"));
         } catch (ReflectiveOperationException | RuntimeException t) {
-            debug("TaskScheduler: Failed to execute task on main thread: " + t.getMessage());
+            LOGGER.error("[Paradigm] Task scheduler: last-resort Minecraft main-thread handoff failed; task was not run.", t);
         }
     }
 
     private void runSafely(Runnable task, String context) {
         try {
             task.run();
-        } catch (Exception t) {
-            debug("TaskScheduler: Task failed (" + context + "): " + t.getMessage());
+        } catch (RuntimeException failure) {
+            LOGGER.error("[Paradigm] Task scheduler: scheduled task failed ({}).", context, failure);
         }
     }
 
@@ -178,14 +183,14 @@ public class TaskScheduler {
                 if (exec.awaitTermination(5, TimeUnit.SECONDS)) {
                     debug("TaskScheduler: Executor service forcefully shut down.");
                 } else {
-                    debug("TaskScheduler: Executor service did not terminate after shutdownNow().");
+                    LOGGER.warn("[Paradigm] Task scheduler: executor did not terminate after shutdownNow(); active tasks may delay shutdown.");
                 }
             } else {
                 debug("TaskScheduler: Executor service shut down gracefully.");
             }
         } catch (InterruptedException ex) {
             exec.shutdownNow();
-            debug("TaskScheduler: Executor service shutdown interrupted.");
+            LOGGER.warn("[Paradigm] Task scheduler: shutdown was interrupted; remaining tasks were cancelled.", ex);
             Thread.currentThread().interrupt();
         }
     }
@@ -216,6 +221,7 @@ public class TaskScheduler {
         try {
             if (debugLogger != null) debugLogger.debugLog(message);
         } catch (RuntimeException ignored) {
+            // Diagnostics must never prevent scheduler cleanup or task dispatch.
         }
     }
 

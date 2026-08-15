@@ -3,14 +3,15 @@ package eu.avalanche7.paradigm.mixin;
 import eu.avalanche7.paradigm.Paradigm;
 import eu.avalanche7.paradigm.configs.MOTDConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.utils.ServerStatusDiagnostics;
+import eu.avalanche7.paradigm.utils.ServerStatusIconCache;
 import net.minecraft.network.Connection;
+import net.minecraft.network.PacketSendListener;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.status.ClientboundStatusResponsePacket;
 import net.minecraft.network.protocol.status.ServerStatus;
 import net.minecraft.network.protocol.status.ServerboundStatusRequestPacket;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerStatusPacketListenerImpl;
-import net.minecraftforge.fml.loading.FMLPaths;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -19,34 +20,21 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.nio.file.DirectoryStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.*;
 
 @Mixin(ServerStatusPacketListenerImpl.class)
 public abstract class ServerStatusMixin {
 
-    static {
-
-    }
-
     @Shadow(remap = false)
     @Final
     private Connection connection;
 
-    @Unique
-    private static final Map<String, ServerStatus.Favicon> paradigm$iconCache = new HashMap<>();
+    @Shadow(remap = false)
+    @Final
+    private ServerStatus status;
 
-    @Unique
-    private static final List<String> paradigm$availableIcons = new ArrayList<>();
-
-    @Unique
-    private static boolean paradigm$iconsLoaded = false;
+    @Shadow(remap = false)
+    private boolean hasRequestedStatus;
 
     @Inject(method = "*(Lnet/minecraft/network/protocol/status/ServerboundStatusRequestPacket;)V", at = @At("HEAD"), cancellable = true, remap = false)
     private void paradigm$modifyStatusRequest(ServerboundStatusRequestPacket packet, CallbackInfo ci) {
@@ -54,37 +42,36 @@ public abstract class ServerStatusMixin {
 
         Services services = Paradigm.getServices();
         if (services == null) {
-
+            ServerStatusDiagnostics.servicesUnavailable("Forge-1.21.1");
             return;
         }
 
         MOTDConfigHandler.Config cfg = services.getMotdConfig();
-        if (cfg == null) {
-
+        boolean enabled = cfg != null && Boolean.TRUE.equals(cfg.serverlistMotdEnabled.value);
+        List<MOTDConfigHandler.ServerListMOTD> motds = cfg != null ? cfg.motds.value : null;
+        String remoteAddress = String.valueOf(this.connection.getRemoteAddress());
+        ServerStatusDiagnostics.received(services, "Forge-1.21.1", remoteAddress, enabled,
+                motds != null ? motds.size() : 0);
+        if (!enabled) {
+            ServerStatusDiagnostics.vanillaFallback(services, "Forge-1.21.1", remoteAddress,
+                    cfg == null ? "MOTD config unavailable" : "custom MOTD disabled");
             return;
         }
-
-        if (!cfg.serverlistMotdEnabled.value) {
-            return;
-        }
-
-        List<MOTDConfigHandler.ServerListMOTD> motds = cfg.motds.value;
         if (motds == null || motds.isEmpty()) {
-
+            ServerStatusDiagnostics.vanillaFallback(services, "Forge-1.21.1", remoteAddress, "no MOTDs configured");
+            return;
+        }
+        if (this.hasRequestedStatus) {
+            ServerStatusDiagnostics.vanillaFallback(services, "Forge-1.21.1", remoteAddress,
+                    "vanilla duplicate-request handling");
             return;
         }
 
         try {
-            MinecraftServer server = (MinecraftServer) services.getPlatformAdapter().getMinecraftServer();
-
-            if (server == null) {
-
-                return;
-            }
-
-            ServerStatus originalStatus = server.getStatus();
+            ServerStatus originalStatus = this.status;
             if (originalStatus == null) {
-
+                ServerStatusDiagnostics.vanillaFallback(services, "Forge-1.21.1", remoteAddress,
+                        "vanilla status unavailable");
                 return;
             }
 
@@ -136,13 +123,26 @@ public abstract class ServerStatusMixin {
                 originalStatus.forgeData()
             );
 
-            this.connection.send(new ClientboundStatusResponsePacket(modifiedStatus));
+            ServerStatusDiagnostics.constructed(services, "Forge-1.21.1", remoteAddress);
+            this.connection.send(new ClientboundStatusResponsePacket(modifiedStatus), new PacketSendListener() {
+                @Override
+                public void onSuccess() {
+                    ServerStatusDiagnostics.sent(services, "Forge-1.21.1", remoteAddress);
+                }
 
-
+                @Override
+                public net.minecraft.network.protocol.Packet<?> onFailure() {
+                    ServerStatusDiagnostics.sendFailed(services, "Forge-1.21.1", remoteAddress, null);
+                    return new ClientboundStatusResponsePacket(originalStatus);
+                }
+            });
+            this.hasRequestedStatus = true;
+            ServerStatusDiagnostics.queued(services, "Forge-1.21.1", remoteAddress);
             ci.cancel();
-        } catch (Exception e) {
-
-            e.printStackTrace();
+        } catch (Throwable failure) {
+            ServerStatusDiagnostics.customizationFailed(services, "Forge-1.21.1", remoteAddress, failure);
+            ServerStatusDiagnostics.vanillaFallback(services, "Forge-1.21.1", remoteAddress,
+                    "custom response construction or enqueue failed");
         }
     }
 
@@ -201,9 +201,10 @@ public abstract class ServerStatusMixin {
                 displayCount,
                 playerSample
             ));
-        } catch (Exception e) {
-
-            e.printStackTrace();
+        } catch (Exception failure) {
+            services.getDebugLogger().debugLog(
+                    "Server status [Forge-1.21.1]: custom player sample generation failed; using vanilla players.",
+                    failure);
             return originalPlayers;
         }
     }
@@ -268,85 +269,6 @@ public abstract class ServerStatusMixin {
 
     @Unique
     private Optional<ServerStatus.Favicon> paradigm$loadIcon(String iconName) {
-        if (iconName == null || iconName.isEmpty()) {
-            return Optional.empty();
-        }
-
-        if (!paradigm$iconsLoaded) {
-            paradigm$loadAvailableIcons();
-            paradigm$iconsLoaded = true;
-        }
-
-        if ("random".equalsIgnoreCase(iconName)) {
-            if (paradigm$availableIcons.isEmpty()) {
-                return Optional.empty();
-            }
-            iconName = paradigm$availableIcons.get(new Random().nextInt(paradigm$availableIcons.size()));
-        }
-
-        if (paradigm$iconCache.containsKey(iconName)) {
-            return Optional.of(paradigm$iconCache.get(iconName));
-        }
-
-        Path iconsDir = FMLPaths.CONFIGDIR.get().resolve("paradigm/icons");
-        Path iconPath = iconsDir.resolve(iconName + ".png");
-
-        if (!Files.exists(iconPath)) {
-
-            return Optional.empty();
-        }
-
-        try {
-            BufferedImage image = ImageIO.read(iconPath.toFile());
-            if (image == null) {
-
-                return Optional.empty();
-            }
-
-            if (image.getWidth() != 64 || image.getHeight() != 64) {
-
-                return Optional.empty();
-            }
-
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            ImageIO.write(image, "PNG", baos);
-            byte[] iconBytes = baos.toByteArray();
-
-            ServerStatus.Favicon favicon = new ServerStatus.Favicon(iconBytes);
-            paradigm$iconCache.put(iconName, favicon);
-
-
-            return Optional.of(favicon);
-        } catch (IOException e) {
-
-            return Optional.empty();
-        }
-    }
-
-    @Unique
-    private void paradigm$loadAvailableIcons() {
-        Path iconsDir = FMLPaths.CONFIGDIR.get().resolve("paradigm/icons");
-
-        try {
-            if (!Files.exists(iconsDir)) {
-                Files.createDirectories(iconsDir);
-
-                return;
-            }
-
-            try (DirectoryStream<Path> stream = Files.newDirectoryStream(iconsDir, "*.png")) {
-                for (Path entry : stream) {
-                    String fileName = entry.getFileName().toString();
-                    String iconName = fileName.substring(0, fileName.length() - 4);
-                    paradigm$availableIcons.add(iconName);
-                }
-            }
-
-            if (!paradigm$availableIcons.isEmpty()) {
-
-            }
-        } catch (IOException e) {
-
-        }
+        return ServerStatusIconCache.resolveBytes(iconName).map(ServerStatus.Favicon::new);
     }
 }

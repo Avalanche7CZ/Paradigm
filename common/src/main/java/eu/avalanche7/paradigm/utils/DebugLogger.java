@@ -30,19 +30,19 @@ public class DebugLogger {
 
     public void debugLog(String message) {
         if (mainConfig != null && mainConfig.debugEnable.value) {
-            LOG.debug("[Paradigm-Debug] " + message);
+            LOG.info("[Paradigm-Debug] " + message);
         }
     }
 
-    public void debugLog(String message, Exception e) {
+    public void debugLog(String message, Throwable failure) {
         if (mainConfig != null && mainConfig.debugEnable.value) {
-            LOG.warn("[Paradigm-Debug] " + message, e);
+            LOG.info("[Paradigm-Debug] " + message, failure);
         }
     }
 
     public void debugLog(String message, Object... args) {
         if (mainConfig != null && mainConfig.debugEnable.value) {
-            LOG.debug("[Paradigm-Debug] " + message, args);
+            LOG.info("[Paradigm-Debug] " + message, args);
         }
     }
 }

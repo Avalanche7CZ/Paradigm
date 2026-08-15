@@ -45,6 +45,7 @@ public final class CommonRuntime {
         CooldownConfigHandler.init(platformConfig, bootstrapDebugLogger);
         EmojiConfigHandler.init(platformConfig, bootstrapDebugLogger);
         TablistConfigHandler.init(platformConfig, bootstrapDebugLogger);
+        DiscordConfigHandler.init(platformConfig, bootstrapDebugLogger);
 
         // --- utilities ---
         DebugLogger debugLogger = new DebugLogger(MainConfigHandler.getConfig());
@@ -139,7 +140,11 @@ public final class CommonRuntime {
         TaskScheduler platformScheduler = null;
         try {
             platformScheduler = platformAdapter.getTaskScheduler();
-        } catch (RuntimeException | AbstractMethodError ignored) {
+        } catch (AbstractMethodError compatibilityFailure) {
+            logger.debug("[Paradigm] Startup: platform adapter predates the shared scheduler contract; creating the common scheduler.",
+                    compatibilityFailure);
+        } catch (RuntimeException failure) {
+            logger.warn("[Paradigm] Startup: failed to obtain the platform task scheduler; creating the common scheduler.", failure);
         }
         if (platformScheduler != null) {
             return platformScheduler;

@@ -9,8 +9,8 @@ import eu.avalanche7.paradigm.modules.audit.AuditActionType;
 import eu.avalanche7.paradigm.modules.audit.AuditEntry;
 import eu.avalanche7.paradigm.modules.audit.AuditResult;
 import eu.avalanche7.paradigm.modules.audit.AuditService;
-import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPermission;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
@@ -283,8 +283,7 @@ public class LocalDashboardModule implements ParadigmModule {
         }
         IPlayer player = source.getPlayer();
         return player != null
-                && player.getUUID() != null
-                && services.getPermissionsHandler().hasPermission(player.getUUID(), DashboardPermission.MANAGE, 4);
+                && services.getPermissionsHandler().hasPermission(player, ParadigmPermissions.DASHBOARD_MANAGE);
     }
 
     private void send(ICommandSource source, String key, String fallback, String... placeholders) {

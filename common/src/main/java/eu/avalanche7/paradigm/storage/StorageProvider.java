@@ -2,6 +2,7 @@ package eu.avalanche7.paradigm.storage;
 
 import eu.avalanche7.paradigm.modules.audit.AuditRepository;
 import eu.avalanche7.paradigm.storage.repository.AdminStateRepository;
+import eu.avalanche7.paradigm.storage.repository.ManagedConfigRepository;
 import eu.avalanche7.paradigm.storage.repository.ModerationRepository;
 import eu.avalanche7.paradigm.storage.repository.PermissionRepository;
 import eu.avalanche7.paradigm.storage.repository.PlayerRepository;
@@ -19,6 +20,7 @@ public interface StorageProvider extends AutoCloseable {
     ModerationRepository moderation();
     AdminStateRepository adminState();
     ServerRepository servers();
+    ManagedConfigRepository managedConfig();
     default AuditRepository audit() {
         return new AuditRepository() {
             @Override public void append(eu.avalanche7.paradigm.modules.audit.AuditEntry entry) {}

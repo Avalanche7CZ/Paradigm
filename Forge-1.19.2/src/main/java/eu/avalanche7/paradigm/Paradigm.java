@@ -77,11 +77,13 @@ public class Paradigm {
 
         try {
             platformAdapter.setPermissionsHandler(runtime.permissionsHandler());
-        } catch (Throwable ignored) {
+        } catch (Throwable failure) {
+            LOGGER.error("[Paradigm] Startup: failed to attach the permission handler to the Forge platform adapter.", failure);
         }
         try {
             platformAdapter.provideMessageParser(services.getMessageParser());
-        } catch (Throwable ignored) {
+        } catch (Throwable failure) {
+            LOGGER.error("[Paradigm] Startup: failed to attach the message parser to the Forge platform adapter.", failure);
         }
 
         modules.clear();
@@ -92,7 +94,8 @@ public class Paradigm {
             modVersion = ModList.get().getModContainerById(MOD_ID)
                     .map(c -> c.getModInfo().getVersion().toString())
                     .orElse("unknown");
-        } catch (Throwable ignored) {
+        } catch (Throwable failure) {
+            LOGGER.debug("[Paradigm] Startup: could not read the mod version; using 'unknown'.", failure);
         }
         CommonRuntime.attachToApi(runtime, modVersion);
 
@@ -130,7 +133,8 @@ public class Paradigm {
             String mcVersion = null;
             try {
                 mcVersion = services != null && services.getPlatformAdapter() != null ? services.getPlatformAdapter().getMinecraftVersion() : null;
-            } catch (Throwable ignored) {
+            } catch (Throwable failure) {
+                LOGGER.debug("[Paradigm] Update check: could not resolve the Minecraft version.", failure);
             }
 
             eu.avalanche7.paradigm.utils.UpdateChecker.checkForUpdates(
@@ -152,7 +156,8 @@ public class Paradigm {
         services.setServer(event.getServer());
         try {
             services.getTaskScheduler().setMainThreadExecutor(event.getServer()::execute);
-        } catch (Throwable ignored) {
+        } catch (Throwable failure) {
+            LOGGER.error("[Paradigm] Startup: failed to bind the task scheduler to the Minecraft server thread.", failure);
         }
 
         if (telemetryReporter == null) telemetryReporter = new TelemetryReporter(services);
@@ -160,7 +165,8 @@ public class Paradigm {
 
         try {
             services.getPermissionsHandler().registerLuckPermsPermissions();
-        } catch (Throwable ignored) {
+        } catch (Throwable failure) {
+            LOGGER.warn("[Paradigm] Startup: LuckPerms permission registration failed; platform authorization fallback remains active.", failure);
         }
 
         modules.forEach(module -> {
@@ -176,7 +182,8 @@ public class Paradigm {
             if (services != null && services.getPlatformAdapter() instanceof eu.avalanche7.paradigm.platform.PlatformAdapterImpl pai) {
                 pai.setCommandDispatcher(event.getDispatcher());
             }
-        } catch (Throwable ignored) {
+        } catch (Throwable failure) {
+            LOGGER.error("[Paradigm] Commands: failed to retain the active command dispatcher.", failure);
         }
 
         modules.forEach(module -> {
@@ -184,7 +191,8 @@ public class Paradigm {
                 Object registryAccess;
                 try {
                     registryAccess = event.getBuildContext();
-                } catch (Throwable t) {
+                } catch (Throwable failure) {
+                    LOGGER.debug("[Paradigm] Commands: build context is unavailable on this Forge version.", failure);
                     registryAccess = null;
                 }
                 module.registerCommands(event.getDispatcher(), registryAccess, services);

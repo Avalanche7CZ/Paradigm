@@ -85,8 +85,28 @@ class SqliteStorageProviderTest {
         } catch (Exception e) {
             throw new AssertionError(e);
         }
-        assertEquals(6, provider.migrationVersion());
+        assertEquals(8, provider.migrationVersion());
         assertTrue(provider.serverRegistered());
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + config.sqlite.path);
+             var statement = connection.createStatement();
+             var result = statement.executeQuery("SELECT * FROM server_instances LIMIT 1")) {
+            Set<String> columns = new HashSet<>();
+            for (int i = 1; i <= result.getMetaData().getColumnCount(); i++) columns.add(result.getMetaData().getColumnLabel(i));
+            assertTrue(columns.contains("mod_version"));
+            assertTrue(columns.contains("minecraft_version"));
+            assertTrue(columns.contains("loader"));
+            assertTrue(columns.contains("schema_fingerprint"));
+        } catch (Exception e) {
+            throw new AssertionError(e);
+        }
+        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + config.sqlite.path);
+             var statement = connection.createStatement()) {
+            statement.executeQuery("SELECT * FROM managed_config LIMIT 1").close();
+            statement.executeQuery("SELECT * FROM managed_config_applied LIMIT 1").close();
+            statement.executeQuery("SELECT * FROM managed_config_adoption_request LIMIT 1").close();
+        } catch (Exception e) {
+            throw new AssertionError(e);
+        }
         provider.close();
 
         SqliteStorageProvider reloaded = new SqliteStorageProvider(config, context, identityService, null, null);
@@ -104,7 +124,7 @@ class SqliteStorageProviderTest {
         assertEquals(punishmentId, reloaded.moderation().findPunishmentRecord(punishmentId).orElseThrow().punishmentId());
         assertTrue(reloaded.moderation().revokePunishmentRecord(punishmentId, 20L, null, "Staff", "done"));
         assertEquals(20L, reloaded.moderation().findPunishmentRecord(punishmentId).orElseThrow().revokedAtMs());
-        assertEquals(6, reloaded.migrationVersion());
+        assertEquals(8, reloaded.migrationVersion());
         reloaded.close();
     }
 

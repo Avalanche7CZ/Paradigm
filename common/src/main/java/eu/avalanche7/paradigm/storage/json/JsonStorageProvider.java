@@ -14,6 +14,7 @@ import eu.avalanche7.paradigm.storage.StorageProviderType;
 import eu.avalanche7.paradigm.storage.StorageService;
 import eu.avalanche7.paradigm.storage.identity.StorageContext;
 import eu.avalanche7.paradigm.storage.repository.AdminStateRepository;
+import eu.avalanche7.paradigm.storage.repository.ManagedConfigRepository;
 import eu.avalanche7.paradigm.storage.repository.ModerationRepository;
 import eu.avalanche7.paradigm.storage.repository.PermissionRepository;
 import eu.avalanche7.paradigm.storage.repository.PlayerRepository;
@@ -28,6 +29,7 @@ public class JsonStorageProvider implements StorageProvider {
     private final ModerationRepository moderation;
     private final AdminStateRepository adminState;
     private final ServerRepository servers;
+    private final ManagedConfigRepository managedConfig;
     private final AuditRepository audit;
 
     public JsonStorageProvider(
@@ -46,6 +48,7 @@ public class JsonStorageProvider implements StorageProvider {
         this.moderation = new JsonModerationRepository(moderationDataStore, context);
         this.adminState = new JsonAdminStateRepository(adminUtilityDataStore, context);
         this.servers = new JsonServerRepository(context);
+        this.managedConfig = new JsonManagedConfigRepository();
         this.audit = new JsonAuditRepository(config, logger);
     }
 
@@ -58,6 +61,7 @@ public class JsonStorageProvider implements StorageProvider {
     @Override public ModerationRepository moderation() { return moderation; }
     @Override public AdminStateRepository adminState() { return adminState; }
     @Override public ServerRepository servers() { return servers; }
+    @Override public ManagedConfigRepository managedConfig() { return managedConfig; }
     @Override public AuditRepository audit() { return audit; }
     @Override public StorageService.StorageTestResult test() {
         return new StorageService.StorageTestResult(true, "json", true, "JSON provider is available.", 0, "not_needed", "not_needed");

@@ -46,11 +46,13 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
 
         try {
             this.platformAdapterInstance.setPermissionsHandler(runtime.permissionsHandler());
-        } catch (Throwable ignored) {
+        } catch (Throwable failure) {
+            LOGGER.error("[Paradigm] Startup: failed to attach the permission handler to the Fabric platform adapter.", failure);
         }
         try {
             this.platformAdapterInstance.provideMessageParser(services.getMessageParser());
-        } catch (Throwable ignored) {
+        } catch (Throwable failure) {
+            LOGGER.error("[Paradigm] Startup: failed to attach the message parser to the Fabric platform adapter.", failure);
         }
 
         this.modules.clear();
@@ -106,7 +108,8 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
 
         try {
             services.getTaskScheduler().setMainThreadExecutor(server::execute);
-        } catch (Throwable ignored) {
+        } catch (Throwable failure) {
+            LOGGER.error("[Paradigm] Startup: failed to bind the task scheduler to the Minecraft server thread.", failure);
         }
 
         if (telemetryReporter == null) {
@@ -116,7 +119,8 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
 
         try {
             services.getPermissionsHandler().registerLuckPermsPermissions();
-        } catch (Throwable ignored) {
+        } catch (Throwable failure) {
+            LOGGER.warn("[Paradigm] Startup: LuckPerms permission registration failed; platform authorization fallback remains active.", failure);
         }
 
         modules.forEach(module -> {
@@ -130,7 +134,8 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
     private void onRegisterCommands(CommandDispatcher<ServerCommandSource> dispatcher, net.minecraft.command.CommandRegistryAccess registryAccess, net.minecraft.server.command.CommandManager.RegistrationEnvironment environment) {
         try {
             this.platformAdapterInstance.setCommandDispatcher(dispatcher);
-        } catch (Throwable ignored) {
+        } catch (Throwable failure) {
+            LOGGER.error("[Paradigm] Commands: failed to retain the active command dispatcher.", failure);
         }
 
         modules.forEach(module -> {
@@ -155,7 +160,8 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
 
         try {
             services.shutdown();
-        } catch (Throwable ignored) {
+        } catch (Throwable failure) {
+            LOGGER.error("[Paradigm] Shutdown: shared service shutdown failed.", failure);
         }
     }
 

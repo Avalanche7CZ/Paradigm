@@ -9,7 +9,14 @@ public class StorageLifecycle implements ParadigmModule {
     @Override public String getName() { return "StorageLifecycle"; }
     @Override public boolean isEnabled(Services services) { return true; }
     @Override public void onLoad(Object event, Services services, Object modEventBus) {}
-    @Override public void onServerStarting(Object event, Services services) {}
+
+    @Override
+    public void onServerStarting(Object event, Services services) {
+        services.getManagedConfigSyncService().reconcileOnStartup();
+        services.getServerHeartbeatPublisher().start();
+        services.getManagedConfigSyncService().start();
+    }
+
     @Override public void onEnable(Services services) {}
     @Override public void onDisable(Services services) {}
     @Override public void registerCommands(Object dispatcher, Object registryAccess, Services services) {}
@@ -17,6 +24,8 @@ public class StorageLifecycle implements ParadigmModule {
 
     @Override
     public void onServerStopping(Object event, Services services) {
+        services.getManagedConfigSyncService().stop();
+        services.getServerHeartbeatPublisher().stop();
         ApiProviderRegistry.uninstall();
         ParadigmAPI.setInstance(null);
     }

@@ -69,6 +69,7 @@ public final class PunishmentService {
         if (stored == null) throw new IllegalStateException("Punishment could not be stored.");
         cache.put(stored);
         auditCreate(stored);
+        publish(events -> events.punishmentCreated(stored));
         return stored;
     }
 
@@ -80,6 +81,8 @@ public final class PunishmentService {
         if (changed) {
             cache.remove(punishmentId);
             auditRevoke(current.get(), actorName);
+            PunishmentRecord revoked = current.get().revoked(now, clean(actorUuid), clean(actorName), clean(reason));
+            publish(events -> events.punishmentRevoked(revoked));
         }
         return changed;
     }
@@ -134,7 +137,14 @@ public final class PunishmentService {
                 .thenAccept(records -> {
                     cache.replace(records);
                     lastRefreshMs = System.currentTimeMillis();
-                }).whenComplete((ignored, error) -> refreshRunning.set(false));
+                }).whenComplete((ignored, error) -> {
+                    refreshRunning.set(false);
+                    if (error != null && services.getLogger() != null) {
+                        Throwable failure = error.getCause() != null ? error.getCause() : error;
+                        services.getLogger().warn("[Paradigm] Moderation: asynchronous punishment cache refresh failed; "
+                                + "the previous cache snapshot remains active.", failure);
+                    }
+                });
     }
 
     private void refreshIfDue() {
@@ -154,6 +164,14 @@ public final class PunishmentService {
         if (audit == null) return;
         audit.dashboard(new DashboardPrincipal(null, actorName, false), AuditActionType.MODERATION_ACTION, AuditResult.SUCCESS,
                 "Punishment revoked.", Map.of("punishmentId", record.punishmentId(), "type", record.type().name(), "scope", record.scope().name()));
+    }
+
+    private void publish(java.util.function.Consumer<eu.avalanche7.paradigm.core.ParadigmEvents> action) {
+        if (services == null) return;
+        try {
+            action.accept(services.getParadigmEvents());
+        } catch (RuntimeException | LinkageError ignored) {
+        }
     }
 
     private static String clean(String value) { String result = value != null ? value.trim() : null; return result == null || result.isBlank() ? null : result; }

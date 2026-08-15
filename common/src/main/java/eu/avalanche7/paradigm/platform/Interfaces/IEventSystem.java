@@ -20,12 +20,21 @@ public interface IEventSystem {
     }
     interface PlayerDeathEvent {
         IPlayer getPlayer();
+
+        default String getDeathMessage() {
+            return null;
+        }
     }
     interface PlayerCommandEvent {
         IPlayer getPlayer();
         String getCommand();
         boolean isCancelled();
         void setCancelled(boolean cancelled);
+    }
+    interface PlayerAdvancementEvent {
+        IPlayer getPlayer();
+        String getAdvancementName();
+        String getAdvancementDescription();
     }
     interface ChatEventListener {
         void onPlayerChat(ChatEvent event);
@@ -41,6 +50,9 @@ public interface IEventSystem {
     }
     interface PlayerCommandEventListener {
         void onPlayerCommand(PlayerCommandEvent event);
+    }
+    interface PlayerAdvancementEventListener {
+        void onPlayerAdvancement(PlayerAdvancementEvent event);
     }
 
     /** Register chat listener (called for every player chat message). */
@@ -58,5 +70,9 @@ public interface IEventSystem {
 
     /** Register player command listener before the command is executed where the platform supports it. */
     default void onPlayerCommand(PlayerCommandEventListener listener) {
+    }
+
+    /** Register player advancement listener, fired once when an advancement is fully earned. */
+    default void onPlayerAdvancement(PlayerAdvancementEventListener listener) {
     }
 }

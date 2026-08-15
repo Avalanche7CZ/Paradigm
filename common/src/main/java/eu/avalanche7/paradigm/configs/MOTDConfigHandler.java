@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.utils.DebugLogger;
+import eu.avalanche7.paradigm.utils.ServerStatusIconCache;
 
 public class MOTDConfigHandler extends BaseConfigHandler<MOTDConfigHandler.Config> {
 
@@ -26,6 +27,7 @@ public class MOTDConfigHandler extends BaseConfigHandler<MOTDConfigHandler.Confi
                     INSTANCE = new MOTDConfigHandler(platformConfig);
                     INSTANCE.setJsonValidator(debugLogger);
                     INSTANCE.config = INSTANCE.load();
+                    ServerStatusIconCache.reload(platformConfig, LOGGER);
                 }
             }
         }
@@ -41,6 +43,7 @@ public class MOTDConfigHandler extends BaseConfigHandler<MOTDConfigHandler.Confi
     public static void reload() {
         if (INSTANCE != null) {
             INSTANCE.config = INSTANCE.load();
+            ServerStatusIconCache.reload(INSTANCE.platformConfig, LOGGER);
         }
     }
 

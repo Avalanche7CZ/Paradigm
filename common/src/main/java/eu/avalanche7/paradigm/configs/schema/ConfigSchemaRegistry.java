@@ -15,6 +15,7 @@ import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.configs.ConfigEntry;
 import eu.avalanche7.paradigm.configs.CooldownConfigHandler;
+import eu.avalanche7.paradigm.configs.DiscordConfigHandler;
 import eu.avalanche7.paradigm.configs.MOTDConfigHandler;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.configs.MentionConfigHandler;
@@ -48,6 +49,7 @@ public class ConfigSchemaRegistry {
                 new ConfigCategory("moderation", "Moderation", "Punishment cache and formatted ban-screen settings."),
                 new ConfigCategory("storage", "Storage", "Read-only data provider status and masked storage settings."),
                 new ConfigCategory("dashboard", "Dashboard", "Local dashboard settings from dashboard.json."),
+                new ConfigCategory("discord", "Discord", "Discord relay, notification, and formatting settings from discord.json."),
                 new ConfigCategory("admin_utilities", "Admin Utilities", "Admin and moderation utility command toggles from main.json."),
                 new ConfigCategory("custom_commands", "Custom Commands", "Read-only custom command summary from config/paradigm/commands.")
         );
@@ -65,11 +67,45 @@ public class ConfigSchemaRegistry {
         addCooldownFields(fields);
         addStorageFields(fields);
         addDashboardFields(fields);
+        addDiscordFields(fields);
         addCustomCommandFields(fields);
         fields.sort(Comparator.comparing(ConfigField::category).thenComparing(ConfigField::key));
 
         ConfigSnapshot draft = new ConfigSnapshot("", System.currentTimeMillis(), categories, fields);
         return new ConfigSnapshot(ConfigRevisionService.revision(draft), draft.createdAtMs(), categories, fields);
+    }
+
+    public String structuralFingerprint() {
+        List<FieldShape> shapes = new ArrayList<>();
+        for (ConfigField field : snapshot().fields()) {
+            shapes.add(new FieldShape(
+                    field.category(), field.key(), field.type() != null ? field.type().name() : "",
+                    field.owner(), field.editable(), field.required(), field.nullable(), field.masked(),
+                    field.min(), field.max(), field.step(), field.options(),
+                    field.listElementType() != null ? field.listElementType().name() : "",
+                    field.durationUnit(), field.trim(), field.allowEmptyItems()
+            ));
+        }
+        shapes.sort(Comparator.comparing(FieldShape::category).thenComparing(FieldShape::key));
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            String json = new Gson().toJson(shapes);
+            byte[] hash = digest.digest(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < 12 && i < hash.length; i++) {
+                sb.append(String.format("%02x", hash[i]));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return Long.toHexString(shapes.hashCode());
+        }
+    }
+
+    private record FieldShape(
+            String category, String key, String type, String owner, boolean editable, boolean required,
+            boolean nullable, boolean masked, Double min, Double max, Double step, List<String> options,
+            String listElementType, String durationUnit, boolean trim, boolean allowEmptyItems
+    ) {
     }
 
     private void addMainFields(List<ConfigField> fields) {
@@ -230,6 +266,24 @@ public class ConfigSchemaRegistry {
                 "Structured world-specific header, footer, player format, and ping overrides.",
                 encodeWorldOverrides(current.perWorldOverrides), encodeWorldOverrides(defaults.perWorldOverrides),
                 "tablist.json", false, ConfigReloadBehavior.LIVE));
+    }
+
+    private void addDiscordFields(List<ConfigField> fields) {
+        if (!DiscordConfigHandler.isInitialized()) {
+            return;
+        }
+        DiscordConfigHandler.Config current = DiscordConfigHandler.getConfig();
+        DiscordConfigHandler.Config defaults = new DiscordConfigHandler.Config();
+        addConfigEntries(fields, "discord", "discord", DiscordConfigHandler.Config.class, current, defaults,
+                "discord.json", ConfigReloadBehavior.LIVE);
+
+        fields.removeIf(field -> "discord.botToken".equals(field.key()));
+        String token = current.botToken.get();
+        fields.add(secretMasked("discord.botToken", "discord", "Bot Token",
+                token != null && !token.isBlank(),
+                "The bot token is stored in discord.json and is never returned to the browser. "
+                        + "Set or replace it with the Discord page's token field.",
+                "discord.json"));
     }
 
     private static List<String> encodeWorldOverrides(Map<String, TablistConfigHandler.WorldOverride> overrides) {
