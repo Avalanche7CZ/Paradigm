@@ -29,34 +29,7 @@ scripts/release-secrets.local.env
 /common/src/test
 /docs
 
-# Public companion API documentation and focused contract tests.
+# Public companion API documentation.
 !/docs/
 /docs/*
 !/docs/COMPANION_API.md
-!/common/src/test/
-/common/src/test/**
-!/common/src/test/**/
-!/common/src/test/java/eu/avalanche7/paradigm/api/**/*.java
-!/common/src/test/java/eu/avalanche7/paradigm/modules/permissions/ExternalPermissionNodeRegistryTest.java
-!/common/src/test/java/eu/avalanche7/paradigm/utils/LiteralPlaceholdersTest.java
-/common/src/test
-!/common/src/test/
-!/common/src/test/java/
-!/common/src/test/java/eu/
-!/common/src/test/java/eu/avalanche7/
-!/common/src/test/java/eu/avalanche7/paradigm/
-!/common/src/test/java/eu/avalanche7/paradigm/utils/
-!/common/src/test/java/eu/avalanche7/paradigm/utils/ServerStatusIconCacheTest.java
-!/common/src/test/java/eu/avalanche7/paradigm/modules/
-!/common/src/test/java/eu/avalanche7/paradigm/modules/discord/
-!/common/src/test/java/eu/avalanche7/paradigm/modules/discord/DiscordConsoleChannelTest.java
-!/common/src/test/java/eu/avalanche7/paradigm/modules/discord/DiscordRelayLoopPreventionTest.java
-!/common/src/test/java/eu/avalanche7/paradigm/modules/discord/DiscordTestSupport.java
-!/common/src/test/java/eu/avalanche7/paradigm/modules/discord/client/
-!/common/src/test/java/eu/avalanche7/paradigm/modules/discord/client/DiscordRestClientRateLimitTest.java
-!/common/src/test/java/eu/avalanche7/paradigm/modules/dashboard/
-!/common/src/test/java/eu/avalanche7/paradigm/modules/dashboard/DashboardDiscordPreviewContractTest.java
-!/common/src/test/java/eu/avalanche7/paradigm/support/
-!/common/src/test/java/eu/avalanche7/paradigm/support/TestComponent.java
-!/common/src/test/java/eu/avalanche7/paradigm/support/TestPlayer.java
-!/common/src/test/java/eu/avalanche7/paradigm/support/TestStyle.java
