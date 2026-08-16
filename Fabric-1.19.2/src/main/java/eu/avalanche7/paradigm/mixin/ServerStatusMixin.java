@@ -3,6 +3,7 @@ package eu.avalanche7.paradigm.mixin;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -159,9 +160,57 @@ public abstract class ServerStatusMixin {
     @Unique
     private String paradigm$sampleText(Services services, String line) {
         try {
-            return services.getMessageParser().parseMessage(line, null).getRawText();
+            var parsed = services.getMessageParser().parseMessage(line, null);
+            if (parsed instanceof MinecraftComponent component) {
+                return paradigm$componentToLegacyText(component.getHandle());
+            }
+            return parsed.getRawText();
         } catch (RuntimeException parseFailure) {
             return line;
         }
+    }
+
+    @Unique
+    private String paradigm$componentToLegacyText(Text component) {
+        StringBuilder result = new StringBuilder();
+        component.visit((style, text) -> {
+            net.minecraft.text.TextColor color = style.getColor();
+            if (color != null) {
+                net.minecraft.util.Formatting formatting = paradigm$formattingForColor(color.getRgb());
+                result.append('§').append(formatting != null
+                        ? formatting.getCode()
+                        : paradigm$nearestFormattingCode(color.getRgb()));
+            }
+            if (style.isBold()) result.append("§l");
+            if (style.isItalic()) result.append("§o");
+            if (style.isUnderlined()) result.append("§n");
+            if (style.isStrikethrough()) result.append("§m");
+            if (style.isObfuscated()) result.append("§k");
+            result.append(text);
+            return Optional.empty();
+        }, net.minecraft.text.Style.EMPTY);
+        return result.toString();
+    }
+
+    @Unique
+    private net.minecraft.util.Formatting paradigm$formattingForColor(int rgb) {
+        for (net.minecraft.util.Formatting formatting : net.minecraft.util.Formatting.values()) {
+            if (formatting.isColor() && formatting.getColorValue() != null && formatting.getColorValue() == rgb) {
+                return formatting;
+            }
+        }
+        return null;
+    }
+
+    @Unique
+    private char paradigm$nearestFormattingCode(int rgb) {
+        int red = (rgb >> 16) & 0xFF;
+        int green = (rgb >> 8) & 0xFF;
+        int blue = rgb & 0xFF;
+        int brightness = (red + green + blue) / 3;
+        if (red > green && red > blue) return 'c';
+        if (green > red && green > blue) return 'a';
+        if (blue > red && blue > green) return 'b';
+        return brightness > 128 ? 'f' : '7';
     }
 }

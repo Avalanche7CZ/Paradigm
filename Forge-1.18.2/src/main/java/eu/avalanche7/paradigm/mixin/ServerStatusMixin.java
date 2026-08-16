@@ -3,6 +3,7 @@ package eu.avalanche7.paradigm.mixin;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -148,9 +149,57 @@ public abstract class ServerStatusMixin {
     @Unique
     private String paradigm$sampleText(Services services, String line) {
         try {
-            return services.getMessageParser().parseMessage(line, null).getRawText();
+            var parsed = services.getMessageParser().parseMessage(line, null);
+            if (parsed instanceof MinecraftComponent component) {
+                return paradigm$componentToLegacyText(component.getHandle());
+            }
+            return parsed.getRawText();
         } catch (RuntimeException parseFailure) {
             return line;
         }
+    }
+
+    @Unique
+    private String paradigm$componentToLegacyText(Component component) {
+        StringBuilder result = new StringBuilder();
+        component.visit((style, text) -> {
+            net.minecraft.network.chat.TextColor color = style.getColor();
+            if (color != null) {
+                net.minecraft.ChatFormatting formatting = paradigm$formattingForColor(color.getValue());
+                result.append('§').append(formatting != null
+                        ? formatting.getChar()
+                        : paradigm$nearestFormattingCode(color.getValue()));
+            }
+            if (style.isBold()) result.append("§l");
+            if (style.isItalic()) result.append("§o");
+            if (style.isUnderlined()) result.append("§n");
+            if (style.isStrikethrough()) result.append("§m");
+            if (style.isObfuscated()) result.append("§k");
+            result.append(text);
+            return Optional.empty();
+        }, net.minecraft.network.chat.Style.EMPTY);
+        return result.toString();
+    }
+
+    @Unique
+    private net.minecraft.ChatFormatting paradigm$formattingForColor(int rgb) {
+        for (net.minecraft.ChatFormatting formatting : net.minecraft.ChatFormatting.values()) {
+            if (formatting.isColor() && formatting.getColor() != null && formatting.getColor() == rgb) {
+                return formatting;
+            }
+        }
+        return null;
+    }
+
+    @Unique
+    private char paradigm$nearestFormattingCode(int rgb) {
+        int red = (rgb >> 16) & 0xFF;
+        int green = (rgb >> 8) & 0xFF;
+        int blue = rgb & 0xFF;
+        int brightness = (red + green + blue) / 3;
+        if (red > green && red > blue) return 'c';
+        if (green > red && green > blue) return 'a';
+        if (blue > red && blue > green) return 'b';
+        return brightness > 128 ? 'f' : '7';
     }
 }
