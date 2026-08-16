@@ -120,6 +120,12 @@ public class PermissionAdminService {
                 changed ? "Permission mutation applied." : "Permission mutation rejected.",
                 Map.of("action", action, "group", group, "permission", permission, "assignmentId", assignmentId, "scope", scope.name().toLowerCase(java.util.Locale.ROOT),
                         "contexts", contexts.canonical(), "expiresAtMs", expiresAtMs != null ? String.valueOf(expiresAtMs) : ""));
+        if (changed && services.getPlatformAdapter() != null) {
+            try {
+                services.getPlatformAdapter().refreshAllPlayerCommandTrees();
+            } catch (Throwable ignored) {
+            }
+        }
         return result(changed, changed ? "ok" : "validation_failed", changed ? "Permission change applied." : "Permission change was rejected.", dangerous);
     }
 
