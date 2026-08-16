@@ -12,7 +12,6 @@
     "DisplayEntityAccessor",
     "TextDisplayEntityAccessor",
     "InteractionEntityAccessor",
-    "CommandNodePermissionMixin",
     "CommandSourcePermissionMixin"
   ],
   "injectors": {

@@ -64,6 +64,15 @@ public interface IPlatformAdapter {
         return null;
     }
 
+    /**
+     * Rewrites every command node's Brigadier requirement predicate to consult
+     * explicit command-permission grants/denies before falling back to the
+     * original (usually vanilla op-level) check. Called once, after all
+     * commands for this server start have been registered.
+     */
+    default void rewireCommandTreePermissions() {
+    }
+
     default Object getConsoleCommandSource() {
         return null;
     }

@@ -450,10 +450,6 @@ public class PermissionsHandler {
         return CommandGuardResult.allowed(commandLine, firstCandidate(candidates), "undefined");
     }
 
-    public String commandNodePath(Object brigadierNode) {
-        return permissionNodeRegistry.pathForCommandNode(brigadierNode);
-    }
-
     public Boolean queryDefinedPermission(IPlayer player, String permission) {
         if (player == null || permission == null || permission.isBlank()) {
             return null;

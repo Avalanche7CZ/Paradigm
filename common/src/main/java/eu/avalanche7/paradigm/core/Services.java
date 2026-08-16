@@ -153,10 +153,19 @@ public class Services {
             return 0;
         }
         Object dispatcher = this.platformAdapter != null ? this.platformAdapter.getCommandDispatcher() : null;
-        if (dispatcher != null) {
-            return this.permissionsHandlerInstance.discoverCommandTree(dispatcher);
+        int changed = dispatcher != null
+                ? this.permissionsHandlerInstance.discoverCommandTree(dispatcher)
+                : this.permissionsHandlerInstance.discoverCommandTreeFromServer(this.server);
+        if (this.platformAdapter != null) {
+            try {
+                this.platformAdapter.rewireCommandTreePermissions();
+            } catch (Throwable failure) {
+                if (logger != null) {
+                    logger.warn("[Paradigm] Failed to rewire command tree permission checks.", failure);
+                }
+            }
         }
-        return this.permissionsHandlerInstance.discoverCommandTreeFromServer(this.server);
+        return changed;
     }
 
     public Object getMinecraftServer() {

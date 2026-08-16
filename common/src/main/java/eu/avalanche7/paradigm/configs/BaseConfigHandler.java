@@ -67,9 +67,9 @@ public abstract class BaseConfigHandler<T> {
 
                     if (loadedEntry != null && loadedEntry.value != null) {
                         defaultEntry.value = loadedEntry.value;
-                        logger.debug("[Paradigm] Preserved user setting for: " + field.getName());
+                        logger.trace("[Paradigm] Preserved user setting for: " + field.getName());
                     } else {
-                        logger.debug("[Paradigm] Using default value for new/missing config: " + field.getName());
+                        logger.trace("[Paradigm] Using default value for new/missing config: " + field.getName());
                     }
                 }
             }

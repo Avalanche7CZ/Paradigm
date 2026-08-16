@@ -9,8 +9,6 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -45,7 +43,6 @@ public class PermissionNodeRegistry {
     private final Object lock = new Object();
     private RegistryState state = new RegistryState();
     private final Map<String, ExternalNode> externalNodes = new LinkedHashMap<>();
-    private volatile Map<Object, String> commandNodePaths = Collections.emptyMap();
 
     public PermissionNodeRegistry(Logger logger, DebugLogger debugLogger, IConfig config) {
         this.logger = logger;
@@ -83,16 +80,14 @@ public class PermissionNodeRegistry {
         }
 
         Map<String, DiscoveredPermission> discovered = new TreeMap<>();
-        Map<Object, String> paths = new IdentityHashMap<>();
         try {
             Object root = invokeNoArg(dispatcher, "getRoot");
             if (root == null) {
                 return 0;
             }
             for (Object child : children(root)) {
-                collectCommandNode(child, "", discovered, paths, 0);
+                collectCommandNode(child, "", discovered, 0);
             }
-            commandNodePaths = paths;
         } catch (Throwable t) {
             if (debugLogger != null) debugLogger.debugLog("[Permissions] Failed to scan command tree: " + t);
             return 0;
@@ -223,10 +218,6 @@ public class PermissionNodeRegistry {
         });
     }
 
-    public String pathForCommandNode(Object node) {
-        return node == null ? null : commandNodePaths.get(node);
-    }
-
     public Set<String> commandCandidates(String commandLine) {
         List<String> tokens = commandTokens(commandLine);
         Set<String> candidates = new LinkedHashSet<>();
@@ -267,7 +258,7 @@ public class PermissionNodeRegistry {
         return tokens;
     }
 
-    private void collectCommandNode(Object node, String prefix, Map<String, DiscoveredPermission> discovered, Map<Object, String> paths, int depth) {
+    private void collectCommandNode(Object node, String prefix, Map<String, DiscoveredPermission> discovered, int depth) {
         if (node == null || depth > MAX_COMMAND_DEPTH) {
             return;
         }
@@ -283,10 +274,9 @@ public class PermissionNodeRegistry {
 
         String path = prefix.isBlank() ? cleanSegment : prefix + "." + cleanSegment;
         addDiscovered(discovered, "command." + path, SOURCE_COMMAND_TREE, "Brigadier command permission for /" + path.replace('.', ' '), -1);
-        paths.put(node, path);
 
         for (Object child : children(node)) {
-            collectCommandNode(child, path, discovered, paths, depth + 1);
+            collectCommandNode(child, path, discovered, depth + 1);
         }
     }
 

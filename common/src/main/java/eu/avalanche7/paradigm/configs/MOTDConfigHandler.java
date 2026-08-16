@@ -69,7 +69,7 @@ public class MOTDConfigHandler extends BaseConfigHandler<MOTDConfigHandler.Confi
         try {
             if (loaded.motdLines != null) {
                 defaults.motdLines = loaded.motdLines;
-                logger.debug("[Paradigm] Preserved user motdLines");
+                logger.trace("[Paradigm] Preserved user motdLines");
             }
             Field[] fields = Config.class.getDeclaredFields();
             for (Field field : fields) {
@@ -80,9 +80,9 @@ public class MOTDConfigHandler extends BaseConfigHandler<MOTDConfigHandler.Confi
 
                     if (loadedEntry != null && loadedEntry.value != null) {
                         defaultEntry.value = loadedEntry.value;
-                        logger.debug("[Paradigm] Preserved user setting for: " + field.getName());
+                        logger.trace("[Paradigm] Preserved user setting for: " + field.getName());
                     } else {
-                        logger.debug("[Paradigm] Using default value for new/missing config: " + field.getName());
+                        logger.trace("[Paradigm] Using default value for new/missing config: " + field.getName());
                     }
                 }
             }

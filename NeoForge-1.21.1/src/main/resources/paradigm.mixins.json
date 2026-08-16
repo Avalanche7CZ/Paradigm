@@ -10,7 +10,6 @@
     "PlayerListMixin",
     "ServerStatusMixin",
     "ServerPlayerTablistMixin",
-    "CommandNodePermissionMixin",
     "CommandSourcePermissionMixin"
   ],
   "injectors": {

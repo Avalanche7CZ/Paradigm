@@ -10,7 +10,6 @@
     "PlayerListMixin",
     "ServerPlayerTablistMixin",
     "ArmorStandEntityAccessor",
-    "CommandNodePermissionMixin",
     "CommandSourcePermissionMixin"
   ],
   "injectors": {

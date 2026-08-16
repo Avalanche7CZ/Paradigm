@@ -656,6 +656,66 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public void rewireCommandTreePermissions() {
+        com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher = commandDispatcher;
+        if (dispatcher == null) {
+            return;
+        }
+        for (com.mojang.brigadier.tree.CommandNode<net.minecraft.commands.CommandSourceStack> child : dispatcher.getRoot().getChildren()) {
+            paradigm$rewireCommandNode(child, "", 0);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void paradigm$rewireCommandNode(com.mojang.brigadier.tree.CommandNode<net.minecraft.commands.CommandSourceStack> node, String prefix, int depth) {
+        if (node == null || depth > 12) {
+            return;
+        }
+        if (depth > 0 && node instanceof com.mojang.brigadier.tree.ArgumentCommandNode) {
+            return;
+        }
+        String segment = node.getName();
+        if (segment == null || segment.isBlank()) {
+            return;
+        }
+        String path = prefix.isEmpty() ? segment : prefix + "." + segment;
+
+        java.util.function.Predicate<net.minecraft.commands.CommandSourceStack> original =
+                (java.util.function.Predicate<net.minecraft.commands.CommandSourceStack>) eu.avalanche7.paradigm.modules.permissions.CommandNodeAccessGate.getRequirement(node);
+        if (original != null) {
+            java.util.function.Predicate<net.minecraft.commands.CommandSourceStack> wrapped = source -> {
+                java.util.UUID uuid = paradigm$rewireSourceUuid(source);
+                if (uuid == null) {
+                    return original.test(source);
+                }
+                Boolean decision = eu.avalanche7.paradigm.modules.permissions.CommandNodeAccessGate.decide(path, uuid);
+                if (decision == null) {
+                    return original.test(source);
+                }
+                if (!decision) {
+                    return false;
+                }
+                eu.avalanche7.paradigm.modules.permissions.CommandPermissionElevation.begin(source, true);
+                try {
+                    return original.test(source);
+                } finally {
+                    eu.avalanche7.paradigm.modules.permissions.CommandPermissionElevation.clear();
+                }
+            };
+            eu.avalanche7.paradigm.modules.permissions.CommandNodeAccessGate.setRequirement(node, wrapped);
+        }
+
+        for (com.mojang.brigadier.tree.CommandNode<net.minecraft.commands.CommandSourceStack> child : node.getChildren()) {
+            paradigm$rewireCommandNode(child, path, depth + 1);
+        }
+    }
+
+    private static java.util.UUID paradigm$rewireSourceUuid(net.minecraft.commands.CommandSourceStack source) {
+        net.minecraft.world.entity.Entity entity = source.getEntity();
+        return entity instanceof net.minecraft.server.level.ServerPlayer player ? player.getUUID() : null;
+    }
+
+    @Override
     public ICommandBuilder createCommandBuilder() {
         return new ForgeCommandBuilder();
     }
