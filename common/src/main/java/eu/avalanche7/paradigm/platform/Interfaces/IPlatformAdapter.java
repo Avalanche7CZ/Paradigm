@@ -57,7 +57,7 @@ public interface IPlatformAdapter {
 
     default boolean unregisterCommandRoot(String rootLiteral) {
         Object dispatcher = getCommandDispatcher();
-        return dispatcher != null && CommandPriority.unregisterRootLiteral(dispatcher, rootLiteral);
+        return dispatcher != null && CommandPriority.releaseRootLiteral(dispatcher, rootLiteral);
     }
 
     default Object getCommandDispatcher() {

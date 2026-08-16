@@ -61,6 +61,10 @@ public class DashboardRouter {
         String path = ctx.path();
         String method = ctx.method();
 
+        if (path.startsWith("/api/") && DashboardRequestContext.bodyTooLarge(exchange)) {
+            return DashboardResponse.apiError(413, "payload_too_large", "Dashboard request body is too large.");
+        }
+
         try {
             if (path.startsWith("/api/")) {
                 if ("GET".equals(method) && "/api/auth/status".equals(path)) return auth.status(ctx);
@@ -190,6 +194,9 @@ public class DashboardRouter {
             }
             return staticAssets.serve(path);
         } catch (Throwable t) {
+            if (DashboardRequestContext.causedByPayloadTooLarge(t)) {
+                return DashboardResponse.apiError(413, "payload_too_large", "Dashboard request body is too large.");
+            }
             if (dashboard.services().getLogger() != null) {
                 dashboard.services().getLogger().warn("Paradigm Dashboard: request {} {} failed: {}", method, path, t.toString());
             }

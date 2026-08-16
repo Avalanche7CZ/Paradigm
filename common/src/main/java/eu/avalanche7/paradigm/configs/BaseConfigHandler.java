@@ -2,7 +2,6 @@ package eu.avalanche7.paradigm.configs;
 
 import java.io.IOException;
 import java.io.Reader;
-import java.io.Writer;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -13,6 +12,7 @@ import com.google.gson.GsonBuilder;
 import org.slf4j.Logger;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import eu.avalanche7.paradigm.utils.AtomicFileIO;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 import eu.avalanche7.paradigm.utils.JsonValidator;
 
@@ -100,8 +100,8 @@ public abstract class BaseConfigHandler<T> {
                         if (result.hasIssues()) {
                             logger.info("[Paradigm] Fixed JSON syntax issues in {}: {}", configFileName, result.getIssuesSummary());
 
-                            try (Writer writer = Files.newBufferedWriter(configPath, StandardCharsets.UTF_8)) {
-                                writer.write(result.getFixedJson());
+                            try {
+                                AtomicFileIO.writeUtf8Atomic(configPath, writer -> writer.write(result.getFixedJson()));
                             } catch (IOException saveError) {
                                 logger.warn("[Paradigm] Failed to save corrected file: {}", saveError.getMessage());
                             }
@@ -144,10 +144,7 @@ public abstract class BaseConfigHandler<T> {
     public void save(T config) {
         try {
             Path configPath = getConfigPath();
-            Files.createDirectories(configPath.getParent());
-            try (Writer writer = Files.newBufferedWriter(configPath, StandardCharsets.UTF_8)) {
-                GSON.toJson(config, writer);
-            }
+            AtomicFileIO.writeUtf8Atomic(configPath, writer -> GSON.toJson(config, writer));
         } catch (IOException e) {
             throw new RuntimeException("Could not save config: " + configFileName, e);
         }

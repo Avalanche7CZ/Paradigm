@@ -599,6 +599,8 @@ public final class DiscordRelay implements ParadigmEvents.Listener {
             return;
         }
         if (!authorizeConsoleCommand(message.channelId(), message.bot(), message.webhook(), message.system())) {
+            services.getDebugLogger().debugLog("[Discord] Ignored a console-channel message because console commands "
+                    + "are disabled or the author is not a regular Discord user.");
             return;
         }
         dispatchConsoleCommand(message.authorId(), message.authorDisplayName(), message.content());
@@ -615,16 +617,11 @@ public final class DiscordRelay implements ParadigmEvents.Listener {
 
     public boolean authorizeConsoleCommand(String channelId, boolean bot, boolean webhook, boolean system) {
         DiscordConfigHandler.Config config = service.config();
-        if (config == null || !service.isEnabled()) {
-            return false;
-        }
-        if (!Boolean.TRUE.equals(config.allowConsoleCommands.get())) {
-            return false;
-        }
-        if (!ownsConsoleChannel(channelId)) {
-            return false;
-        }
-        return !bot && !webhook && !system;
+        return config != null
+                && service.isEnabled()
+                && Boolean.TRUE.equals(config.allowConsoleCommands.get())
+                && ownsConsoleChannel(channelId)
+                && !bot && !webhook && !system;
     }
 
     public void dispatchConsoleCommand(String authorId, String authorName, String rawCommand) {

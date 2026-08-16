@@ -47,7 +47,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     private eu.avalanche7.paradigm.platform.Interfaces.IConfig config;
 
     private com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> commandDispatcher;
-    private final Set<String> ownedRootsRegisteredThisCycle = new HashSet<>();
 
     public PlatformAdapterImpl(
             eu.avalanche7.paradigm.modules.permissions.PermissionsHandler permissionsHandler,
@@ -70,7 +69,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     public void setCommandDispatcher(com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher) {
         this.commandDispatcher = dispatcher;
-        this.ownedRootsRegisteredThisCycle.clear();
         try {
             if (debugLogger != null) debugLogger.debugLog("[NeoForge] CommandDispatcher set: " + (dispatcher != null));
         } catch (Throwable ignored) {}
@@ -125,18 +123,13 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             return;
         }
 
-        if (!CommandPriority.shouldRegisterRoot(normalizedRoot)) {
+        com.mojang.brigadier.CommandDispatcher<CommandSourceStack> resolvedDispatcher = dispatcher;
+        if (!CommandPriority.shouldRegisterRoot(resolvedDispatcher, normalizedRoot)) {
             return;
         }
-        boolean shouldOwnRoot = CommandPriority.shouldOwnRoot(normalizedRoot);
-        boolean firstParadigmRegistrationForRoot = shouldOwnRoot && ownedRootsRegisteredThisCycle.add(normalizedRoot);
-        if (firstParadigmRegistrationForRoot) {
-            CommandPriority.unregisterRootLiteral(dispatcher, normalizedRoot);
-        }
-
-        com.mojang.brigadier.tree.LiteralCommandNode<CommandSourceStack> registeredNode = dispatcher.register(cast);
-        if (firstParadigmRegistrationForRoot
-                && !CommandPriority.isOwnedByExpectedNode(dispatcher, normalizedRoot, registeredNode)
+        CommandPriority.RootRegistration registration = CommandPriority.registerRootLiteral(
+                resolvedDispatcher, normalizedRoot, () -> resolvedDispatcher.register(cast));
+        if (registration.managed() && !registration.owned()
                 && debugLogger != null) {
             debugLogger.debugLog("[Paradigm] Command root /" + normalizedRoot + " did not resolve to the newly registered Paradigm node.");
         }

@@ -91,6 +91,18 @@ public class TaskScheduler {
         }
     }
 
+    public ScheduledFuture<?> scheduleAtFixedRateRaw(Runnable task, long initialDelay, long period, TimeUnit unit) {
+        ScheduledThreadPoolExecutor exec = executor();
+        if (exec == null) {
+            return reject("scheduleAtFixedRateRaw");
+        }
+        try {
+            return exec.scheduleAtFixedRate(() -> runSafely(task, "scheduler thread"), initialDelay, period, unit);
+        } catch (RejectedExecutionException | IllegalArgumentException ex) {
+            return reject("scheduleAtFixedRateRaw");
+        }
+    }
+
     public ScheduledFuture<?> schedule(Runnable task, long delay, TimeUnit unit) {
         ScheduledThreadPoolExecutor exec = executor();
         if (exec == null) {
@@ -109,7 +121,7 @@ public class TaskScheduler {
             return reject("scheduleRaw");
         }
         try {
-            return exec.schedule(task, delay, unit);
+            return exec.schedule(() -> runSafely(task, "scheduler thread"), delay, unit);
         } catch (RejectedExecutionException ex) {
             return reject("scheduleRaw");
         }
@@ -134,7 +146,6 @@ public class TaskScheduler {
             return;
         }
 
-        // Last-resort reflection: MinecraftServer#execute(Runnable)
         try {
             Method m = currentServer.getClass().getMethod("execute", Runnable.class);
             m.invoke(currentServer, (Runnable) () -> runSafely(task, "server main thread"));
@@ -144,6 +155,7 @@ public class TaskScheduler {
     }
 
     private void runSafely(Runnable task, String context) {
+        if (task == null) return;
         try {
             task.run();
         } catch (RuntimeException failure) {
@@ -221,7 +233,6 @@ public class TaskScheduler {
         try {
             if (debugLogger != null) debugLogger.debugLog(message);
         } catch (RuntimeException ignored) {
-            // Diagnostics must never prevent scheduler cleanup or task dispatch.
         }
     }
 

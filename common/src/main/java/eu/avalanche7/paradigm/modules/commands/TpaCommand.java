@@ -111,9 +111,7 @@ public class TpaCommand implements ParadigmModule {
     private void registerTpAccept() {
         ICommandBuilder root = platform.createCommandBuilder()
                 .literal("tpaccept")
-                .requires(source -> services.getCommandToggleStore().isEnabled("tpaccept")
-                        && source.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(source.getPlayer(), ParadigmPermissions.TPA_ACCEPT))
+                .requires(source -> canUseTpAccept(source.getPlayer()))
                 .executes(ctx -> executeAccept(ctx.getSource().getPlayer(), null));
 
         ICommandBuilder withPlayer = platform.createCommandBuilder()
@@ -125,6 +123,12 @@ public class TpaCommand implements ParadigmModule {
                 });
 
         platform.registerCommand(root.then(withPlayer));
+    }
+
+    private boolean canUseTpAccept(IPlayer player) {
+        return player != null
+                && services.getCommandToggleStore().isEnabled("tpaccept")
+                && services.getPermissionsHandler().hasPermission(player, ParadigmPermissions.TPA_ACCEPT);
     }
 
     private void registerTpDeny() {
@@ -191,7 +195,8 @@ public class TpaCommand implements ParadigmModule {
                         send(currentRequester, "tpa.blocked_by_ignore", "That player is ignoring you.");
                         return;
                     }
-                    CommandCooldowns.runCooldownOnly(services, currentRequester, commandKey, () -> createTeleportRequest(currentRequester, currentTarget, type));
+                    CommandCooldowns.runCooldownOnly(services, currentRequester, commandKey,
+                            freshRequester -> createTeleportRequest(freshRequester, currentTarget, type));
                 },
                 "tpa.error_request");
     }
@@ -249,16 +254,17 @@ public class TpaCommand implements ParadigmModule {
             return 0;
         }
 
-        return CommandCooldowns.run(services, accepter, "tpaccept", () -> acceptTeleportRequest(accepter, requester, request));
+        return CommandCooldowns.run(services, accepter, "tpaccept", freshAccepter ->
+                canUseTpAccept(freshAccepter) ? acceptTeleportRequest(freshAccepter, request) : 0);
     }
 
-    private int acceptTeleportRequest(IPlayer accepter, IPlayer requester, TeleportRequestService.Request request) {
+    private int acceptTeleportRequest(IPlayer accepter, TeleportRequestService.Request request) {
         TeleportRequestService.Request current = teleportRequests.peekIncoming(accepter.getUUID(), request.requesterUuid());
         if (current == null || !current.equals(request)) {
             send(accepter, "tpa.no_pending_request", "You have no pending teleport requests.");
             return 0;
         }
-        requester = platform.getPlayerByUuid(request.requesterUuid());
+        IPlayer requester = platform.getPlayerByUuid(request.requesterUuid());
         if (requester == null) {
             send(accepter, "tpa.requester_offline", "That request is no longer valid because requester is offline.");
             return 0;

@@ -13,7 +13,13 @@ import eu.avalanche7.paradigm.configs.MentionConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
-import eu.avalanche7.paradigm.platform.Interfaces.*;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandContext;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
 public class Mentions implements ParadigmModule {
 
@@ -58,6 +64,8 @@ public class Mentions implements ParadigmModule {
 
     @Override
     public void onDisable(Services services) {
+        lastIndividualMentionBySender.clear();
+        lastEveryoneMentionBySender.clear();
         if (this.services != null && this.services.getDebugLogger() != null) {
             this.services.getDebugLogger().debugLog(NAME + " module disabled.");
         }
@@ -65,6 +73,8 @@ public class Mentions implements ParadigmModule {
 
     @Override
     public void onServerStopping(Object event, Services services) {
+        lastIndividualMentionBySender.clear();
+        lastEveryoneMentionBySender.clear();
         if (this.services != null && this.services.getDebugLogger() != null) {
             this.services.getDebugLogger().debugLog(NAME + " module: Server stopping.");
         }
@@ -86,11 +96,15 @@ public class Mentions implements ParadigmModule {
     public void registerEventListeners(Object eventBus, Services services) {
         IEventSystem events = services.getPlatformAdapter().getEventSystem();
         if (events != null) {
-            events.onPlayerChat(event -> {
-                handleChatMessage(event.getPlayer(), event.getMessage(), services);
-             });
-         }
-     }
+            events.onPlayerChat(event -> handleChatMessage(event.getPlayer(), event.getMessage(), services));
+            events.onPlayerLeave(event -> {
+                IPlayer player = event != null ? event.getPlayer() : null;
+                if (player == null || player.getUUID() == null) return;
+                lastIndividualMentionBySender.remove(player.getUUID());
+                lastEveryoneMentionBySender.remove(player.getUUID());
+            });
+        }
+    }
 
     public boolean handleChatMessage(IPlayer sender, String rawMessage, Services services) {
         if (this.services == null || !isEnabled(this.services)) return true;
@@ -127,7 +141,7 @@ public class Mentions implements ParadigmModule {
         notifyEveryone(platform.getOnlinePlayers(), sender, rawMessage, sender == null, mentionConfig, matchedEveryoneMention);
 
         if (sender != null) {
-             markMentionEveryoneUsed(sender);
+            markMentionEveryoneUsed(sender);
         }
     }
 
@@ -154,10 +168,10 @@ public class Mentions implements ParadigmModule {
         }
 
         boolean mentionedSomeone = false;
-         while (mentionMatcher.find()) {
-             String playerName = mentionMatcher.group(1);
-             IPlayer targetPlayer = platform.getPlayerByName(playerName);
-             if (targetPlayer == null) continue;
+        while (mentionMatcher.find()) {
+            String playerName = mentionMatcher.group(1);
+            IPlayer targetPlayer = platform.getPlayerByName(playerName);
+            if (targetPlayer == null) continue;
             if (sender != null && targetPlayer.getUUID() != null && targetPlayer.getUUID().equals(sender.getUUID())) {
                 continue;
             }
@@ -182,7 +196,7 @@ public class Mentions implements ParadigmModule {
 
         MentionConfigHandler.Config mentionConfig = MentionConfigHandler.getConfig();
         List<IPlayer> players = platform.getOnlinePlayers();
-        boolean isConsole = (sender == null);
+        boolean isConsole = sender == null;
 
         String everyoneMentionPlaceholder = mentionConfig.MENTION_SYMBOL.value + "everyone";
         Pattern everyonePattern = Pattern.compile(Pattern.quote(everyoneMentionPlaceholder), Pattern.CASE_INSENSITIVE);
@@ -289,8 +303,8 @@ public class Mentions implements ParadigmModule {
             IComponent finalChatMessage = services.getMessageParser().parseMessage(chatMessage, targetPlayer);
             if (contentMessage != null && !contentMessage.isEmpty()) {
                 String prefix = config.CHAT_APPEND_PREFIX.value;
-                IComponent dash = services.getPlatformAdapter().createComponentFromLiteral("\n" + prefix);
-                IComponent contentComp = services.getMessageParser().parseMessage(contentMessage, targetPlayer);
+                IComponent dash = services.getMessageParser().parseMessage("\n" + prefix, targetPlayer);
+                IComponent contentComp = platform.createComponentFromLiteral(contentMessage);
                 finalChatMessage = finalChatMessage.append(dash).append(contentComp);
             }
             platform.sendSystemMessage(targetPlayer, finalChatMessage);
@@ -301,7 +315,7 @@ public class Mentions implements ParadigmModule {
             IComponent parsedSubtitleMessage = platform.createEmptyComponent();
             boolean willShowSubtitle = config.enableSubtitleNotification.value && contentMessage != null && !contentMessage.isEmpty();
             if (willShowSubtitle) {
-                parsedSubtitleMessage = services.getMessageParser().parseMessage(contentMessage, targetPlayer);
+                parsedSubtitleMessage = platform.createComponentFromLiteral(contentMessage);
             }
             platform.sendTitle(targetPlayer, parsedTitleMessage, parsedSubtitleMessage);
         }
@@ -322,7 +336,6 @@ public class Mentions implements ParadigmModule {
 
     private boolean canMentionEveryoneNow(IPlayer sender, MentionConfigHandler.Config config) {
         if (sender == null) return true;
-        if (services.getPermissionsHandler().hasPermission(sender, ParadigmPermissions.MENTION_EVERYONE)) return true;
 
         int rateLimit = config.EVERYONE_MENTION_RATE_LIMIT.get();
         if (rateLimit <= 0) return true;
@@ -335,11 +348,10 @@ public class Mentions implements ParadigmModule {
     private void markMentionEveryoneUsed(IPlayer sender) {
         if (sender == null) return;
         lastEveryoneMentionBySender.put(sender.getUUID(), System.currentTimeMillis());
-     }
+    }
 
     private boolean canMentionIndividualNow(IPlayer sender, MentionConfigHandler.Config config) {
         if (sender == null) return true;
-        if (services.getPermissionsHandler().hasPermission(sender, ParadigmPermissions.MENTION_PLAYER)) return true;
 
         int rateLimit = config.INDIVIDUAL_MENTION_RATE_LIMIT.get();
         if (rateLimit <= 0) return true;
@@ -362,4 +374,4 @@ public class Mentions implements ParadigmModule {
         if (end >= originalMessage.length()) return "";
         return originalMessage.substring(end).trim();
     }
- }
+}

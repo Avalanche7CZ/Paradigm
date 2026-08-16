@@ -1,7 +1,6 @@
 package eu.avalanche7.paradigm.data;
 
 import java.io.Reader;
-import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,6 +15,7 @@ import com.google.gson.GsonBuilder;
 import org.slf4j.Logger;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import eu.avalanche7.paradigm.utils.AtomicFileIO;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 
 public class WarpStore {
@@ -124,10 +124,21 @@ public class WarpStore {
             data.normalize();
             return data;
         } catch (Exception e) {
-            logger.warn("Paradigm: Failed to load warps.json: {}", e.getMessage());
-            debugLogger.debugLog("WarpStore: load failed", e);
+            Path archived = AtomicFileIO.quarantine(path, "corrupt");
+            if (logger != null) {
+                if (archived != null) {
+                    logger.warn("Paradigm: Failed to load warps.json; archived unreadable data as {}", archived.getFileName());
+                } else {
+                    logger.warn("Paradigm: Failed to load warps.json and could not archive it: {}", e.getMessage());
+                }
+            }
+            if (debugLogger != null) {
+                debugLogger.debugLog("WarpStore: load failed", e);
+            }
             data = fallback;
-            saveLocked();
+            if (archived != null) {
+                saveLocked();
+            }
             return data;
         }
     }
@@ -144,13 +155,14 @@ public class WarpStore {
         }
 
         try {
-            Files.createDirectories(path.getParent());
-            try (Writer writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
-                gson.toJson(data, writer);
-            }
+            AtomicFileIO.writeUtf8Atomic(path, writer -> gson.toJson(data, writer));
         } catch (Exception e) {
-            logger.warn("Paradigm: Failed to save warps.json: {}", e.getMessage());
-            debugLogger.debugLog("WarpStore: save failed", e);
+            if (logger != null) {
+                logger.warn("Paradigm: Failed to save warps.json: {}", e.getMessage());
+            }
+            if (debugLogger != null) {
+                debugLogger.debugLog("WarpStore: save failed", e);
+            }
         }
     }
 

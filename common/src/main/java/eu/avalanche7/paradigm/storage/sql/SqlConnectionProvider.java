@@ -7,6 +7,8 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
 import eu.avalanche7.paradigm.storage.StorageConfig;
@@ -15,20 +17,34 @@ import eu.avalanche7.paradigm.storage.runtime.RuntimeJdbcDriverProvider;
 
 public class SqlConnectionProvider implements AutoCloseable {
     private static final int SQLITE_BUSY_TIMEOUT_MS = 10_000;
-    private static final ConcurrentHashMap<String, ReentrantLock> SQLITE_LOCKS = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, SharedSqliteLock> SQLITE_LOCKS = new ConcurrentHashMap<>();
 
     private final StorageConfig config;
     private final SqlDialect dialect;
     private final RuntimeJdbcDriverProvider runtimeDrivers;
     private final ReentrantLock operationLock;
+    private final String sqliteLockKey;
+    private final SharedSqliteLock sharedSqliteLock;
+    private final AtomicBoolean closed = new AtomicBoolean();
 
     public SqlConnectionProvider(StorageConfig config, SqlDialect dialect, RuntimeJdbcDriverProvider runtimeDrivers) {
         this.config = config;
         this.dialect = dialect;
         this.runtimeDrivers = runtimeDrivers;
-        this.operationLock = isSqlite()
-                ? SQLITE_LOCKS.computeIfAbsent(sqliteLockKey(), ignored -> new ReentrantLock(true))
-                : null;
+
+        if (isSqlite()) {
+            this.sqliteLockKey = sqliteLockKey();
+            this.sharedSqliteLock = SQLITE_LOCKS.compute(this.sqliteLockKey, (key, existing) -> {
+                SharedSqliteLock shared = existing != null ? existing : new SharedSqliteLock();
+                shared.references.incrementAndGet();
+                return shared;
+            });
+            this.operationLock = sharedSqliteLock.lock;
+        } else {
+            this.sqliteLockKey = null;
+            this.sharedSqliteLock = null;
+            this.operationLock = null;
+        }
     }
 
     public Connection getConnection() {
@@ -109,6 +125,19 @@ public class SqlConnectionProvider implements AutoCloseable {
 
     @Override
     public void close() {
-        // Simple DriverManager provider; no pooled resources yet.
+        if (!closed.compareAndSet(false, true) || sharedSqliteLock == null || sqliteLockKey == null) {
+            return;
+        }
+        SQLITE_LOCKS.computeIfPresent(sqliteLockKey, (key, current) -> {
+            if (current != sharedSqliteLock) {
+                return current;
+            }
+            return current.references.decrementAndGet() <= 0 ? null : current;
+        });
+    }
+
+    private static final class SharedSqliteLock {
+        private final ReentrantLock lock = new ReentrantLock(true);
+        private final AtomicInteger references = new AtomicInteger();
     }
 }

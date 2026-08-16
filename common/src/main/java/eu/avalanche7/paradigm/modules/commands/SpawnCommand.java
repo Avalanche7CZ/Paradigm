@@ -59,16 +59,13 @@ public class SpawnCommand implements ParadigmModule {
     private void registerSpawn() {
         ICommandBuilder cmd = services.getPlatformAdapter().createCommandBuilder()
                 .literal("spawn")
-                .requires(src -> services.getCommandToggleStore().isEnabled("spawn")
-                        && src.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), ParadigmPermissions.SPAWN))
+                .requires(src -> canUseSpawn(src.getPlayer()))
                 .executes(ctx -> {
                     IPlayer player = ctx.getSource().getPlayer();
                     if (player == null) {
                         return 0;
                     }
 
-                    PlayerDataStore.StoredLocation previous = services.getPlatformAdapter().getPlayerLocation(player).orElse(null);
                     return StorageCommandSupport.runForPlayer(services, player, "spawn.load", () ->
                             services.getStorageService().warps().getGlobalSpawn().orElse(null),
                             (current, storedSpawn) -> {
@@ -77,23 +74,31 @@ public class SpawnCommand implements ParadigmModule {
                                     return;
                                 }
                                 PlayerDataStore.StoredLocation location = toDataLocation(storedSpawn);
-                                CommandCooldowns.run(services, current, "spawn", () -> teleportSpawn(current, previous, location));
+                                CommandCooldowns.run(services, current, "spawn", fresh ->
+                                        canUseSpawn(fresh) ? teleportSpawn(fresh, location) : 0);
                             },
                             "spawn.error_load");
                 });
         services.getPlatformAdapter().registerCommand(cmd);
     }
 
-    private int teleportSpawn(IPlayer player, PlayerDataStore.StoredLocation previous, PlayerDataStore.StoredLocation location) {
-                    if (!services.getPlatformAdapter().teleportPlayer(player, location)) {
-                        send(player, "spawn.teleport_failed", "Teleport to spawn failed.");
-                        return 0;
-                    }
-                    if (previous != null) {
-                        saveBackLocationAsync(player, previous);
-                    }
-                    send(player, "spawn.teleported", "Teleported to spawn.");
-                    return 1;
+    private boolean canUseSpawn(IPlayer player) {
+        return player != null
+                && services.getCommandToggleStore().isEnabled("spawn")
+                && services.getPermissionsHandler().hasPermission(player, ParadigmPermissions.SPAWN);
+    }
+
+    private int teleportSpawn(IPlayer player, PlayerDataStore.StoredLocation location) {
+        PlayerDataStore.StoredLocation previous = services.getPlatformAdapter().getPlayerLocation(player).orElse(null);
+        if (!services.getPlatformAdapter().teleportPlayer(player, location)) {
+            send(player, "spawn.teleport_failed", "Teleport to spawn failed.");
+            return 0;
+        }
+        if (previous != null) {
+            saveBackLocationAsync(player, previous);
+        }
+        send(player, "spawn.teleported", "Teleported to spawn.");
+        return 1;
     }
 
     private void registerSetSpawn() {

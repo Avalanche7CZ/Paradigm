@@ -70,6 +70,8 @@ public class JsonAuditRepository implements AuditRepository {
         String actorQuery = actor != null ? actor.trim().toLowerCase(Locale.ROOT) : "";
         String typeQuery = type != null ? type.trim().toUpperCase(Locale.ROOT) : "";
         List<AuditEntry> entries = new ArrayList<>();
+        int malformedLines = 0;
+
         synchronized (lock) {
             if (!Files.exists(path)) {
                 return List.of();
@@ -80,22 +82,35 @@ public class JsonAuditRepository implements AuditRepository {
                     if (line.isBlank()) {
                         continue;
                     }
-                    AuditEntry entry = GSON.fromJson(line, AuditEntry.class);
+
+                    AuditEntry entry;
+                    try {
+                        entry = GSON.fromJson(line, AuditEntry.class);
+                    } catch (RuntimeException malformed) {
+                        malformedLines++;
+                        continue;
+                    }
+
                     if (entry == null || !matches(entry, actorQuery, typeQuery)) {
                         continue;
                     }
                     entries.add(entry);
                     if (entries.size() > max * 4) {
-                        entries = entries.subList(entries.size() - max * 2, entries.size());
+                        entries = new ArrayList<>(entries.subList(entries.size() - max * 2, entries.size()));
                     }
                 }
-            } catch (IOException | RuntimeException t) {
+            } catch (IOException t) {
                 if (logger != null) {
                     logger.warn("Paradigm audit: failed to read audit log: {}", t.getMessage());
                 }
                 return List.of();
             }
         }
+
+        if (malformedLines > 0 && logger != null) {
+            logger.warn("Paradigm audit: skipped {} malformed audit log line(s) while reading {}.", malformedLines, path.getFileName());
+        }
+
         Collections.reverse(entries);
         return entries.size() > max ? List.copyOf(entries.subList(0, max)) : List.copyOf(entries);
     }

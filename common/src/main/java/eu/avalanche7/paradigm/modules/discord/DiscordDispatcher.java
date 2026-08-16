@@ -67,12 +67,17 @@ public final class DiscordDispatcher {
         this.queue = new ArrayBlockingQueue<>(Math.max(16, Math.min(queueSize, 10_000)));
     }
 
-    public void start() {
+    public synchronized void start() {
+        Thread previous = worker;
+        if (previous != null && previous.isAlive()) {
+            debug("Dispatcher start ignored because the previous worker is still stopping.");
+            return;
+        }
         if (!running.compareAndSet(false, true)) {
             return;
         }
         accepting.set(true);
-        outstanding.set(0L);
+        outstanding.set(queue.size());
         Thread thread = new Thread(this::runLoop, "paradigm-discord-dispatch");
         thread.setDaemon(true);
         worker = thread;
@@ -122,13 +127,13 @@ public final class DiscordDispatcher {
         return outstanding.get() == 0L;
     }
 
-    public void stop() {
+    public synchronized void stop() {
         accepting.set(false);
         if (!running.compareAndSet(true, false)) {
             return;
         }
+
         Thread thread = worker;
-        worker = null;
         if (thread != null) {
             thread.interrupt();
             try {
@@ -136,9 +141,17 @@ public final class DiscordDispatcher {
             } catch (InterruptedException interrupted) {
                 Thread.currentThread().interrupt();
             }
+            if (!thread.isAlive() && worker == thread) {
+                worker = null;
+            }
         }
+
+        int discarded = queue.size();
         queue.clear();
-        outstanding.set(0L);
+        if (discarded > 0) {
+            dropped.addAndGet(discarded);
+            outstanding.updateAndGet(value -> Math.max(0L, value - discarded));
+        }
     }
 
     public int queueDepth() {
@@ -166,27 +179,34 @@ public final class DiscordDispatcher {
     }
 
     private void runLoop() {
-        while (running.get()) {
-            Attempt attempt;
-            try {
-                attempt = queue.poll(POLL_INTERVAL_MILLIS, TimeUnit.MILLISECONDS);
-            } catch (InterruptedException interrupted) {
-                Thread.currentThread().interrupt();
-                return;
-            }
-            if (attempt == null) {
-                continue;
-            }
-            boolean requeued = false;
-            try {
-                requeued = deliver(attempt);
-            } catch (RuntimeException failure) {
-                failed.incrementAndGet();
-                debug("Unexpected dispatcher failure: " + failure.getClass().getSimpleName());
-            } finally {
-                if (!requeued) {
-                    outstanding.decrementAndGet();
+        Thread current = Thread.currentThread();
+        try {
+            while (running.get() && worker == current) {
+                Attempt attempt;
+                try {
+                    attempt = queue.poll(POLL_INTERVAL_MILLIS, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return;
                 }
+                if (attempt == null) {
+                    continue;
+                }
+                boolean requeued = false;
+                try {
+                    requeued = deliver(attempt);
+                } catch (RuntimeException failure) {
+                    failed.incrementAndGet();
+                    debug("Unexpected dispatcher failure: " + failure.getClass().getSimpleName());
+                } finally {
+                    if (!requeued) {
+                        outstanding.updateAndGet(value -> Math.max(0L, value - 1L));
+                    }
+                }
+            }
+        } finally {
+            if (worker == current) {
+                worker = null;
             }
         }
     }
@@ -217,7 +237,10 @@ public final class DiscordDispatcher {
 
         String error = result != null ? result.errorMessage() : "Unknown Discord send failure.";
         boolean retryable = result != null && result.retryable();
-        if (retryable && attempt.attempts() + 1 < MAX_SEND_ATTEMPTS) {
+        if (retryable
+                && accepting.get()
+                && running.get()
+                && attempt.attempts() + 1 < MAX_SEND_ATTEMPTS) {
             if (queue.offer(new Attempt(message, attempt.attempts() + 1))) {
                 return true;
             }

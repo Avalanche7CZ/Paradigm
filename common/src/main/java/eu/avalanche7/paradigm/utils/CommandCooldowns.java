@@ -21,23 +21,49 @@ public final class CommandCooldowns {
         int run();
     }
 
+    @FunctionalInterface
+    public interface PlayerCommandAction {
+        int run(IPlayer currentPlayer);
+    }
+
+    /**
+     * Compatibility overload for actions that do not retain a player/entity reference.
+     * Player-sensitive warmups should use the PlayerCommandAction overload instead.
+     */
     public static int run(Services services, IPlayer player, String commandName, CommandAction action) {
+        return runInternal(services, player, commandName, true, current -> action.run());
+    }
+
+    public static int run(Services services, IPlayer player, String commandName, PlayerCommandAction action) {
         return runInternal(services, player, commandName, true, action);
     }
 
     public static int runCooldownOnly(Services services, IPlayer player, String commandName, CommandAction action) {
+        return runInternal(services, player, commandName, false, current -> action.run());
+    }
+
+    public static int runCooldownOnly(Services services, IPlayer player, String commandName, PlayerCommandAction action) {
         return runInternal(services, player, commandName, false, action);
     }
 
-    private static int runInternal(Services services, IPlayer player, String commandName, boolean allowWarmup, CommandAction action) {
-        if (services == null || player == null || action == null) {
-            return action != null ? action.run() : 0;
+    private static int runInternal(
+            Services services,
+            IPlayer player,
+            String commandName,
+            boolean allowWarmup,
+            PlayerCommandAction action
+    ) {
+        if (action == null) {
+            return 0;
+        }
+        if (services == null || player == null) {
+            return action.run(player);
         }
 
         UUID uuid = parseUuid(player.getUUID());
         String key = normalize(commandName);
         if (uuid == null || key == null) {
-            return action.run();
+            return action.run(player);
         }
 
         long now = System.currentTimeMillis();
@@ -53,7 +79,7 @@ public final class CommandCooldowns {
 
         int warmupSeconds = allowWarmup ? CooldownConfigHandler.getCommandWarmupSeconds(key) : 0;
         if (warmupSeconds <= 0) {
-            int result = action.run();
+            int result = action.run(player);
             if (result > 0) {
                 CooldownConfigHandler.setLastUsage(uuid, key, System.currentTimeMillis());
             }
@@ -77,7 +103,7 @@ public final class CommandCooldowns {
                 if (online == null) {
                     return;
                 }
-                int result = action.run();
+                int result = action.run(online);
                 if (result > 0) {
                     CooldownConfigHandler.setLastUsage(uuid, key, System.currentTimeMillis());
                 }

@@ -1,7 +1,6 @@
 package eu.avalanche7.paradigm.modules.dashboard;
 
 import java.io.Reader;
-import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,6 +13,7 @@ import com.google.gson.GsonBuilder;
 import org.slf4j.Logger;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import eu.avalanche7.paradigm.utils.AtomicFileIO;
 
 public class DashboardConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
@@ -36,32 +36,53 @@ public class DashboardConfig {
         DashboardConfig defaults = new DashboardConfig();
         Path path = platformConfig.resolveConfigPath(FILE_NAME);
         if (!Files.exists(path)) {
-            save(platformConfig, defaults);
+            saveForLoad(platformConfig, defaults, logger);
             return defaults;
         }
+
+        DashboardConfig merged;
         try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
             DashboardConfig loaded = GSON.fromJson(reader, DashboardConfig.class);
-            DashboardConfig merged = merge(defaults, loaded);
-            save(platformConfig, merged);
-            return merged;
+            merged = merge(defaults, loaded);
         } catch (Throwable t) {
+            Path archived = AtomicFileIO.quarantine(path, "corrupt");
             if (logger != null) {
-                logger.warn("Paradigm Dashboard: failed to load dashboard.json, using defaults: {}", t.getMessage());
+                if (archived != null) {
+                    logger.warn("Paradigm Dashboard: failed to load dashboard.json; archived the unreadable file as {} and restored defaults: {}",
+                            archived.getFileName(), t.getMessage());
+                } else {
+                    logger.warn("Paradigm Dashboard: failed to load dashboard.json and could not archive it; using in-memory defaults: {}",
+                            t.getMessage());
+                }
             }
-            save(platformConfig, defaults);
+            if (archived != null) {
+                saveForLoad(platformConfig, defaults, logger);
+            }
             return defaults;
         }
+
+        saveForLoad(platformConfig, merged, logger);
+        return merged;
     }
 
     public static void save(IConfig platformConfig, DashboardConfig config) {
         try {
             Path path = platformConfig.resolveConfigPath(FILE_NAME);
-            Files.createDirectories(path.getParent());
-            try (Writer writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
-                GSON.toJson(config != null ? config : new DashboardConfig(), writer);
-            }
+            DashboardConfig value = config != null ? config : new DashboardConfig();
+            AtomicFileIO.writeUtf8Atomic(path, writer -> GSON.toJson(value, writer));
         } catch (Throwable t) {
             throw new RuntimeException("Could not save dashboard.json", t);
+        }
+    }
+
+    private static void saveForLoad(IConfig platformConfig, DashboardConfig config, Logger logger) {
+        try {
+            save(platformConfig, config);
+        } catch (RuntimeException failure) {
+            if (logger != null) {
+                logger.warn("Paradigm Dashboard: dashboard.json was loaded but could not be rewritten safely: {}",
+                        failure.getMessage());
+            }
         }
     }
 
@@ -89,6 +110,8 @@ public class DashboardConfig {
         String browserHost = host != null ? host.trim() : "";
         if (browserHost.isBlank() || "0.0.0.0".equals(browserHost) || "::".equals(browserHost) || "[::]".equals(browserHost)) {
             browserHost = "localhost";
+        } else if (browserHost.indexOf(':') >= 0 && !(browserHost.startsWith("[") && browserHost.endsWith("]"))) {
+            browserHost = "[" + browserHost + "]";
         }
         return "http://" + browserHost + ":" + port;
     }

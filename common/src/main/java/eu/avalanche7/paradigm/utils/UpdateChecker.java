@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -28,6 +29,7 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 public final class UpdateChecker {
 
     private static final int OP_LEVEL = 2;
+    private static final AtomicBoolean CHECK_RUNNING = new AtomicBoolean();
     private static volatile boolean inGameNotifierRegistered = false;
 
     private static volatile UpdateConfig lastConfig;
@@ -59,25 +61,45 @@ public final class UpdateChecker {
     ) {
         if (config == null) throw new IllegalArgumentException("config cannot be null");
         if (logger == null) throw new IllegalArgumentException("logger cannot be null");
-        if (currentVersion == null || currentVersion.isBlank()) currentVersion = "unknown";
+        String resolvedCurrentVersion = currentVersion == null || currentVersion.isBlank() ? "unknown" : currentVersion;
         lastConfig = config;
 
+        if (CHECK_RUNNING.compareAndSet(false, true)) {
+            Thread thread = new Thread(() -> {
+                try {
+                    performCheck(config, resolvedCurrentVersion, mcVersion, loader, logger);
+                } finally {
+                    CHECK_RUNNING.set(false);
+                }
+            }, "paradigm-update-check");
+            thread.setDaemon(true);
+            thread.start();
+        }
+        return lastResult;
+    }
+
+    private static void performCheck(
+            UpdateConfig config,
+            String currentVersion,
+            String mcVersion,
+            String loader,
+            Logger logger
+    ) {
         UpdateResult modrinth = checkModrinth(config, currentVersion, mcVersion, loader, logger);
         if (modrinth != null && modrinth.updateAvailable()) {
             lastResult = modrinth;
             logResult(logger, config, currentVersion, modrinth);
-            return modrinth;
+            return;
         }
 
         UpdateResult github = checkGithubRaw(config, currentVersion, logger);
         if (github != null && github.updateAvailable()) {
             lastResult = github;
             logResult(logger, config, currentVersion, github);
-            return github;
+            return;
         }
 
         lastResult = new UpdateResult(false, null, null);
-        return lastResult;
     }
 
     public static UpdateResult getLastResult() {
@@ -143,10 +165,7 @@ public final class UpdateChecker {
                     .withColor("aqua")
                     .withFormatting("underline")
                     .onClickOpenUrl(modrinthUrl);
-            platform.sendSystemMessage(
-                    player,
-                    clickLink
-            );
+            platform.sendSystemMessage(player, clickLink);
         }
     }
 
@@ -165,16 +184,25 @@ public final class UpdateChecker {
         String url = config.githubRawVersionUrl();
         if (url == null || url.isBlank()) return null;
 
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(URI.create(url).toURL().openStream(), StandardCharsets.UTF_8))) {
-            String latest = reader.readLine();
-            if (latest != null) {
-                latest = latest.trim();
-                if (!latest.isEmpty() && isNewerVersion(latest, currentVersion, logger)) {
-                    return new UpdateResult(true, latest, "github");
+        HttpURLConnection conn = null;
+        try {
+            conn = (HttpURLConnection) URI.create(url).toURL().openConnection();
+            conn.setRequestProperty("User-Agent", "Paradigm-UpdateChecker/1.0");
+            conn.setConnectTimeout(4000);
+            conn.setReadTimeout(6000);
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8))) {
+                String latest = reader.readLine();
+                if (latest != null) {
+                    latest = latest.trim();
+                    if (!latest.isEmpty() && isNewerVersion(latest, currentVersion, logger)) {
+                        return new UpdateResult(true, latest, "github");
+                    }
                 }
             }
         } catch (Exception e) {
             logger.debug("Paradigm: GitHub update check failed: {}", e.toString());
+        } finally {
+            if (conn != null) conn.disconnect();
         }
         return null;
     }

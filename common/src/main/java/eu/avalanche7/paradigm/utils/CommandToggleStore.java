@@ -1,7 +1,6 @@
 package eu.avalanche7.paradigm.utils;
 
 import java.io.Reader;
-import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,6 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 
+import eu.avalanche7.paradigm.modules.commands.shared.CommandCatalog;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 
 public class CommandToggleStore {
@@ -72,7 +72,7 @@ public class CommandToggleStore {
         if (canonical == null) {
             return true;
         }
-        return commandStates.getOrDefault(canonical, true);
+        return commandStates.getOrDefault(canonical, true) && CommandCatalog.isModuleEnabled(canonical);
     }
 
     public synchronized ToggleResult setEnabled(String commandOrAlias, boolean enabled) {
@@ -141,10 +141,7 @@ public class CommandToggleStore {
         state.commands = new LinkedHashMap<>(listStates());
 
         try {
-            Files.createDirectories(path.getParent());
-            try (Writer writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
-                gson.toJson(state, writer);
-            }
+            AtomicFileIO.writeUtf8Atomic(path, writer -> gson.toJson(state, writer));
         } catch (Exception e) {
             logger.warn("Paradigm: Failed to save commands.json: {}", e.getMessage());
         }
@@ -152,11 +149,7 @@ public class CommandToggleStore {
 
     private Map<String, Boolean> loadPersistedStates() {
         Path path = resolvePath();
-        if (path == null) {
-            return new LinkedHashMap<>();
-        }
-
-        if (!Files.exists(path)) {
+        if (path == null || !Files.exists(path)) {
             return new LinkedHashMap<>();
         }
 
@@ -175,7 +168,12 @@ public class CommandToggleStore {
             }
             return normalized;
         } catch (Exception e) {
-            logger.warn("Paradigm: Failed to load commands.json, defaults will be used. {}", e.getMessage());
+            Path archived = AtomicFileIO.quarantine(path, "corrupt");
+            if (archived != null) {
+                logger.warn("Paradigm: Failed to load commands.json; archived unreadable data as {}", archived.getFileName());
+            } else {
+                logger.warn("Paradigm: Failed to load commands.json and could not archive it: {}", e.getMessage());
+            }
             return new LinkedHashMap<>();
         }
     }

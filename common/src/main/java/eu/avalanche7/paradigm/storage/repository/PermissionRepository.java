@@ -21,6 +21,7 @@ public interface PermissionRepository {
     List<StoredUserPermissionData> listUsers();
     Optional<StoredUserPermissionData> getUser(String uuid);
     void saveUser(StoredUserPermissionData user);
+    boolean deleteUser(String uuid);
     void addUserGroup(String uuid, StoredUserPermissionData.GroupAssignment assignment);
     boolean removeUserGroup(String uuid, String groupName);
     void addUserPermission(String uuid, StoredPermissionNode permission);

@@ -45,6 +45,7 @@ public class CommandManager implements ParadigmModule {
     @Override
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         bind(services);
+        unregisterRegisteredCustomCommands();
         registerLoadedCustomCommands();
         ICommandBuilder reload = platform.createCommandBuilder()
                 .literal("customcommandsreload")
@@ -99,11 +100,12 @@ public class CommandManager implements ParadigmModule {
     }
 
     private int registerLoadedCustomCommands() {
-        if (services == null || platform == null) {
+        if (services == null || platform == null || !services.getCommandToggleStore().isEnabled("customcommands")) {
             return 0;
         }
 
         int count = 0;
+        Object dispatcher = platform.getCommandDispatcher();
         for (CustomCommand command : services.getCmConfig().getLoadedCommands()) {
             if (command == null || command.getName() == null || command.getName().trim().isEmpty()) {
                 continue;
@@ -112,8 +114,26 @@ public class CommandManager implements ParadigmModule {
             if (rootName == null) {
                 continue;
             }
+            if (registeredCustomRoots.contains(rootName)) {
+                continue;
+            }
+            if (CommandPriority.hasRootLiteral(dispatcher, rootName)) {
+                services.getLogger().warn("Paradigm custom command '{}' was skipped because command root '{}' is already owned by another command provider.", command.getName(), rootName);
+                continue;
+            }
             ICommandBuilder cmd = buildCustomCommand(command);
-            platform.registerCommand(cmd);
+            CommandPriority.manageRootLiteral(dispatcher, rootName);
+            try {
+                platform.registerCommand(cmd);
+            } catch (RuntimeException failure) {
+                CommandPriority.unmanageRootLiteral(dispatcher, rootName);
+                throw failure;
+            }
+            if (!CommandPriority.ownsRootLiteral(dispatcher, rootName)) {
+                CommandPriority.unmanageRootLiteral(dispatcher, rootName);
+                services.getLogger().warn("Paradigm custom command '{}' could not claim command root '{}'.", command.getName(), rootName);
+                continue;
+            }
             registeredCustomRoots.add(rootName);
             count++;
         }
@@ -491,6 +511,8 @@ public class CommandManager implements ParadigmModule {
 
     @Override
     public void onDisable(Services services) {
+        bind(services);
+        unregisterRegisteredCustomCommands();
     }
 
     @Override

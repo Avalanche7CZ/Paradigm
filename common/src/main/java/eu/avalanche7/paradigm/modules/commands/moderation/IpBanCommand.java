@@ -14,7 +14,10 @@ import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 
 public final class IpBanCommand extends AbstractModerationCommand {
-    @Override public String getName() { return "IPBan"; }
+    @Override
+    public String getName() {
+        return "IPBan";
+    }
 
     @Override
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
@@ -47,40 +50,93 @@ public final class IpBanCommand extends AbstractModerationCommand {
 
     private int create(ICommandSource source, String targetValue, String duration, String rawReason) {
         PlayerIdentity player = resolveIdentity(targetValue);
-        String address = player != null && player.online() != null ? services.getPlatformAdapter().getPlayerRemoteAddress(player.online()) : targetValue;
-        try { address = IpAddressUtil.canonicalize(address); }
-        catch (IllegalArgumentException error) { send(source, "moderation.ip.invalid", "Invalid IPv4 or IPv6 address."); return 0; }
+        String address = player != null && player.online() != null
+                ? services.getPlatformAdapter().getPlayerRemoteAddress(player.online())
+                : targetValue;
+        try {
+            address = IpAddressUtil.canonicalize(address);
+        } catch (IllegalArgumentException error) {
+            send(source, "moderation.ip.invalid", "Invalid IPv4 or IPv6 address.");
+            return 0;
+        }
+
         Long expiresAt = null;
         if (duration != null) {
             long millis = DurationParser.parseToMillis(duration);
-            if (millis <= 0L) { send(source, "moderation.duration_invalid", "Invalid duration."); return 0; }
+            if (millis <= 0L) {
+                send(source, "moderation.duration_invalid", "Invalid duration.");
+                return 0;
+            }
             expiresAt = System.currentTimeMillis() + millis;
         }
+
         ScopeReason parsed = parseScopeReason(rawReason);
         String finalAddress = address;
         Long finalExpiresAt = expiresAt;
         return StorageCommandSupport.runForSource(services, source, "moderation.ipban", () -> services.getPunishmentService().create(
-                PunishmentType.IP_BAN, parsed.scope(), player != null ? player.uuid() : null, player != null ? player.name() : null,
-                finalAddress, parsed.reason(), actorUuid(source), actorName(source), finalExpiresAt), punishment -> {
-            if (player != null && player.online() != null) services.getPunishmentService().enforcePlayer(player.online());
-            send(source, "moderation.ip.created", "Created IP ban {id}. Subject: {subject}.", "{id}", punishment.punishmentId(), "{subject}", IpAddressUtil.mask(finalAddress));
+                PunishmentType.IP_BAN,
+                parsed.scope(),
+                player != null ? player.uuid() : null,
+                player != null ? player.name() : null,
+                finalAddress,
+                parsed.reason(),
+                actorUuid(source),
+                actorName(source),
+                finalExpiresAt
+        ), punishment -> {
+            if (player != null && player.online() != null) {
+                services.getPunishmentService().enforcePlayer(player.online());
+            }
+            send(source, "moderation.ip.created", "Created IP ban {id}. Subject: {subject}.",
+                    "{id}", punishment.punishmentId(), "{subject}", IpAddressUtil.mask(finalAddress));
         }, "moderation.error_save");
     }
 
     private int revoke(ICommandSource source, String target, String rawReason) {
-        List<PunishmentRecord> matches;
-        if (PunishmentIds.isValid(target)) {
-            matches = services.getPunishmentService().find(target).filter(record -> record.type() == PunishmentType.IP_BAN && record.activeAt(System.currentTimeMillis())).stream().toList();
-        } else {
-            try { matches = services.getPunishmentService().activeFor(null, IpAddressUtil.canonicalize(target)).stream().filter(record -> record.type() == PunishmentType.IP_BAN).toList(); }
-            catch (IllegalArgumentException error) { send(source, "moderation.ip.invalid", "Invalid IP address or punishment ID."); return 0; }
+        boolean exactId = PunishmentIds.isValid(target);
+        String canonicalAddress = null;
+        if (!exactId) {
+            try {
+                canonicalAddress = IpAddressUtil.canonicalize(target);
+            } catch (IllegalArgumentException error) {
+                send(source, "moderation.ip.invalid", "Invalid IP address or punishment ID.");
+                return 0;
+            }
         }
-        if (matches.size() != 1) {
-            send(source, "moderation.punishment.ambiguous", "Use an exact punishment ID. Matching IDs: {ids}", "{ids}", matches.stream().map(PunishmentRecord::punishmentId).collect(java.util.stream.Collectors.joining(", ")));
-            return 0;
-        }
-        boolean revoked = services.getPunishmentService().revoke(matches.get(0).punishmentId(), actorUuid(source), actorName(source), reason(rawReason));
-        if (revoked) send(source, "moderation.punishment.revoked", "Revoked punishment {id}.", "{id}", matches.get(0).punishmentId());
-        return revoked ? 1 : 0;
+
+        String actorUuid = actorUuid(source);
+        String actorName = actorName(source);
+        String revokeReason = reason(rawReason);
+        String finalAddress = canonicalAddress;
+
+        return StorageCommandSupport.runForSource(services, source, "moderation.unipban", () -> {
+            List<PunishmentRecord> matches = exactId
+                    ? services.getPunishmentService().find(target)
+                            .filter(record -> record.type() == PunishmentType.IP_BAN && record.activeAt(System.currentTimeMillis()))
+                            .stream()
+                            .toList()
+                    : services.getPunishmentService().activeFor(null, finalAddress).stream()
+                            .filter(record -> record.type() == PunishmentType.IP_BAN)
+                            .toList();
+
+            boolean revoked = matches.size() == 1
+                    && services.getPunishmentService().revoke(matches.get(0).punishmentId(), actorUuid, actorName, revokeReason);
+            return new RevokeResult(matches, revoked);
+        }, result -> {
+            if (result.matches().size() != 1) {
+                send(source, "moderation.punishment.ambiguous", "Use an exact punishment ID. Matching IDs: {ids}",
+                        "{ids}", result.matches().stream()
+                                .map(PunishmentRecord::punishmentId)
+                                .collect(java.util.stream.Collectors.joining(", ")));
+                return;
+            }
+            if (result.revoked()) {
+                send(source, "moderation.punishment.revoked", "Revoked punishment {id}.",
+                        "{id}", result.matches().get(0).punishmentId());
+            }
+        }, "moderation.error_save");
+    }
+
+    private record RevokeResult(List<PunishmentRecord> matches, boolean revoked) {
     }
 }

@@ -70,6 +70,9 @@ public abstract class PlayerListMixin {
             Object nativeObj = parsedComponent.getOriginalText();
             Text finalMessage = nativeObj instanceof Text t ? t : Text.literal(String.valueOf(nativeObj));
 
+            eu.avalanche7.paradigm.modules.chat.ChatConsoleLogger.log(
+                    services, sender.getName().getString(), message.getContent().getString());
+
             for (ServerPlayerEntity player : getPlayerList()) {
                 player.sendMessage(finalMessage, false);
             }

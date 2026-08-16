@@ -3,7 +3,6 @@ package eu.avalanche7.paradigm.modules.moderation;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -23,6 +22,7 @@ public final class PunishmentService {
     private final AuditService audit;
     private final ActivePunishmentCache cache = new ActivePunishmentCache();
     private final BanScreenFormatter banScreen;
+    private final Object mutationLock = new Object();
     private volatile long lastRefreshMs;
     private final AtomicBoolean refreshRunning = new AtomicBoolean();
     private final AtomicBoolean started = new AtomicBoolean();
@@ -65,23 +65,33 @@ public final class PunishmentService {
                 scope == ServerScope.SERVER ? context.serverId() : null, clean(subjectUuid), clean(subjectName),
                 canonicalIp != null ? IpAddressUtil.hash(canonicalIp) : null, canonicalIp, clean(reason), clean(actorUuid),
                 clean(actorName), now, now, expiresAtMs, null, null, null, null, now, Map.of());
-        PunishmentRecord stored = services.getStorageService().moderation().addPunishmentRecord(record);
-        if (stored == null) throw new IllegalStateException("Punishment could not be stored.");
-        cache.put(stored);
+        PunishmentRecord stored;
+        synchronized (mutationLock) {
+            stored = services.getStorageService().moderation().addPunishmentRecord(record);
+            if (stored == null) throw new IllegalStateException("Punishment could not be stored.");
+            cache.put(stored);
+        }
         auditCreate(stored);
         publish(events -> events.punishmentCreated(stored));
         return stored;
     }
 
     public boolean revoke(String punishmentId, String actorUuid, String actorName, String reason) {
-        Optional<PunishmentRecord> current = find(punishmentId);
-        if (current.isEmpty() || !current.get().activeAt(System.currentTimeMillis())) return false;
+        PunishmentRecord existing;
+        boolean changed;
         long now = System.currentTimeMillis();
-        boolean changed = services.getStorageService().moderation().revokePunishmentRecord(punishmentId, now, clean(actorUuid), clean(actorName), clean(reason));
+        synchronized (mutationLock) {
+            Optional<PunishmentRecord> current = find(punishmentId);
+            if (current.isEmpty() || !current.get().activeAt(now)) return false;
+            existing = current.get();
+            changed = services.getStorageService().moderation().revokePunishmentRecord(punishmentId, now, clean(actorUuid), clean(actorName), clean(reason));
+            if (changed) {
+                cache.remove(punishmentId);
+            }
+        }
         if (changed) {
-            cache.remove(punishmentId);
-            auditRevoke(current.get(), actorName);
-            PunishmentRecord revoked = current.get().revoked(now, clean(actorUuid), clean(actorName), clean(reason));
+            auditRevoke(existing, actorName);
+            PunishmentRecord revoked = existing.revoked(now, clean(actorUuid), clean(actorName), clean(reason));
             publish(events -> events.punishmentRevoked(revoked));
         }
         return changed;
@@ -127,24 +137,25 @@ public final class PunishmentService {
     public ActivePunishmentCache cache() { return cache; }
 
     public void refreshNow() {
-        cache.replace(services.getStorageService().moderation().listActivePunishmentRecords(0L));
-        lastRefreshMs = System.currentTimeMillis();
+        synchronized (mutationLock) {
+            cache.replace(services.getStorageService().moderation().listActivePunishmentRecords(0L));
+            lastRefreshMs = System.currentTimeMillis();
+        }
     }
 
     public void refreshAsync() {
         if (!refreshRunning.compareAndSet(false, true)) return;
-        CompletableFuture.supplyAsync(() -> services.getStorageService().moderation().listActivePunishmentRecords(0L))
-                .thenAccept(records -> {
-                    cache.replace(records);
+        services.getStorageService().runStorageAsync("moderation.cache-refresh", () -> {
+            try {
+                if (!started.get()) return;
+                synchronized (mutationLock) {
+                    cache.replace(services.getStorageService().moderation().listActivePunishmentRecords(0L));
                     lastRefreshMs = System.currentTimeMillis();
-                }).whenComplete((ignored, error) -> {
-                    refreshRunning.set(false);
-                    if (error != null && services.getLogger() != null) {
-                        Throwable failure = error.getCause() != null ? error.getCause() : error;
-                        services.getLogger().warn("[Paradigm] Moderation: asynchronous punishment cache refresh failed; "
-                                + "the previous cache snapshot remains active.", failure);
-                    }
-                });
+                }
+            } finally {
+                refreshRunning.set(false);
+            }
+        });
     }
 
     private void refreshIfDue() {

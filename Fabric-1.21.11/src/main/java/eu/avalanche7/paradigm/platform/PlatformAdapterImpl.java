@@ -60,7 +60,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     private final IEventSystem eventSystem;
 
     private CommandDispatcher<ServerCommandSource> commandDispatcher;
-    private final java.util.Set<String> ownedRootsRegisteredThisCycle = new java.util.HashSet<>();
 
     public PlatformAdapterImpl(
             PermissionsHandler permissionsHandler,
@@ -960,18 +959,13 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
                 return;
             }
 
-            if (!CommandPriority.shouldRegisterRoot(normalizedRoot)) {
+            CommandDispatcher<ServerCommandSource> resolvedDispatcher = dispatcher;
+            if (!CommandPriority.shouldRegisterRoot(resolvedDispatcher, normalizedRoot)) {
                 return;
             }
-            boolean shouldOwnRoot = CommandPriority.shouldOwnRoot(normalizedRoot);
-            boolean firstParadigmRegistrationForRoot = shouldOwnRoot && ownedRootsRegisteredThisCycle.add(normalizedRoot);
-            if (firstParadigmRegistrationForRoot) {
-                CommandPriority.unregisterRootLiteral(dispatcher, normalizedRoot);
-            }
-
-            com.mojang.brigadier.tree.LiteralCommandNode<ServerCommandSource> registeredNode = dispatcher.register(literalBuilder);
-            if (firstParadigmRegistrationForRoot
-                    && !CommandPriority.isOwnedByExpectedNode(dispatcher, normalizedRoot, registeredNode)
+            CommandPriority.RootRegistration registration = CommandPriority.registerRootLiteral(
+                    resolvedDispatcher, normalizedRoot, () -> resolvedDispatcher.register(literalBuilder));
+            if (registration.managed() && !registration.owned()
                     && debugLogger != null) {
                 debugLogger.debugLog("[Paradigm] Command root /" + normalizedRoot + " did not resolve to the newly registered Paradigm node.");
             }
@@ -1030,6 +1024,5 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     public void setCommandDispatcher(CommandDispatcher<ServerCommandSource> dispatcher) {
         this.commandDispatcher = dispatcher;
-        this.ownedRootsRegisteredThisCycle.clear();
     }
 }

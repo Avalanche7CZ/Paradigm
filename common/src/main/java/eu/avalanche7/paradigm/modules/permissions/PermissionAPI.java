@@ -143,6 +143,16 @@ public class PermissionAPI {
                 if (user.groups != null) {
                     user.groups.removeIf(g -> normalized.equals(normalizeGroupName(g)));
                 }
+                if (user.contextualGroups != null) {
+                    user.contextualGroups.removeIf(g -> g != null && normalized.equals(normalizeGroupName(g.group)));
+                }
+            }
+            if (playerDataStore != null) {
+                for (PlayerDataStore.PlayerEntry player : playerDataStore.listPlayerEntries()) {
+                    if (player != null && player.getUuid() != null) {
+                        playerDataStore.removeTemporaryGroup(player.getUuid(), normalized);
+                    }
+                }
             }
 
             saveLocked();
@@ -749,14 +759,14 @@ public class PermissionAPI {
 
             List<String> permanent = user.groups != null ? List.copyOf(user.groups) : List.of();
             List<TemporaryGroupInfo> temporary = new ArrayList<>();
-                if (playerDataStore != null) {
-                    for (PlayerDataStore.TemporaryGroupEntry entry : playerDataStore.getTemporaryGroups(playerUuid.toString())) {
-                        if (entry == null || entry.getGroup() == null || entry.getGroup().isBlank()) {
-                            continue;
-                        }
-                        temporary.add(new TemporaryGroupInfo(entry.getGroup(), entry.getExpiresAtMs(), entry.getAssignedAtMs(), entry.getAssignedBy() != null ? entry.getAssignedBy() : ""));
+            if (playerDataStore != null) {
+                for (PlayerDataStore.TemporaryGroupEntry entry : playerDataStore.getTemporaryGroups(playerUuid.toString())) {
+                    if (entry == null || entry.getGroup() == null || entry.getGroup().isBlank()) {
+                        continue;
                     }
+                    temporary.add(new TemporaryGroupInfo(entry.getGroup(), entry.getExpiresAtMs(), entry.getAssignedAtMs(), entry.getAssignedBy() != null ? entry.getAssignedBy() : ""));
                 }
+            }
 
             return new UserGroupsInfo(permanent, List.copyOf(temporary));
         } finally {
@@ -828,50 +838,48 @@ public class PermissionAPI {
             return null;
         }
 
-        PermissionDataStore.PermissionState snapshot;
         stateLock.readLock().lock();
         try {
-            snapshot = this.state;
+            PermissionDataStore.PermissionState snapshot = this.state;
+            String normalizedUuid = playerUuid.toString().toLowerCase(Locale.ROOT);
+            PermissionDataStore.UserEntry user = snapshot.users.get(normalizedUuid);
+            PermissionContextResolver resolver = this.contextResolver;
+            PermissionContextSet currentContext = resolver != null ? resolver.currentServer() : PermissionContextSet.empty();
+            List<String> groupNames = resolvePlayerGroups(snapshot, normalizedUuid, user, currentContext);
+            if (groupNames.isEmpty()) {
+                return null;
+            }
+
+            String primary = null;
+            int bestWeight = Integer.MIN_VALUE;
+            String prefix = "";
+            String suffix = "";
+            List<String> resolvedGroups = new ArrayList<>();
+
+            for (String groupName : new LinkedHashSet<>(groupNames)) {
+                PermissionDataStore.GroupEntry group = snapshot.groups.get(groupName);
+                if (group == null) {
+                    continue;
+                }
+
+                resolvedGroups.add(groupName);
+                int weight = group.weight;
+                if (primary == null || weight > bestWeight) {
+                    primary = groupName;
+                    bestWeight = weight;
+                    prefix = group.prefix != null ? group.prefix : "";
+                    suffix = group.suffix != null ? group.suffix : "";
+                }
+            }
+
+            if (primary == null) {
+                return null;
+            }
+
+            return new PermissionMeta(primary, prefix, suffix, List.copyOf(resolvedGroups));
         } finally {
             stateLock.readLock().unlock();
         }
-
-        String normalizedUuid = playerUuid.toString().toLowerCase(Locale.ROOT);
-        PermissionDataStore.UserEntry user = snapshot.users.get(normalizedUuid);
-        PermissionContextResolver resolver = this.contextResolver;
-        PermissionContextSet currentContext = resolver != null ? resolver.currentServer() : PermissionContextSet.empty();
-        List<String> groupNames = resolvePlayerGroups(snapshot, normalizedUuid, user, currentContext);
-        if (groupNames.isEmpty()) {
-            return null;
-        }
-
-        String primary = null;
-        int bestWeight = Integer.MIN_VALUE;
-        String prefix = "";
-        String suffix = "";
-        List<String> resolvedGroups = new ArrayList<>();
-
-        for (String groupName : new LinkedHashSet<>(groupNames)) {
-            PermissionDataStore.GroupEntry group = snapshot.groups.get(groupName);
-            if (group == null) {
-                continue;
-            }
-
-            resolvedGroups.add(groupName);
-            int weight = group.weight;
-            if (primary == null || weight > bestWeight) {
-                primary = groupName;
-                bestWeight = weight;
-                prefix = group.prefix != null ? group.prefix : "";
-                suffix = group.suffix != null ? group.suffix : "";
-            }
-        }
-
-        if (primary == null) {
-            return null;
-        }
-
-        return new PermissionMeta(primary, prefix, suffix, List.copyOf(resolvedGroups));
     }
 
     public Boolean hasPermission(UUID playerUuid, String permissionNode) {
@@ -885,36 +893,34 @@ public class PermissionAPI {
             return null;
         }
 
-        PermissionDataStore.PermissionState snapshot;
         stateLock.readLock().lock();
         try {
-            snapshot = this.state;
+            PermissionDataStore.PermissionState snapshot = this.state;
+            String normalizedNode = permissionNode.trim().toLowerCase(Locale.ROOT);
+            String normalizedUuid = playerUuid.toString().toLowerCase(Locale.ROOT);
+
+            PermissionDataStore.UserEntry user = snapshot.users.get(normalizedUuid);
+
+            RuleDecision userDecision = bestRuleMatch(user != null ? user.permissions : List.of(), normalizedNode, "user", normalizedUuid, currentContext, 20);
+            userDecision = pickBetter(userDecision, bestContextRuleMatch(user != null ? user.contextualPermissions : List.of(), normalizedNode, "user", normalizedUuid, currentContext, 20));
+
+            List<String> groups = resolvePlayerGroups(snapshot, normalizedUuid, user, currentContext);
+            RuleDecision groupDecision = null;
+
+            for (String groupName : groups) {
+                RuleDecision candidate = evaluateGroup(snapshot, groupName, normalizedNode, currentContext, new HashSet<>(), 0);
+                groupDecision = pickBetter(groupDecision, candidate);
+            }
+
+            RuleDecision decision = pickBetter(userDecision, groupDecision);
+            if (decision != null) {
+                return decision.allowed;
+            }
+
+            return null;
         } finally {
             stateLock.readLock().unlock();
         }
-
-        String normalizedNode = permissionNode.trim().toLowerCase(Locale.ROOT);
-        String normalizedUuid = playerUuid.toString().toLowerCase(Locale.ROOT);
-
-        PermissionDataStore.UserEntry user = snapshot.users.get(normalizedUuid);
-
-        RuleDecision userDecision = bestRuleMatch(user != null ? user.permissions : List.of(), normalizedNode, "user", normalizedUuid, currentContext, 20);
-        userDecision = pickBetter(userDecision, bestContextRuleMatch(user != null ? user.contextualPermissions : List.of(), normalizedNode, "user", normalizedUuid, currentContext, 20));
-
-        List<String> groups = resolvePlayerGroups(snapshot, normalizedUuid, user, currentContext);
-        RuleDecision groupDecision = null;
-
-        for (String groupName : groups) {
-            RuleDecision candidate = evaluateGroup(snapshot, groupName, normalizedNode, currentContext, new HashSet<>(), 0);
-            groupDecision = pickBetter(groupDecision, candidate);
-        }
-
-        RuleDecision decision = pickBetter(userDecision, groupDecision);
-        if (decision != null) {
-            return decision.allowed;
-        }
-
-        return null;
     }
 
     public PermissionExplain explainPermission(UUID playerUuid, String permissionNode) {
@@ -922,36 +928,34 @@ public class PermissionAPI {
             return new PermissionExplain(null, "invalid", "", "", List.of());
         }
 
-        PermissionDataStore.PermissionState snapshot;
         stateLock.readLock().lock();
         try {
-            snapshot = this.state;
+            PermissionDataStore.PermissionState snapshot = this.state;
+            String normalizedNode = permissionNode.trim().toLowerCase(Locale.ROOT);
+            String normalizedUuid = playerUuid.toString().toLowerCase(Locale.ROOT);
+            PermissionDataStore.UserEntry user = snapshot.users.get(normalizedUuid);
+            PermissionContextResolver resolver = this.contextResolver;
+            PermissionContextSet currentContext = resolver != null ? resolver.currentServer() : PermissionContextSet.empty();
+            List<String> groups = resolvePlayerGroups(snapshot, normalizedUuid, user, currentContext);
+
+            RuleDecision userDecision = bestRuleMatch(user != null ? user.permissions : List.of(), normalizedNode, "user", normalizedUuid, currentContext, 20);
+            userDecision = pickBetter(userDecision, bestContextRuleMatch(user != null ? user.contextualPermissions : List.of(), normalizedNode, "user", normalizedUuid, currentContext, 20));
+
+            RuleDecision groupDecision = null;
+            for (String groupName : groups) {
+                RuleDecision candidate = evaluateGroup(snapshot, groupName, normalizedNode, currentContext, new HashSet<>(), 0);
+                groupDecision = pickBetter(groupDecision, candidate);
+            }
+
+            RuleDecision decision = pickBetter(userDecision, groupDecision);
+            if (decision != null) {
+                return new PermissionExplain(decision.allowed, decision.sourceType, decision.sourceName, decision.rule, List.copyOf(groups));
+            }
+
+            return new PermissionExplain(null, "none", "", "", List.copyOf(groups));
         } finally {
             stateLock.readLock().unlock();
         }
-
-        String normalizedNode = permissionNode.trim().toLowerCase(Locale.ROOT);
-        String normalizedUuid = playerUuid.toString().toLowerCase(Locale.ROOT);
-        PermissionDataStore.UserEntry user = snapshot.users.get(normalizedUuid);
-        PermissionContextResolver resolver = this.contextResolver;
-        PermissionContextSet currentContext = resolver != null ? resolver.currentServer() : PermissionContextSet.empty();
-        List<String> groups = resolvePlayerGroups(snapshot, normalizedUuid, user, currentContext);
-
-        RuleDecision userDecision = bestRuleMatch(user != null ? user.permissions : List.of(), normalizedNode, "user", normalizedUuid, currentContext, 20);
-        userDecision = pickBetter(userDecision, bestContextRuleMatch(user != null ? user.contextualPermissions : List.of(), normalizedNode, "user", normalizedUuid, currentContext, 20));
-
-        RuleDecision groupDecision = null;
-        for (String groupName : groups) {
-            RuleDecision candidate = evaluateGroup(snapshot, groupName, normalizedNode, currentContext, new HashSet<>(), 0);
-            groupDecision = pickBetter(groupDecision, candidate);
-        }
-
-        RuleDecision decision = pickBetter(userDecision, groupDecision);
-        if (decision != null) {
-            return new PermissionExplain(decision.allowed, decision.sourceType, decision.sourceName, decision.rule, List.copyOf(groups));
-        }
-
-        return new PermissionExplain(null, "none", "", "", List.copyOf(groups));
     }
 
     private List<String> resolvePlayerGroups(PermissionDataStore.PermissionState snapshot, String normalizedUuid, PermissionDataStore.UserEntry user, PermissionContextSet currentContext) {
@@ -1464,6 +1468,14 @@ public class PermissionAPI {
                     entry.inherits != null ? List.copyOf(entry.inherits) : List.of(),
                     permissions
             ));
+        }
+
+        Set<String> desiredUsers = new LinkedHashSet<>(snapshot.users.keySet());
+        for (StoredUserPermissionData existing : repository.listUsers()) {
+            String existingUuid = existing != null ? normalizeUuid(existing.uuid()) : null;
+            if (existingUuid != null && !desiredUsers.contains(existingUuid)) {
+                repository.deleteUser(existingUuid);
+            }
         }
 
         for (Map.Entry<String, PermissionDataStore.UserEntry> userEntry : snapshot.users.entrySet()) {

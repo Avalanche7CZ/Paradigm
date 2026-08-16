@@ -2,10 +2,16 @@ package eu.avalanche7.paradigm.modules.commands.shared;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+
+import eu.avalanche7.paradigm.ParadigmAPI;
+import eu.avalanche7.paradigm.core.ParadigmModule;
+import eu.avalanche7.paradigm.core.Services;
 
 /** Single source of truth for built-in command toggles and root ownership. */
 public final class CommandCatalog {
@@ -102,7 +108,7 @@ public final class CommandCatalog {
             entry("warpinfo", true, false, true, "warpinfo"),
             entry("rtp", true, false, true, "rtp"),
 
-            entry("reload", true, false, true, "reload"),
+            entry("reload", true, false, false, "reload"),
             entry("paradigm.help", true, false, false, "help"),
             entry("paradigm.command", true, true, false, "command", "commands"),
             entry("paradigm.dashboard", true, true, false, "dashboard"),
@@ -110,6 +116,7 @@ public final class CommandCatalog {
     );
 
     private static final Set<String> OWNED_ROOTS;
+    private static final Map<String, String> MODULE_BY_ID;
 
     static {
         LinkedHashSet<String> roots = new LinkedHashSet<>();
@@ -117,6 +124,47 @@ public final class CommandCatalog {
             if (entry.ownsConflictingRoots()) roots.addAll(entry.roots());
         }
         OWNED_ROOTS = Collections.unmodifiableSet(roots);
+
+        Map<String, String> modules = new LinkedHashMap<>();
+        own(modules, "PrivateMessages", "msg", "reply", "socialspy");
+        own(modules, "Mentions", "mention");
+        own(modules, "Restart", "restart");
+        own(modules, "CustomCommands", "customcommands");
+        own(modules, "StaffChat", "sc");
+        own(modules, "GroupChat", "groupchat");
+        own(modules, "Holograms", "hologram");
+        own(modules, "Home", "sethome", "home", "delhome", "homes", "back");
+        own(modules, "Spawn", "spawn", "setspawn");
+        own(modules, "Seen", "seen");
+        own(modules, "Ignore", "ignore", "unignore");
+        own(modules, "Speed", "speed");
+        own(modules, "Feed", "feed");
+        own(modules, "Heal", "heal");
+        own(modules, "Gamemode", "gamemode", "gmc", "creative", "gms", "survival", "gma", "adventure", "gmsp", "spectator");
+        own(modules, "Fly", "fly");
+        own(modules, "ClearInventory", "clearinv");
+        own(modules, "TimeWeather", "day", "night", "sun", "rain", "thunder");
+        own(modules, "Kick", "kick");
+        own(modules, "Ban", "ban", "unban", "pardon");
+        own(modules, "TempBan", "tempban");
+        own(modules, "IPBan", "ipban", "tempipban", "unipban");
+        own(modules, "Mute", "mute", "unmute");
+        own(modules, "TempMute", "tempmute");
+        own(modules, "Warn", "warn");
+        own(modules, "Jail", "setjail", "jail", "unjail");
+        own(modules, "Vanish", "vanish");
+        own(modules, "God", "god");
+        own(modules, "InventoryInspect", "invsee", "endersee");
+        own(modules, "Repair", "repair");
+        own(modules, "Enchant", "enchant");
+        own(modules, "Sudo", "sudo");
+        own(modules, "Near", "near");
+        own(modules, "Whois", "whois");
+        own(modules, "MovementUtility", "top", "jump");
+        own(modules, "Tpa", "tpa", "tpahere", "tpaccept", "tpdeny", "tpcancel");
+        own(modules, "Warp", "warp", "warps", "setwarp", "delwarp", "warpinfo");
+        own(modules, "Rtp", "rtp");
+        MODULE_BY_ID = Collections.unmodifiableMap(modules);
     }
 
     private CommandCatalog() {
@@ -144,6 +192,35 @@ public final class CommandCatalog {
         return null;
     }
 
+    public static Entry findById(String commandId) {
+        String normalized = normalize(commandId);
+        if (normalized == null) return null;
+        for (Entry entry : ENTRIES) {
+            if (entry.id().equals(normalized)) return entry;
+        }
+        return null;
+    }
+
+    public static boolean isModuleEnabled(String commandId) {
+        String moduleName = MODULE_BY_ID.get(normalize(commandId));
+        if (moduleName == null) return true;
+        Services services = ParadigmAPI.getServices();
+        for (ParadigmModule module : ParadigmAPI.getModules()) {
+            if (moduleName.equalsIgnoreCase(module.getName())) {
+                return module.isEnabled(services);
+            }
+        }
+        return true;
+    }
+
+    public static List<Entry> entriesForModule(ParadigmModule module) {
+        if (module == null || module.getName() == null) return List.of();
+        String moduleName = module.getName();
+        return ENTRIES.stream()
+                .filter(entry -> moduleName.equalsIgnoreCase(MODULE_BY_ID.get(entry.id())))
+                .toList();
+    }
+
     private static Entry entry(String id, boolean enabled, boolean protectedCommand, boolean ownsRoots, String... roots) {
         List<String> normalizedRoots = new ArrayList<>();
         for (String root : roots) {
@@ -151,6 +228,10 @@ public final class CommandCatalog {
             if (normalized != null) normalizedRoots.add(normalized);
         }
         return new Entry(id, normalizedRoots, enabled, protectedCommand, ownsRoots);
+    }
+
+    private static void own(Map<String, String> modules, String moduleName, String... commandIds) {
+        for (String commandId : commandIds) modules.put(commandId, moduleName);
     }
 
     private static String normalize(String value) {

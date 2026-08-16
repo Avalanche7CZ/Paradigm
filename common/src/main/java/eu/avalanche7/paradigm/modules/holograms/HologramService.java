@@ -385,7 +385,7 @@ public final class HologramService {
             for (String sourceId : index.sourcesInChunk(key)) {
                 boolean hasRuntime = runtime.values().stream().anyMatch(value -> sourceId.equals(value.sourceId));
                 if (loaded && !hasRuntime) dirtySources.add(sourceId);
-                if (!loaded && hasRuntime) runtime.entrySet().removeIf(entry -> sourceId.equals(entry.getValue().sourceId));
+                if (!loaded && hasRuntime) removeSourceRuntime(sourceId);
             }
         }
     }

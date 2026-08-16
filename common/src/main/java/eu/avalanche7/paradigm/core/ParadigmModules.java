@@ -73,7 +73,6 @@ public final class ParadigmModules {
         modules.add(new Announcements());
         modules.add(new MOTD());
         modules.add(new Tablist());
-        modules.add(new Mentions());
         modules.add(new Restart());
     }
 
@@ -81,6 +80,8 @@ public final class ParadigmModules {
         modules.add(new StaffChat());
         modules.add(new PrivateMessages());
         modules.add(new GroupChat(groupChatManager));
+        modules.add(new MuteCommand());
+        modules.add(new Mentions());
         modules.add(new JoinLeaveMessages());
         modules.add(new DiscordModule());
     }
@@ -109,7 +110,6 @@ public final class ParadigmModules {
         modules.add(new BanCommand());
         modules.add(new TempBanCommand());
         modules.add(new IpBanCommand());
-        modules.add(new MuteCommand());
         modules.add(new TempMuteCommand());
         modules.add(new WarnCommand());
         modules.add(new JailCommand());

@@ -4,9 +4,14 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Consumer;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
 
 public final class ParadigmEvents {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ParadigmEvents.class);
+
     public interface Listener {
         default void onPunishmentCreated(PunishmentRecord record) {
         }
@@ -77,7 +82,8 @@ public final class ParadigmEvents {
         for (Listener listener : listeners) {
             try {
                 action.accept(listener);
-            } catch (RuntimeException | LinkageError ignored) {
+            } catch (RuntimeException | LinkageError failure) {
+                LOGGER.warn("Paradigm event listener {} failed: {}", listener.getClass().getName(), failure.toString(), failure);
             }
         }
     }

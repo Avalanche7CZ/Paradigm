@@ -75,6 +75,8 @@ public abstract class PlayerListMixin {
             if (parsedComponent == null) {
                 return;
             }
+            eu.avalanche7.paradigm.modules.chat.ChatConsoleLogger.log(
+                    services, sender.getName().getString(), playerChatMessage.signedContent().plain());
             Component finalMessage;
             if (parsedComponent instanceof MinecraftComponent mc) {
                 finalMessage = mc.getHandle();

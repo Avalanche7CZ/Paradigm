@@ -1,7 +1,6 @@
 package eu.avalanche7.paradigm.data;
 
 import java.io.Reader;
-import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,6 +13,7 @@ import com.google.gson.GsonBuilder;
 import org.slf4j.Logger;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import eu.avalanche7.paradigm.utils.AtomicFileIO;
 
 public class AdminUtilityDataStore {
     private static final String FILE_NAME = "paradigm/admin_utils.json";
@@ -123,8 +123,20 @@ public class AdminUtilityDataStore {
                 state.normalize();
             }
         } catch (Throwable t) {
-            if (logger != null) logger.warn("Paradigm: Failed to load admin_utils.json: {}", t.getMessage());
-            save();
+            Path archived = AtomicFileIO.quarantine(path, "corrupt");
+            if (logger != null) {
+                if (archived != null) {
+                    logger.warn("Paradigm: Failed to load admin_utils.json; archived unreadable data as {}", archived.getFileName());
+                } else {
+                    logger.warn("Paradigm: Failed to load admin_utils.json and could not archive it: {}", t.getMessage());
+                }
+            }
+            synchronized (lock) {
+                state = new State();
+            }
+            if (archived != null) {
+                save();
+            }
         }
     }
 
@@ -138,10 +150,7 @@ public class AdminUtilityDataStore {
         Path path = resolvePath();
         if (path == null) return;
         try {
-            Files.createDirectories(path.getParent());
-            try (Writer writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
-                gson.toJson(state, writer);
-            }
+            AtomicFileIO.writeUtf8Atomic(path, writer -> gson.toJson(state, writer));
         } catch (Throwable t) {
             if (logger != null) logger.warn("Paradigm: Failed to save admin_utils.json: {}", t.getMessage());
         }

@@ -1,8 +1,13 @@
 package eu.avalanche7.paradigm.modules.commands;
 
+import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
@@ -15,6 +20,7 @@ import eu.avalanche7.paradigm.modules.CommandManager;
 import eu.avalanche7.paradigm.modules.Restart;
 import eu.avalanche7.paradigm.modules.commands.moderation.PunishmentCommands;
 import eu.avalanche7.paradigm.modules.commands.permissions.PermissionCommands;
+import eu.avalanche7.paradigm.modules.commands.shared.CommandCatalog;
 import eu.avalanche7.paradigm.modules.dashboard.LocalDashboardModule;
 import eu.avalanche7.paradigm.modules.discord.DiscordModule;
 import eu.avalanche7.paradigm.modules.holograms.Holograms;
@@ -27,6 +33,8 @@ import eu.avalanche7.paradigm.utils.CommandToggleStore;
 
 public class Reload implements ParadigmModule {
     private static final Map<ParadigmModule, Boolean> LAST_HELP_STATE = new ConcurrentHashMap<>();
+    private static final Map<Object, Object> REGISTRY_ACCESS_BY_DISPATCHER =
+            Collections.synchronizedMap(new WeakHashMap<>());
 
     @Override public String getName() { return "Reload"; }
     @Override public boolean isEnabled(Services services) { return true; }
@@ -39,6 +47,9 @@ public class Reload implements ParadigmModule {
 
     @Override
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
+        if (dispatcher != null) {
+            REGISTRY_ACCESS_BY_DISPATCHER.put(dispatcher, registryAccess);
+        }
         IPlatformAdapter platform = services.getPlatformAdapter();
 
         ICommandBuilder reload = platform.createCommandBuilder()
@@ -90,6 +101,7 @@ public class Reload implements ParadigmModule {
 
                             refreshModuleStates(services, prevEnabled);
                             if ("main".equals(cfg) || "all".equals(cfg)) {
+                                refreshAllCommandStates(services);
                                 services.getPermissionsHandler().refreshInternalPermissions();
                             }
 
@@ -167,7 +179,25 @@ public class Reload implements ParadigmModule {
         refreshModuleStates(services, LAST_HELP_STATE);
     }
 
+    public static Map<ParadigmModule, Boolean> snapshotModuleStates(Services services) {
+        Map<ParadigmModule, Boolean> states = new HashMap<>();
+        for (ParadigmModule module : ParadigmAPI.getModules()) {
+            try {
+                states.put(module, module.isEnabled(services));
+            } catch (Throwable ignored) {
+                states.put(module, false);
+            }
+        }
+        return states;
+    }
+
+    public static void recordModuleStates(Services services) {
+        LAST_HELP_STATE.clear();
+        LAST_HELP_STATE.putAll(snapshotModuleStates(services));
+    }
+
     public static void refreshModuleStates(Services services, Map<ParadigmModule, Boolean> prevEnabled) {
+        boolean commandsChanged = false;
         for (var m : ParadigmAPI.getModules()) {
             try {
                 boolean before = prevEnabled.getOrDefault(m, m.isEnabled(services));
@@ -175,17 +205,62 @@ public class Reload implements ParadigmModule {
                 try { after = m.isEnabled(services); } catch (Throwable t) { after = false; }
 
                 if (before && !after) {
+                    commandsChanged |= releaseModuleCommands(m, services);
                     m.onDisable(services);
                 } else if (!before && after) {
                     m.onEnable(services);
+                    commandsChanged |= registerModuleCommands(m, services);
                 }
                 prevEnabled.put(m, after);
+                LAST_HELP_STATE.put(m, after);
             } catch (Throwable t) {
                 if (services != null && services.getLogger() != null) {
                     services.getLogger().warn("Failed to refresh module {}: {}", m.getName(), t.toString());
                 }
             }
         }
+        if (commandsChanged) services.getPlatformAdapter().refreshAllPlayerCommandTrees();
+    }
+
+    public static void refreshCommandStates(Services services, Collection<String> commandIds) {
+        if (services == null || commandIds == null || commandIds.isEmpty()) return;
+        Set<ParadigmModule> modules = new HashSet<>();
+        for (String commandId : commandIds) {
+            CommandCatalog.Entry entry = CommandCatalog.findById(commandId);
+            if (entry == null) continue;
+            for (ParadigmModule module : ParadigmAPI.getModules()) {
+                if (CommandCatalog.entriesForModule(module).contains(entry)) modules.add(module);
+            }
+        }
+        for (ParadigmModule module : modules) {
+            releaseModuleCommands(module, services);
+            if (module.isEnabled(services)) registerModuleCommands(module, services);
+        }
+        services.getPlatformAdapter().refreshAllPlayerCommandTrees();
+    }
+
+    public static void refreshAllCommandStates(Services services) {
+        refreshCommandStates(services, CommandCatalog.entries().stream().map(CommandCatalog.Entry::id).toList());
+    }
+
+    private static boolean releaseModuleCommands(ParadigmModule module, Services services) {
+        var entries = CommandCatalog.entriesForModule(module);
+        boolean changed = false;
+        for (CommandCatalog.Entry entry : entries) {
+            if (!entry.ownsConflictingRoots()) continue;
+            for (String root : entry.roots()) {
+                changed |= services.getPlatformAdapter().unregisterCommandRoot(root);
+            }
+        }
+        return changed;
+    }
+
+    private static boolean registerModuleCommands(ParadigmModule module, Services services) {
+        if (CommandCatalog.entriesForModule(module).isEmpty()) return false;
+        Object dispatcher = services.getPlatformAdapter().getCommandDispatcher();
+        if (dispatcher == null) return false;
+        module.registerCommands(dispatcher, REGISTRY_ACCESS_BY_DISPATCHER.get(dispatcher), services);
+        return true;
     }
 
     private ICommandBuilder buildCommandToggleBranch(IPlatformAdapter platform, Services services) {
@@ -252,7 +327,7 @@ public class Reload implements ParadigmModule {
                 .literal("reload")
                 .executes(ctx -> {
                     toggles.reload();
-                    platform.refreshAllPlayerCommandTrees();
+                    refreshAllCommandStates(services);
                     sendToggleMessage(ctx.getSource(), services, "command_toggle.reloaded", "Command toggles reloaded from commands.json.");
                     sendCommandTogglePanel(ctx.getSource(), services, "");
                     return 1;
@@ -276,7 +351,7 @@ public class Reload implements ParadigmModule {
                 enabled ? "command_toggle.enabled" : "command_toggle.disabled",
                 enabled ? "Enabled command {command}." : "Disabled command {command}.",
                 "{command}", result.canonicalId());
-        services.getPlatformAdapter().refreshAllPlayerCommandTrees();
+        refreshCommandStates(services, java.util.List.of(result.canonicalId()));
         sendCommandTogglePanel(source, services, "");
         return 1;
     }

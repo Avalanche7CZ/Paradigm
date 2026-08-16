@@ -1,7 +1,6 @@
 package eu.avalanche7.paradigm.data;
 
 import java.io.Reader;
-import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,6 +20,7 @@ import org.slf4j.Logger;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.utils.AtomicFileIO;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 
 public class PlayerDataStore {
@@ -470,31 +470,32 @@ public class PlayerDataStore {
             loaded.normalize(uuid);
             return loaded;
         } catch (Exception e) {
-            logger.warn("Paradigm: Failed to load playerdata for {}: {}", uuid, e.getMessage());
+            Path quarantined = AtomicFileIO.quarantine(path, "corrupt");
+            logger.warn("Paradigm: Failed to load playerdata for {}: {}{}", uuid, e.getMessage(),
+                    quarantined != null ? " (preserved as " + quarantined.getFileName() + ")" : "");
             debugLogger.debugLog("PlayerDataStore: load failed for " + uuid, e);
             return fallback;
         }
     }
 
-    private void saveEntryLocked(PlayerEntry entry) {
+    private boolean saveEntryLocked(PlayerEntry entry) {
         if (entry == null || entry.getUuid() == null || entry.getUuid().isBlank()) {
-            return;
+            return false;
         }
         entry.normalize(entry.getUuid());
 
         Path path = resolvePlayerPath(entry.getUuid());
         if (path == null) {
-            return;
+            return false;
         }
 
         try {
-            Files.createDirectories(path.getParent());
-            try (Writer writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
-                gson.toJson(entry, writer);
-            }
+            AtomicFileIO.writeUtf8Atomic(path, writer -> gson.toJson(entry, writer));
+            return true;
         } catch (Exception e) {
             logger.warn("Paradigm: Failed to save playerdata for {}: {}", entry.getUuid(), e.getMessage());
             debugLogger.debugLog("PlayerDataStore: save failed for " + entry.getUuid(), e);
+            return false;
         }
     }
 
@@ -519,21 +520,40 @@ public class PlayerDataStore {
 
         try (Reader reader = Files.newBufferedReader(legacyPath, StandardCharsets.UTF_8)) {
             LegacyDataFile legacy = gson.fromJson(reader, LegacyDataFile.class);
-            if (legacy == null || legacy.players == null || legacy.players.isEmpty()) {
+            boolean complete = true;
+            if (legacy != null && legacy.players != null) {
+                for (Map.Entry<String, PlayerEntry> e : legacy.players.entrySet()) {
+                    String uuid = normalizePlayerKey(e.getKey());
+                    if (uuid == null) {
+                        continue;
+                    }
+
+                    Path playerPath = resolvePlayerPath(uuid);
+                    if (playerPath != null && Files.exists(playerPath)) {
+                        continue;
+                    }
+
+                    PlayerEntry entry = e.getValue() != null ? e.getValue() : new PlayerEntry();
+                    entry.normalize(uuid);
+                    if (saveEntryLocked(entry)) {
+                        cache.putIfAbsent(uuid, entry);
+                    } else {
+                        complete = false;
+                    }
+                }
+            }
+
+            if (!complete) {
+                logger.warn("Paradigm: Legacy playerdata.json migration was incomplete; original file was kept for a future retry.");
                 return;
             }
 
-            for (Map.Entry<String, PlayerEntry> e : legacy.players.entrySet()) {
-                String uuid = normalizePlayerKey(e.getKey());
-                if (uuid == null) {
-                    continue;
-                }
-                PlayerEntry entry = e.getValue() != null ? e.getValue() : new PlayerEntry();
-                entry.normalize(uuid);
-                cache.put(uuid, entry);
-                saveEntryLocked(entry);
+            Path archived = AtomicFileIO.archive(legacyPath, "migrated");
+            if (archived != null) {
+                debugLogger.debugLog("PlayerDataStore: migrated legacy playerdata.json and archived it as " + archived.getFileName() + ".");
+            } else {
+                logger.warn("Paradigm: Legacy playerdata.json was migrated but could not be archived; existing per-player files will be kept on future starts.");
             }
-            debugLogger.debugLog("PlayerDataStore: migrated legacy playerdata.json to per-player files.");
         } catch (Exception e) {
             logger.warn("Paradigm: Failed to migrate legacy playerdata.json: {}", e.getMessage());
             debugLogger.debugLog("PlayerDataStore: migration failed", e);

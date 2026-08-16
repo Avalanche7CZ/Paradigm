@@ -28,7 +28,6 @@ import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.modules.CommandManager;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardJson;
 
-/** Constrained CRUD service for the custom-command directory. */
 public final class CustomCommandAdminService {
     private static final Pattern NAME = Pattern.compile("[a-z0-9][a-z0-9_-]{0,31}");
     private static final Pattern PERMISSION = Pattern.compile("[A-Za-z0-9_*.-]{1,128}");
@@ -39,6 +38,7 @@ public final class CustomCommandAdminService {
     private final Services services;
     private final Path directory;
     private final Supplier<Integer> reloader;
+    private final Object mutationLock = new Object();
 
     public CustomCommandAdminService(Services services) {
         this(services,
@@ -79,45 +79,55 @@ public final class CustomCommandAdminService {
     }
 
     public MutationResult create(JsonObject command) {
-        JsonObject normalized = validate(command, null);
-        String name = string(normalized, "name");
-        if (locate(name) != null) throw new IllegalArgumentException("A custom command with that name already exists.");
-        Path path = directory.resolve(MANAGED_FILE);
-        JsonArray commands = readArray(path);
-        commands.add(normalized);
-        writeAtomic(path, commands);
-        return reloaded("created", name);
+        synchronized (mutationLock) {
+            JsonObject normalized = validate(command, null);
+            String name = string(normalized, "name");
+            if (locate(name) != null) throw new IllegalArgumentException("A custom command with that name already exists.");
+            Path path = directory.resolve(MANAGED_FILE);
+            JsonArray commands = readArray(path);
+            commands.add(normalized);
+            writeAtomic(path, commands);
+            return reloaded("created", name);
+        }
     }
 
     public MutationResult update(String originalName, JsonObject command) {
-        Located located = requireLocated(originalName);
-        JsonObject normalized = validate(command, originalName);
-        String newName = string(normalized, "name");
-        Located collision = locate(newName);
-        if (collision != null && !sameLocation(located, collision)) {
-            throw new IllegalArgumentException("A custom command with that name already exists.");
+        synchronized (mutationLock) {
+            Located located = requireLocated(originalName);
+            JsonObject normalized = validate(command, originalName);
+            String newName = string(normalized, "name");
+            Located collision = locate(newName);
+            if (collision != null && !sameLocation(located, collision)) {
+                throw new IllegalArgumentException("A custom command with that name already exists.");
+            }
+            located.commands().set(located.index(), normalized);
+            writeAtomic(located.path(), located.commands());
+            return reloaded(originalName.equalsIgnoreCase(newName) ? "updated" : "renamed", newName);
         }
-        located.commands().set(located.index(), normalized);
-        writeAtomic(located.path(), located.commands());
-        return reloaded(originalName.equalsIgnoreCase(newName) ? "updated" : "renamed", newName);
     }
 
     public MutationResult duplicate(String sourceName, String requestedName) {
-        Located source = requireLocated(sourceName);
-        JsonObject copy = source.command().deepCopy();
-        copy.addProperty("name", text(requestedName));
-        return create(copy);
+        synchronized (mutationLock) {
+            Located source = requireLocated(sourceName);
+            JsonObject copy = source.command().deepCopy();
+            copy.addProperty("name", text(requestedName));
+            return create(copy);
+        }
     }
 
     public MutationResult delete(String name) {
-        Located located = requireLocated(name);
-        located.commands().remove(located.index());
-        writeAtomic(located.path(), located.commands());
-        return reloaded("deleted", string(located.command(), "name"));
+        synchronized (mutationLock) {
+            Located located = requireLocated(name);
+            located.commands().remove(located.index());
+            writeAtomic(located.path(), located.commands());
+            return reloaded("deleted", string(located.command(), "name"));
+        }
     }
 
     public MutationResult reload() {
-        return new MutationResult("reloaded", "", reloadCommands().join());
+        synchronized (mutationLock) {
+            return new MutationResult("reloaded", "", reloadCommands().join());
+        }
     }
 
     private MutationResult reloaded(String action, String name) {

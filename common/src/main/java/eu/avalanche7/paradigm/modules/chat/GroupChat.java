@@ -98,7 +98,6 @@ public class GroupChat implements ParadigmModule {
                                     IPlayer player = ctx.getSource().requirePlayer();
                                     IPlayer target = ctx.getPlayerArgument("player");
                                     if (target == null) {
-                                        // Some platforms/versions may not resolve here; fall back to raw string if present.
                                         try {
                                             String raw = ctx.getStringArgument("player");
                                             return groupChatManager.invitePlayer(player, raw) ? 1 : 0;
@@ -144,6 +143,18 @@ public class GroupChat implements ParadigmModule {
                                     String groupName = ctx.getStringArgument("groupname");
                                     groupChatManager.requestJoinGroup(player, groupName);
                                     return 1;
+                                })))
+                .then(platform.createCommandBuilder()
+                        .literal("cancelreq")
+                        .then(platform.createCommandBuilder()
+                                .argument("groupname", ICommandBuilder.ArgumentType.STRING)
+                                .executes(ctx -> {
+                                    IPlayer player = ctx.getSource().requirePlayer();
+                                    String groupName = ctx.getStringArgument("groupname");
+                                    boolean cancelled = groupChatManager.cancelJoinRequest(player.getUUID(), groupName);
+                                    platform.sendSystemMessage(player, platform.createLiteralComponent(
+                                            cancelled ? "Join request cancelled." : "No pending join request for that group."));
+                                    return cancelled ? 1 : 0;
                                 })))
                 .then(platform.createCommandBuilder()
                         .literal("acceptreq")
@@ -260,6 +271,12 @@ public class GroupChat implements ParadigmModule {
                     event.setCancelled(true);
                 }
             });
+            events.onPlayerLeave(event -> {
+                IPlayer player = event != null ? event.getPlayer() : null;
+                if (player != null) {
+                    groupChatManager.clearPendingRequestsForPlayer(player.getUUID());
+                }
+            });
         }
     }
 
@@ -307,6 +324,7 @@ public class GroupChat implements ParadigmModule {
         sendHelpMessage(player, label, "accept <group_name>", services.getLang().translate("group.help_accept").getRawText(), services);
         sendHelpMessage(player, label, "deny <group_name>", services.getLang().translate("group.help_deny").getRawText(), services);
         sendHelpMessage(player, label, "request <group_name>", services.getLang().translate("group.help_request").getRawText(), services);
+        sendHelpMessage(player, label, "cancelreq <group_name>", "Cancel your pending join request.", services);
         sendHelpMessage(player, label, "acceptreq <player_name>", services.getLang().translate("group.help_acceptreq").getRawText(), services);
         sendHelpMessage(player, label, "denyreq <player_name>", services.getLang().translate("group.help_denyreq").getRawText(), services);
         sendHelpMessage(player, label, "requests", services.getLang().translate("group.help_requests").getRawText(), services);

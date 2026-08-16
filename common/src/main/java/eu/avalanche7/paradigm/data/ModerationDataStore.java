@@ -1,7 +1,6 @@
 package eu.avalanche7.paradigm.data;
 
 import java.io.Reader;
-import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -18,6 +17,7 @@ import org.slf4j.Logger;
 
 import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import eu.avalanche7.paradigm.utils.AtomicFileIO;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 
 public class ModerationDataStore {
@@ -382,9 +382,23 @@ public class ModerationDataStore {
                 state.normalize();
             }
         } catch (Throwable t) {
-            if (logger != null) logger.warn("Paradigm: Failed to load moderation.json: {}", t.getMessage());
+            Path archived = AtomicFileIO.quarantine(path, "corrupt");
+            if (logger != null) {
+                if (archived != null) {
+                    logger.warn("Paradigm: Failed to load moderation.json; archived unreadable data as {}: {}",
+                            archived.getFileName(), t.getMessage());
+                } else {
+                    logger.warn("Paradigm: Failed to load moderation.json and could not archive the unreadable file: {}",
+                            t.getMessage());
+                }
+            }
             debug("Failed to load moderation.json: " + t);
-            save();
+            synchronized (lock) {
+                state = new State();
+            }
+            if (archived != null) {
+                save();
+            }
         }
     }
 
@@ -398,10 +412,7 @@ public class ModerationDataStore {
         Path path = resolvePath();
         if (path == null) return;
         try {
-            Files.createDirectories(path.getParent());
-            try (Writer writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
-                gson.toJson(state, writer);
-            }
+            AtomicFileIO.writeUtf8Atomic(path, writer -> gson.toJson(state, writer));
         } catch (Throwable t) {
             if (logger != null) logger.warn("Paradigm: Failed to save moderation.json: {}", t.getMessage());
         }

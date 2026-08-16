@@ -21,7 +21,7 @@ public class DashboardAuthService {
         String raw = loginCode();
         long now = System.currentTimeMillis();
         String hash = hash(normalizeLoginToken(raw));
-        loginTokens.put(hash, new DashboardLoginToken(hash, principal, now, now + minutes(config.loginTokenMinutes) , false));
+        loginTokens.put(hash, new DashboardLoginToken(hash, principal, now, now + minutes(config.loginTokenMinutes), false));
         cleanup(now);
         return new IssuedToken(raw, now + minutes(config.loginTokenMinutes));
     }
@@ -30,14 +30,25 @@ public class DashboardAuthService {
         if (rawToken == null || rawToken.isBlank()) {
             return null;
         }
+
         long now = System.currentTimeMillis();
         String hash = hash(normalizeLoginToken(rawToken));
-        DashboardLoginToken token = loginTokens.get(hash);
-        if (token == null || token.used() || token.expired(now)) {
+        DashboardLoginToken[] consumed = new DashboardLoginToken[1];
+
+        loginTokens.compute(hash, (key, current) -> {
+            if (current == null || current.used() || current.expired(now)) {
+                return current;
+            }
+            consumed[0] = current;
+            return current.markUsed();
+        });
+
+        DashboardLoginToken token = consumed[0];
+        if (token == null) {
             cleanup(now);
             return null;
         }
-        loginTokens.put(hash, token.markUsed());
+
         String rawSession = randomToken(32);
         String rawCsrf = randomToken(32);
         String sessionHash = hash(rawSession);

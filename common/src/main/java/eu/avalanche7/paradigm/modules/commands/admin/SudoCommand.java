@@ -39,7 +39,14 @@ public class SudoCommand extends AbstractAdminCommand {
             send(source, "admin.sudo_missing", "Command is missing.");
             return 0;
         }
-        services.getPlatformAdapter().executeCommandAsConsole("execute as " + target.getName() + " at " + target.getName() + " run " + command);
+
+        ICommandSource targetSource = services.getPlatformAdapter().createCommandSourceForPlayer(target);
+        if (targetSource == null) {
+            send(source, "admin.sudo_failed", "Could not create a command source for {player}.", "{player}", target.getName());
+            return 0;
+        }
+
+        services.getPlatformAdapter().executeCommandAs(targetSource, command);
         send(source, "admin.sudo_ok", "Executed command as {player}.", "{player}", target.getName());
         return 1;
     }

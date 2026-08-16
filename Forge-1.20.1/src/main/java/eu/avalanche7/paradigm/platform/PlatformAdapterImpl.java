@@ -3,7 +3,6 @@ package eu.avalanche7.paradigm.platform;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.tree.LiteralCommandNode;
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.platform.Interfaces.*;
@@ -56,7 +55,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     private final IConfig config;
     private final IEventSystem eventSystem;
     private CommandDispatcher<CommandSourceStack> commandDispatcher;
-    private final Set<String> ownedRootsRegisteredThisCycle = new HashSet<>();
 
     public PlatformAdapterImpl(
             PermissionsHandler permissionsHandler,
@@ -598,7 +596,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             @SuppressWarnings("unchecked")
             CommandDispatcher<CommandSourceStack> cast = (CommandDispatcher<CommandSourceStack>) cd;
             this.commandDispatcher = cast;
-            this.ownedRootsRegisteredThisCycle.clear();
         }
     }
 
@@ -630,33 +627,16 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             return;
         }
 
-        if (!CommandPriority.shouldRegisterRoot(normalizedRoot)) {
+        if (!CommandPriority.shouldRegisterRoot(dispatcher, normalizedRoot)) {
             return;
         }
-        boolean shouldOwnRoot = CommandPriority.shouldOwnRoot(normalizedRoot);
-        boolean firstParadigmRegistrationForRoot = shouldOwnRoot && !ownedRootsRegisteredThisCycle.contains(normalizedRoot);
-        boolean strictIdentityVerification = firstParadigmRegistrationForRoot;
-
-        if (firstParadigmRegistrationForRoot) {
-            boolean hadExistingRoot = CommandPriority.hasRootLiteral(dispatcher, normalizedRoot);
-            if (hadExistingRoot) {
-                LOGGER.info("[Paradigm] Overriding existing command root: /{}", normalizedRoot);
-                boolean removed = CommandPriority.unregisterRootLiteral(dispatcher, normalizedRoot);
-                if (!removed) {
-                    LOGGER.warn("[Paradigm] Failed to remove existing command root before override: /{}", normalizedRoot);
-                }
-            }
+        CommandPriority.RootRegistration registration = CommandPriority.registerRootLiteral(
+                dispatcher, normalizedRoot, () -> dispatcher.register(literalBuilder));
+        if (registration.registered()) {
+            debugLogger.debugLog("[Paradigm] Registered command root: /" + normalizedRoot);
         }
-
-        LiteralCommandNode<CommandSourceStack> registeredNode = dispatcher.register(literalBuilder);
-        debugLogger.debugLog("[Paradigm] Registered command root: /" + normalizedRoot);
-
-        if (shouldOwnRoot) {
-            ownedRootsRegisteredThisCycle.add(normalizedRoot);
-            if (strictIdentityVerification
-                    && !CommandPriority.isOwnedByExpectedNode(dispatcher, normalizedRoot, registeredNode)) {
-                LOGGER.warn("[Paradigm] Command root /{} still points to non-Paradigm logic after registration.", normalizedRoot);
-            }
+        if (registration.managed() && !registration.owned()) {
+            LOGGER.warn("[Paradigm] Command root /{} still points to non-Paradigm logic after registration.", normalizedRoot);
         }
     }
 

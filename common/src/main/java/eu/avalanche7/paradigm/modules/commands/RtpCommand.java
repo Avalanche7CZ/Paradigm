@@ -56,28 +56,32 @@ public class RtpCommand implements ParadigmModule {
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         ICommandBuilder cmd = services.getPlatformAdapter().createCommandBuilder()
                 .literal("rtp")
-                .requires(src -> services.getCommandToggleStore().isEnabled("rtp")
-                        && src.getPlayer() != null
-                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), ParadigmPermissions.RTP))
+                .requires(src -> canUseRtp(src.getPlayer()))
                 .executes(ctx -> executeRtp(ctx.getSource().getPlayer()));
         services.getPlatformAdapter().registerCommand(cmd);
+    }
+
+    private boolean canUseRtp(IPlayer player) {
+        return player != null
+                && services.getCommandToggleStore().isEnabled("rtp")
+                && services.getPermissionsHandler().hasPermission(player, ParadigmPermissions.RTP);
     }
 
     private int executeRtp(IPlayer player) {
         if (player == null) {
             return 0;
         }
+        return CommandCooldowns.run(services, player, "rtp", fresh ->
+                canUseRtp(fresh) ? teleportRandomly(fresh) : 0);
+    }
 
+    private int teleportRandomly(IPlayer player) {
         PlayerDataStore.StoredLocation origin = services.getPlatformAdapter().getPlayerLocation(player).orElse(null);
         if (origin == null) {
             send(player, "rtp.location_unavailable", "Unable to read your current location.");
             return 0;
         }
 
-        return CommandCooldowns.run(services, player, "rtp", () -> teleportRandomly(player, origin));
-    }
-
-    private int teleportRandomly(IPlayer player, PlayerDataStore.StoredLocation origin) {
         int minRadius = Math.max(0, services.getMainConfig().rtpMinRadius.value);
         int maxRadius = Math.max(minRadius + 1, services.getMainConfig().rtpMaxRadius.value);
         int maxAttempts = Math.max(1, services.getMainConfig().rtpMaxAttempts.value);
@@ -94,7 +98,11 @@ public class RtpCommand implements ParadigmModule {
 
             Optional<Double> safeY = services.getPlatformAdapter().findSafeRtpY(player, blockX, blockZ);
             if (safeY.isPresent()) {
-                services.getPlatformAdapter().teleportPlayer(player, blockX, safeY.get(), blockZ);
+                PlayerDataStore.StoredLocation destination = new PlayerDataStore.StoredLocation(
+                        origin.getWorldId(), blockX, safeY.get(), blockZ, origin.getYaw(), origin.getPitch());
+                if (!services.getPlatformAdapter().teleportPlayer(player, destination)) {
+                    continue;
+                }
                 saveBackLocationAsync(player, origin);
                 send(player, "rtp.teleported", "Teleported to a random location.");
                 return 1;

@@ -1,9 +1,10 @@
 package eu.avalanche7.paradigm.modules.commands;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 
 import eu.avalanche7.paradigm.core.ParadigmModule;
@@ -21,11 +22,14 @@ import eu.avalanche7.paradigm.storage.model.StoredWarp;
 import eu.avalanche7.paradigm.utils.CommandCooldowns;
 
 public class WarpCommand implements ParadigmModule {
+    private static final long WARP_CACHE_REFRESH_MS = 10_000L;
     private static final Pattern SAFE_NAME = Pattern.compile("[A-Za-z0-9_-]{1,32}");
 
     private Services services;
     private IPlatformAdapter platform;
-    private final Map<String, StoredWarp> warpCache = new ConcurrentHashMap<>();
+    private volatile Map<String, StoredWarp> warpCache = Map.of();
+    private final AtomicBoolean warpCacheRefreshInFlight = new AtomicBoolean();
+    private volatile long warpCacheUpdatedAt;
 
     @Override
     public String getName() {
@@ -47,10 +51,12 @@ public class WarpCommand implements ParadigmModule {
 
     @Override
     public void onServerStarting(Object event, Services services) {
+        refreshWarpCacheAsync(true);
     }
 
     @Override
     public void onEnable(Services services) {
+        refreshWarpCacheAsync(true);
     }
 
     @Override
@@ -59,6 +65,9 @@ public class WarpCommand implements ParadigmModule {
 
     @Override
     public void onServerStopping(Object event, Services services) {
+        warpCache = Map.of();
+        warpCacheUpdatedAt = 0L;
+        warpCacheRefreshInFlight.set(false);
     }
 
     @Override
@@ -249,7 +258,10 @@ public class WarpCommand implements ParadigmModule {
                         send(current, "warp.no_permission", "You do not have permission to use warp {warp}.", "{warp}", warpName);
                         return;
                     }
-                    CommandCooldowns.run(services, current, "warp", () -> teleportWarp(current, warp));
+                    CommandCooldowns.run(services, current, "warp", fresh ->
+                            canUseWarpCommand(fresh) && canUseWarp(fresh, warp, warpName)
+                                    ? teleportWarp(fresh, warp)
+                                    : 0);
                 },
                 "warp.error_load");
     }
@@ -389,20 +401,46 @@ public class WarpCommand implements ParadigmModule {
 
     private List<String> warpSuggestions(String input) {
         String q = input != null ? input.trim().toLowerCase(Locale.ROOT) : "";
-        if (services != null && services.getStorageService() != null) {
-            try {
-                updateWarpCache(services.getStorageService().warps().listWarps());
-            } catch (Throwable t) {
-                if (services.getDebugLogger() != null) {
-                    services.getDebugLogger().debugLog("WarpCommand: failed to refresh warp suggestions: " + t);
-                }
-            }
+        if (System.currentTimeMillis() - warpCacheUpdatedAt >= WARP_CACHE_REFRESH_MS) {
+            refreshWarpCacheAsync(false);
         }
         return warpCache.values().stream()
                 .map(StoredWarp::name)
+                .filter(java.util.Objects::nonNull)
                 .filter(name -> q.isEmpty() || name.toLowerCase(Locale.ROOT).startsWith(q))
                 .sorted(String.CASE_INSENSITIVE_ORDER)
                 .toList();
+    }
+
+    private void refreshWarpCacheAsync(boolean force) {
+        if (services == null || services.getStorageService() == null) {
+            return;
+        }
+        if (!force && System.currentTimeMillis() - warpCacheUpdatedAt < WARP_CACHE_REFRESH_MS) {
+            return;
+        }
+        if (!warpCacheRefreshInFlight.compareAndSet(false, true)) {
+            return;
+        }
+
+        services.getStorageService().runAsync(
+                "warp.suggestions",
+                () -> services.getStorageService().warps().listWarps(),
+                services.getTaskScheduler(),
+                warps -> {
+                    try {
+                        updateWarpCache(warps);
+                    } finally {
+                        warpCacheRefreshInFlight.set(false);
+                    }
+                },
+                failure -> {
+                    warpCacheRefreshInFlight.set(false);
+                    if (services.getDebugLogger() != null) {
+                        services.getDebugLogger().debugLog("WarpCommand: failed to refresh warp suggestions: " + failure);
+                    }
+                }
+        );
     }
 
     private String normalizeInputName(String value) {
@@ -464,15 +502,19 @@ public class WarpCommand implements ParadigmModule {
     }
 
     private void updateWarpCache(List<StoredWarp> warps) {
-        warpCache.clear();
-        for (StoredWarp warp : warps) {
-            if (warp != null && warp.name() != null) {
-                String key = WarpStore.normalizeWarpKey(warp.name());
-                if (key != null) {
-                    warpCache.put(key, warp);
+        Map<String, StoredWarp> next = new LinkedHashMap<>();
+        if (warps != null) {
+            for (StoredWarp warp : warps) {
+                if (warp != null && warp.name() != null) {
+                    String key = WarpStore.normalizeWarpKey(warp.name());
+                    if (key != null) {
+                        next.put(key, warp);
+                    }
                 }
             }
         }
+        warpCache = Map.copyOf(next);
+        warpCacheUpdatedAt = System.currentTimeMillis();
     }
 
     private record DeleteWarpResult(boolean deleted, List<StoredWarp> warps) {

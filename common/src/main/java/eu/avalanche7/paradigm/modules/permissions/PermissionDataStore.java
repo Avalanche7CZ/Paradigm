@@ -1,7 +1,6 @@
 package eu.avalanche7.paradigm.modules.permissions;
 
 import java.io.Reader;
-import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,6 +19,7 @@ import org.slf4j.Logger;
 
 import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import eu.avalanche7.paradigm.utils.AtomicFileIO;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 
 public class PermissionDataStore {
@@ -58,11 +58,20 @@ public class PermissionDataStore {
             loaded.normalize();
             return loaded;
         } catch (Exception e) {
+            Path archived = AtomicFileIO.quarantine(path, "corrupt");
             if (logger != null) {
-                logger.warn("Paradigm: Failed to load permissions.json, using defaults. {}", e.getMessage());
+                if (archived != null) {
+                    logger.warn("Paradigm: Failed to load permissions.json; archived unreadable data as {}: {}",
+                            archived.getFileName(), e.getMessage());
+                } else {
+                    logger.warn("Paradigm: Failed to load permissions.json and could not archive the unreadable file: {}",
+                            e.getMessage());
+                }
             }
             PermissionState defaults = PermissionState.createDefault();
-            save(defaults);
+            if (archived != null) {
+                save(defaults);
+            }
             return defaults;
         }
     }
@@ -74,10 +83,7 @@ public class PermissionDataStore {
         }
 
         try {
-            Files.createDirectories(path.getParent());
-            try (Writer writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
-                gson.toJson(state, writer);
-            }
+            AtomicFileIO.writeUtf8Atomic(path, writer -> gson.toJson(state, writer));
         } catch (Exception e) {
             if (logger != null) {
                 logger.warn("Paradigm: Failed to save permissions.json: {}", e.getMessage());
@@ -155,7 +161,6 @@ public class PermissionDataStore {
                 groups.put(defaultKey, createBuiltInDefaultGroupEntry());
             }
 
-            // Keep built-in admin group available for older configs that predate it.
             if (!groups.containsKey("admin")) {
                 groups.put("admin", createBuiltInAdminGroupEntry());
             }
@@ -477,5 +482,4 @@ public class PermissionDataStore {
 
         return new ArrayList<>(normalized);
     }
-
 }

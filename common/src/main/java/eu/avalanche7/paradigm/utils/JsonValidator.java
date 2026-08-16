@@ -61,9 +61,7 @@ public class JsonValidator {
 
         return result;
     }
-    /**
-     * Remove comments from JSON (both single-line and multi-line)
-     */
+
     private String removeComments(String json, List<String> issues) {
         if (!json.contains("//") && !json.contains("/*")) {
             return json;
@@ -109,7 +107,7 @@ public class JsonValidator {
                     while (i + 1 < json.length() && !(json.charAt(i) == '*' && json.charAt(i + 1) == '/')) {
                         i++;
                     }
-                    if (i + 1 < json.length()) i += 2;
+                    if (i + 1 < json.length()) i += 1;
                     issues.add("Removed multi-line comments");
                     continue;
                 }
@@ -121,9 +119,6 @@ public class JsonValidator {
         return result.toString();
     }
 
-    /**
-     * Fix single quotes to double quotes (but only for JSON strings, not content)
-     */
     private String fixQuotes(String json, List<String> issues) {
         StringBuilder result = new StringBuilder();
         boolean inDoubleString = false;
@@ -163,9 +158,6 @@ public class JsonValidator {
         return result.toString();
     }
 
-    /**
-     * Add quotes around unquoted property names
-     */
     private String fixUnquotedProperties(String json, List<String> issues) {
         StringBuilder result = new StringBuilder();
         String[] lines = json.split("\n");
@@ -197,9 +189,6 @@ public class JsonValidator {
         return result.toString().trim();
     }
 
-    /**
-     * Remove trailing commas
-     */
     private String fixTrailingCommas(String json, List<String> issues) {
         String[] lines = json.split("\n");
         StringBuilder result = new StringBuilder();
@@ -225,9 +214,6 @@ public class JsonValidator {
         return result.toString().trim();
     }
 
-    /**
-     * Add missing commas between array elements and object properties
-     */
     private String fixMissingCommas(String json, List<String> issues) {
         String[] lines = json.split("\n");
         StringBuilder result = new StringBuilder();
@@ -257,9 +243,6 @@ public class JsonValidator {
         return result.toString().trim();
     }
 
-    /**
-     * Fix missing brackets/braces
-     */
     private String fixMissingBrackets(String json, List<String> issues) {
         int openBraces = 0, closeBraces = 0;
         int openBrackets = 0, closeBrackets = 0;
@@ -294,14 +277,12 @@ public class JsonValidator {
         }
 
         StringBuilder result = new StringBuilder(json);
-        boolean foundIssues = false;
         if (openBraces > closeBraces) {
             int missing = openBraces - closeBraces;
             for (int i = 0; i < missing; i++) {
                 result.append('\n').append('}');
             }
             issues.add("Added " + missing + " missing closing brace(s)");
-            foundIssues = true;
         }
         if (openBrackets > closeBrackets) {
             int missing = openBrackets - closeBrackets;
@@ -309,7 +290,6 @@ public class JsonValidator {
                 result.append('\n').append(']');
             }
             issues.add("Added " + missing + " missing closing bracket(s)");
-            foundIssues = true;
         }
 
         return result.toString();

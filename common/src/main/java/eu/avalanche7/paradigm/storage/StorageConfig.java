@@ -2,17 +2,16 @@ package eu.avalanche7.paradigm.storage;
 
 import java.io.IOException;
 import java.io.Reader;
-import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonParseException;
 import org.slf4j.Logger;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import eu.avalanche7.paradigm.utils.AtomicFileIO;
 
 public class StorageConfig {
     private static final String FILE_NAME = "paradigm/storage.json";
@@ -43,11 +42,20 @@ public class StorageConfig {
             merged.save(path, logger);
             return merged;
         } catch (IOException | RuntimeException t) {
+            Path archived = AtomicFileIO.quarantine(path, "corrupt");
             if (logger != null) {
-                logger.warn("Paradigm storage: failed to load storage.json, using safe defaults. {}", t.getMessage());
+                if (archived != null) {
+                    logger.warn("Paradigm storage: failed to load storage.json; archived unreadable data as {}. {}",
+                            archived.getFileName(), t.getMessage());
+                } else {
+                    logger.warn("Paradigm storage: failed to load storage.json and could not archive it. {}", t.getMessage());
+                }
             }
-            defaults.normalized(logger).save(path, logger);
-            return defaults.normalized(logger);
+            StorageConfig normalizedDefaults = defaults.normalized(logger);
+            if (archived != null) {
+                normalizedDefaults.save(path, logger);
+            }
+            return normalizedDefaults;
         }
     }
 
@@ -111,11 +119,8 @@ public class StorageConfig {
 
     private void save(Path path, Logger logger) {
         try {
-            Files.createDirectories(path.getParent());
-            try (Writer writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
-                GSON.toJson(this, writer);
-            }
-        } catch (IOException | JsonParseException t) {
+            AtomicFileIO.writeUtf8Atomic(path, writer -> GSON.toJson(this, writer));
+        } catch (IOException t) {
             if (logger != null) {
                 logger.warn("Paradigm storage: failed to save storage.json: {}", t.getMessage());
             }

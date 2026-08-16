@@ -64,6 +64,7 @@ import eu.avalanche7.paradigm.storage.migration.StorageMigrationOptions;
 import eu.avalanche7.paradigm.storage.model.StoredJailState;
 import eu.avalanche7.paradigm.storage.model.StoredPermissionNode;
 import eu.avalanche7.paradigm.storage.model.StoredUserPermissionData;
+import eu.avalanche7.paradigm.utils.ServerThreadCalls;
 
 public class DashboardService implements AutoCloseable {
     public static final class SchemaIncompatibleException extends IllegalStateException {
@@ -175,8 +176,9 @@ public class DashboardService implements AutoCloseable {
                 }
                 switch (page) {
                     case "general", "teleports" -> {
+                        Map<ParadigmModule, Boolean> moduleStates = Reload.snapshotModuleStates(services);
                         MainConfigHandler.reload();
-                        Reload.refreshModuleStatesForHelp(services);
+                        Reload.refreshModuleStates(services, moduleStates);
                     }
                     case "chat" -> {
                         ChatConfigHandler.reload();
@@ -191,7 +193,7 @@ public class DashboardService implements AutoCloseable {
                         for (ParadigmModule module : ParadigmAPI.getModules()) if (module instanceof Restart restart) restart.rescheduleNextRestart(services);
                     }
                     case "motd" -> MOTDConfigHandler.reload();
-                    case "commands" -> services.getPlatformAdapter().refreshAllPlayerCommandTrees();
+                    case "commands" -> Reload.refreshAllCommandStates(services);
                     case "discord" -> {
                         DiscordConfigHandler.reload();
                         services.getDiscordService().reload();
@@ -243,59 +245,50 @@ public class DashboardService implements AutoCloseable {
     }
 
     public CompletableFuture<Object> overviewAsync() {
-        return CompletableFuture.supplyAsync(() -> {
-            StorageService.StorageStatus storage = services.getStorageService().status();
-            int enabledModules = 0;
-            int modules = 0;
-            for (ParadigmModule module : ParadigmAPI.getModules()) {
-                modules++;
-                try {
-                    if (module.isEnabled(services)) {
-                        enabledModules++;
+        return ServerThreadCalls.supply(services, this::captureOverviewRuntime)
+                .thenApplyAsync(runtime -> {
+                    StorageService.StorageStatus storage = services.getStorageService().status();
+                    List<String> warnings = new ArrayList<>();
+                    if (config.remoteAccessRequested()) {
+                        warnings.add("Dashboard remote access is enabled or bound outside localhost.");
                     }
-                } catch (Throwable ignored) {
-                }
-            }
-            List<String> warnings = new ArrayList<>();
-            if (config.remoteAccessRequested()) {
-                warnings.add("Dashboard remote access is enabled or bound outside localhost.");
-            }
-            if (storage.fallbackActive()) {
-                warnings.add("Storage fallback is active: " + storage.fallbackReason());
-            }
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("version", ParadigmAPI.getModVersion());
-            data.put("minecraftVersion", services.getPlatformAdapter().getMinecraftVersion());
-            data.put("loader", loaderName());
-            data.put("onlinePlayers", safeOnlinePlayerCount());
-            data.put("uptimeMs", java.lang.management.ManagementFactory.getRuntimeMXBean().getUptime());
-            data.put("serverName", storage.serverIdentity().serverName());
-            data.put("serverId", storage.serverIdentity().serverId());
-            data.put("networkId", storage.serverIdentity().networkId());
-            data.put("activeProvider", storage.activeDataProvider());
-            data.put("dashboardUrl", baseUrl());
-            data.put("dashboardRunning", running());
-            data.put("sessions", authService.activeSessionCount());
-            data.put("loginTokens", authService.activeLoginTokenCount());
-            data.put("security", Map.of(
-                    "localOnly", !config.remoteAccessRequested(),
-                    "csrfEnabled", true,
-                    "requireLogin", config.requireLogin,
-                    "rateLimitPerMinute", config.rateLimitPerMinute,
-                    "publicBaseUrl", config.publicBaseUrl != null ? config.publicBaseUrl : ""
-            ));
-            data.put("modules", Map.of("total", modules, "enabled", enabledModules));
-            data.put("recentActivity", auditService.recent(6));
-            data.put("warnings", warnings);
-            return data;
-        }, executor);
+                    if (storage.fallbackActive()) {
+                        warnings.add("Storage fallback is active: " + storage.fallbackReason());
+                    }
+                    Map<String, Object> data = new LinkedHashMap<>();
+                    data.put("version", ParadigmAPI.getModVersion());
+                    data.put("minecraftVersion", runtime.minecraftVersion());
+                    data.put("loader", runtime.loader());
+                    data.put("onlinePlayers", runtime.onlinePlayers());
+                    data.put("uptimeMs", java.lang.management.ManagementFactory.getRuntimeMXBean().getUptime());
+                    data.put("serverName", storage.serverIdentity().serverName());
+                    data.put("serverId", storage.serverIdentity().serverId());
+                    data.put("networkId", storage.serverIdentity().networkId());
+                    data.put("activeProvider", storage.activeDataProvider());
+                    data.put("dashboardUrl", baseUrl());
+                    data.put("dashboardRunning", running());
+                    data.put("sessions", authService.activeSessionCount());
+                    data.put("loginTokens", authService.activeLoginTokenCount());
+                    data.put("security", Map.of(
+                            "localOnly", !config.remoteAccessRequested(),
+                            "csrfEnabled", true,
+                            "requireLogin", config.requireLogin,
+                            "rateLimitPerMinute", config.rateLimitPerMinute,
+                            "publicBaseUrl", config.publicBaseUrl != null ? config.publicBaseUrl : ""
+                    ));
+                    data.put("modules", Map.of("total", runtime.modules(), "enabled", runtime.enabledModules()));
+                    data.put("recentActivity", auditService.recent(6));
+                    data.put("warnings", warnings);
+                    return (Object) data;
+                }, executor);
     }
 
     public CompletableFuture<Object> serversAsync() {
-        return CompletableFuture.supplyAsync(() -> {
-            List<Map<String, Object>> result = heartbeatService.list(config, running());
-            return Map.of("servers", result, "networkActive", services.getStorageService().isMysqlActive());
-        }, executor);
+        return ServerThreadCalls.supply(services, () -> heartbeatService.captureLocal(config, running()))
+                .handle((local, failure) -> local)
+                .thenApplyAsync(local -> (Object) Map.of(
+                        "servers", heartbeatService.list(local),
+                        "networkActive", services.getStorageService().isMysqlActive()), executor);
     }
 
     public boolean isManagedLocally(String category) {
@@ -765,7 +758,7 @@ public class DashboardService implements AutoCloseable {
     }
 
     public CompletableFuture<Object> permissionUsersAsync(String query, int page, int pageSize) {
-        return CompletableFuture.supplyAsync(() -> {
+        return onlinePlayersAsync().thenApplyAsync(onlinePlayers -> {
             String q = query != null ? query.trim().toLowerCase(java.util.Locale.ROOT) : "";
             Map<String, Map<String, Object>> discovered = new LinkedHashMap<>();
             for (var profile : safeList(() -> services.getStorageService().players().listProfiles())) {
@@ -776,8 +769,8 @@ public class DashboardService implements AutoCloseable {
                     mergeUser(discovered, profile.getUuid(), profile.getName(), profile.getLastSeenMs(), false);
                 }
             }
-            for (IPlayer online : safeList(() -> services.getPlatformAdapter().getOnlinePlayers())) {
-                mergeUser(discovered, online.getUUID(), online.getName(), System.currentTimeMillis(), true);
+            for (OnlinePlayerSnapshot online : onlinePlayers) {
+                mergeUser(discovered, online.uuid(), online.name(), System.currentTimeMillis(), true);
             }
             for (var user : safeList(() -> services.getStorageService().permissions().listUsers())) {
                 Map<String, Object> row = mergeUser(discovered, user.uuid(), user.name(), 0L, false);
@@ -816,20 +809,19 @@ public class DashboardService implements AutoCloseable {
             rows.sort(java.util.Comparator.comparing(row -> safeText((String) row.get("name")), String.CASE_INSENSITIVE_ORDER));
             int size = clampPageSize(pageSize);
             int current = Math.max(1, page);
-            return Map.of("users", page(rows, current, size), "total", rows.size(), "page", current, "pageSize", size);
+            return (Object) Map.of("users", page(rows, current, size), "total", rows.size(), "page", current, "pageSize", size);
         }, executor);
     }
 
     public CompletableFuture<Object> permissionUserAsync(String uuidOrName) {
-        return CompletableFuture.supplyAsync(() -> {
-            UUID uuid = resolveUuid(uuidOrName);
+        return resolveUuidAsync(uuidOrName).thenApplyAsync(uuid -> {
             if (uuid == null) {
-                return Map.of("user", null);
+                return (Object) Map.of("user", null);
             }
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("uuid", uuid.toString());
             data.put("info", services.getPermissionsHandler().getPlayerPermissionInfo(uuid));
-            return Map.of("user", data);
+            return (Object) Map.of("user", data);
         }, executor);
     }
 
@@ -864,9 +856,8 @@ public class DashboardService implements AutoCloseable {
     }
 
     public CompletableFuture<Object> permissionEffectiveAsync(String uuidOrName, String query, int page, int pageSize) {
-        return CompletableFuture.supplyAsync(() -> {
-            UUID uuid = resolveUuid(uuidOrName);
-            if (uuid == null) return Map.of("entries", List.of(), "total", 0, "page", 1, "pageSize", clampPageSize(pageSize));
+        return resolveUuidAsync(uuidOrName).thenApplyAsync(uuid -> {
+            if (uuid == null) return (Object) Map.of("entries", List.of(), "total", 0, "page", 1, "pageSize", clampPageSize(pageSize));
             String q = safeText(query).toLowerCase(java.util.Locale.ROOT);
             Set<String> nodes = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
             nodes.addAll(services.getPermissionsHandler().knownPermissionNodes().keySet());
@@ -886,7 +877,7 @@ public class DashboardService implements AutoCloseable {
             }
             int size = clampPageSize(pageSize);
             int current = Math.max(1, page);
-            return Map.of("entries", page(entries, current, size), "total", entries.size(), "page", current, "pageSize", size);
+            return (Object) Map.of("entries", page(entries, current, size), "total", entries.size(), "page", current, "pageSize", size);
         }, executor);
     }
 
@@ -924,16 +915,14 @@ public class DashboardService implements AutoCloseable {
     }
 
     public CompletableFuture<Object> moderationPlayerAsync(String uuidOrName) {
-        return CompletableFuture.supplyAsync(() -> {
-            String q = uuidOrName != null ? uuidOrName.trim() : "";
+        String q = safeText(uuidOrName);
+        return resolveOnlinePlayerAsync(q).thenApplyAsync(online -> {
             var profile = services.getStorageService().players().listProfiles().stream()
                     .filter(item -> q.equalsIgnoreCase(item.uuid()) || q.equalsIgnoreCase(item.name())).findFirst().orElse(null);
-            IPlayer online = services.getPlatformAdapter().getPlayerByName(q);
-            if (online == null) online = services.getPlatformAdapter().getPlayerByUuid(q);
-            String uuid = profile != null ? profile.uuid() : online != null ? online.getUUID() : validUuid(q) ? q : "";
-            String name = profile != null ? profile.name() : online != null ? online.getName() : q;
+            String uuid = profile != null ? profile.uuid() : online != null ? online.uuid() : validUuid(q) ? q : "";
+            String name = profile != null ? profile.name() : online != null ? online.name() : q;
             List<Map<String, Object>> punishments = services.getPunishmentService().history(uuid, 1, 100).stream().map(this::punishmentDto).toList();
-            return Map.of("player", Map.of("uuid", uuid, "name", name), "punishments", punishments, "warnings", List.of());
+            return (Object) Map.of("player", Map.of("uuid", uuid, "name", name), "punishments", punishments, "warnings", List.of());
         }, executor);
     }
 
@@ -943,7 +932,11 @@ public class DashboardService implements AutoCloseable {
     }
 
     public CompletableFuture<Object> moderationActionAsync(DashboardPrincipal actor, ModerationActionRequest action) {
-        return CompletableFuture.supplyAsync(() -> moderationService.apply(actor, action), executor);
+        String target = action != null ? action.player : null;
+        return ServerThreadCalls.supply(services, () -> moderationService.snapshotPlayer(target))
+                .exceptionally(failure -> null)
+                .thenApplyAsync(online -> moderationService.apply(actor, action, online), executor)
+                .thenApply(result -> (Object) result);
     }
 
     private Map<String, Object> punishmentDto(eu.avalanche7.paradigm.modules.moderation.PunishmentRecord source) {
@@ -986,9 +979,9 @@ public class DashboardService implements AutoCloseable {
     public CompletableFuture<Object> auditQueryAsync(String actor, String type, String result, String source, String target,
                                                      Long fromMs, Long toMs, int page, int pageSize) {
         CompletableFuture<List<eu.avalanche7.paradigm.modules.audit.AuditEntry>> base;
-        if (!safeText(actor).isBlank()) base = auditService.actorAsync(actor, 500);
-        else if (!safeText(type).isBlank()) base = auditService.typeAsync(type, 500);
-        else base = CompletableFuture.completedFuture(auditService.recent(500));
+        if (!safeText(actor).isBlank()) base = auditService.actorAsync(actor, limitForAudit());
+        else if (!safeText(type).isBlank()) base = auditService.typeAsync(type, limitForAudit());
+        else base = CompletableFuture.completedFuture(auditService.recent(limitForAudit()));
         return base.thenApply(entries -> {
             String expectedResult = safeText(result).toUpperCase(java.util.Locale.ROOT);
             String expectedSource = safeText(source).toUpperCase(java.util.Locale.ROOT);
@@ -1007,6 +1000,10 @@ public class DashboardService implements AutoCloseable {
             int current = Math.max(1, page);
             return Map.of("entries", page(filtered, current, size), "total", filtered.size(), "page", current, "pageSize", size);
         });
+    }
+
+    private static int limitForAudit() {
+        return 500;
     }
 
     public CompletableFuture<List<CustomCommandAdminService.CommandView>> customCommandsAsync(String query) {
@@ -1029,16 +1026,85 @@ public class DashboardService implements AutoCloseable {
         }, executor);
     }
 
-    private int safeOnlinePlayerCount() {
-        try {
-            return services.getPlatformAdapter().getOnlinePlayers().size();
-        } catch (Throwable ignored) {
-            return 0;
+    private OverviewRuntime captureOverviewRuntime() {
+        int enabledModules = 0;
+        int modules = 0;
+        for (ParadigmModule module : ParadigmAPI.getModules()) {
+            modules++;
+            try {
+                if (module.isEnabled(services)) {
+                    enabledModules++;
+                }
+            } catch (Throwable ignored) {
+            }
         }
+        String minecraftVersion;
+        String loader;
+        int onlinePlayers;
+        try {
+            minecraftVersion = services.getPlatformAdapter().getMinecraftVersion();
+        } catch (Throwable ignored) {
+            minecraftVersion = "";
+        }
+        try {
+            loader = normalizeLoaderName(services.getPlatformAdapter().getLoaderName());
+        } catch (Throwable ignored) {
+            loader = "Unavailable";
+        }
+        try {
+            onlinePlayers = services.getPlatformAdapter().getOnlinePlayers().size();
+        } catch (Throwable ignored) {
+            onlinePlayers = 0;
+        }
+        return new OverviewRuntime(minecraftVersion, loader, onlinePlayers, modules, enabledModules);
     }
 
-    private String loaderName() {
-        return normalizeLoaderName(services.getPlatformAdapter().getLoaderName());
+    private CompletableFuture<List<OnlinePlayerSnapshot>> onlinePlayersAsync() {
+        return ServerThreadCalls.supply(services, () -> {
+            List<OnlinePlayerSnapshot> players = new ArrayList<>();
+            for (IPlayer player : services.getPlatformAdapter().getOnlinePlayers()) {
+                if (player != null && player.getUUID() != null && !player.getUUID().isBlank()) {
+                    players.add(new OnlinePlayerSnapshot(player.getUUID(), player.getName()));
+                }
+            }
+            return List.copyOf(players);
+        }).exceptionally(failure -> List.of());
+    }
+
+    private CompletableFuture<OnlinePlayerSnapshot> resolveOnlinePlayerAsync(String query) {
+        String value = safeText(query);
+        if (value.isBlank()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        return ServerThreadCalls.supply(services, () -> {
+            IPlayer player = services.getPlatformAdapter().getPlayerByUuid(value);
+            if (player == null) {
+                player = services.getPlatformAdapter().getPlayerByName(value);
+            }
+            return player != null ? new OnlinePlayerSnapshot(player.getUUID(), player.getName()) : null;
+        }).exceptionally(failure -> null);
+    }
+
+    private CompletableFuture<UUID> resolveUuidAsync(String uuidOrName) {
+        String value = safeText(uuidOrName);
+        if (value.isBlank()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        try {
+            return CompletableFuture.completedFuture(UUID.fromString(value));
+        } catch (Throwable ignored) {
+        }
+        return ServerThreadCalls.supply(services, () -> {
+            IPlayer player = services.getPlatformAdapter().getPlayerByName(value);
+            if (player == null || player.getUUID() == null) {
+                return null;
+            }
+            try {
+                return UUID.fromString(player.getUUID());
+            } catch (Throwable ignored) {
+                return null;
+            }
+        }).exceptionally(failure -> null);
     }
 
     static String normalizeLoaderName(String name) {
@@ -1167,27 +1233,14 @@ public class DashboardService implements AutoCloseable {
         return copy.size() > max ? List.copyOf(copy.subList(0, max)) : List.copyOf(copy);
     }
 
-    private UUID resolveUuid(String uuidOrName) {
-        String value = safeText(uuidOrName);
-        if (value.isBlank()) {
-            return null;
-        }
-        try {
-            return UUID.fromString(value);
-        } catch (Throwable ignored) {
-        }
-        try {
-            IPlayer player = services.getPlatformAdapter().getPlayerByName(value);
-            if (player != null && player.getUUID() != null) {
-                return UUID.fromString(player.getUUID());
-            }
-        } catch (Throwable ignored) {
-        }
-        return null;
-    }
-
     private static String safeText(String value) {
         return value != null ? value.trim() : "";
+    }
+
+    private record OverviewRuntime(String minecraftVersion, String loader, int onlinePlayers, int modules, int enabledModules) {
+    }
+
+    private record OnlinePlayerSnapshot(String uuid, String name) {
     }
 
     @Override

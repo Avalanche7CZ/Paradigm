@@ -2,7 +2,6 @@ package eu.avalanche7.paradigm.configs;
 
 import java.io.IOException;
 import java.io.Reader;
-import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,6 +15,7 @@ import com.google.gson.GsonBuilder;
 
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import eu.avalanche7.paradigm.utils.AtomicFileIO;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 
 public class CMConfig {
@@ -93,11 +93,8 @@ public class CMConfig {
         try {
             Files.createDirectories(configFolderPath);
             Path exampleFile = configFolderPath.resolve("examples.json");
-
-            try (Writer writer = Files.newBufferedWriter(exampleFile, StandardCharsets.UTF_8)) {
-                gson.toJson(this.loadedCommands, writer);
-                this.debugLogger.debugLog("CMConfig: Commands configuration saved successfully to examples.json.");
-            }
+            AtomicFileIO.writeUtf8Atomic(exampleFile, writer -> gson.toJson(this.loadedCommands, writer));
+            this.debugLogger.debugLog("CMConfig: Commands configuration saved successfully to examples.json.");
         } catch (IOException e) {
             this.debugLogger.debugLog("CMConfig: Failed to save commands configuration.", e);
         }

@@ -23,6 +23,7 @@ import eu.avalanche7.paradigm.configs.MentionConfigHandler;
 import eu.avalanche7.paradigm.configs.ModerationConfigHandler;
 import eu.avalanche7.paradigm.configs.RestartConfigHandler;
 import eu.avalanche7.paradigm.configs.TablistConfigHandler;
+import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.chat.PlayerNameClickAction;
 import eu.avalanche7.paradigm.modules.commands.Reload;
@@ -60,7 +61,9 @@ public class ConfigPatchService {
             return result;
         }
 
+        Map<ParadigmModule, Boolean> moduleStatesBefore = Reload.snapshotModuleStates(services);
         Map<String, ConfigField> fields = new HashMap<>();
+        java.util.Set<String> changedCommands = new java.util.HashSet<>();
         for (ConfigField field : current.fields()) {
             fields.put(field.key(), field);
         }
@@ -133,7 +136,9 @@ public class ConfigPatchService {
                     discordChanged = true;
                     result.accept(key);
                 } else if (key.startsWith("commands.")) {
-                    applyCommand(key.substring("commands.".length()), value, result, key);
+                    String commandId = key.substring("commands.".length());
+                    applyCommand(commandId, value, result, key);
+                    changedCommands.add(commandId);
                     commandsChanged = true;
                 } else if (key.startsWith("cooldowns.cooldown.")) {
                     applyCooldown(key.substring("cooldowns.cooldown.".length()), value, true);
@@ -158,7 +163,7 @@ public class ConfigPatchService {
 
         if (mainChanged) {
             MainConfigHandler.persistConfig();
-            scheduleServerThread(() -> Reload.refreshModuleStatesForHelp(services));
+            scheduleServerThread(() -> Reload.refreshModuleStates(services, moduleStatesBefore));
             result.warn("Main config changes were saved. Some effects may require a reload or restart.");
         }
         if (chatChanged) {
@@ -190,7 +195,7 @@ public class ConfigPatchService {
             result.warn("Dashboard config changes were saved. Use Apply Reload to activate bind/session changes.");
         }
         if (commandsChanged) {
-            scheduleServerThread(() -> services.getPlatformAdapter().refreshAllPlayerCommandTrees());
+            scheduleServerThread(() -> Reload.refreshCommandStates(services, changedCommands));
         }
         if (cooldownsChanged) {
             CooldownConfigHandler.persistConfig();

@@ -310,6 +310,10 @@ public class StorageService implements AutoCloseable {
                     return CompletableFuture.failedFuture(
                             new StorageException("Storage service is closed.", rejected));
                 }
+                if (!closing) {
+                    return CompletableFuture.failedFuture(
+                            new StorageException("Storage service is not accepting new work.", rejected));
+                }
                 try {
                     return CompletableFuture.completedFuture(task.get());
                 } catch (Throwable failure) {

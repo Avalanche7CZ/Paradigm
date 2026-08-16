@@ -87,6 +87,7 @@ public class GroupChatManager {
             if (memberPlayer != null && !memberPlayer.getUUID().equals(player.getUUID())) platform().sendSystemMessage(memberPlayer, deletedMessage);
         });
         groups.remove(groupName);
+        pendingJoinRequests.remove(groupName);
         platform().sendSystemMessage(player, translate("group.deleted_successfully"));
         debugLog("Player " + player.getName() + " deleted group: " + groupName);
         return true;
@@ -235,6 +236,7 @@ public class GroupChatManager {
         broadcastToGroup(group, parseMessage(leftNotificationRaw, null), null);
         if (group.getMembers().isEmpty()) {
             groups.remove(groupName);
+            pendingJoinRequests.remove(groupName);
             debugLog("Group " + groupName + " disbanded as last member left.");
         } else if (group.getOwner().equals(player.getUUID())) {
             String newOwnerUUID = group.getMembers().stream().findFirst().orElse(null);
@@ -257,6 +259,7 @@ public class GroupChatManager {
         group.addMember(player.getUUID());
         playerData.setCurrentGroup(groupName);
         playerData.removeInvitation(groupName);
+        cancelJoinRequest(player.getUUID(), groupName);
         String joinedRaw = translate("group.joined").getRawText().replace("{group_name}", groupName);
         platform().sendSystemMessage(player, parseMessage(joinedRaw, player));
         String joinedNotificationRaw = translate("group.player_joined_notification").getRawText().replace("{player_name}", player.getName());
@@ -283,7 +286,11 @@ public class GroupChatManager {
         platform().sendSystemMessage(owner, parseMessage(oMsg, owner));
         String nMsg = translate("group.kick_success_notify").getRawText().replace("{player_name}", target.getName());
         broadcastToGroup(group, parseMessage(nMsg, null), owner.getUUID());
-        if (group.getMembers().isEmpty()) { groups.remove(groupName); debugLog("Group " + groupName + " disbanded as last member was kicked."); }
+        if (group.getMembers().isEmpty()) {
+            groups.remove(groupName);
+            pendingJoinRequests.remove(groupName);
+            debugLog("Group " + groupName + " disbanded as last member was kicked.");
+        }
         debugLog("Player " + target.getName() + " was kicked from group: " + groupName + " by owner " + owner.getName());
         return true;
     }
@@ -313,7 +320,11 @@ public class GroupChatManager {
         String playerUUID = player.getUUID();
         if (group.getMembers().contains(playerUUID)) { platform().sendSystemMessage(player, parseMessage("&7You are already in group &f" + groupName, player)); return; }
         if (getPlayerData(player).getInvitations().contains(groupName)) { platform().sendSystemMessage(player, parseMessage("&7You already have an invite to &e" + groupName + "&7. Use &a/groupchat accept " + groupName, player)); return; }
-        pendingJoinRequests.computeIfAbsent(groupName, k -> new HashSet<>()).add(playerUUID);
+        Set<String> requests = pendingJoinRequests.computeIfAbsent(groupName, k -> new HashSet<>());
+        if (!requests.add(playerUUID)) {
+            platform().sendSystemMessage(player, translate("group.join_request_sent"));
+            return;
+        }
         platform().sendSystemMessage(player, translate("group.join_request_sent"));
         IComponent reqMsg = platform().createComponentFromLiteral("§eYou have a pending join request to §b" + groupName + " §8[");
         IComponent cancel = platform().createComponentFromLiteral("§6CANCEL")
@@ -335,6 +346,21 @@ public class GroupChatManager {
         }
     }
 
+    public boolean cancelJoinRequest(String requesterUuid, String groupName) {
+        if (requesterUuid == null || requesterUuid.isBlank() || groupName == null || groupName.isBlank()) return false;
+        Set<String> requests = pendingJoinRequests.get(groupName);
+        if (requests == null || !requests.remove(requesterUuid)) return false;
+        if (requests.isEmpty()) pendingJoinRequests.remove(groupName);
+        return true;
+    }
+
+    public void clearPendingRequestsForPlayer(String requesterUuid) {
+        if (requesterUuid == null || requesterUuid.isBlank()) return;
+        pendingJoinRequests.values().forEach(requests -> requests.remove(requesterUuid));
+        pendingJoinRequests.entrySet().removeIf(entry -> entry.getValue().isEmpty());
+        inviteCooldowns.remove(requesterUuid);
+    }
+
     public boolean acceptJoinRequest(IPlayer owner, String playerName) {
         String groupName = getPlayerData(owner).getCurrentGroup();
         if (groupName == null) { platform().sendSystemMessage(owner, translate("group.no_group_to_manage_requests")); return false; }
@@ -344,7 +370,7 @@ public class GroupChatManager {
         if (target == null) { platform().sendSystemMessage(owner, translate("group.request_player_offline")); return false; }
         Set<String> reqs = pendingJoinRequests.getOrDefault(groupName, Collections.emptySet());
         if (!reqs.contains(target.getUUID())) { platform().sendSystemMessage(owner, translate("group.no_pending_request")); return false; }
-        reqs.remove(target.getUUID());
+        cancelJoinRequest(target.getUUID(), groupName);
         boolean ok = internalJoinGroup(target, groupName);
         if (ok) {
             platform().sendSystemMessage(owner, translate("group.request_accepted_owner"));
@@ -360,8 +386,7 @@ public class GroupChatManager {
         if (!group.getOwner().equals(owner.getUUID())) { platform().sendSystemMessage(owner, translate("group.not_owner")); return false; }
         IPlayer target = platform().getPlayerByName(playerName);
         if (target == null) { platform().sendSystemMessage(owner, translate("group.request_player_offline")); return false; }
-        Set<String> reqs = pendingJoinRequests.getOrDefault(groupName, Collections.emptySet());
-        if (!reqs.remove(target.getUUID())) { platform().sendSystemMessage(owner, translate("group.no_pending_request")); return false; }
+        if (!cancelJoinRequest(target.getUUID(), groupName)) { platform().sendSystemMessage(owner, translate("group.no_pending_request")); return false; }
         platform().sendSystemMessage(owner, translate("group.request_denied_owner"));
         platform().sendSystemMessage(target, translate("group.request_denied_player"));
         return true;
@@ -406,7 +431,7 @@ public class GroupChatManager {
     public boolean sendMessageToGroup(IPlayer sender, String groupName, String messageContent) {
         Group group = groups.get(groupName);
         if (group == null || !group.getMembers().contains(sender.getUUID())) { platform().sendSystemMessage(sender, translate("group.not_in_group_or_not_exists")); return false; }
-        String preFormatted = String.format("&9[Group: %s] &r%s &7> &f%s", groupName, sender.getName(), messageContent);
+        String preFormatted = String.format("&9[Group: %s] &r%s &7> &f%s", escapeTags(groupName), escapeTags(sender.getName()), escapeTags(messageContent));
         IComponent finalMessage = parseMessage(preFormatted, sender);
         broadcastToGroup(group, finalMessage, null);
         return true;
@@ -416,5 +441,10 @@ public class GroupChatManager {
         String groupName = getPlayerData(sender).getCurrentGroup();
         if (groupName == null) { platform().sendSystemMessage(sender, translate("group.no_group_to_send_message")); return; }
         sendMessageToGroup(sender, groupName, messageContent);
+    }
+
+    private static String escapeTags(String value) {
+        if (value == null) return "";
+        return value.replace("\\", "\\\\").replace("<", "\\<");
     }
 }

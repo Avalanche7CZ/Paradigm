@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -25,6 +26,7 @@ public class TelemetryReporter {
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
     private static final String ENDPOINT = "https://arcturus-official.eu/paradigm/telemetry";
     private final Services services;
+    private final AtomicBoolean inFlight = new AtomicBoolean(false);
     private volatile boolean active = false;
     private volatile ScheduledFuture<?> reportTask;
 
@@ -57,7 +59,7 @@ public class TelemetryReporter {
         Integer intervalConfig = MainConfigHandler.getConfig().telemetryIntervalSeconds.value;
         int interval = Math.max(60, intervalConfig != null ? intervalConfig : 900);
         active = true;
-        reportTask = services.getTaskScheduler().scheduleAtFixedRate(this::reportOnceSafe, 10, interval, TimeUnit.SECONDS);
+        reportTask = services.getTaskScheduler().scheduleAtFixedRateRaw(this::queueReport, 10, interval, TimeUnit.SECONDS);
         services.getDebugLogger().debugLog("TelemetryReporter: started with interval " + interval + "s");
     }
 
@@ -69,45 +71,80 @@ public class TelemetryReporter {
         services.getDebugLogger().debugLog("TelemetryReporter: stopped");
     }
 
-    private void reportOnceSafe() {
-        if (!active) return;
-        try {
-            reportOnce();
-        } catch (Throwable t) {
-            services.getDebugLogger().debugLog("TelemetryReporter: send failed: " + t.getMessage());
+    /**
+     * The periodic trigger runs on the scheduler pool. Minecraft state is captured on the server
+     * thread, then only the immutable snapshot is handed back to a scheduler thread for HTTP I/O.
+     */
+    private void queueReport() {
+        if (!active || !inFlight.compareAndSet(false, true)) {
+            return;
+        }
+
+        ScheduledFuture<?> capture = services.getTaskScheduler().schedule(() -> {
+            if (!active) {
+                inFlight.set(false);
+                return;
+            }
+            TelemetrySnapshot snapshot;
+            try {
+                snapshot = captureSnapshot();
+            } catch (Throwable t) {
+                inFlight.set(false);
+                services.getDebugLogger().debugLog("TelemetryReporter: snapshot failed: " + t.getMessage());
+                return;
+            }
+
+            ScheduledFuture<?> send = services.getTaskScheduler().scheduleRaw(() -> reportOnceSafe(snapshot), 0L, TimeUnit.MILLISECONDS);
+            if (send == null || send.isCancelled()) {
+                inFlight.set(false);
+            }
+        }, 0L, TimeUnit.MILLISECONDS);
+
+        if (capture == null || capture.isCancelled()) {
+            inFlight.set(false);
         }
     }
 
-    private void reportOnce() throws Exception {
+    private TelemetrySnapshot captureSnapshot() {
         IPlatformAdapter platform = services.getPlatformAdapter();
         int online = platform.getOnlinePlayers().size();
-        int maxPlayers = 0;
-        try {
-            Object server = platform.getMinecraftServer();
-            if (server != null) {
-                try {
-                    var m = server.getClass().getMethod("getMaxPlayers");
-                    Object v = m.invoke(server);
-                    if (v instanceof Integer i) maxPlayers = i;
-                } catch (Throwable ignored) {}
-            }
-        } catch (Throwable ignored) {
-        }
+        int maxPlayers = platform.getMaxPlayers();
 
         String mcVersion = platform.getMinecraftVersion();
         if (mcVersion == null || mcVersion.isBlank()) mcVersion = "unknown";
 
-        String modVersion = resolveModVersion();
+        return new TelemetrySnapshot(
+                MainConfigHandler.getConfig().telemetryServerId.value,
+                mcVersion,
+                resolveModVersion(),
+                detectLoader(),
+                resolveRawMotd(),
+                online,
+                Math.max(0, maxPlayers)
+        );
+    }
 
+    private void reportOnceSafe(TelemetrySnapshot snapshot) {
+        try {
+            if (!active) return;
+            reportOnce(snapshot);
+        } catch (Throwable t) {
+            services.getDebugLogger().debugLog("TelemetryReporter: send failed: " + t.getMessage());
+        } finally {
+            inFlight.set(false);
+        }
+    }
+
+    private void reportOnce(TelemetrySnapshot snapshot) throws Exception {
         JsonObject payload = new JsonObject();
         payload.addProperty("timestamp", Instant.now().toString());
-        payload.addProperty("serverId", MainConfigHandler.getConfig().telemetryServerId.value);
-        payload.addProperty("mcVersion", mcVersion);
-        payload.addProperty("modVersion", modVersion);
-        payload.addProperty("loader", detectLoader());
-        payload.addProperty("motdRaw", resolveRawMotd());
-        payload.addProperty("onlinePlayers", online);
-        payload.addProperty("maxPlayers", maxPlayers);
+        payload.addProperty("serverId", snapshot.serverId());
+        payload.addProperty("mcVersion", snapshot.mcVersion());
+        payload.addProperty("modVersion", snapshot.modVersion());
+        payload.addProperty("loader", snapshot.loader());
+        payload.addProperty("motdRaw", snapshot.motdRaw());
+        payload.addProperty("onlinePlayers", snapshot.onlinePlayers());
+        payload.addProperty("maxPlayers", snapshot.maxPlayers());
 
         String json = GSON.toJson(payload);
 
@@ -155,13 +192,10 @@ public class TelemetryReporter {
     }
 
     private static String detectLoader() {
-        // NeoForge
         if (classExists("net.neoforged.neoforge.common.NeoForge")) return "neoforge";
-        if (classExists("net.neoforged.fml.loading.FMLEnvironment"))  return "neoforge";
-        // Forge (classic)
-        if (classExists("net.minecraftforge.common.MinecraftForge"))   return "forge";
+        if (classExists("net.neoforged.fml.loading.FMLEnvironment")) return "neoforge";
+        if (classExists("net.minecraftforge.common.MinecraftForge")) return "forge";
         if (classExists("net.minecraftforge.fml.loading.FMLEnvironment")) return "forge";
-        // Fabric / Quilt
         if (classExists("net.fabricmc.loader.api.FabricLoader")) {
             if (classExists("org.quiltmc.loader.api.QuiltLoader")) return "quilt";
             return "fabric";
@@ -245,22 +279,27 @@ public class TelemetryReporter {
         if (input == null || input.isBlank()) return "";
 
         String text = input;
-        // Remove MiniMessage-style tags: <color:red>, </bold>, <emoji:star>, etc.
         text = text.replaceAll("<[^>]+>", " ");
-        // Remove legacy formatting codes (&a, &l, &x...) and section codes.
         text = text.replaceAll("(?i)[&\u00A7][0-9A-FK-ORX]", " ");
-        // Remove legacy bracket directives like [link=...], [hover=...], [center].
         text = text.replaceAll("\\[[^\\]]+\\]", " ");
-        // Remove placeholders.
         text = text.replaceAll("\\{[^}]+\\}", " ");
-        // Keep only letters, numbers and whitespace.
         text = text.replaceAll("[^\\p{L}\\p{N}\\s]", " ");
-        // Collapse spacing.
         text = text.replaceAll("\\s+", " ").trim();
 
         if (text.length() > 160) {
             return text.substring(0, 160);
         }
         return text;
+    }
+
+    private record TelemetrySnapshot(
+            String serverId,
+            String mcVersion,
+            String modVersion,
+            String loader,
+            String motdRaw,
+            int onlinePlayers,
+            int maxPlayers
+    ) {
     }
 }

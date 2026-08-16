@@ -2,32 +2,47 @@ package eu.avalanche7.paradigm.modules.moderation;
 
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentHashMap;
 
 import eu.avalanche7.paradigm.storage.identity.ServerScope;
 
 public final class ActivePunishmentCache {
-    private final Map<String, PunishmentRecord> byId = new ConcurrentHashMap<>();
+    private volatile Map<String, PunishmentRecord> byId = Map.of();
 
-    public void replace(Collection<PunishmentRecord> records) {
-        byId.clear();
-        if (records != null) records.forEach(this::put);
+    public synchronized void replace(Collection<PunishmentRecord> records) {
+        long now = System.currentTimeMillis();
+        Map<String, PunishmentRecord> next = new LinkedHashMap<>();
+        if (records != null) {
+            for (PunishmentRecord record : records) {
+                if (record != null && record.activeAt(now)) {
+                    next.put(record.punishmentId(), record);
+                }
+            }
+        }
+        byId = Map.copyOf(next);
     }
 
-    public void put(PunishmentRecord record) {
-        if (record != null && record.activeAt(System.currentTimeMillis())) byId.put(record.punishmentId(), record);
+    public synchronized void put(PunishmentRecord record) {
+        if (record == null || !record.activeAt(System.currentTimeMillis())) return;
+        Map<String, PunishmentRecord> next = new LinkedHashMap<>(byId);
+        next.put(record.punishmentId(), record);
+        byId = Map.copyOf(next);
     }
 
-    public void remove(String punishmentId) {
-        if (punishmentId != null) byId.remove(punishmentId);
+    public synchronized void remove(String punishmentId) {
+        if (punishmentId == null || !byId.containsKey(punishmentId)) return;
+        Map<String, PunishmentRecord> next = new LinkedHashMap<>(byId);
+        next.remove(punishmentId);
+        byId = Map.copyOf(next);
     }
 
     public List<PunishmentRecord> activeFor(String uuid, String ipHash, String networkId, String serverId) {
         long now = System.currentTimeMillis();
-        return byId.values().stream().filter(record -> {
+        Map<String, PunishmentRecord> snapshot = byId;
+        return snapshot.values().stream().filter(record -> {
             if (!record.activeAt(now) || !record.appliesTo(networkId, serverId)) return false;
             boolean uuidMatch = uuid != null && record.subjectUuid() != null && record.subjectUuid().equalsIgnoreCase(uuid);
             boolean ipMatch = ipHash != null && record.subjectIpHash() != null && record.subjectIpHash().equals(ipHash);

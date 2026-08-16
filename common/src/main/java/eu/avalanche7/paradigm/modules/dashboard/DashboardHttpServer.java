@@ -2,12 +2,15 @@ package eu.avalanche7.paradigm.modules.dashboard;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicLong;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -17,6 +20,7 @@ public class DashboardHttpServer implements AutoCloseable {
     private final DashboardConfig config;
     private final DashboardRouter router;
     private final Map<String, Window> rateLimits = new ConcurrentHashMap<>();
+    private final AtomicLong lastRateCleanupMinute = new AtomicLong(-1L);
     private HttpServer server;
     private ExecutorService httpExecutor;
     private volatile boolean running;
@@ -97,64 +101,111 @@ public class DashboardHttpServer implements AutoCloseable {
         if (!isApi(exchange)) {
             return true;
         }
+
+        Set<String> trusted = trustedOrigins();
         String origin = exchange.getRequestHeaders().getFirst("Origin");
         if (origin != null && !origin.isBlank()) {
-            return trustedOrigins().contains(normalizeOrigin(origin));
+            String normalizedOrigin = normalizeOrigin(origin);
+            return !normalizedOrigin.isBlank() && trusted.contains(normalizedOrigin);
         }
+
         String method = exchange.getRequestMethod();
         String referer = exchange.getRequestHeaders().getFirst("Referer");
-        if (referer != null && !referer.isBlank()
-                && ("POST".equalsIgnoreCase(method) || "PUT".equalsIgnoreCase(method) || "PATCH".equalsIgnoreCase(method) || "DELETE".equalsIgnoreCase(method))) {
-            return trustedOrigins().stream().anyMatch(originValue -> normalizeOrigin(referer).startsWith(originValue));
+        if (referer != null && !referer.isBlank() && isMutationMethod(method)) {
+            String refererOrigin = normalizeOrigin(referer);
+            return !refererOrigin.isBlank() && trusted.contains(refererOrigin);
         }
-        if (origin == null || origin.isBlank()) {
-            return true;
-        }
-        return false;
+
+        return true;
     }
 
     private void applyCorsHeaders(HttpExchange exchange) {
         String origin = exchange.getRequestHeaders().getFirst("Origin");
-        if (origin == null || origin.isBlank() || !trustedOrigins().contains(normalizeOrigin(origin))) {
+        String normalizedOrigin = normalizeOrigin(origin);
+        if (normalizedOrigin.isBlank() || !trustedOrigins().contains(normalizedOrigin)) {
             return;
         }
-        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", normalizeOrigin(origin));
+        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", normalizedOrigin);
         exchange.getResponseHeaders().set("Access-Control-Allow-Credentials", "true");
         exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type, X-Paradigm-CSRF");
-        exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+        exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
         exchange.getResponseHeaders().add("Vary", "Origin");
     }
 
     private Set<String> trustedOrigins() {
         Set<String> origins = new HashSet<>();
-        origins.add(normalizeOrigin(config.localBaseUrl()));
-        origins.add("http://127.0.0.1:" + config.port);
-        origins.add("http://localhost:" + config.port);
+        addOrigin(origins, config.localBaseUrl());
+        addOrigin(origins, "http://127.0.0.1:" + config.port);
+        addOrigin(origins, "http://localhost:" + config.port);
+        addOrigin(origins, "http://[::1]:" + config.port);
         if (config.publicBaseUrl != null && !config.publicBaseUrl.isBlank()) {
-            origins.add(normalizeOrigin(config.publicBaseUrl));
+            addOrigin(origins, config.publicBaseUrl);
         }
         if (config.allowedOrigins != null) {
             for (String origin : config.allowedOrigins) {
-                if (origin != null && !origin.isBlank()) {
-                    origins.add(normalizeOrigin(origin));
-                }
+                addOrigin(origins, origin);
             }
         }
         return origins;
     }
 
+    private static void addOrigin(Set<String> origins, String rawOrigin) {
+        String normalized = normalizeOrigin(rawOrigin);
+        if (!normalized.isBlank()) {
+            origins.add(normalized);
+        }
+    }
+
     private static String normalizeOrigin(String origin) {
-        return origin != null ? origin.trim().replaceAll("/+$", "") : "";
+        if (origin == null || origin.isBlank()) {
+            return "";
+        }
+        try {
+            URI uri = URI.create(origin.trim());
+            String scheme = uri.getScheme();
+            String host = uri.getHost();
+            if (scheme == null || host == null) {
+                return "";
+            }
+            String normalizedHost = host.toLowerCase(Locale.ROOT);
+            if (normalizedHost.indexOf(':') >= 0) {
+                normalizedHost = "[" + normalizedHost + "]";
+            }
+            int port = uri.getPort();
+            return scheme.toLowerCase(Locale.ROOT) + "://" + normalizedHost + (port >= 0 ? ":" + port : "");
+        } catch (IllegalArgumentException ignored) {
+            return "";
+        }
+    }
+
+    private static boolean isMutationMethod(String method) {
+        return "POST".equalsIgnoreCase(method)
+                || "PUT".equalsIgnoreCase(method)
+                || "PATCH".equalsIgnoreCase(method)
+                || "DELETE".equalsIgnoreCase(method);
     }
 
     private boolean rateAllowed(HttpExchange exchange) {
-        String remote = exchange.getRemoteAddress() != null ? exchange.getRemoteAddress().getAddress().getHostAddress() : "unknown";
+        String remote = exchange.getRemoteAddress() != null && exchange.getRemoteAddress().getAddress() != null
+                ? exchange.getRemoteAddress().getAddress().getHostAddress()
+                : "unknown";
         long minute = System.currentTimeMillis() / 60_000L;
-        Window window = rateLimits.compute(remote, (key, old) -> old == null || old.minute != minute ? new Window(minute, 0) : old);
+        cleanupRateLimits(minute);
+
+        Window window = rateLimits.compute(remote,
+                (key, old) -> old == null || old.minute != minute ? new Window(minute, 0) : old);
         synchronized (window) {
             window.count++;
             return window.count <= Math.max(10, config.rateLimitPerMinute);
         }
+    }
+
+    private void cleanupRateLimits(long minute) {
+        long previous = lastRateCleanupMinute.get();
+        if (previous == minute || !lastRateCleanupMinute.compareAndSet(previous, minute)) {
+            return;
+        }
+        rateLimits.entrySet().removeIf(entry -> entry.getValue() == null || entry.getValue().minute < minute - 1L);
     }
 
     @Override
@@ -168,6 +219,7 @@ public class DashboardHttpServer implements AutoCloseable {
             httpExecutor.shutdownNow();
             httpExecutor = null;
         }
+        rateLimits.clear();
     }
 
     private static final class Window {

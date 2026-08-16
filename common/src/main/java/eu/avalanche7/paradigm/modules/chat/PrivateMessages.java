@@ -261,9 +261,10 @@ public class PrivateMessages implements ParadigmModule {
 
         String targetName = platform.getPlayerName(target);
         String senderName = platform.getPlayerName(sender);
+        String literalMessage = escapeTags(message);
 
-        String toFormatted = String.format(toTemplate, targetName, message);
-        String fromFormatted = String.format(fromTemplate, senderName, message);
+        String toFormatted = String.format(toTemplate, targetName, literalMessage);
+        String fromFormatted = String.format(fromTemplate, senderName, literalMessage);
 
         platform.sendSystemMessage(sender, services.getMessageParser().parseMessage(toFormatted, sender));
         platform.sendSystemMessage(target, services.getMessageParser().parseMessage(fromFormatted, target));
@@ -280,7 +281,7 @@ public class PrivateMessages implements ParadigmModule {
         }
 
         String line = "<color:#A78BFA><bold>[SocialSpy]</bold></color> <color:#E5E7EB>"
-                + safe(sender.getName()) + " -> " + safe(target.getName()) + ": " + safe(message)
+                + escapeTags(sender.getName()) + " -> " + escapeTags(target.getName()) + ": " + escapeTags(message)
                 + "</color>";
 
         for (IPlayer online : platform.getOnlinePlayers()) {
@@ -300,11 +301,9 @@ public class PrivateMessages implements ParadigmModule {
         }
     }
 
-    private static String safe(String value) {
-        if (value == null) {
-            return "";
-        }
-        return value.replace("<", "").replace(">", "").replace("'", "");
+    private static String escapeTags(String value) {
+        if (value == null) return "";
+        return value.replace("\\", "\\\\").replace("<", "\\<");
     }
 
     private void updateLastContact(IPlayer sender, IPlayer target) {

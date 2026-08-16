@@ -1,7 +1,6 @@
 package eu.avalanche7.paradigm.modules.dashboard.heartbeat;
 
 import java.io.Reader;
-import java.io.Writer;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -24,6 +23,8 @@ import eu.avalanche7.paradigm.modules.dashboard.DashboardConfig;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.storage.StorageService;
 import eu.avalanche7.paradigm.storage.managedconfig.ServerInstanceInfo;
+import eu.avalanche7.paradigm.utils.AtomicFileIO;
+import eu.avalanche7.paradigm.utils.ServerThreadCalls;
 
 public class DashboardHeartbeatService {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
@@ -42,82 +43,16 @@ public class DashboardHeartbeatService {
         this.logger = services.getLogger();
     }
 
-    public DashboardHeartbeat updateLocal(DashboardConfig dashboardConfig, boolean dashboardRunning) {
-        DashboardHeartbeat heartbeat = createLocal(dashboardConfig, dashboardRunning);
-        synchronized (lock) {
-            Map<String, DashboardHeartbeat> all = loadLocked();
-            all.put(heartbeat.serverId(), heartbeat);
-            saveLocked(all);
-        }
-        return heartbeat;
-    }
-
     public List<Map<String, Object>> list(DashboardConfig dashboardConfig, boolean dashboardRunning) {
-        DashboardHeartbeat local = updateLocal(dashboardConfig, dashboardRunning);
-        Map<String, DashboardHeartbeat> snapshots;
-        synchronized (lock) {
-            snapshots = loadLocked();
-        }
-
-        StorageService storage = services.getStorageService();
-        if (storage != null && storage.isMysqlActive()) {
-            try {
-                for (ServerInstanceInfo instance : storage.servers().listServerInstances()) {
-                    snapshots.put(instance.serverId(), new DashboardHeartbeat(
-                            instance.serverId(),
-                            instance.networkId(),
-                            instance.serverName(),
-                            instance.modVersion(),
-                            instance.minecraftVersion(),
-                            instance.loader(),
-                            instance.schemaFingerprint(),
-                            "sql",
-                            "unknown",
-                            false,
-                            0,
-                            0,
-                            0,
-                            instance.lastSeenMs()
-                    ));
-                }
-            } catch (Throwable t) {
-                if (logger != null) {
-                    logger.warn("Paradigm Dashboard: failed to list SQL server instances for heartbeat view: {}", t.getMessage());
-                }
-            }
-        }
-        snapshots.put(local.serverId(), local);
-
-        long now = System.currentTimeMillis();
-        List<Map<String, Object>> rows = new ArrayList<>();
-        for (DashboardHeartbeat hb : snapshots.values()) {
-            if (hb == null || !local.networkId().equals(hb.networkId())) {
-                continue;
-            }
-            Map<String, Object> row = new LinkedHashMap<>();
-            row.put("serverId", hb.serverId());
-            row.put("networkId", hb.networkId());
-            row.put("serverName", hb.serverName());
-            row.put("version", hb.version());
-            row.put("minecraftVersion", hb.minecraftVersion());
-            row.put("loader", hb.loader());
-            row.put("schemaFingerprint", hb.schemaFingerprint());
-            row.put("activeProvider", hb.activeProvider());
-            row.put("storageHealth", hb.storageHealth());
-            row.put("dashboardEnabled", hb.dashboardEnabled());
-            row.put("onlinePlayers", hb.onlinePlayers());
-            row.put("moduleCount", hb.moduleCount());
-            row.put("enabledModuleCount", hb.enabledModuleCount());
-            row.put("lastSeenMs", hb.lastSeenMs());
-            row.put("online", hb.lastSeenMs() > 0 && now - hb.lastSeenMs() <= ONLINE_THRESHOLD_MS);
-            row.put("current", local.serverId().equals(hb.serverId()));
-            rows.add(row);
-        }
-        rows.sort((a, b) -> Boolean.compare(Boolean.TRUE.equals(b.get("current")), Boolean.TRUE.equals(a.get("current"))));
-        return rows;
+        ServerThreadCalls.supply(services, () -> captureLocal(dashboardConfig, dashboardRunning))
+                .thenAccept(local -> services.getStorageService().runStorageAsync(
+                        "dashboard.heartbeat.persist",
+                        () -> storeLocal(local)))
+                .exceptionally(failure -> null);
+        return list((DashboardHeartbeat) null);
     }
 
-    private DashboardHeartbeat createLocal(DashboardConfig dashboardConfig, boolean dashboardRunning) {
+    public DashboardHeartbeat captureLocal(DashboardConfig dashboardConfig, boolean dashboardRunning) {
         StorageService.StorageStatus storage = services.getStorageService().status();
         int modules = 0;
         int enabled = 0;
@@ -146,6 +81,89 @@ public class DashboardHeartbeatService {
                 enabled,
                 System.currentTimeMillis()
         );
+    }
+
+    public List<Map<String, Object>> list(DashboardHeartbeat local) {
+        if (local != null) {
+            storeLocal(local);
+        }
+
+        Map<String, DashboardHeartbeat> snapshots;
+        synchronized (lock) {
+            snapshots = loadLocked();
+        }
+
+        StorageService storage = services.getStorageService();
+        String networkId = local != null ? local.networkId() : storage.context().serverIdentity().networkId();
+        String currentServerId = local != null ? local.serverId() : storage.context().serverIdentity().serverId();
+        if (storage.isMysqlActive()) {
+            try {
+                for (ServerInstanceInfo instance : storage.servers().listServerInstances()) {
+                    snapshots.put(instance.serverId(), new DashboardHeartbeat(
+                            instance.serverId(),
+                            instance.networkId(),
+                            instance.serverName(),
+                            instance.modVersion(),
+                            instance.minecraftVersion(),
+                            instance.loader(),
+                            instance.schemaFingerprint(),
+                            "sql",
+                            "unknown",
+                            false,
+                            0,
+                            0,
+                            0,
+                            instance.lastSeenMs()
+                    ));
+                }
+            } catch (Throwable t) {
+                if (logger != null) {
+                    logger.warn("Paradigm Dashboard: failed to list SQL server instances for heartbeat view: {}", t.getMessage());
+                }
+            }
+        }
+        if (local != null) {
+            snapshots.put(local.serverId(), local);
+        }
+
+        long now = System.currentTimeMillis();
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (DashboardHeartbeat hb : snapshots.values()) {
+            if (hb == null || !networkId.equals(hb.networkId())) {
+                continue;
+            }
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("serverId", hb.serverId());
+            row.put("networkId", hb.networkId());
+            row.put("serverName", hb.serverName());
+            row.put("version", hb.version());
+            row.put("minecraftVersion", hb.minecraftVersion());
+            row.put("loader", hb.loader());
+            row.put("schemaFingerprint", hb.schemaFingerprint());
+            row.put("activeProvider", hb.activeProvider());
+            row.put("storageHealth", hb.storageHealth());
+            row.put("dashboardEnabled", hb.dashboardEnabled());
+            row.put("onlinePlayers", hb.onlinePlayers());
+            row.put("moduleCount", hb.moduleCount());
+            row.put("enabledModuleCount", hb.enabledModuleCount());
+            row.put("lastSeenMs", hb.lastSeenMs());
+            row.put("online", hb.lastSeenMs() > 0 && now - hb.lastSeenMs() <= ONLINE_THRESHOLD_MS);
+            row.put("current", currentServerId.equals(hb.serverId()));
+            rows.add(row);
+        }
+        rows.sort((a, b) -> Boolean.compare(Boolean.TRUE.equals(b.get("current")), Boolean.TRUE.equals(a.get("current"))));
+        return rows;
+    }
+
+    private void storeLocal(DashboardHeartbeat local) {
+        if (local == null) {
+            return;
+        }
+        synchronized (lock) {
+            Map<String, DashboardHeartbeat> all = loadLocked();
+            all.put(local.serverId(), local);
+            saveLocked(all);
+        }
     }
 
     private String safeMinecraftVersion() {
@@ -189,10 +207,7 @@ public class DashboardHeartbeatService {
 
     private void saveLocked(Map<String, DashboardHeartbeat> data) {
         try {
-            Files.createDirectories(path.getParent());
-            try (Writer writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
-                GSON.toJson(data, writer);
-            }
+            AtomicFileIO.writeUtf8Atomic(path, writer -> GSON.toJson(data, writer));
         } catch (Throwable t) {
             if (logger != null) {
                 logger.warn("Paradigm Dashboard: failed to save heartbeat snapshot: {}", t.getMessage());

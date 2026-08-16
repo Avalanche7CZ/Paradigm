@@ -34,6 +34,7 @@ import eu.avalanche7.paradigm.modules.discord.console.ConsoleRelayAppender;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.utils.CommandSuggestions;
 import eu.avalanche7.paradigm.utils.DebugLogger;
+import eu.avalanche7.paradigm.utils.ServerThreadCalls;
 
 public final class DiscordService implements DiscordOutbox {
     private static final long WEBHOOK_RETRYABLE_BACKOFF_MILLIS = 30_000L;
@@ -66,6 +67,7 @@ public final class DiscordService implements DiscordOutbox {
     private volatile boolean consoleCommandRegisteredByUs;
     private volatile AutocompleteCoordinator autocompleteCoordinator;
     private final AtomicBoolean criticalFlushPending = new AtomicBoolean();
+    private final AtomicBoolean presenceUpdatePending = new AtomicBoolean();
     private final Object consoleRelayLock = new Object();
 
     private static final String CONSOLE_COMMAND_NAME = "console";
@@ -707,16 +709,40 @@ public final class DiscordService implements DiscordOutbox {
     private void updatePresence() {
         DiscordConfigHandler.Config config = config();
         DiscordGatewayClient client = gateway;
-        if (config == null || client == null || !Boolean.TRUE.equals(config.presenceEnabled.get())) {
+        if (config == null || client == null || !Boolean.TRUE.equals(config.presenceEnabled.get())
+                || !presenceUpdatePending.compareAndSet(false, true)) {
             return;
         }
-        IPlatformAdapter platform = services.getPlatformAdapter();
-        int online;
-        int max;
-        try {
-            online = platform != null && platform.getOnlinePlayers() != null ? platform.getOnlinePlayers().size() : 0;
-            max = platform != null ? platform.getMaxPlayers() : 0;
-        } catch (RuntimeException | AbstractMethodError unavailable) {
+
+        ServerThreadCalls.supply(services, () -> {
+            IPlatformAdapter platform = services.getPlatformAdapter();
+            int online = platform != null && platform.getOnlinePlayers() != null ? platform.getOnlinePlayers().size() : 0;
+            int max = platform != null ? platform.getMaxPlayers() : 0;
+            return new PresenceSnapshot(online, max);
+        }).whenComplete((snapshot, failure) -> {
+            ScheduledExecutorService pool = executor;
+            if (failure != null || snapshot == null || pool == null) {
+                presenceUpdatePending.set(false);
+                return;
+            }
+            try {
+                pool.execute(() -> {
+                    try {
+                        sendPresence(snapshot.online(), snapshot.max());
+                    } finally {
+                        presenceUpdatePending.set(false);
+                    }
+                });
+            } catch (RuntimeException rejected) {
+                presenceUpdatePending.set(false);
+            }
+        });
+    }
+
+    private void sendPresence(int online, int max) {
+        DiscordConfigHandler.Config config = config();
+        DiscordGatewayClient client = gateway;
+        if (config == null || client == null || !Boolean.TRUE.equals(config.presenceEnabled.get())) {
             return;
         }
 
@@ -768,6 +794,7 @@ public final class DiscordService implements DiscordOutbox {
     private synchronized void cancelPresence() {
         ScheduledFuture<?> task = presenceTask;
         presenceTask = null;
+        presenceUpdatePending.set(false);
         if (task != null) {
             task.cancel(false);
         }
@@ -893,9 +920,7 @@ public final class DiscordService implements DiscordOutbox {
         @Override
         public void onMessage(DiscordInboundMessage message) {
             try {
-                DiscordConfigHandler.Config config = config();
-                String consoleChannel = DiscordDestination.CONSOLE.channelId(config);
-                if (!consoleChannel.isBlank() && consoleChannel.equals(message.channelId())) {
+                if (relay.ownsConsoleChannel(message.channelId())) {
                     relay.handleConsoleCommand(message);
                     return;
                 }
@@ -959,5 +984,8 @@ public final class DiscordService implements DiscordOutbox {
                         + "to use Discord to Minecraft chat.");
             }
         }
+    }
+
+    private record PresenceSnapshot(int online, int max) {
     }
 }

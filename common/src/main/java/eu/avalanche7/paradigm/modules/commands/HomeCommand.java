@@ -3,6 +3,7 @@ package eu.avalanche7.paradigm.modules.commands;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
@@ -25,11 +26,14 @@ public class HomeCommand implements ParadigmModule {
     private static final String HOME_LIMIT_PREFIX = "paradigm.home.limit.";
     private static final String HOME_LIMIT_UNLIMITED = "paradigm.home.limit.unlimited";
     private static final int HOME_LIMIT_SCAN_MAX = 256;
+    private static final long HOME_SUGGESTION_REFRESH_MS = 10_000L;
     private static final Pattern SAFE_NAME = Pattern.compile("[A-Za-z0-9_-]{1,32}");
 
     private Services services;
     private IPlatformAdapter platform;
     private final Map<String, List<String>> homeSuggestionCache = new ConcurrentHashMap<>();
+    private final Map<String, Long> homeSuggestionCacheUpdatedAt = new ConcurrentHashMap<>();
+    private final Set<String> homeSuggestionRefreshInFlight = ConcurrentHashMap.newKeySet();
 
     @Override
     public String getName() {
@@ -63,6 +67,9 @@ public class HomeCommand implements ParadigmModule {
 
     @Override
     public void onServerStopping(Object event, Services services) {
+        homeSuggestionCache.clear();
+        homeSuggestionCacheUpdatedAt.clear();
+        homeSuggestionRefreshInFlight.clear();
     }
 
     @Override
@@ -85,6 +92,22 @@ public class HomeCommand implements ParadigmModule {
                                 ignored -> {},
                                 ignored -> {}
                         ));
+            });
+            events.onPlayerJoin(event -> {
+                IPlayer player = event != null ? event.getPlayer() : null;
+                if (player != null && player.getUUID() != null && !player.getUUID().isBlank()) {
+                    refreshHomeSuggestionsAsync(player.getUUID(), true);
+                }
+            });
+            events.onPlayerLeave(event -> {
+                IPlayer player = event != null ? event.getPlayer() : null;
+                if (player == null || player.getUUID() == null) {
+                    return;
+                }
+                String uuid = player.getUUID();
+                homeSuggestionCache.remove(uuid);
+                homeSuggestionCacheUpdatedAt.remove(uuid);
+                homeSuggestionRefreshInFlight.remove(uuid);
             });
         }
     }
@@ -282,7 +305,9 @@ public class HomeCommand implements ParadigmModule {
                         send(current, "home.home_not_found", "Home {home} was not found.", "{home}", normalized);
                         return;
                     }
-                    CommandCooldowns.run(services, current, "home", () -> teleportHome(current, normalized, toDataLocation(home.location())));
+                    PlayerDataStore.StoredLocation destination = toDataLocation(home.location());
+                    CommandCooldowns.run(services, current, "home", fresh ->
+                            canUseHome(fresh) ? teleportHome(fresh, normalized, destination) : 0);
                 },
                 "home.error_load");
     }
@@ -378,7 +403,8 @@ public class HomeCommand implements ParadigmModule {
                         return;
                     }
                     PlayerDataStore.StoredLocation last = toDataLocation(storedLast);
-                    CommandCooldowns.run(services, current, "back", () -> teleportBack(current, last));
+                    CommandCooldowns.run(services, current, "back", fresh ->
+                            canBack(fresh) ? teleportBack(fresh, last) : 0);
                 },
                 "home.error_load");
     }
@@ -404,15 +430,50 @@ public class HomeCommand implements ParadigmModule {
         if (uuid == null || uuid.isBlank() || services == null || services.getStorageService() == null) {
             return List.of();
         }
-        try {
-            List<StoredHome> homes = services.getStorageService().players().listHomes(uuid);
-            updateHomeCache(uuid, homes);
-        } catch (Throwable t) {
-            if (services.getDebugLogger() != null) {
-                services.getDebugLogger().debugLog("HomeCommand: failed to refresh home suggestions: " + t);
-            }
+
+        long now = System.currentTimeMillis();
+        long updatedAt = homeSuggestionCacheUpdatedAt.getOrDefault(uuid, 0L);
+        if (now - updatedAt >= HOME_SUGGESTION_REFRESH_MS) {
+            refreshHomeSuggestionsAsync(uuid, false);
         }
         return homeSuggestionCache.getOrDefault(uuid, List.of());
+    }
+
+    private void refreshHomeSuggestionsAsync(String uuid, boolean force) {
+        if (uuid == null || uuid.isBlank() || services == null || services.getStorageService() == null) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (!force && now - homeSuggestionCacheUpdatedAt.getOrDefault(uuid, 0L) < HOME_SUGGESTION_REFRESH_MS) {
+            return;
+        }
+        if (!homeSuggestionRefreshInFlight.add(uuid)) {
+            return;
+        }
+
+        services.getStorageService().runAsync(
+                "home.suggestions",
+                () -> services.getStorageService().players().listHomes(uuid),
+                services.getTaskScheduler(),
+                homes -> {
+                    try {
+                        if (platform.getPlayerByUuid(uuid) != null) {
+                            updateHomeCache(uuid, homes);
+                        } else {
+                            homeSuggestionCache.remove(uuid);
+                            homeSuggestionCacheUpdatedAt.remove(uuid);
+                        }
+                    } finally {
+                        homeSuggestionRefreshInFlight.remove(uuid);
+                    }
+                },
+                failure -> {
+                    homeSuggestionRefreshInFlight.remove(uuid);
+                    if (services.getDebugLogger() != null) {
+                        services.getDebugLogger().debugLog("HomeCommand: failed to refresh home suggestions: " + failure);
+                    }
+                }
+        );
     }
 
     private int resolveHomeLimit(IPlayer player) {
@@ -478,13 +539,16 @@ public class HomeCommand implements ParadigmModule {
     }
 
     private void updateHomeCache(String uuid, List<StoredHome> homes) {
-        if (uuid == null) {
+        if (uuid == null || homes == null) {
             return;
         }
         homeSuggestionCache.put(uuid, homes.stream()
+                .filter(java.util.Objects::nonNull)
                 .map(StoredHome::name)
+                .filter(java.util.Objects::nonNull)
                 .sorted(String.CASE_INSENSITIVE_ORDER)
                 .toList());
+        homeSuggestionCacheUpdatedAt.put(uuid, System.currentTimeMillis());
     }
 
     private void saveBackLocationAsync(IPlayer player, PlayerDataStore.StoredLocation location, String operation) {

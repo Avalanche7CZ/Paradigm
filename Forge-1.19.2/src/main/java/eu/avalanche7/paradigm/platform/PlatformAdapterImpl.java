@@ -53,7 +53,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     private final MinecraftEventSystem eventSystem;
 
     private CommandDispatcher<CommandSourceStack> commandDispatcher;
-    private final Set<String> ownedRootsRegisteredThisCycle = new HashSet<>();
 
     public PlatformAdapterImpl(
             PermissionsHandler permissionsHandler,
@@ -780,7 +779,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             @SuppressWarnings("unchecked")
             CommandDispatcher<CommandSourceStack> cast = (CommandDispatcher<CommandSourceStack>) cd;
             this.commandDispatcher = cast;
-            this.ownedRootsRegisteredThisCycle.clear();
         }
     }
 
@@ -808,18 +806,13 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
                 return;
             }
 
-            if (!CommandPriority.shouldRegisterRoot(normalizedRoot)) {
+            CommandDispatcher<CommandSourceStack> resolvedDispatcher = dispatcher;
+            if (!CommandPriority.shouldRegisterRoot(resolvedDispatcher, normalizedRoot)) {
                 return;
             }
-            boolean shouldOwnRoot = CommandPriority.shouldOwnRoot(normalizedRoot);
-            boolean firstParadigmRegistrationForRoot = shouldOwnRoot && ownedRootsRegisteredThisCycle.add(normalizedRoot);
-            if (firstParadigmRegistrationForRoot) {
-                CommandPriority.unregisterRootLiteral(dispatcher, normalizedRoot);
-            }
-
-            com.mojang.brigadier.tree.LiteralCommandNode<CommandSourceStack> registeredNode = dispatcher.register(l);
-            if (firstParadigmRegistrationForRoot
-                    && !CommandPriority.isOwnedByExpectedNode(dispatcher, normalizedRoot, registeredNode)
+            CommandPriority.RootRegistration registration = CommandPriority.registerRootLiteral(
+                    resolvedDispatcher, normalizedRoot, () -> resolvedDispatcher.register(l));
+            if (registration.managed() && !registration.owned()
                     && debugLogger != null) {
                 debugLogger.debugLog("[Paradigm] Command root /" + normalizedRoot + " did not resolve to the newly registered Paradigm node.");
             }
