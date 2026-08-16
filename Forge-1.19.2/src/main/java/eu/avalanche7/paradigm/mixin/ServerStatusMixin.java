@@ -30,7 +30,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ServerStatusPacketListenerImpl.class)
 public abstract class ServerStatusMixin {
-    @Shadow(remap = false)
+    @Shadow
     private boolean hasRequestedStatus;
 
     @Inject(method = "*(Lnet/minecraft/network/protocol/status/ServerboundStatusRequestPacket;)V",

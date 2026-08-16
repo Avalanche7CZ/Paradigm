@@ -2,6 +2,7 @@ plugins {
     id 'eclipse'
     id 'idea'
     id 'net.minecraftforge.gradle' version '6.0.54'
+    id 'org.spongepowered.mixin' version '0.7.38'
 }
 
 // Ensure properties are available with defaults
@@ -47,10 +48,11 @@ configurations.configureEach {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
     options.release = Integer.parseInt(project.ext.java_version.toString())
-    options.compilerArgs += [
-        "-AoutRefMapFile=${layout.buildDirectory.file('classes/java/main/paradigm.refmap.json').get().asFile.absolutePath}",
-        "-AdefaultObfuscationEnv=searge"
-    ]
+}
+
+mixin {
+    add sourceSets.main, 'paradigm.refmap.json'
+    config 'paradigm.mixins.json'
 }
 
 minecraft {
@@ -252,7 +254,6 @@ tasks.named('jar', Jar).configure {
     dependsOn(project(":common").tasks.named("jar"))
     dependsOn(tasks.named('mergeCommonForDevRun'))
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    from(layout.buildDirectory.file("classes/java/main/paradigm.refmap.json"))
     from({ zipTree(project(":common").tasks.named("jar").get().archiveFile.get().asFile) }) {
         exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
         exclude 'lang/*.json', 'assets/**/lang/*.json'

@@ -61,7 +61,7 @@ jobs:
           if [ -f version.txt ]; then
             VERSION=$(cat version.txt | tr -d '\n')
           else
-            VERSION="2.0.0b"
+            VERSION="2.4.0b"
           fi
 
           echo "version=$VERSION" >> $GITHUB_OUTPUT
