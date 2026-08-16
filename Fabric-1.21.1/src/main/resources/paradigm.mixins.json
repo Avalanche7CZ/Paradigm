@@ -8,10 +8,12 @@
     "PlayerAdvancementMixin",
     "ServerStatusMixin",
     "PlayerListMixin",
-    "ServerPlayerTablistMixin"
-    ,"DisplayEntityAccessor"
-    ,"TextDisplayEntityAccessor"
-    ,"InteractionEntityAccessor"
+    "ServerPlayerTablistMixin",
+    "DisplayEntityAccessor",
+    "TextDisplayEntityAccessor",
+    "InteractionEntityAccessor",
+    "CommandNodePermissionMixin",
+    "CommandSourcePermissionMixin"
   ],
   "injectors": {
     "defaultRequire": 1

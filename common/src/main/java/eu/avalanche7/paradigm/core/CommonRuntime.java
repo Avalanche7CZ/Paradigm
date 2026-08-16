@@ -17,6 +17,7 @@ import eu.avalanche7.paradigm.modules.*;
 import eu.avalanche7.paradigm.modules.chat.*;
 import eu.avalanche7.paradigm.modules.commands.Reload;
 import eu.avalanche7.paradigm.modules.commands.shared.CommandCatalog;
+import eu.avalanche7.paradigm.modules.permissions.CommandNodeAccessGate;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
@@ -157,6 +158,7 @@ public final class CommonRuntime {
     }
 
     private static void registerExternalCommandGuard(Services services) {
+        CommandNodeAccessGate.install(services.getPermissionsHandler());
         IEventSystem events = eventSystemOrNull(services, "external command guard");
         if (events == null) {
             return;

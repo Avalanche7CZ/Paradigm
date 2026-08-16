@@ -4,6 +4,7 @@ import eu.avalanche7.paradigm.ParadigmAPI;
 import eu.avalanche7.paradigm.api.internal.ApiProviderRegistry;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.CommandNodeAccessGate;
 
 public class StorageLifecycle implements ParadigmModule {
     @Override public String getName() { return "StorageLifecycle"; }
@@ -27,6 +28,7 @@ public class StorageLifecycle implements ParadigmModule {
         services.getManagedConfigSyncService().stop();
         services.getServerHeartbeatPublisher().stop();
         ApiProviderRegistry.uninstall();
+        CommandNodeAccessGate.uninstall();
         ParadigmAPI.setInstance(null);
     }
 

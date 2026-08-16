@@ -13,7 +13,9 @@
   "server": [
     "PlayerListMixin",
     "ServerStatusMixin",
-    "ServerPlayerTablistMixin"
+    "ServerPlayerTablistMixin",
+    "CommandNodePermissionMixin",
+    "CommandSourcePermissionMixin"
   ],
   "injectors": {
     "defaultRequire": 1

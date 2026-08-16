@@ -9,7 +9,9 @@
     "ServerStatusMixin",
     "PlayerListMixin",
     "ServerPlayerTablistMixin",
-    "ArmorStandEntityAccessor"
+    "ArmorStandEntityAccessor",
+    "CommandNodePermissionMixin",
+    "CommandSourcePermissionMixin"
   ],
   "injectors": {
     "defaultRequire": 1

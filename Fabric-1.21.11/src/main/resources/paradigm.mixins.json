@@ -11,7 +11,9 @@
     "ServerPlayerTablistMixin",
     "DisplayEntityAccessor",
     "TextDisplayEntityAccessor",
-    "InteractionEntityAccessor"
+    "InteractionEntityAccessor",
+    "CommandNodePermissionMixin",
+    "CommandSourcePermissionMixin"
   ],
   "injectors": {
     "defaultRequire": 1
