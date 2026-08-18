@@ -8,9 +8,6 @@ import net.minecraft.server.permissions.Permission;
 import net.minecraft.server.permissions.PermissionLevel;
 import javax.annotation.Nullable;
 
-/**
- * Minecraft implementation of ICommandSource
- */
 public class MinecraftCommandSource implements ICommandSource {
     private final CommandSourceStack source;
     private final IPlayer player;
@@ -41,7 +38,7 @@ public class MinecraftCommandSource implements ICommandSource {
             Permission required = new Permission.HasCommandLevel(permLevel);
             return source.permissions().hasPermission(required);
         } catch (Throwable t) {
-            return player == null; // console has full permissions
+            return player == null;
         }
     }
 

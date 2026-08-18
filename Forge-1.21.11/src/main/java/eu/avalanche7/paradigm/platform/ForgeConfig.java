@@ -5,10 +5,6 @@ import net.minecraftforge.fml.loading.FMLPaths;
 
 import java.nio.file.Path;
 
-/**
- * Forge implementation of IConfig interface.
- * Uses FMLPaths API to get config directory.
- */
 public class ForgeConfig implements IConfig {
 
     private static final String MOD_ID = "paradigm";

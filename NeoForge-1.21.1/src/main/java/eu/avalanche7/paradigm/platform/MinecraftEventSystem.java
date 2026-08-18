@@ -121,12 +121,6 @@ public class MinecraftEventSystem implements IEventSystem {
             }
         }
 
-        // IMPORTANT:
-        // NeoForge doesn't let us override the vanilla join message via this event.
-        // Our common JoinLeaveMessages module calls event.setJoinMessage(...) and then falls back to
-        // platform.broadcastSystemMessage(...) only if setJoinMessage throws.
-        // Because our setJoinMessage is a no-op, nothing gets broadcast.
-        // So we do the Fabric-style fallback here when at least one module asked for a custom message.
         try {
             IComponent custom = joinEvent.getJoinMessage();
             if (custom != null) {
@@ -160,7 +154,6 @@ public class MinecraftEventSystem implements IEventSystem {
             }
         }
 
-        // Same reasoning as join: broadcast custom leave message if a module set it.
         try {
             IComponent custom = leaveEvent.getLeaveMessage();
             if (custom != null) {
@@ -281,14 +274,11 @@ public class MinecraftEventSystem implements IEventSystem {
         LOGGER.debug("[Paradigm] Chat: player={}, modified={}, cancelled={}.",
                 sp != null ? sp.getGameProfile().getName() : "<null>", !raw.equals(result.message), result.cancelled);
 
-        // If a module cancelled or modified the message, cancel the original NeoForge chat event.
         if (result.cancelled || !raw.equals(result.message)) {
             event.setCanceled(true);
 
-            // If the message was cancelled (e.g., redirected into staffchat/groupchat), do not rebroadcast.
             if (result.cancelled) return;
 
-            // Message was modified: re-broadcast the modified text so players actually see it.
             try {
                 MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
                 if (server != null) {
@@ -311,7 +301,7 @@ public class MinecraftEventSystem implements IEventSystem {
         @Override public IPlayer getPlayer() { return player; }
         @Override public IComponent getJoinMessage() { return joinMessage; }
         @Override public void setJoinMessage(IComponent message) {
-            // Store for post-dispatch fallback broadcast (NeoForge doesn't provide a setter here).
+
             this.joinMessage = message;
         }
     }
@@ -326,7 +316,7 @@ public class MinecraftEventSystem implements IEventSystem {
         @Override public IPlayer getPlayer() { return player; }
         @Override public IComponent getLeaveMessage() { return leaveMessage; }
         @Override public void setLeaveMessage(IComponent message) {
-            // Store for post-dispatch fallback broadcast.
+
             this.leaveMessage = message;
         }
     }

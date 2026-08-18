@@ -103,8 +103,8 @@ public class Paradigm {
         modules.forEach(m -> m.onLoad(null, services, modBusGroup));
         modules.forEach(m -> m.registerEventListeners(null, services));
 
-        // Forge 61.x: use direct bus addListener() instead of EventBusMigrationHelper
         EventBus.create(modBusGroup, FMLCommonSetupEvent.class).addListener(this::commonSetup);
+        eu.avalanche7.paradigm.platform.ServerTickMetricsEvents.register();
         ServerStartingEvent.BUS.addListener(this::onServerStarting);
         RegisterCommandsEvent.BUS.addListener(this::onRegisterCommands);
         ServerStoppingEvent.BUS.addListener(this::onServerStopping);

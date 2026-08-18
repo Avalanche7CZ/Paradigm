@@ -38,7 +38,6 @@ public abstract class ServerStatusMixin {
     @Inject(method = "*(Lnet/minecraft/network/protocol/status/ServerboundStatusRequestPacket;)V", at = @At("HEAD"), cancellable = true)
     private void paradigm$modifyStatusRequest(ServerboundStatusRequestPacket packet, CallbackInfo ci) {
 
-
         Services services = Paradigm.getServices();
         if (services == null) {
             ServerStatusDiagnostics.servicesUnavailable("Forge-1.21.11");
@@ -76,7 +75,6 @@ public abstract class ServerStatusMixin {
 
             MOTDConfigHandler.ServerListMOTD selectedMotd = motds.get(new Random().nextInt(motds.size()));
 
-
             String line1 = selectedMotd.line1 != null ? selectedMotd.line1 : "";
             String line2 = selectedMotd.line2 != null ? selectedMotd.line2 : "";
 
@@ -96,8 +94,7 @@ public abstract class ServerStatusMixin {
                         "Server status [Forge-1.21.11]: MOTD parsing failed; using literal text.", parseError);
                 motdComponent = Component.literal(line1).append("\n").append(Component.literal(line2));
             }
-            
-            // Apply hover text to MOTD if available
+
             if (selectedMotd.playerCount != null && selectedMotd.playerCount.hoverText != null && !selectedMotd.playerCount.hoverText.isEmpty()) {
                 try {
                     Component hoverComponent = paradigm$buildHoverComponent(selectedMotd.playerCount.hoverText, services);
@@ -185,8 +182,7 @@ public abstract class ServerStatusMixin {
                     playerSample = new ArrayList<>(originalSample);
                 }
             }
-            
-            // Append hover text lines as additional player sample entries with hover tooltips
+
             if (customDisplay.hoverText != null && !customDisplay.hoverText.isEmpty()) {
                 String[] lines = customDisplay.hoverText.split("\\n");
 
@@ -243,7 +239,7 @@ public abstract class ServerStatusMixin {
                 if (formatting != null) {
                     builder.append('§').append(formatting.getChar());
                 } else {
-                    // Custom/hex color: pick nearest legacy formatting code (instead of §x hex).
+
                     builder.append('§').append(paradigm$getNearestFormattingCode(rgb));
                 }
             }
@@ -267,11 +263,11 @@ public abstract class ServerStatusMixin {
 
         int brightness = (r + g + b) / 3;
 
-        if (r > g && r > b) return 'c'; // red-ish
-        if (g > r && g > b) return 'a'; // green-ish
-        if (b > r && b > g) return 'b'; // aqua-ish
-        if (brightness > 128) return 'f'; // white
-        return '7'; // gray
+        if (r > g && r > b) return 'c';
+        if (g > r && g > b) return 'a';
+        if (b > r && b > g) return 'b';
+        if (brightness > 128) return 'f';
+        return '7';
     }
 
     @Unique
@@ -293,30 +289,30 @@ public abstract class ServerStatusMixin {
     private Component paradigm$buildHoverComponent(String hoverText, Services services) {
         try {
             if (hoverText == null || hoverText.isEmpty()) return null;
-            
+
             Component result = Component.empty();
             String[] lines = hoverText.split("\\n");
-            
+
             for (int i = 0; i < lines.length; i++) {
                 String line = lines[i];
-                
-                eu.avalanche7.paradigm.platform.Interfaces.IComponent parsed = 
+
+                eu.avalanche7.paradigm.platform.Interfaces.IComponent parsed =
                     services.getMessageParser().parseMessage(line, null);
-                
+
                 Component lineComp;
                 if (parsed instanceof eu.avalanche7.paradigm.platform.MinecraftComponent mc) {
                     lineComp = mc.getHandle();
                 } else {
                     lineComp = Component.literal(line);
                 }
-                
+
                 if (i > 0) {
                     result = result.copy().append("\n").append(lineComp);
                 } else {
                     result = lineComp;
                 }
             }
-            
+
             return result;
         } catch (Throwable failure) {
             services.getDebugLogger().debugLog(
@@ -330,16 +326,16 @@ public abstract class ServerStatusMixin {
     private net.minecraft.network.chat.HoverEvent paradigm$createShowTextHoverEvent(Component hover) {
         try {
             Object showText = paradigm$instantiateNestedClass(
-                net.minecraft.network.chat.HoverEvent.class, 
-                "ShowText", 
-                Component.class, 
+                net.minecraft.network.chat.HoverEvent.class,
+                "ShowText",
+                Component.class,
                 hover
             );
             if (showText instanceof net.minecraft.network.chat.HoverEvent hoverEvent) {
                 return hoverEvent;
             }
         } catch (Throwable ignored) {
-            // Optional compatibility probe: missing hover-event constructor simply disables hover text.
+
         }
         return null;
     }

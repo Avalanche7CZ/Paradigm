@@ -34,7 +34,6 @@ public abstract class PlayerListMixin {
     private void paradigm$filterJoinLeaveMessages(Component message, boolean overlay, CallbackInfo ci) {
         if (message == null) return;
 
-        // Only suppress vanilla join/leave messages (translatable multiplayer.player.*)
         int type = paradigm$getVanillaJoinLeaveType(message);
         if (type == 0) return;
 

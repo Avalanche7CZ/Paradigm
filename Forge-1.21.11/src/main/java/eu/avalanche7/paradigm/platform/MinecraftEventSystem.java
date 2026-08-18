@@ -36,9 +36,8 @@ public class MinecraftEventSystem implements IEventSystem {
     private final CopyOnWriteArrayList<PlayerCommandEventListener> commandListeners = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<PlayerAdvancementEventListener> advancementListeners = new CopyOnWriteArrayList<>();
 
-    /** Called from PlatformAdapterImpl constructor to register on Forge 61.x buses directly. */
     public void register() {
-        // Chat - CancellableEventBus: Predicate returning true = cancel
+
         ServerChatEvent.BUS.addListener(Priority.HIGHEST, (ServerChatEvent event) -> {
             MinecraftChatEvent chatEvent = new MinecraftChatEvent(event);
             if (!chatListeners.isEmpty()) {
@@ -49,7 +48,7 @@ public class MinecraftEventSystem implements IEventSystem {
                     if (chatEvent.isCancelled()) break;
                 }
             }
-            if (chatEvent.isCancelled()) return true; // cancel the Forge event
+            if (chatEvent.isCancelled()) return true;
             if (paradigm$handleCustomChatFormat(chatEvent)) {
                 return true;
             }
@@ -59,7 +58,6 @@ public class MinecraftEventSystem implements IEventSystem {
             return false;
         });
 
-        // Join
         PlayerEvent.PlayerLoggedInEvent.BUS.addListener((PlayerEvent.PlayerLoggedInEvent event) -> {
             if (joinListeners.isEmpty()) return;
             MinecraftPlayerJoinEvent joinEvent = new MinecraftPlayerJoinEvent(event);
@@ -81,7 +79,6 @@ public class MinecraftEventSystem implements IEventSystem {
             }
         });
 
-        // Leave
         PlayerEvent.PlayerLoggedOutEvent.BUS.addListener((PlayerEvent.PlayerLoggedOutEvent event) -> {
             if (leaveListeners.isEmpty()) return;
             MinecraftPlayerLeaveEvent leaveEvent = new MinecraftPlayerLeaveEvent(event);
@@ -219,8 +216,6 @@ public class MinecraftEventSystem implements IEventSystem {
             return false;
         }
     }
-
-    // ---- inner event wrappers ----
 
     private static class MinecraftChatEvent implements ChatEvent {
         private final ServerChatEvent forgeEvent;
