@@ -56,6 +56,12 @@ public final class PunishmentService {
 
     public PunishmentRecord create(PunishmentType type, ServerScope scope, String subjectUuid, String subjectName,
                                    String ipAddress, String reason, String actorUuid, String actorName, Long expiresAtMs) {
+        return create(type, scope, subjectUuid, subjectName, ipAddress, reason, actorUuid, actorName, expiresAtMs, Map.of());
+    }
+
+    public PunishmentRecord create(PunishmentType type, ServerScope scope, String subjectUuid, String subjectName,
+                                   String ipAddress, String reason, String actorUuid, String actorName, Long expiresAtMs,
+                                   Map<String, String> metadata) {
         long now = System.currentTimeMillis();
         String canonicalIp = ipAddress != null && !ipAddress.isBlank() ? IpAddressUtil.canonicalize(ipAddress) : null;
         if (type == PunishmentType.IP_BAN && canonicalIp == null) throw new IllegalArgumentException("IP ban requires a valid address.");
@@ -64,7 +70,8 @@ public final class PunishmentService {
         PunishmentRecord record = new PunishmentRecord(PunishmentIds.create(), type, scope, context.networkId(),
                 scope == ServerScope.SERVER ? context.serverId() : null, clean(subjectUuid), clean(subjectName),
                 canonicalIp != null ? IpAddressUtil.hash(canonicalIp) : null, canonicalIp, clean(reason), clean(actorUuid),
-                clean(actorName), now, now, expiresAtMs, null, null, null, null, now, Map.of());
+                clean(actorName), now, now, expiresAtMs, null, null, null, null, now,
+                metadata != null ? Map.copyOf(metadata) : Map.of());
         PunishmentRecord stored;
         synchronized (mutationLock) {
             stored = services.getStorageService().moderation().addPunishmentRecord(record);

@@ -163,6 +163,14 @@ public class MainConfigHandler extends BaseConfigHandler<MainConfigHandler.Confi
                 true,
                 "Enable or disable /seen command."
         );
+        public ConfigEntry<Boolean> playtimeEnable = new ConfigEntry<>(
+                true,
+                "Enable or disable persistent playtime tracking, the /playtime command and the {playtime} placeholders."
+        );
+        public ConfigEntry<Integer> playtimeFlushIntervalSeconds = new ConfigEntry<>(
+                300,
+                "How often accumulated online playtime is written to storage so a crash cannot lose a whole session."
+        );
         public ConfigEntry<Boolean> ignoreCommandsEnable = new ConfigEntry<>(
                 true,
                 "Enable or disable /ignore and /unignore commands."

@@ -29,7 +29,7 @@ public class MuteCommand extends AbstractModerationCommand {
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
         this.services = services;
-        IEventSystem events = services.getPlatformAdapter().getEventSystem();
+        IEventSystem events = moduleEvents(services);
         if (events == null) {
             return;
         }

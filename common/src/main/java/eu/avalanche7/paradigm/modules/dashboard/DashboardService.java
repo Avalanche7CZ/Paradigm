@@ -14,6 +14,7 @@ import java.util.concurrent.Executors;
 import com.google.gson.JsonObject;
 
 import eu.avalanche7.paradigm.ParadigmAPI;
+import eu.avalanche7.paradigm.configs.AfkConfigHandler;
 import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.configs.DiscordConfigHandler;
@@ -197,6 +198,10 @@ public class DashboardService implements AutoCloseable {
                     case "discord" -> {
                         DiscordConfigHandler.reload();
                         services.getDiscordService().reload();
+                    }
+                    case "afk" -> {
+                        AfkConfigHandler.reload();
+                        services.getAfkService().restart();
                     }
                     default -> throw new IllegalArgumentException("This page does not support a live module reload.");
                 }

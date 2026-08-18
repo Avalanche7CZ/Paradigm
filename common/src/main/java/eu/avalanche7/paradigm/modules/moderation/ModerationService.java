@@ -73,7 +73,7 @@ public class ModerationService {
         boolean changed;
         try {
             changed = switch (type) {
-                case WARN -> create(actor, PunishmentType.WARN, scope, targetUuid, targetName, null, reason, null, created);
+                case WARN -> warn(actor, scope, targetUuid, targetName, reason, created);
                 case MUTE -> create(actor, PunishmentType.MUTE, scope, targetUuid, targetName, null, reason, null, created);
                 case TEMPMUTE -> create(actor, PunishmentType.MUTE, scope, targetUuid, targetName, null, reason, expires, created);
                 case UNMUTE -> revokeMatching(actor, safe.punishmentId, targetUuid, null, PunishmentType.MUTE, reason);
@@ -113,6 +113,23 @@ public class ModerationService {
                 confirmRequired,
                 created[0] != null ? created[0].punishmentId() : safe.punishmentId
         );
+    }
+
+    private boolean warn(
+            DashboardPrincipal actor,
+            ServerScope scope,
+            String uuid,
+            String name,
+            String reason,
+            PunishmentRecord[] output
+    ) {
+        create(actor, PunishmentType.WARN, scope, uuid, name, null, reason, null, output);
+        WarnEscalationService.Result escalation = services.getWarnEscalationService()
+                .evaluate(blankToNull(uuid), blankToNull(name), output[0], actorUuid(actor), actorName(actor));
+        if (escalation != null && escalation.punishment() != null) {
+            enforceCurrentPlayer(uuid);
+        }
+        return true;
     }
 
     private boolean create(

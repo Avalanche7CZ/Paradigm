@@ -71,7 +71,7 @@ public class TpaCommand implements ParadigmModule {
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
-        IEventSystem events = services.getPlatformAdapter().getEventSystem();
+        IEventSystem events = lifecycleEvents(services);
         if (events != null) {
             events.onPlayerLeave(event -> {
                 IPlayer player = event.getPlayer();

@@ -13,6 +13,7 @@ public class Placeholders {
     private Boolean luckPermsAvailable = null;
     private static volatile Function<IPlayer, PermissionMeta> permissionMetaResolver;
     private static volatile ToIntFunction<IPlayer> pingResolver;
+    private static volatile Function<IPlayer, PlayerActivity> activityResolver;
 
     public Placeholders() {
     }
@@ -23,6 +24,10 @@ public class Placeholders {
 
     public static void setPingResolver(ToIntFunction<IPlayer> resolver) {
         pingResolver = resolver;
+    }
+
+    public static void setActivityResolver(Function<IPlayer, PlayerActivity> resolver) {
+        activityResolver = resolver;
     }
 
     private void initLuckPerms() {
@@ -69,6 +74,7 @@ public class Placeholders {
             if (replacedText.contains("{player_ping}")) {
                 replacedText = replacedText.replace("{player_ping}", resolvePing(player));
             }
+            replacedText = replaceActivityPlaceholders(replacedText, player);
 
             initLuckPerms();
             if (luckPermsAvailable != null && luckPermsAvailable) {
@@ -86,6 +92,7 @@ public class Placeholders {
         replacedText = replacedText.replace("{player_health}", "");
         replacedText = replacedText.replace("{max_player_health}", "");
         replacedText = stripRuntimePlaceholders(replacedText);
+        replacedText = stripActivityPlaceholders(replacedText);
         replacedText = stripLuckPermsPlaceholders(replacedText);
         replacedText = stripInternalGroupPlaceholders(replacedText);
         return resolveExternal(replacedText, null);
@@ -152,6 +159,7 @@ public class Placeholders {
                 replacedText = replacedText.replace("{max_player_health}", safe(maxHealth));
             }
             replacedText = stripRuntimePlaceholders(replacedText);
+            replacedText = stripActivityPlaceholders(replacedText);
 
             initLuckPerms();
 
@@ -167,6 +175,7 @@ public class Placeholders {
             replacedText = replacedText.replace("{player_level}", "");
             replacedText = replacedText.replace("{player_health}", "");
             replacedText = replacedText.replace("{max_player_health}", "");
+            replacedText = stripActivityPlaceholders(replacedText);
             replacedText = stripLuckPermsPlaceholders(replacedText);
             replacedText = stripInternalGroupPlaceholders(replacedText);
         }
@@ -216,6 +225,51 @@ public class Placeholders {
                 .replace("{player_world}", "")
                 .replace("{player_dimension}", "")
                 .replace("{player_ping}", "");
+    }
+
+    private static String replaceActivityPlaceholders(String text, IPlayer player) {
+        if (!containsActivityToken(text)) {
+            return text;
+        }
+
+        Function<IPlayer, PlayerActivity> resolver = activityResolver;
+        PlayerActivity activity = null;
+        if (resolver != null && player != null) {
+            try {
+                activity = resolver.apply(player);
+            } catch (RuntimeException | LinkageError ignored) {
+                activity = null;
+            }
+        }
+        if (activity == null) {
+            return stripActivityPlaceholders(text);
+        }
+
+        long playtime = activity.playtimeMs();
+        boolean playtimeKnown = playtime >= 0L;
+        return text
+                .replace("{afk}", activity.afk() ? safe(activity.afkTag()) : "")
+                .replace("{is_afk}", Boolean.toString(activity.afk()))
+                .replace("{playtime}", playtimeKnown ? DurationFormatter.humanize(playtime) : "")
+                .replace("{playtime_short}", playtimeKnown ? DurationFormatter.compact(playtime) : "")
+                .replace("{playtime_hours}", playtimeKnown ? Long.toString(DurationFormatter.wholeHours(playtime)) : "");
+    }
+
+    private static boolean containsActivityToken(String text) {
+        return text.contains("{afk}")
+                || text.contains("{is_afk}")
+                || text.contains("{playtime}")
+                || text.contains("{playtime_short}")
+                || text.contains("{playtime_hours}");
+    }
+
+    private static String stripActivityPlaceholders(String text) {
+        return text
+                .replace("{afk}", "")
+                .replace("{is_afk}", "false")
+                .replace("{playtime}", "")
+                .replace("{playtime_short}", "")
+                .replace("{playtime_hours}", "");
     }
 
     private String stripLuckPermsPlaceholders(String text) {
@@ -391,5 +445,11 @@ public class Placeholders {
     }
 
     public record PermissionMeta(String primaryGroup, String prefix, String suffix, List<String> groups) {
+    }
+
+    public record PlayerActivity(boolean afk, String afkTag, long playtimeMs) {
+        public static PlayerActivity withoutPlaytime(boolean afk, String afkTag) {
+            return new PlayerActivity(afk, afkTag, -1L);
+        }
     }
 }

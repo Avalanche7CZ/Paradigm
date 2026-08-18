@@ -266,6 +266,7 @@ public class SqlMigrationRunner implements MigrationRunner {
                 case 7 -> "managed_config";
                 case 8 -> "server_instances_metadata";
                 case 9 -> "permission_assignment_keys";
+                case 10 -> "player_playtime";
                 default -> "migration";
             } + ".sql";
             String sql = resourceText(resource);

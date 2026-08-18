@@ -57,7 +57,10 @@ public class JoinLeaveMessages implements ParadigmModule {
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
-        IEventSystem events = services.getPlatformAdapter().getEventSystem();
+        IEventSystem events = moduleEvents(services);
+        if (events == null) {
+            return;
+        }
         events.onPlayerJoin(evt -> onPlayerJoin(evt));
         events.onPlayerLeave(evt -> onPlayerLeave(evt));
     }

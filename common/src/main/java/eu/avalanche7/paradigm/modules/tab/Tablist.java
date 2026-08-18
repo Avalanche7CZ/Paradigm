@@ -16,6 +16,7 @@ import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
@@ -84,17 +85,23 @@ public final class Tablist implements ParadigmModule {
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
-        if (services == null || services.getPlatformAdapter().getEventSystem() == null) return;
-        services.getPlatformAdapter().getEventSystem().onPlayerJoin(event -> scheduleRefresh(1));
-        services.getPlatformAdapter().getEventSystem().onPlayerLeave(event -> {
-            IPlayer player = event.getPlayer();
-            String uuid = player != null ? player.getUUID() : null;
-            if (uuid != null) {
-                snapshots.remove(uuid);
-                if (resolver instanceof TablistMetadataResolver r) r.invalidate(uuid);
-            }
-            scheduleRefresh(0);
-        });
+        if (services == null) return;
+        IEventSystem events = moduleEvents(services);
+        if (events != null) {
+            events.onPlayerJoin(event -> scheduleRefresh(1));
+        }
+        IEventSystem lifecycle = lifecycleEvents(services);
+        if (lifecycle != null) {
+            lifecycle.onPlayerLeave(event -> {
+                IPlayer player = event.getPlayer();
+                String uuid = player != null ? player.getUUID() : null;
+                if (uuid != null) {
+                    snapshots.remove(uuid);
+                    if (resolver instanceof TablistMetadataResolver r) r.invalidate(uuid);
+                }
+                scheduleRefresh(0);
+            });
+        }
     }
 
     public void reload() {

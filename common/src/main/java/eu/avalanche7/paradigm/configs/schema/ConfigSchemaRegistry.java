@@ -11,6 +11,7 @@ import java.util.Map;
 import com.google.gson.Gson;
 
 import eu.avalanche7.paradigm.ParadigmAPI;
+import eu.avalanche7.paradigm.configs.AfkConfigHandler;
 import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.configs.ConfigEntry;
@@ -46,7 +47,8 @@ public class ConfigSchemaRegistry {
                 new ConfigCategory("restart", "Restart", "Scheduled restart timing and warning messages."),
                 new ConfigCategory("motd", "MOTD", "Join MOTD and server-list MOTD text/icon settings."),
                 new ConfigCategory("tablist", "Tablist", "Header, footer, player formatting, sorting, and world overrides."),
-                new ConfigCategory("moderation", "Moderation", "Punishment cache and formatted ban-screen settings."),
+                new ConfigCategory("moderation", "Moderation", "Punishment cache, warn escalation, and formatted ban-screen settings."),
+                new ConfigCategory("afk", "AFK", "Automatic AFK detection, timeout, and broadcast settings."),
                 new ConfigCategory("storage", "Storage", "Read-only data provider status and masked storage settings."),
                 new ConfigCategory("dashboard", "Dashboard", "Local dashboard settings from dashboard.json."),
                 new ConfigCategory("discord", "Discord", "Discord relay, notification, and formatting settings from discord.json."),
@@ -63,6 +65,7 @@ public class ConfigSchemaRegistry {
         addMotdFields(fields);
         addTablistFields(fields);
         addModerationFields(fields);
+        addAfkFields(fields);
         addCommandFields(fields);
         addCooldownFields(fields);
         addStorageFields(fields);
@@ -308,6 +311,34 @@ public class ConfigSchemaRegistry {
         ModerationConfigHandler.Config defaults = new ModerationConfigHandler.Config();
         addConfigEntries(fields, "moderation", "moderation", ModerationConfigHandler.Config.class, current, defaults,
                 "moderation-settings.json", ConfigReloadBehavior.RELOAD_REQUIRED);
+        fields.add(stringListField("moderation.warnEscalationRules", "moderation", "Warn Escalation Rules",
+                "One rule per row as JSON: {\"warnings\":3,\"window\":\"7d\",\"banDuration\":\"1h\",\"reason\":\"\"}.",
+                encodeEscalationRules(current.warnEscalationRules.value), encodeEscalationRules(defaults.warnEscalationRules.value),
+                "moderation-settings.json", false, ConfigReloadBehavior.RELOAD_REQUIRED));
+    }
+
+    private void addAfkFields(List<ConfigField> fields) {
+        if (!AfkConfigHandler.isInitialized()) {
+            return;
+        }
+        AfkConfigHandler.Config current = AfkConfigHandler.getConfig();
+        AfkConfigHandler.Config defaults = new AfkConfigHandler.Config();
+        addConfigEntries(fields, "afk", "afk", AfkConfigHandler.Config.class, current, defaults,
+                "afk.json", ConfigReloadBehavior.LIVE);
+    }
+
+    static List<String> encodeEscalationRules(List<ModerationConfigHandler.EscalationRule> rules) {
+        if (rules == null || rules.isEmpty()) {
+            return List.of();
+        }
+        Gson gson = new Gson();
+        List<String> encoded = new ArrayList<>(rules.size());
+        for (ModerationConfigHandler.EscalationRule rule : rules) {
+            if (rule != null) {
+                encoded.add(gson.toJson(rule));
+            }
+        }
+        return encoded;
     }
 
     private void addCommandFields(List<ConfigField> fields) {

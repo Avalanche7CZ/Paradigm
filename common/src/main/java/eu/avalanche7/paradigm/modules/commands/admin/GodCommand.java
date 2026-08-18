@@ -33,7 +33,7 @@ public class GodCommand extends AbstractAdminCommand {
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
         this.services = services;
-        IEventSystem events = services.getPlatformAdapter().getEventSystem();
+        IEventSystem events = moduleEvents(services);
         if (events == null) {
             return;
         }

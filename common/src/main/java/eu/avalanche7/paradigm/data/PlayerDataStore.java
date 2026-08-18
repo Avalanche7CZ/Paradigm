@@ -333,6 +333,10 @@ public class PlayerDataStore {
     }
 
     public void upsertProfile(String playerUuid, String playerName, long firstSeenMs, long lastSeenMs) {
+        upsertProfile(playerUuid, playerName, firstSeenMs, lastSeenMs, -1L);
+    }
+
+    public void upsertProfile(String playerUuid, String playerName, long firstSeenMs, long lastSeenMs, long playtimeMs) {
         String uuid = normalizePlayerKey(playerUuid);
         if (uuid == null) {
             return;
@@ -347,6 +351,9 @@ public class PlayerDataStore {
             }
             if (lastSeenMs > 0L) {
                 entry.setLastSeenMs(lastSeenMs);
+            }
+            if (playtimeMs >= 0L) {
+                entry.setPlaytimeMs(playtimeMs);
             }
             saveEntryLocked(entry);
         }
@@ -587,6 +594,7 @@ public class PlayerDataStore {
         private StoredLocation lastLocation;
         private long firstSeenMs;
         private long lastSeenMs;
+        private long playtimeMs;
         private Set<String> ignoredPlayers = new LinkedHashSet<>();
         private List<TemporaryGroupEntry> tempGroups = new ArrayList<>();
 
@@ -632,6 +640,14 @@ public class PlayerDataStore {
 
         public void setLastSeenMs(long lastSeenMs) {
             this.lastSeenMs = lastSeenMs;
+        }
+
+        public long getPlaytimeMs() {
+            return playtimeMs;
+        }
+
+        public void setPlaytimeMs(long playtimeMs) {
+            this.playtimeMs = Math.max(0L, playtimeMs);
         }
 
         public Set<String> getIgnoredPlayers() {
@@ -698,6 +714,9 @@ public class PlayerDataStore {
             }
             if (firstSeenMs == 0L && lastSeenMs > 0L) {
                 firstSeenMs = lastSeenMs;
+            }
+            if (playtimeMs < 0L) {
+                playtimeMs = 0L;
             }
 
             Set<String> seenGroups = new LinkedHashSet<>();

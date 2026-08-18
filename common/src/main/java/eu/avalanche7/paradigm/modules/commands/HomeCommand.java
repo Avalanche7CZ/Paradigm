@@ -74,7 +74,7 @@ public class HomeCommand implements ParadigmModule {
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
-        IEventSystem events = services.getPlatformAdapter().getEventSystem();
+        IEventSystem events = moduleEvents(services);
         if (events != null) {
             events.onPlayerDeath(event -> {
                 IPlayer player = event.getPlayer();
@@ -99,7 +99,10 @@ public class HomeCommand implements ParadigmModule {
                     refreshHomeSuggestionsAsync(player.getUUID(), true);
                 }
             });
-            events.onPlayerLeave(event -> {
+        }
+        IEventSystem lifecycle = lifecycleEvents(services);
+        if (lifecycle != null) {
+            lifecycle.onPlayerLeave(event -> {
                 IPlayer player = event != null ? event.getPlayer() : null;
                 if (player == null || player.getUUID() == null) {
                     return;

@@ -76,6 +76,7 @@ public class Reload implements ParadigmModule {
                                 case "moderation" -> { ModerationConfigHandler.reload(); services.getPunishmentService().refreshAsync(); msg = "Moderation config reloaded."; }
                                 case "tablist" -> { TablistConfigHandler.reload(); msg = "Tablist config reloaded."; }
                                 case "discord" -> { DiscordConfigHandler.reload(); msg = "Discord config reloaded."; }
+                                case "afk" -> { AfkConfigHandler.reload(); msg = "AFK config reloaded."; }
                                 case "customcommands" -> {
                                     CommandManager.reloadCustomCommands(services);
                                     msg = "Custom commands config reloaded.";
@@ -90,6 +91,7 @@ public class Reload implements ParadigmModule {
                                     ModerationConfigHandler.reload();
                                     TablistConfigHandler.reload();
                                     DiscordConfigHandler.reload();
+                                    AfkConfigHandler.reload();
                                     CommandManager.reloadCustomCommands(services);
                                     msg = "All configs reloaded.";
                                 }
@@ -117,6 +119,9 @@ public class Reload implements ParadigmModule {
                             }
                             if ("discord".equals(cfg) || "all".equals(cfg)) {
                                 services.getDiscordService().reload();
+                            }
+                            if ("afk".equals(cfg) || "all".equals(cfg)) {
+                                services.getAfkService().restart();
                             }
 
                             platform.sendSuccess(ctx.getSource(), platform.createLiteralComponent("§a" + msg), true);

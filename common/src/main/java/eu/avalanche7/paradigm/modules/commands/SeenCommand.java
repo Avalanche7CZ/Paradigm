@@ -73,7 +73,7 @@ public class SeenCommand implements ParadigmModule {
                             }
 
                             return StorageCommandSupport.runForPlayer(services, sender, "seen.lookup", () ->
-                                    services.getStorageService().players().getProfile(uuid.toString()).orElse(null),
+                                    services.getPlayerProfileService().find(uuid.toString()).orElse(null),
                                     (current, profile) -> sendSeenResult(current, profile),
                                     "seen.error_load");
                         }));
@@ -82,7 +82,7 @@ public class SeenCommand implements ParadigmModule {
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
-        IEventSystem events = services.getPlatformAdapter().getEventSystem();
+        IEventSystem events = moduleEvents(services);
         if (events != null) {
             events.onPlayerJoin(event -> {
                 IPlayer player = event.getPlayer();
@@ -103,18 +103,7 @@ public class SeenCommand implements ParadigmModule {
         if (player == null || player.getUUID() == null || player.getUUID().isBlank()) {
             return;
         }
-        String uuid = player.getUUID();
-        String name = player.getName();
-        services.getStorageService().runAsync("seen.update", () -> {
-            long now = System.currentTimeMillis();
-            long firstSeen = services.getStorageService().players()
-                    .getProfile(uuid)
-                    .map(StoredPlayerProfile::firstSeenMs)
-                    .filter(value -> value > 0L)
-                    .orElse(now);
-            services.getStorageService().players().upsertProfile(new StoredPlayerProfile(uuid, name, firstSeen, now));
-            return null;
-        }, services.getTaskScheduler(), ignored -> {}, ignored -> {});
+        services.getPlayerProfileService().mergeAsync("seen.update", player.getUUID(), player.getName(), true, 0L);
     }
 
     private void sendSeenResult(IPlayer sender, StoredPlayerProfile profile) {

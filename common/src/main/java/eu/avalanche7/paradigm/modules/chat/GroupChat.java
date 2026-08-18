@@ -258,20 +258,22 @@ public class GroupChat implements ParadigmModule {
         this.services = services;
         this.platform = services.getPlatformAdapter();
 
-        IEventSystem events = services.getPlatformAdapter().getEventSystem();
+        IEventSystem events = moduleEvents(services);
         if (events != null) {
             events.onPlayerChat(event -> {
                 if (event.isCancelled()) return;
                 IPlayer player = event.getPlayer();
                 if (player == null) return;
-                if (!isEnabled(this.services)) return;
 
                 boolean allow = handleGroupChatMessage(player, event.getMessage());
                 if (!allow) {
                     event.setCancelled(true);
                 }
             });
-            events.onPlayerLeave(event -> {
+        }
+        IEventSystem lifecycle = lifecycleEvents(services);
+        if (lifecycle != null) {
+            lifecycle.onPlayerLeave(event -> {
                 IPlayer player = event != null ? event.getPlayer() : null;
                 if (player != null) {
                     groupChatManager.clearPendingRequestsForPlayer(player.getUUID());

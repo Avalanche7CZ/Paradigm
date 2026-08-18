@@ -51,6 +51,10 @@ public class Services {
     private volatile PermissionAdminService permissionAdminService;
     private volatile CustomCommandAdminService customCommandAdminService;
     private volatile PunishmentService punishmentService;
+    private volatile eu.avalanche7.paradigm.modules.moderation.WarnEscalationService warnEscalationService;
+    private volatile eu.avalanche7.paradigm.modules.profile.PlayerProfileService playerProfileService;
+    private volatile eu.avalanche7.paradigm.modules.afk.AfkService afkService;
+    private volatile eu.avalanche7.paradigm.modules.playtime.PlaytimeService playtimeService;
     private volatile HologramService hologramService;
     private volatile CommandAccess commandAccess;
     private volatile PlayerMessenger playerMessenger;
@@ -134,6 +138,26 @@ public class Services {
                 if (logger != null) {
                     logger.warn("[Paradigm] Shutdown: failed to stop the punishment cache refresher; scheduler shutdown will continue.",
                             failure);
+                }
+            }
+        }
+        eu.avalanche7.paradigm.modules.playtime.PlaytimeService playtime = this.playtimeService;
+        if (playtime != null) {
+            try {
+                playtime.stop();
+            } catch (RuntimeException failure) {
+                if (logger != null) {
+                    logger.warn("[Paradigm] Shutdown: failed to flush pending playtime.", failure);
+                }
+            }
+        }
+        eu.avalanche7.paradigm.modules.afk.AfkService afk = this.afkService;
+        if (afk != null) {
+            try {
+                afk.stop();
+            } catch (RuntimeException failure) {
+                if (logger != null) {
+                    logger.warn("[Paradigm] Shutdown: failed to stop the AFK watcher.", failure);
                 }
             }
         }
@@ -315,6 +339,46 @@ public class Services {
                 if (this.server != null) punishmentService.start();
             }
             return punishmentService;
+        }
+    }
+
+    public eu.avalanche7.paradigm.modules.moderation.WarnEscalationService getWarnEscalationService() {
+        eu.avalanche7.paradigm.modules.moderation.WarnEscalationService current = warnEscalationService;
+        if (current != null) return current;
+        synchronized (this) {
+            if (warnEscalationService == null) {
+                warnEscalationService = new eu.avalanche7.paradigm.modules.moderation.WarnEscalationService(this);
+            }
+            return warnEscalationService;
+        }
+    }
+
+    public eu.avalanche7.paradigm.modules.profile.PlayerProfileService getPlayerProfileService() {
+        eu.avalanche7.paradigm.modules.profile.PlayerProfileService current = playerProfileService;
+        if (current != null) return current;
+        synchronized (this) {
+            if (playerProfileService == null) {
+                playerProfileService = new eu.avalanche7.paradigm.modules.profile.PlayerProfileService(this);
+            }
+            return playerProfileService;
+        }
+    }
+
+    public eu.avalanche7.paradigm.modules.afk.AfkService getAfkService() {
+        eu.avalanche7.paradigm.modules.afk.AfkService current = afkService;
+        if (current != null) return current;
+        synchronized (this) {
+            if (afkService == null) afkService = new eu.avalanche7.paradigm.modules.afk.AfkService(this);
+            return afkService;
+        }
+    }
+
+    public eu.avalanche7.paradigm.modules.playtime.PlaytimeService getPlaytimeService() {
+        eu.avalanche7.paradigm.modules.playtime.PlaytimeService current = playtimeService;
+        if (current != null) return current;
+        synchronized (this) {
+            if (playtimeService == null) playtimeService = new eu.avalanche7.paradigm.modules.playtime.PlaytimeService(this);
+            return playtimeService;
         }
     }
 

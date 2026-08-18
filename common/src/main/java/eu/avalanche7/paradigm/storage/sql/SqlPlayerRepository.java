@@ -1,5 +1,7 @@
 package eu.avalanche7.paradigm.storage.sql;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -20,10 +22,10 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
 
     @Override
     public List<StoredPlayerProfile> listProfiles() {
-        return sql.query("SELECT uuid, name, first_seen_ms, last_seen_ms FROM players ORDER BY uuid", null, rs -> {
+        return sql.query("SELECT uuid, name, first_seen_ms, last_seen_ms, playtime_ms FROM players ORDER BY uuid", null, rs -> {
             List<StoredPlayerProfile> profiles = new ArrayList<>();
             while (rs.next()) {
-                profiles.add(new StoredPlayerProfile(rs.getString("uuid"), rs.getString("name"), rs.getLong("first_seen_ms"), rs.getLong("last_seen_ms")));
+                profiles.add(readProfile(rs));
             }
             return profiles;
         });
@@ -32,9 +34,9 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
     @Override
     public Optional<StoredPlayerProfile> getProfile(String uuid) {
         String normalizedUuid = normalize(uuid);
-        return sql.query("SELECT uuid, name, first_seen_ms, last_seen_ms FROM players WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid), rs -> {
+        return sql.query("SELECT uuid, name, first_seen_ms, last_seen_ms, playtime_ms FROM players WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid), rs -> {
             if (!rs.next()) return Optional.empty();
-            return Optional.of(new StoredPlayerProfile(rs.getString("uuid"), rs.getString("name"), rs.getLong("first_seen_ms"), rs.getLong("last_seen_ms")));
+            return Optional.of(readProfile(rs));
         });
     }
 
@@ -44,11 +46,12 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
         String normalizedUuid = normalize(profile.uuid());
         sql.transaction(() -> {
             sql.update("DELETE FROM players WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid));
-            sql.update("INSERT INTO players(uuid, name, first_seen_ms, last_seen_ms) VALUES(?, ?, ?, ?)", ps -> {
+            sql.update("INSERT INTO players(uuid, name, first_seen_ms, last_seen_ms, playtime_ms) VALUES(?, ?, ?, ?, ?)", ps -> {
                 ps.setString(1, normalizedUuid);
                 ps.setString(2, profile.name());
                 ps.setLong(3, profile.firstSeenMs());
                 ps.setLong(4, profile.lastSeenMs());
+                ps.setLong(5, profile.playtimeMs());
             });
         });
     }
@@ -180,6 +183,11 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
             ps.setString(2, normalizedUuid);
             ps.setString(3, normalizedIgnoredUuid);
         }) > 0;
+    }
+
+    private static StoredPlayerProfile readProfile(ResultSet rs) throws SQLException {
+        return new StoredPlayerProfile(rs.getString("uuid"), rs.getString("name"),
+                rs.getLong("first_seen_ms"), rs.getLong("last_seen_ms"), rs.getLong("playtime_ms"));
     }
 
     private static String normalize(String uuid) {

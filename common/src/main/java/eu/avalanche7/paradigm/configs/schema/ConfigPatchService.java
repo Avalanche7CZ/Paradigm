@@ -12,6 +12,7 @@ import java.util.regex.Pattern;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
+import eu.avalanche7.paradigm.configs.AfkConfigHandler;
 import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.configs.ConfigEntry;
@@ -80,6 +81,7 @@ public class ConfigPatchService {
         boolean cooldownsChanged = false;
         boolean tablistChanged = false;
         boolean discordChanged = false;
+        boolean afkChanged = false;
 
         for (ConfigPatchOperation op : patch.operations()) {
             String key = op != null ? normalizeKey(op.key()) : null;
@@ -120,8 +122,12 @@ public class ConfigPatchService {
                     motdChanged = true;
                     result.accept(key);
                 } else if (key.startsWith("moderation.")) {
-                    applyConfigEntry(ModerationConfigHandler.Config.class, ModerationConfigHandler.getConfig(), key.substring("moderation.".length()), value);
+                    applyModeration(key.substring("moderation.".length()), value);
                     moderationChanged = true;
+                    result.accept(key);
+                } else if (key.startsWith("afk.")) {
+                    applyConfigEntry(AfkConfigHandler.Config.class, AfkConfigHandler.getConfig(), key.substring("afk.".length()), value);
+                    afkChanged = true;
                     result.accept(key);
                 } else if (key.startsWith("dashboard.")) {
                     applyDashboard(key.substring("dashboard.".length()), value);
@@ -161,9 +167,20 @@ public class ConfigPatchService {
             }
         }
 
+        if (afkChanged) {
+            AfkConfigHandler.persistConfig();
+        }
+        if (mainChanged || afkChanged) {
+            boolean restartAfk = afkChanged;
+            scheduleServerThread(() -> {
+                Reload.refreshModuleStates(services, moduleStatesBefore);
+                if (restartAfk) {
+                    services.getAfkService().restart();
+                }
+            });
+        }
         if (mainChanged) {
             MainConfigHandler.persistConfig();
-            scheduleServerThread(() -> Reload.refreshModuleStates(services, moduleStatesBefore));
             result.warn("Main config changes were saved. Some effects may require a reload or restart.");
         }
         if (chatChanged) {
@@ -190,6 +207,9 @@ public class ConfigPatchService {
             ModerationConfigHandler.persistConfig();
             services.getPunishmentService().refreshAsync();
             result.warn("Moderation settings were saved and apply immediately.");
+        }
+        if (afkChanged) {
+            result.warn("AFK settings were saved and applied.");
         }
         if (dashboardChanged) {
             result.warn("Dashboard config changes were saved. Use Apply Reload to activate bind/session changes.");
@@ -281,6 +301,57 @@ public class ConfigPatchService {
             return;
         }
         applyConfigEntry(RestartConfigHandler.Config.class, RestartConfigHandler.getConfig(), fieldName, value);
+    }
+
+    private void applyModeration(String fieldName, Object value) throws Exception {
+        if ("warnEscalationRules".equals(fieldName)) {
+            ModerationConfigHandler.getConfig().warnEscalationRules.value = parseEscalationRules(stringList(value));
+            return;
+        }
+        applyConfigEntry(ModerationConfigHandler.Config.class, ModerationConfigHandler.getConfig(), fieldName, value);
+    }
+
+    static List<ModerationConfigHandler.EscalationRule> parseEscalationRules(List<String> rows) {
+        List<ModerationConfigHandler.EscalationRule> rules = new ArrayList<>();
+        Gson gson = new Gson();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (String raw : rows) {
+            JsonObject row;
+            try {
+                row = gson.fromJson(raw, JsonObject.class);
+            } catch (RuntimeException exception) {
+                throw new IllegalArgumentException("Escalation rule data is invalid.");
+            }
+            if (row == null) {
+                throw new IllegalArgumentException("Escalation rule data is invalid.");
+            }
+            int warnings = row.has("warnings") && !row.get("warnings").isJsonNull() ? row.get("warnings").getAsInt() : 0;
+            if (warnings < 1 || warnings > 1000) {
+                throw new IllegalArgumentException("Escalation rules need a warning threshold between 1 and 1000.");
+            }
+            String window = row.has("window") && !row.get("window").isJsonNull() ? row.get("window").getAsString().trim() : "";
+            String banDuration = row.has("banDuration") && !row.get("banDuration").isJsonNull()
+                    ? row.get("banDuration").getAsString().trim() : "";
+            if (DurationParser.parseToMillis(window) <= 0L) {
+                throw new IllegalArgumentException("Escalation rule windows must be durations such as 7d or 12h.");
+            }
+            if (DurationParser.parseToMillis(banDuration) <= 0L) {
+                throw new IllegalArgumentException("Escalation rule ban durations must be durations such as 1h or 1d.");
+            }
+            String key = warnings + "@" + window.toLowerCase(Locale.ROOT);
+            if (!seen.add(key)) {
+                throw new IllegalArgumentException("Escalation rules must be unique per threshold and window.");
+            }
+            String reason = row.has("reason") && !row.get("reason").isJsonNull() ? row.get("reason").getAsString().trim() : "";
+            if (reason.length() > 256) {
+                throw new IllegalArgumentException("Escalation rule reasons must be at most 256 characters.");
+            }
+            rules.add(new ModerationConfigHandler.EscalationRule(warnings, window, banDuration, reason));
+        }
+        if (rules.size() > 16) {
+            throw new IllegalArgumentException("At most 16 escalation rules are supported.");
+        }
+        return rules;
     }
 
     private void applyChat(String fieldName, Object value) throws Exception {

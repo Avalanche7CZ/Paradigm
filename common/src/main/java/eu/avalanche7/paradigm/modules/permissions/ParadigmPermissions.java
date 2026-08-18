@@ -54,6 +54,12 @@ public final class ParadigmPermissions {
             def("paradigm.seen", EVERYONE, "Allows checking when a player was last seen with /seen.");
     public static final PermissionDefinition IGNORE =
             def("paradigm.ignore", EVERYONE, "Allows managing ignored players with /ignore and /unignore.");
+    public static final PermissionDefinition AFK =
+            def("paradigm.afk", EVERYONE, "Allows toggling AFK status with /afk.");
+    public static final PermissionDefinition PLAYTIME =
+            def("paradigm.playtime", EVERYONE, "Allows checking your own cumulative playtime with /playtime.");
+    public static final PermissionDefinition PLAYTIME_OTHERS =
+            def("paradigm.playtime.others", OP, "Allows checking another player's playtime, including offline players.");
     public static final PermissionDefinition GAMEMODE =
             def("paradigm.gamemode", OP, "Allows changing gamemode with /gamemode and gamemode aliases.");
     public static final PermissionDefinition GAMEMODE_OTHERS =
@@ -178,6 +184,7 @@ public final class ParadigmPermissions {
             STAFF_CHAT, MENTION_EVERYONE, MENTION_PLAYER, RESTART_MANAGE, BROADCAST, GROUP_CHAT,
             RELOAD, COMMAND_TOGGLE, HOLOGRAM_MANAGE, STORAGE_MANAGE, TABLIST_MANAGE, GROUP_MANAGE, DISCORD_MANAGE,
             PRIVATE_MESSAGE, PRIVATE_REPLY, SOCIAL_SPY, SPAWN, SET_SPAWN, SEEN, IGNORE,
+            AFK, PLAYTIME, PLAYTIME_OTHERS,
             GAMEMODE, GAMEMODE_OTHERS, FLY, FLY_OTHERS, CLEAR_INVENTORY, CLEAR_INVENTORY_OTHERS,
             TIME, WEATHER, SPEED, SPEED_OTHERS, FEED, FEED_OTHERS, HEAL, HEAL_OTHERS,
             HOME_USE, HOME_SET, HOME_DELETE, HOME_LIST, HOME_LIMIT_TEMPLATE, HOME_LIMIT_UNLIMITED,

@@ -8,6 +8,7 @@ import eu.avalanche7.paradigm.modules.CommandManager;
 import eu.avalanche7.paradigm.modules.Mentions;
 import eu.avalanche7.paradigm.modules.Restart;
 import eu.avalanche7.paradigm.modules.StorageLifecycle;
+import eu.avalanche7.paradigm.modules.afk.AfkModule;
 import eu.avalanche7.paradigm.modules.chat.GroupChat;
 import eu.avalanche7.paradigm.modules.chat.JoinLeaveMessages;
 import eu.avalanche7.paradigm.modules.chat.MOTD;
@@ -49,6 +50,7 @@ import eu.avalanche7.paradigm.modules.commands.moderation.WarnCommand;
 import eu.avalanche7.paradigm.modules.dashboard.LocalDashboardModule;
 import eu.avalanche7.paradigm.modules.discord.DiscordModule;
 import eu.avalanche7.paradigm.modules.holograms.Holograms;
+import eu.avalanche7.paradigm.modules.playtime.PlaytimeModule;
 import eu.avalanche7.paradigm.modules.tab.Tablist;
 import eu.avalanche7.paradigm.utils.GroupChatManager;
 
@@ -95,6 +97,8 @@ public final class ParadigmModules {
         modules.add(new SpawnCommand());
         modules.add(new RtpCommand());
         modules.add(new SeenCommand());
+        modules.add(new AfkModule());
+        modules.add(new PlaytimeModule());
         modules.add(new IgnoreCommand());
         modules.add(new GamemodeCommand());
         modules.add(new FlyCommand());

@@ -180,6 +180,7 @@ public class MessageParser {
         return List.of(
                 "{player}", "{player_name}", "{player_uuid}", "{player_level}", "{player_health}", "{max_player_health}",
                 "{player_world}", "{player_dimension}", "{player_ping}",
+                "{afk}", "{is_afk}", "{playtime}", "{playtime_short}", "{playtime_hours}",
                 "{player_prefix}", "{player_suffix}", "{player_group}", "{player_primary_group}", "{player_groups}",
                 "{prefix}", "{suffix}", "{group}");
     }

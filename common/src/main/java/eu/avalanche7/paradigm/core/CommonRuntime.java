@@ -47,6 +47,7 @@ public final class CommonRuntime {
         EmojiConfigHandler.init(platformConfig, bootstrapDebugLogger);
         TablistConfigHandler.init(platformConfig, bootstrapDebugLogger);
         DiscordConfigHandler.init(platformConfig, bootstrapDebugLogger);
+        AfkConfigHandler.init(platformConfig, bootstrapDebugLogger);
 
         DebugLogger debugLogger = new DebugLogger(MainConfigHandler.getConfig());
         CMConfig cmConfig = new CMConfig(debugLogger, platformConfig);
@@ -97,6 +98,7 @@ public final class CommonRuntime {
         );
 
         services.getPunishmentService();
+        registerActivityPlaceholders(services);
 
         registerDefaultCommandToggles(commandToggleStore);
 
@@ -152,6 +154,20 @@ public final class CommonRuntime {
         logger.warn("[Paradigm] Platform adapter {} exposed no TaskScheduler; creating a runtime-owned one. "
                 + "Tasks scheduled by the adapter itself may then outlive server shutdown.", platformAdapter.getClass().getName());
         return new TaskScheduler(debugLogger);
+    }
+
+    private static void registerActivityPlaceholders(Services services) {
+        Placeholders.setActivityResolver(player -> {
+            if (player == null) {
+                return null;
+            }
+            boolean afk = services.getAfkService().isAfk(player);
+            String tag = services.getAfkService().afkTag();
+            if (!services.getPlaytimeService().isRunning()) {
+                return Placeholders.PlayerActivity.withoutPlaytime(afk, tag);
+            }
+            return new Placeholders.PlayerActivity(afk, tag, services.getPlaytimeService().onlinePlaytimeMs(player));
+        });
     }
 
     private static void registerExternalCommandGuard(Services services) {

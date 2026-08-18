@@ -299,6 +299,17 @@
     "teleported": "Teleport na náhodné místo proběhl.",
     "no_safe_location": "Nepodařilo se najít bezpečné místo. Zkus to prosím znovu."
   },
+  "afk": {
+    "now_afk": "Nyní jsi AFK.",
+    "no_longer_afk": "Už nejsi AFK."
+  },
+  "playtime": {
+    "self": "Odehraný čas: {total} (tato relace: {session}).",
+    "other": "{player} odehrál {total}.",
+    "unknown": "Pro hráče {player} nejsou data o odehraném čase.",
+    "player_only": "Z konzole použij /playtime <hráč>.",
+    "error_load": "Data o odehraném čase se nepodařilo načíst. Zkus to prosím později."
+  },
   "seen": {
     "online": "{player} je právě online.",
     "need_uuid": "Hráč je offline. Pro přesné hledání použij UUID.",
@@ -455,6 +466,8 @@
     "whois_pos": "Pozice: {x}, {y}, {z}",
     "whois_health": "HP: {health}/{max}",
     "whois_level": "XP level: {level}",
+    "whois_afk": "AFK: {state}",
+    "whois_playtime": "Odehraný čas: {playtime}",
     "whois_groups": "Skupiny: {groups}",
     "sudo_missing": "Chybí příkaz.",
     "sudo_ok": "Příkaz byl spuštěn jako {player}.",
@@ -493,6 +506,10 @@
     "unjail_ok": "Hráč {player} byl propuštěn z jailu.",
     "unjailed": "Byl jsi propuštěn z jailu.",
     "no_reason": "Důvod nebyl uveden.",
+    "escalation": {
+      "applied": "Eskalace varování: {player} dosáhl {count} varování za {window} a byl zabanován na {duration}. ID: {id}.",
+      "notified": "Dosáhl jsi {count} varování a byl jsi zabanován na {duration}. Důvod: {reason}"
+    },
     "ip": {
       "invalid": "Neplatná adresa IPv4 nebo IPv6.",
       "created": "IP ban {id} byl vytvořen. Cíl: {subject}."

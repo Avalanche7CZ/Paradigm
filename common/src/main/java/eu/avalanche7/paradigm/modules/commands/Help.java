@@ -172,6 +172,16 @@ public class Help implements ParadigmModule {
                 "/seen <player|uuid>",
                 "paradigm/playerdata/<uuid>.json"
         ));
+        m.put("Afk", new HelpEntry(
+                "Automatic and manual AFK status with {afk} placeholder support.",
+                "/afk",
+                "afk.json"
+        ));
+        m.put("Playtime", new HelpEntry(
+                "Persistent cumulative playtime for online and offline players.",
+                "/playtime [player]",
+                "paradigm/playerdata/<uuid>.json"
+        ));
         m.put("Ignore", new HelpEntry(
                 "Ignore and unignore private messages from players.",
                 "/ignore <player>, /unignore <player>",

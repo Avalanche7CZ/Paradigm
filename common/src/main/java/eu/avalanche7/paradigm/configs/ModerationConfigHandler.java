@@ -44,5 +44,31 @@ public final class ModerationConfigHandler extends BaseConfigHandler<ModerationC
         ), "Formatted lines shown when Paradigm rejects a banned connection.");
         public ConfigEntry<String> appealUrl = new ConfigEntry<>("https://example.invalid/appeal/{punishment_id}", "Appeal URL available as {appeal_url}.");
         public ConfigEntry<Integer> cacheRefreshSeconds = new ConfigEntry<>(30, "How often SQL-backed servers refresh active punishments from storage.");
+        public ConfigEntry<Boolean> warnEscalationEnabled = new ConfigEntry<>(false,
+                "Automatically create a temporary ban when a player reaches a configured warning threshold.");
+        public ConfigEntry<String> warnEscalationReason = new ConfigEntry<>(
+                "Automatic escalation: {count} warnings within {window}.",
+                "Reason recorded on escalation bans. Supports {count}, {window}, {duration} and {player}.");
+        public ConfigEntry<List<EscalationRule>> warnEscalationRules = new ConfigEntry<>(List.of(
+                new EscalationRule(3, "7d", "1h", ""),
+                new EscalationRule(5, "30d", "1d", "")
+        ), "Escalation thresholds. Each rule counts non-revoked warnings inside its window and applies its ban duration.");
+    }
+
+    public static final class EscalationRule {
+        public int warnings;
+        public String window;
+        public String banDuration;
+        public String reason;
+
+        public EscalationRule() {
+        }
+
+        public EscalationRule(int warnings, String window, String banDuration, String reason) {
+            this.warnings = warnings;
+            this.window = window;
+            this.banDuration = banDuration;
+            this.reason = reason;
+        }
     }
 }

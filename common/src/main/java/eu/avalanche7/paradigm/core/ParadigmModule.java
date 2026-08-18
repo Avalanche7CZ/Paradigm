@@ -1,5 +1,7 @@
 package eu.avalanche7.paradigm.core;
 
+import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
+
 public interface ParadigmModule {
     String getName();
 
@@ -21,4 +23,12 @@ public interface ParadigmModule {
     void registerCommands(Object dispatcher, Object registryAccess, Services services);
 
     void registerEventListeners(Object eventBus, Services services);
+
+    default IEventSystem moduleEvents(Services services) {
+        return ModuleEventListeners.gated(services, this);
+    }
+
+    default IEventSystem lifecycleEvents(Services services) {
+        return ModuleEventListeners.raw(services);
+    }
 }

@@ -27,7 +27,7 @@ public class JsonPlayerRepository implements PlayerRepository {
         List<StoredPlayerProfile> profiles = new ArrayList<>();
         for (PlayerDataStore.PlayerEntry entry : store.listPlayerEntries()) {
             if (entry != null && entry.getUuid() != null && !entry.getUuid().isBlank()) {
-                profiles.add(new StoredPlayerProfile(entry.getUuid(), entry.getName(), entry.getFirstSeenMs(), entry.getLastSeenMs()));
+                profiles.add(new StoredPlayerProfile(entry.getUuid(), entry.getName(), entry.getFirstSeenMs(), entry.getLastSeenMs(), entry.getPlaytimeMs()));
             }
         }
         return profiles;
@@ -39,13 +39,13 @@ public class JsonPlayerRepository implements PlayerRepository {
         if (entry == null) {
             return Optional.empty();
         }
-        return Optional.of(new StoredPlayerProfile(entry.getUuid(), entry.getName(), entry.getFirstSeenMs(), entry.getLastSeenMs()));
+        return Optional.of(new StoredPlayerProfile(entry.getUuid(), entry.getName(), entry.getFirstSeenMs(), entry.getLastSeenMs(), entry.getPlaytimeMs()));
     }
 
     @Override
     public void upsertProfile(StoredPlayerProfile profile) {
         if (store != null && profile != null) {
-            store.upsertProfile(profile.uuid(), profile.name(), profile.firstSeenMs(), profile.lastSeenMs());
+            store.upsertProfile(profile.uuid(), profile.name(), profile.firstSeenMs(), profile.lastSeenMs(), profile.playtimeMs());
         }
     }
 

@@ -15,7 +15,7 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.ServerThreadCalls;
 
 public class PlayerApiHandler {
-    private record OnlinePlayer(String uuid, String name) {
+    private record OnlinePlayer(String uuid, String name, boolean afk, long playtimeMs) {
     }
 
     private final DashboardService dashboard;
@@ -43,7 +43,8 @@ public class PlayerApiHandler {
 
         try {
             for (var profile : dashboard.services().getStorageService().players().listProfiles()) {
-                merge(discovered, profile.uuid(), profile.name(), profile.lastSeenMs(), false);
+                merge(discovered, profile.uuid(), profile.name(), profile.lastSeenMs(), false)
+                        .merge("playtimeMs", profile.playtimeMs(), PlayerApiHandler::maxPlaytime);
             }
         } catch (Throwable ignored) {
 
@@ -52,7 +53,8 @@ public class PlayerApiHandler {
         try {
             if (dashboard.services().getPlayerDataStore() != null) {
                 for (var profile : dashboard.services().getPlayerDataStore().listPlayerEntries()) {
-                    merge(discovered, profile.getUuid(), profile.getName(), profile.getLastSeenMs(), false);
+                    merge(discovered, profile.getUuid(), profile.getName(), profile.getLastSeenMs(), false)
+                            .merge("playtimeMs", profile.getPlaytimeMs(), PlayerApiHandler::maxPlaytime);
                 }
             }
         } catch (Throwable ignored) {
@@ -61,7 +63,9 @@ public class PlayerApiHandler {
 
         long now = System.currentTimeMillis();
         for (OnlinePlayer online : onlinePlayers) {
-            merge(discovered, online.uuid(), online.name(), now, true);
+            Map<String, Object> row = merge(discovered, online.uuid(), online.name(), now, true);
+            row.put("afk", online.afk());
+            row.merge("playtimeMs", online.playtimeMs(), PlayerApiHandler::maxPlaytime);
         }
 
         int knownTotal = discovered.size();
@@ -105,15 +109,19 @@ public class PlayerApiHandler {
             if (player == null || safe(player.getUUID()).isBlank()) {
                 continue;
             }
-            players.add(new OnlinePlayer(player.getUUID(), player.getName()));
+            players.add(new OnlinePlayer(
+                    player.getUUID(),
+                    player.getName(),
+                    dashboard.services().getAfkService().isAfk(player),
+                    dashboard.services().getPlaytimeService().onlinePlaytimeMs(player)));
         }
         return List.copyOf(players);
     }
 
-    private static void merge(Map<String, Map<String, Object>> players, String rawUuid, String rawName, long lastSeenMs, boolean online) {
+    private static Map<String, Object> merge(Map<String, Map<String, Object>> players, String rawUuid, String rawName, long lastSeenMs, boolean online) {
         String uuid = safe(rawUuid).toLowerCase(Locale.ROOT);
         if (uuid.isBlank()) {
-            return;
+            return new LinkedHashMap<>();
         }
         Map<String, Object> row = players.computeIfAbsent(uuid, ignored -> {
             Map<String, Object> created = new LinkedHashMap<>();
@@ -121,6 +129,8 @@ public class PlayerApiHandler {
             created.put("name", safe(rawName));
             created.put("online", false);
             created.put("lastSeenMs", 0L);
+            created.put("afk", false);
+            created.put("playtimeMs", 0L);
             return created;
         });
         if (!safe(rawName).isBlank()) {
@@ -129,6 +139,13 @@ public class PlayerApiHandler {
         row.put("online", Boolean.TRUE.equals(row.get("online")) || online);
         long existing = row.get("lastSeenMs") instanceof Number number ? number.longValue() : 0L;
         row.put("lastSeenMs", Math.max(existing, Math.max(0L, lastSeenMs)));
+        return row;
+    }
+
+    private static Object maxPlaytime(Object existing, Object candidate) {
+        long left = existing instanceof Number number ? number.longValue() : 0L;
+        long right = candidate instanceof Number number ? number.longValue() : 0L;
+        return Math.max(left, right);
     }
 
     private static int positiveInt(String value, int fallback) {

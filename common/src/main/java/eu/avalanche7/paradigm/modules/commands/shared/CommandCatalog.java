@@ -44,6 +44,8 @@ public final class CommandCatalog {
             entry("spawn", true, false, true, "spawn"),
             entry("setspawn", true, false, true, "setspawn"),
             entry("seen", true, false, true, "seen"),
+            entry("afk", true, false, true, "afk"),
+            entry("playtime", true, false, true, "playtime"),
             entry("ignore", true, false, true, "ignore"),
             entry("unignore", true, false, true, "unignore"),
             entry("speed", true, false, true, "speed"),
@@ -135,6 +137,8 @@ public final class CommandCatalog {
         own(modules, "Home", "sethome", "home", "delhome", "homes", "back");
         own(modules, "Spawn", "spawn", "setspawn");
         own(modules, "Seen", "seen");
+        own(modules, "Afk", "afk");
+        own(modules, "Playtime", "playtime");
         own(modules, "Ignore", "ignore", "unignore");
         own(modules, "Speed", "speed");
         own(modules, "Feed", "feed");

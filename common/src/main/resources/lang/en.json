@@ -299,6 +299,17 @@
     "teleported": "Teleported to a random location.",
     "no_safe_location": "Could not find a safe location. Please try again."
   },
+  "afk": {
+    "now_afk": "You are now AFK.",
+    "no_longer_afk": "You are no longer AFK."
+  },
+  "playtime": {
+    "self": "Playtime: {total} (this session: {session}).",
+    "other": "{player} has played for {total}.",
+    "unknown": "No playtime data for {player}.",
+    "player_only": "Use /playtime <player> from the console.",
+    "error_load": "Could not load playtime data. Please try again later."
+  },
   "seen": {
     "online": "{player} is online right now.",
     "need_uuid": "Player is offline. Use UUID for exact lookup.",
@@ -455,6 +466,8 @@
     "whois_pos": "Position: {x}, {y}, {z}",
     "whois_health": "Health: {health}/{max}",
     "whois_level": "XP level: {level}",
+    "whois_afk": "AFK: {state}",
+    "whois_playtime": "Playtime: {playtime}",
     "whois_groups": "Groups: {groups}",
     "sudo_missing": "Command is missing.",
     "sudo_ok": "Executed command as {player}.",
@@ -493,6 +506,10 @@
     "unjail_ok": "Unjailed {player}.",
     "unjailed": "You were unjailed.",
     "no_reason": "No reason provided.",
+    "escalation": {
+      "applied": "Warn escalation: {player} reached {count} warnings in {window} and was banned for {duration}. ID: {id}.",
+      "notified": "You reached {count} warnings and were banned for {duration}. Reason: {reason}"
+    },
     "ip": {
       "invalid": "Invalid IPv4 or IPv6 address.",
       "created": "Created IP ban {id}. Subject: {subject}."

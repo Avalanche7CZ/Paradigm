@@ -1275,7 +1275,7 @@ function renderTablist() {
   $('tablist-refresh').addEventListener('input', event => setEdit('tablist.refreshInterval', Number(event.target.value), 'tablist', false));
   root.querySelectorAll('#tablist-header,#tablist-footer,#tablist-player-format').forEach(input => input.addEventListener('focus', () => { state.tablistActiveEditor = input.id; }));
   root.querySelectorAll('[data-tab-format]').forEach(button => button.addEventListener('click', () => applyFormatToInput($(tablistTargetId(button.closest('[data-tab-target]').dataset.tabTarget)), button.dataset.tabFormat)));
-  renderTokens('tablist-placeholders', ['{player_name}','{prefix}','{suffix}','{group}','{world}','{ping}','{online_players}','{max_players}','{server_name}','{server_id}','{network_id}'], token => { const input = $(state.tablistActiveEditor); if (input) { insertAtCursor(input, token); input.dispatchEvent(new Event('input', { bubbles: true })); input.focus(); } });
+  renderTokens('tablist-placeholders', ['{player_name}','{prefix}','{suffix}','{group}','{world}','{ping}','{afk}','{playtime}','{playtime_short}','{online_players}','{max_players}','{server_name}','{server_id}','{network_id}'], token => { const input = $(state.tablistActiveEditor); if (input) { insertAtCursor(input, token); input.dispatchEvent(new Event('input', { bubbles: true })); input.focus(); } });
   wirePreviewDisclosures(root, renderTablistPreviewPanel);
   wireAutoGrow(root);
 

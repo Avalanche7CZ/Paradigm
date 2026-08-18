@@ -23,15 +23,30 @@ public class TempBanCommand extends AbstractModerationCommand {
     @Override
     public void onServerStarting(Object event, Services services) {
         this.services = services;
+        startExpiryTask(services);
+    }
+
+    @Override
+    public void onEnable(Services services) {
+        this.services = services;
+        startExpiryTask(services);
+    }
+
+    @Override
+    public void onDisable(Services services) {
         cancelExpiryTask();
-        if (services != null && services.getTaskScheduler() != null) {
-            expiryTask = services.getTaskScheduler().scheduleAtFixedRate(this::expireTempBans, 30L, 60L, TimeUnit.SECONDS);
-        }
     }
 
     @Override
     public void onServerStopping(Object event, Services services) {
         cancelExpiryTask();
+    }
+
+    private void startExpiryTask(Services services) {
+        cancelExpiryTask();
+        if (services != null && services.getTaskScheduler() != null) {
+            expiryTask = services.getTaskScheduler().scheduleAtFixedRate(this::expireTempBans, 30L, 60L, TimeUnit.SECONDS);
+        }
     }
 
     private void cancelExpiryTask() {

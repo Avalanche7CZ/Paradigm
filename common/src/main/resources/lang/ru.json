@@ -307,6 +307,17 @@
     "teleported": "Телепортация в случайное место выполнена.",
     "no_safe_location": "Не удалось найти безопасное место. Попробуйте еще раз."
   },
+  "afk": {
+    "now_afk": "Вы теперь AFK.",
+    "no_longer_afk": "Вы больше не AFK."
+  },
+  "playtime": {
+    "self": "Время в игре: {total} (эта сессия: {session}).",
+    "other": "{player} провел в игре {total}.",
+    "unknown": "Нет данных о времени игры для {player}.",
+    "player_only": "Из консоли используйте /playtime <игрок>.",
+    "error_load": "Не удалось загрузить данные о времени игры. Попробуйте позже."
+  },
   "seen": {
     "online": "{player} сейчас в сети.",
     "need_uuid": "Игрок офлайн. Для точного поиска используйте UUID.",
@@ -455,6 +466,8 @@
     "whois_pos": "Позиция: {x}, {y}, {z}",
     "whois_health": "HP: {health}/{max}",
     "whois_level": "Уровень XP: {level}",
+    "whois_afk": "AFK: {state}",
+    "whois_playtime": "Время в игре: {playtime}",
     "whois_groups": "Группы: {groups}",
     "sudo_missing": "Команда отсутствует.",
     "sudo_ok": "Команда выполнена от имени {player}.",
@@ -493,6 +506,10 @@
     "unjail_ok": "Игрок {player} выпущен из jail.",
     "unjailed": "Вы выпущены из jail.",
     "no_reason": "Причина не указана.",
+    "escalation": {
+      "applied": "Эскалация предупреждений: {player} получил {count} предупреждений за {window} и забанен на {duration}. ID: {id}.",
+      "notified": "Вы получили {count} предупреждений и были забанены на {duration}. Причина: {reason}"
+    },
     "ip": {
       "invalid": "Недопустимый адрес IPv4 или IPv6.",
       "created": "Создан IP-бан {id}. Субъект: {subject}."

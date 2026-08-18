@@ -91,12 +91,11 @@ public class StaffChat implements ParadigmModule {
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
-        IEventSystem events = services.getPlatformAdapter().getEventSystem();
+        IEventSystem events = moduleEvents(services);
         if (events != null) {
             events.onPlayerChat(event -> {
                 IPlayer player = event.getPlayer();
                 if (player == null) return;
-                if (!isEnabled(this.services)) return;
 
                 if (ChatRoute.resolve(staffChatEnabledMap.getOrDefault(player.getUUID(), false), false) == ChatRoute.STAFF) {
                     sendStaffChatMessage(player, event.getMessage());

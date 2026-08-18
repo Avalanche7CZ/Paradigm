@@ -94,10 +94,13 @@ public class Mentions implements ParadigmModule {
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
-        IEventSystem events = services.getPlatformAdapter().getEventSystem();
+        IEventSystem events = moduleEvents(services);
         if (events != null) {
             events.onPlayerChat(event -> handleChatMessage(event.getPlayer(), event.getMessage(), services));
-            events.onPlayerLeave(event -> {
+        }
+        IEventSystem lifecycle = lifecycleEvents(services);
+        if (lifecycle != null) {
+            lifecycle.onPlayerLeave(event -> {
                 IPlayer player = event != null ? event.getPlayer() : null;
                 if (player == null || player.getUUID() == null) return;
                 lastIndividualMentionBySender.remove(player.getUUID());
