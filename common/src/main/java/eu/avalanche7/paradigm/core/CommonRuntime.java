@@ -33,7 +33,6 @@ public final class CommonRuntime {
         Objects.requireNonNull(platformConfig, "platformConfig");
         Objects.requireNonNull(platformAdapter, "platformAdapter");
 
-        // --- configs ---
         DebugLogger bootstrapDebugLogger = new DebugLogger(null);
         MainConfigHandler.init(platformConfig, bootstrapDebugLogger);
         bootstrapDebugLogger = new DebugLogger(MainConfigHandler.getConfig());
@@ -49,7 +48,6 @@ public final class CommonRuntime {
         TablistConfigHandler.init(platformConfig, bootstrapDebugLogger);
         DiscordConfigHandler.init(platformConfig, bootstrapDebugLogger);
 
-        // --- utilities ---
         DebugLogger debugLogger = new DebugLogger(MainConfigHandler.getConfig());
         CMConfig cmConfig = new CMConfig(debugLogger, platformConfig);
         cmConfig.loadCommands();
@@ -107,7 +105,6 @@ public final class CommonRuntime {
         groupChatManager.setServices(services);
         registerExternalCommandGuard(services);
         registerPunishmentGuard(services);
-
 
         List<ParadigmModule> modules = ParadigmModules.compose(groupChatManager);
 

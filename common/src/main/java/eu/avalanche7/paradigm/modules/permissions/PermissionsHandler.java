@@ -208,7 +208,6 @@ public class PermissionsHandler {
         }
     }
 
-    /** Re-evaluates the config toggle without requiring a new Services graph. */
     public void refreshInternalPermissions() {
         if (isInternalPermissionsEnabled()) {
             internalPermissionApi.initialize();
@@ -274,8 +273,6 @@ public class PermissionsHandler {
             warmupUserPermissions(user, allPermissions);
         }
 
-        // Command and PermissionAPI discovery can run before the loader has attached its server instance.
-        // Loaded LuckPerms groups/users are still safe to warm at that point; online players are not.
         if (platform == null || platform.getMinecraftServer() == null) return;
 
         List<IPlayer> onlinePlayers = platform.getOnlinePlayers();
@@ -409,9 +406,7 @@ public class PermissionsHandler {
             return;
         }
         permissionNodeRegistry.registerNode(node, source, description, defaultLevel);
-        // Forge/NeoForge PermissionAPI discovery reports nodes one at a time. Re-warming every
-        // LuckPerms subject for each callback makes startup quadratic. The normal discovery and
-        // server-start registration passes consume the complete registry as one batch.
+
     }
 
     public List<PermissionNodeRegistry.DiscoveredPermission> listDiscoveredPermissionNodes(String query, int limit) {
@@ -515,7 +510,6 @@ public class PermissionsHandler {
         return null;
     }
 
-    /** Cache-only explicit-context lookup used by the stable companion API. */
     public Boolean queryDefinedPermission(UUID playerUuid, String permission, PermissionContextSet context) {
         if (playerUuid == null || permission == null || permission.isBlank()) return null;
         PermissionContextSet effectiveContext = context != null ? context : PermissionContextSet.empty();
@@ -539,7 +533,6 @@ public class PermissionsHandler {
         return null;
     }
 
-    /** Applies the existing external/internal order and a typed platform OP fallback without storage access. */
     public boolean hasPermission(UUID playerUuid, String permission, int fallbackLevel, PermissionContextSet context) {
         if (playerUuid == null || permission == null || permission.isBlank()) return false;
         Boolean defined = queryDefinedPermission(playerUuid, permission, context);
@@ -642,7 +635,6 @@ public class PermissionsHandler {
         return false;
     }
 
-    /** Cache-only permission lookup for authenticated actors that are no longer tied to a command source. */
     public boolean hasPermission(String playerUuid, String permission, int vanillaLevelFallback) {
         if (playerUuid == null || playerUuid.isBlank()) return false;
         IPlayer online = platform != null ? platform.getPlayerByUuid(playerUuid) : null;
@@ -669,7 +661,7 @@ public class PermissionsHandler {
 
     private boolean hasOperatorBypass(IPlayer player) {
         try {
-            // Level 2 is the common admin/operator threshold across loaders.
+
             return platform.hasVanillaPermissionLevel(player, 2);
         } catch (RuntimeException | LinkageError ignored) {
             return false;
@@ -754,7 +746,6 @@ public class PermissionsHandler {
         );
     }
 
-    /** Cache-only metadata used by features such as chat and tablist presentation. */
     public PermissionAPI.PermissionMeta resolvePlayerMetadata(IPlayer player) {
         if (!isInternalPermissionsEnabled()) return null;
         return internalPermissionApi.resolveMeta(player);
@@ -764,7 +755,6 @@ public class PermissionsHandler {
         return internalPermissionApi.stateVersion();
     }
 
-    /** Cache-only resolved metadata for the stable companion API. */
     public PermissionAPI.PermissionMeta resolvePlayerMetadata(UUID playerUuid) {
         if (playerUuid == null) return null;
         if (isInternalPermissionsEnabled()) return internalPermissionApi.resolveMeta(playerUuid);

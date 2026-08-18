@@ -26,10 +26,6 @@ public final class CommandCooldowns {
         int run(IPlayer currentPlayer);
     }
 
-    /**
-     * Compatibility overload for actions that do not retain a player/entity reference.
-     * Player-sensitive warmups should use the PlayerCommandAction overload instead.
-     */
     public static int run(Services services, IPlayer player, String commandName, CommandAction action) {
         return runInternal(services, player, commandName, true, current -> action.run());
     }

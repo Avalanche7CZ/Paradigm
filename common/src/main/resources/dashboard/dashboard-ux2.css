@@ -1,0 +1,296 @@
+/* Dashboard UX wave 2: review flow, actionable health and entity search. */
+body.ux2-review-open {
+  overflow: hidden;
+}
+
+.ux2-review-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: var(--pd-space-5);
+  background: rgba(3, 9, 31, 0.84);
+}
+
+.ux2-review {
+  width: min(980px, 100%);
+  max-height: min(860px, calc(100vh - 40px));
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  border: var(--pd-border-width) solid var(--pd-border);
+  background: var(--pd-card-bg-2);
+  color: var(--pd-text-inverse);
+  box-shadow: 5px 5px 0 rgba(0, 0, 0, 0.78);
+}
+
+.ux2-review-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--pd-space-4);
+  border-bottom: var(--pd-border-width) solid var(--pd-border);
+  background: var(--pd-panel);
+  color: var(--pd-text);
+  padding: var(--pd-space-4);
+}
+
+.ux2-review-header h2 {
+  margin-top: 6px;
+  font-size: 20px;
+}
+
+.ux2-review-header p {
+  margin-top: 6px;
+  color: #062d35;
+  font-weight: 800;
+}
+
+.ux2-review-close {
+  min-width: 38px;
+  padding: 5px;
+  font-size: 20px;
+}
+
+.ux2-review-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--pd-space-2);
+  flex-wrap: wrap;
+  border-bottom: 1px solid #27346e;
+  padding: var(--pd-space-3) var(--pd-space-4);
+  background: #08123a;
+}
+
+.ux2-review-summary > strong,
+.ux2-review-summary > span,
+.ux2-change-badges span {
+  border: 1px solid var(--pd-border);
+  background: var(--pd-panel-light);
+  color: var(--pd-text);
+  padding: 3px 7px;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.ux2-review-summary > strong {
+  background: var(--pd-accent);
+}
+
+.ux2-review-summary .is-warning,
+.ux2-change-badges .is-warning {
+  background: var(--pd-warning);
+}
+
+.ux2-review-summary .is-danger,
+.ux2-change-badges .is-danger {
+  background: var(--pd-danger);
+}
+
+.ux2-review-summary .is-reload,
+.ux2-change-badges .is-reload {
+  background: var(--pd-success);
+}
+
+.ux2-review-list {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: var(--pd-space-3);
+  padding: var(--pd-space-4);
+}
+
+.ux2-change-card {
+  border: 1px solid #2c3976;
+  background: var(--pd-card-bg);
+  padding: var(--pd-space-3);
+}
+
+.ux2-change-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--pd-space-3);
+  margin-bottom: var(--pd-space-3);
+}
+
+.ux2-change-card > header > div:first-child {
+  min-width: 0;
+}
+
+.ux2-change-card > header strong {
+  display: block;
+  color: var(--pd-text-inverse);
+  font-size: 14px;
+}
+
+.ux2-change-card > header code {
+  margin-top: 5px;
+  max-width: 100%;
+  background: #08123a;
+  color: var(--pd-muted);
+  box-shadow: none;
+  overflow-wrap: anywhere;
+}
+
+.ux2-change-badges {
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.ux2-change-values {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: stretch;
+  gap: var(--pd-space-3);
+}
+
+.ux2-change-values > div:not(.ux2-change-arrow) {
+  min-width: 0;
+}
+
+.ux2-change-values span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--pd-muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.ux2-change-values pre {
+  height: 100%;
+  min-height: 58px;
+  max-height: 180px;
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--pd-text-inverse);
+}
+
+.ux2-change-values > div:last-child pre {
+  border-color: var(--pd-panel-light);
+}
+
+.ux2-change-arrow {
+  display: grid;
+  place-items: center;
+  color: var(--pd-accent);
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.ux2-review-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--pd-space-2);
+  border-top: var(--pd-border-width) solid var(--pd-border);
+  background: #08123a;
+  padding: var(--pd-space-3) var(--pd-space-4);
+}
+
+.ux2-review-save {
+  background: var(--pd-accent);
+}
+
+.shell-health-card ul {
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  padding-left: 0;
+}
+
+.shell-health-card li {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pd-space-3);
+  border-left: 3px solid var(--pd-warning);
+  background: rgba(255, 207, 64, 0.08);
+  color: var(--pd-warning);
+  padding: 5px 7px 5px 9px;
+}
+
+.shell-health-card li > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.shell-health-card li button {
+  flex: 0 0 auto;
+  min-height: 26px;
+  background: var(--pd-warning);
+  padding: 4px 7px;
+  font-size: 9px;
+  box-shadow: none;
+}
+
+.shell-health-card li button:hover {
+  background: var(--pd-accent);
+  transform: none;
+  box-shadow: none;
+}
+
+.ux2-entity-divider {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  border-bottom: 1px solid #27346e;
+  background: #08123a;
+  color: var(--pd-muted);
+  padding: 6px 10px;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ux2-entity-result .shell-result-kind {
+  background: var(--pd-accent);
+}
+
+@media (max-width: 760px) {
+  .ux2-review-backdrop {
+    padding: 8px;
+  }
+
+  .ux2-review {
+    max-height: calc(100vh - 16px);
+  }
+
+  .ux2-review-header,
+  .ux2-change-card > header {
+    align-items: stretch;
+  }
+
+  .ux2-change-card > header {
+    display: grid;
+  }
+
+  .ux2-change-badges {
+    justify-content: flex-start;
+  }
+
+  .ux2-change-values {
+    grid-template-columns: 1fr;
+  }
+
+  .ux2-change-arrow {
+    transform: rotate(90deg);
+    min-height: 20px;
+  }
+
+  .shell-health-card li {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .shell-health-card li button {
+    align-self: flex-start;
+  }
+}

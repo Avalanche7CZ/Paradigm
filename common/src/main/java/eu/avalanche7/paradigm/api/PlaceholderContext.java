@@ -3,7 +3,6 @@ package eu.avalanche7.paradigm.api;
 import java.util.Optional;
 import java.util.UUID;
 
-/** Loader-neutral context passed to an external placeholder resolver. */
 public record PlaceholderContext(Optional<UUID> playerUuid) {
     public PlaceholderContext {
         playerUuid = playerUuid != null ? playerUuid : Optional.empty();

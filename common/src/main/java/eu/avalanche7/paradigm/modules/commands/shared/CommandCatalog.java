@@ -13,7 +13,6 @@ import eu.avalanche7.paradigm.ParadigmAPI;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 
-/** Single source of truth for built-in command toggles and root ownership. */
 public final class CommandCatalog {
     public record Entry(
             String id,

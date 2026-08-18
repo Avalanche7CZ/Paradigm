@@ -143,8 +143,6 @@ public class StorageMigrationService {
             }
         }
 
-        // Repositories with a ledger expose legacy records through that ledger. Copying both
-        // representations would create duplicate punishment history in the target provider.
         if (!ledger.isEmpty()) {
             copyJailState(source, target, counter);
             return;

@@ -24,7 +24,6 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.LiteralPlaceholders;
 
-/** Adapts stable API contracts to the current internal services. */
 public final class ParadigmApiProvider implements ApiProvider {
     private static final Set<ApiCapability> CAPABILITIES = Set.of(
             ApiCapability.PERMISSION_CHECKS,

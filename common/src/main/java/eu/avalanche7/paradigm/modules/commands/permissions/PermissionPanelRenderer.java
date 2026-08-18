@@ -152,10 +152,6 @@ public final class PermissionPanelRenderer {
                         translation(services, "permission.panel.tooltip.back_to_group", "Back to group detail"), "94A3B8")));
     }
 
-    /**
-     * Render a user panel after the command handler has resolved the player identity.
-     * The resolver remains outside the renderer so rendering never performs command parsing.
-     */
     public static int sendUserInfo(ICommandSource source, Services services, UUID uuid, String label) {
         if (uuid == null) {
             sendGroupMessage(source, services, "group.manage.user_invalid", "Player must be online name or UUID.");

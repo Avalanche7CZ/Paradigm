@@ -20,7 +20,7 @@ public abstract class ServerPlayerTablistMixin implements ITablistPlayerAccess {
 
     @Override
     public void paradigm$setTablistOrder(int order) {
-        // Native player-list ordering is not present in this protocol version.
+
     }
 
     @Inject(method = "getPlayerListName", at = @At("HEAD"), cancellable = true)

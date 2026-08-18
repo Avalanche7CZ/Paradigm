@@ -19,10 +19,6 @@ public class AnnouncementsConfigHandler extends BaseConfigHandler<AnnouncementsC
         super(LOGGER, platformConfig, "announcements.json");
     }
 
-    /**
-     * Initialize the handler with platform-specific config.
-     * Call this once during mod initialization.
-     */
     public static void init(IConfig platformConfig, DebugLogger debugLogger) {
         if (INSTANCE == null) {
             synchronized (AnnouncementsConfigHandler.class) {

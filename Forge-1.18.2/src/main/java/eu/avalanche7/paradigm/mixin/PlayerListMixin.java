@@ -1,9 +1,3 @@
-/*
- * NOTE FOR PORTING (1.19.2 → 1.18.2):
- * - TranslatableComponent is in net.minecraft.network.chat, not .contents.
- * - Use instanceof TranslatableComponent for vanilla join/leave detection.
- * - Do NOT use net.minecraft.network.chat.contents.TranslatableContents (does not exist in 1.18.2).
- */
 
 package eu.avalanche7.paradigm.mixin;
 

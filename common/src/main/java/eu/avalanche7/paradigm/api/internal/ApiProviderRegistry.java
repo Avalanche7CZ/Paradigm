@@ -17,7 +17,6 @@ import eu.avalanche7.paradigm.api.PlayerPermissionMeta;
 import eu.avalanche7.paradigm.api.Registration;
 import eu.avalanche7.paradigm.api.RegistrationStatus;
 
-/** Internal lifecycle holder behind the stable public facade. */
 public final class ApiProviderRegistry {
     private static final ApiProvider UNAVAILABLE = new UnavailableProvider();
     private static final AtomicReference<ApiProvider> CURRENT = new AtomicReference<>(UNAVAILABLE);

@@ -22,13 +22,6 @@ public final class CommandSuggestions {
     private CommandSuggestions() {
     }
 
-    /**
-     * Must be called on the server thread: Brigadier's dispatcher, the given source, and any
-     * custom suggestion providers registered against it assume main-thread execution for the
-     * initial parse/suggest call. This never blocks the calling thread: it kicks off the
-     * reflective parse/getCompletionSuggestions calls (which return futures without waiting on
-     * them) and composes a result future that resolves later, possibly on another thread.
-     */
     public static CompletableFuture<List<String>> suggestAsync(Object dispatcher, Object source,
                                                                 String partialInput, int maxResults,
                                                                 DebugLogger debugLogger) {

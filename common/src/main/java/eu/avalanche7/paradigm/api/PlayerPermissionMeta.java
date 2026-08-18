@@ -2,7 +2,6 @@ package eu.avalanche7.paradigm.api;
 
 import java.util.List;
 
-/** Read-only resolved permission metadata suitable for display. */
 public record PlayerPermissionMeta(String primaryGroup, String prefix, String suffix, List<String> resolvedGroups) {
     public static final PlayerPermissionMeta EMPTY = new PlayerPermissionMeta("", "", "", List.of());
 

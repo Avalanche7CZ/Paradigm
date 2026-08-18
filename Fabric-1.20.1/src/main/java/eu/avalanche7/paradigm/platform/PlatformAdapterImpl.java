@@ -369,7 +369,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         restartBossBar.setPercent(progress);
     }
 
-
     @Override
     public void removeRestartBossBar() {
         if (restartBossBar != null) {

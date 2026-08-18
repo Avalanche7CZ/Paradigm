@@ -213,7 +213,7 @@ public abstract class ServerStatusMixin {
                 if (formatting != null) {
                     builder.append('§').append(formatting.getCode());
                 } else {
-                    // Avoid §x hex in player-sample hover; map to nearest legacy formatting code.
+
                     builder.append('§').append(paradigm$getNearestFormattingCode(rgb));
                 }
             }
@@ -243,18 +243,17 @@ public abstract class ServerStatusMixin {
 
     @Unique
     private char paradigm$getNearestFormattingCode(int rgb) {
-        // Extract RGB components
+
         int r = (rgb >> 16) & 0xFF;
         int g = (rgb >> 8) & 0xFF;
         int b = rgb & 0xFF;
 
-        // Simple brightness-based color mapping
         int brightness = (r + g + b) / 3;
 
-        if (r > g && r > b) return 'c'; // Red
-        if (g > r && g > b) return 'a'; // Green
-        if (b > r && b > g) return 'b'; // Aqua
-        if (brightness > 128) return 'f'; // White
-        return '7'; // Gray
+        if (r > g && r > b) return 'c';
+        if (g > r && g > b) return 'a';
+        if (b > r && b > g) return 'b';
+        if (brightness > 128) return 'f';
+        return '7';
     }
 }

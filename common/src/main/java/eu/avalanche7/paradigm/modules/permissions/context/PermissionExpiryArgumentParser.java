@@ -2,7 +2,6 @@ package eu.avalanche7.paradigm.modules.permissions.context;
 
 import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
 
-/** Parses command expiry arguments into the persistence representation. */
 public final class PermissionExpiryArgumentParser {
     private PermissionExpiryArgumentParser() {
     }

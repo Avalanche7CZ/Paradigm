@@ -1,10 +1,3 @@
-/*
- * NOTE FOR PORTING (1.19.2):
- * - Uses TranslatableContents (net.minecraft.network.chat.contents) instead of TranslatableComponent
- * - Chat message uses PlayerChatMessage with signedContent().plain() method
- * - Uses ChatType.Bound instead of ChatType enum
- * - Uses sendSystemMessage() instead of sendMessage()
- */
 
 package eu.avalanche7.paradigm.mixin;
 

@@ -71,10 +71,6 @@ public class TelemetryReporter {
         services.getDebugLogger().debugLog("TelemetryReporter: stopped");
     }
 
-    /**
-     * The periodic trigger runs on the scheduler pool. Minecraft state is captured on the server
-     * thread, then only the immutable snapshot is handed back to a scheduler thread for HTTP I/O.
-     */
     private void queueReport() {
         if (!active || !inFlight.compareAndSet(false, true)) {
             return;

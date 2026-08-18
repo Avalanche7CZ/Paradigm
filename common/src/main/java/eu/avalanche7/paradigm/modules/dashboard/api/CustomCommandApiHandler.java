@@ -1,5 +1,6 @@
 package eu.avalanche7.paradigm.modules.dashboard.api;
 
+import java.util.List;
 import java.util.Map;
 
 import com.google.gson.JsonObject;
@@ -7,9 +8,11 @@ import com.google.gson.JsonObject;
 import eu.avalanche7.paradigm.modules.audit.AuditActionType;
 import eu.avalanche7.paradigm.modules.audit.AuditResult;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardJson;
+import eu.avalanche7.paradigm.modules.dashboard.DashboardMutationFeedback;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardRequestContext;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardResponse;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardService;
+import eu.avalanche7.paradigm.modules.dashboard.customcommands.CustomCommandAdminService;
 
 public final class CustomCommandApiHandler {
     private final DashboardService dashboard;
@@ -35,6 +38,7 @@ public final class CustomCommandApiHandler {
             Object result = dashboard.customCommandMutationAsync(action, request.originalName, request.name, request.command).get();
             dashboard.audit().dashboard(ctx.principal(), AuditActionType.CUSTOM_COMMAND_CHANGE, AuditResult.SUCCESS,
                     "Custom command " + action + " completed.", Map.of("action", action, "name", safe(request.name), "originalName", safe(request.originalName)));
+            notifyMutation(ctx, request, result);
             return DashboardResponse.apiOk(result);
         } catch (Exception e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
@@ -45,6 +49,22 @@ public final class CustomCommandApiHandler {
             }
             return DashboardResponse.apiError(500, "save_failed", "Custom command change failed.");
         }
+    }
+
+    private void notifyMutation(DashboardRequestContext ctx, Request request, Object result) {
+        if (!(result instanceof CustomCommandAdminService.MutationResult mutation)) return;
+        List<DashboardMutationFeedback.Change> changes = switch (mutation.action()) {
+            case "created" -> List.of(DashboardMutationFeedback.add("/" + safe(mutation.name())));
+            case "deleted" -> List.of(DashboardMutationFeedback.remove("/" + safe(mutation.name())));
+            case "renamed" -> List.of(
+                    DashboardMutationFeedback.remove("/" + safe(request.originalName)),
+                    DashboardMutationFeedback.add("/" + safe(mutation.name())));
+            case "updated" -> List.of(DashboardMutationFeedback.info("/" + safe(mutation.name()) + " updated"));
+            default -> List.of();
+        };
+        DashboardMutationFeedback.notify(
+                dashboard.services(), ctx.principal(), ctx.header("X-Paradigm-Locale"),
+                DashboardMutationFeedback.Area.CUSTOM_COMMANDS, changes);
     }
 
     private static String safe(String value) {

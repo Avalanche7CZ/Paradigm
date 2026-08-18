@@ -3,7 +3,6 @@ package eu.avalanche7.paradigm.api;
 import java.util.Objects;
 import java.util.Optional;
 
-/** Immutable description of a permission node owned by an external mod. */
 public record PermissionNodeDefinition(
         String node,
         String description,

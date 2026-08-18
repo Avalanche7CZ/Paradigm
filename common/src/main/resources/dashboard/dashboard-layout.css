@@ -1,0 +1,216 @@
+/*
+ * Dashboard layout only.
+ *
+ * This file deliberately avoids theme colors. Classic keeps the original
+ * Paradigm palette and [data-theme="dark"] keeps the system24 skin from
+ * style.css. Only information density and workspace composition live here.
+ */
+
+/* The global topbar owns page identity; local toolbars are action strips. */
+.page.active > .page-toolbar > div:first-child {
+  display: none;
+}
+
+.page.active > .page-toolbar {
+  min-height: 42px;
+  justify-content: flex-end;
+}
+
+/* Hub pages are directories, not landing-page card walls. */
+.shell-hub-intro > .shell-kicker,
+.shell-hub-intro > h2,
+.shell-hub-intro > p,
+.administration-player-workflow,
+.administration-card .shell-kicker,
+.command-center-card .shell-kicker {
+  display: none;
+}
+
+.shell-hub-grid {
+  display: block;
+}
+
+.shell-hub-card {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.45fr) minmax(220px, 1fr) minmax(180px, auto);
+  align-items: center;
+  gap: var(--pd-space-4);
+  min-height: 66px;
+  padding: 12px var(--pd-space-4);
+}
+
+.shell-hub-card p {
+  min-height: 0;
+}
+
+.shell-card-links {
+  justify-content: flex-end;
+  margin-top: 0;
+}
+
+/* Administration / Commands read as compact directories. */
+.administration-cards,
+.command-center-cards {
+  grid-template-columns: 1fr;
+  gap: 1px;
+}
+
+.administration-card,
+.command-center-card {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--pd-space-5);
+  padding: 14px var(--pd-space-4);
+}
+
+.administration-card h2,
+.command-center-card h2 {
+  margin-top: 0;
+  font-size: 16px;
+  text-transform: none;
+}
+
+.administration-card p,
+.command-center-card p {
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.administration-card > button,
+.command-center-card > button {
+  align-self: center;
+}
+
+/* Administration stats own their integrated strip styling in
+ * dashboard-administration.css. Commands keep their lightweight inline stats. */
+.command-center-stats {
+  display: flex;
+  gap: var(--pd-space-4);
+  margin-top: var(--pd-space-3);
+}
+
+.command-center-stats > div {
+  padding: 0 0 0 var(--pd-space-3);
+}
+
+.command-center-stats > div:first-child {
+  padding-left: 0;
+}
+
+/* Overview is an instrument strip rather than a KPI card wall. */
+#overview-grid.shell-overview-grid {
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 1px;
+}
+
+.shell-health-card {
+  padding: 13px var(--pd-space-4);
+}
+
+.shell-health-icon {
+  width: 30px;
+  height: 30px;
+  flex-basis: 30px;
+  font-size: 15px;
+}
+
+.shell-health-card strong {
+  font-size: 13px;
+  text-transform: none;
+}
+
+.shell-health-card ul {
+  margin-left: 42px;
+}
+
+.shell-overview-metric {
+  padding: 12px var(--pd-space-3);
+}
+
+.shell-overview-metric strong {
+  margin-top: 3px;
+  font-size: 16px;
+}
+
+.shell-overview-panel > header {
+  padding: 12px var(--pd-space-3);
+}
+
+/* Players / Servers keep the denser master-detail layout. */
+.shell-player-facts,
+.player-context-summary-grid {
+  gap: 1px;
+}
+
+.player-context-tabs button {
+  border-bottom-width: 2px;
+}
+
+/* Permissions top switcher behaves as one segmented control. */
+.permission-ux-overview {
+  gap: 0;
+}
+
+button.permission-ux-card {
+  border-right-width: 1px;
+}
+
+button.permission-ux-card:last-child {
+  border-right-width: 0;
+}
+
+.permission-ux-card > strong {
+  font-size: 20px;
+}
+
+/* Server facts stay in a compact matrix. */
+.servers-detail-grid {
+  display: grid;
+}
+
+/* Breadcrumbs are navigation, not primary actions. */
+button.shell-backlink,
+.command-center-home-back,
+.administration-child-breadcrumb button,
+.command-center-breadcrumb button {
+  padding-left: 0;
+}
+
+@media (max-width: 900px) {
+  .shell-hub-card {
+    grid-template-columns: 1fr;
+    gap: 5px;
+  }
+
+  .shell-card-links {
+    justify-content: flex-start;
+    margin-top: 4px;
+  }
+}
+
+@media (max-width: 680px) {
+  .administration-card,
+  .command-center-card {
+    grid-template-columns: 1fr;
+  }
+
+  .administration-card > button,
+  .command-center-card > button {
+    justify-self: start;
+  }
+
+  .command-center-stats {
+    flex-wrap: wrap;
+  }
+
+  .permission-ux-overview {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  button.permission-ux-card {
+    border-right-width: 0;
+  }
+}

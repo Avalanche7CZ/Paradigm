@@ -19,7 +19,7 @@ import java.util.function.Predicate;
 
 public class FabricCommandBuilder implements ICommandBuilder {
 
-    private Object currentBuilder; // Can be LiteralArgumentBuilder or RequiredArgumentBuilder
+    private Object currentBuilder;
 
     public FabricCommandBuilder() {
     }

@@ -1,0 +1,206 @@
+/* Administration hub and child navigation. */
+#navigation .administration-child-nav {
+  display: none;
+}
+
+.administration-hub {
+  display: none;
+}
+
+.administration-hub.active {
+  display: block;
+}
+
+.administration-child-breadcrumb {
+  margin: var(--pd-space-4) var(--pd-space-6) 0;
+  max-width: var(--pd-max);
+  display: flex;
+  align-items: center;
+  gap: var(--pd-space-2);
+  color: var(--pd-muted);
+}
+
+.administration-child-breadcrumb button {
+  min-height: 28px;
+  background: transparent;
+  color: var(--pd-text-inverse);
+  padding: 4px 7px;
+  box-shadow: none;
+}
+
+.administration-child-breadcrumb button:hover {
+  background: var(--pd-card-bg);
+  transform: none;
+  box-shadow: none;
+}
+
+.administration-child-breadcrumb strong {
+  color: var(--pd-accent);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.administration-player-workflow {
+  margin: var(--pd-space-5) var(--pd-space-6) 0;
+  max-width: var(--pd-max);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pd-space-5);
+  border: var(--pd-border-width) solid var(--pd-border);
+  background: var(--pd-panel);
+  color: var(--pd-text);
+  padding: var(--pd-space-4);
+  box-shadow: var(--pd-shadow-small);
+}
+
+.administration-player-workflow h2 {
+  margin-top: 5px;
+}
+
+.administration-player-workflow p {
+  max-width: 760px;
+  margin-top: 5px;
+  color: #062d35;
+  font-weight: 800;
+}
+
+.administration-player-workflow > button {
+  flex: 0 0 auto;
+  background: var(--pd-accent);
+}
+
+.administration-cards {
+  margin: var(--pd-space-4) var(--pd-space-6) var(--pd-space-6);
+  max-width: var(--pd-max);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--pd-space-4);
+}
+
+.administration-cards.is-loading {
+  opacity: 0.62;
+  pointer-events: none;
+}
+
+.administration-card {
+  min-width: 0;
+  min-height: 250px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--pd-space-4);
+  border: var(--pd-border-width) solid var(--pd-border);
+  background: var(--pd-card-bg);
+  color: var(--pd-text-inverse);
+  padding: var(--pd-space-4);
+  box-shadow: var(--pd-shadow-small);
+}
+
+.administration-card h2 {
+  margin-top: 7px;
+  color: var(--pd-text-inverse);
+  font-size: 20px;
+}
+
+.administration-card p {
+  margin-top: var(--pd-space-2);
+  color: var(--pd-muted);
+}
+
+.administration-card > button {
+  align-self: flex-start;
+  background: var(--pd-panel-light);
+}
+
+/* Statistics are one compact instrument strip, not cards nested inside cards. */
+.administration-stats {
+  display: inline-flex;
+  align-items: stretch;
+  width: fit-content;
+  max-width: 100%;
+  margin-top: var(--pd-space-3);
+  border: 1px solid var(--pd-border);
+  background: var(--pd-card-bg-2);
+  overflow: hidden;
+}
+
+.administration-stats > div {
+  min-width: 92px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  padding: 8px 11px;
+}
+
+.administration-stats > div + div {
+  border-left: 1px solid var(--pd-border);
+}
+
+.administration-stats span {
+  display: block;
+  color: var(--pd-muted);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.administration-stats strong {
+  display: block;
+  margin: 0;
+  color: var(--pd-accent);
+  font-size: 18px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.administration-unavailable {
+  display: inline-flex;
+  margin-top: var(--pd-space-4);
+  border: 1px solid var(--pd-border);
+  background: var(--pd-muted);
+  color: var(--pd-text);
+  padding: 4px 7px;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+@media (max-width: 980px) {
+  .administration-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .administration-child-breadcrumb,
+  .administration-player-workflow,
+  .administration-cards {
+    margin-left: var(--pd-space-4);
+    margin-right: var(--pd-space-4);
+  }
+
+  .administration-player-workflow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .administration-player-workflow > button {
+    align-self: flex-start;
+  }
+
+  .administration-stats {
+    width: 100%;
+  }
+
+  .administration-stats > div {
+    min-width: 0;
+    flex: 1 1 0;
+  }
+}

@@ -29,7 +29,6 @@ import eu.avalanche7.paradigm.modules.permissions.PermissionAssignment;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
 
-/** Explicit, report-oriented LuckPerms migration. Unsupported contexts are never flattened. */
 public final class LuckPermsMigrationService {
     public enum Direction { IMPORT, EXPORT }
     public enum Mode { DRY_RUN, MERGE, REPLACE }

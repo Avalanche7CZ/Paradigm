@@ -582,10 +582,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         return playerNames;
     }
 
-    /**
-     * Volá se z Forge {@code RegisterCommandsEvent}, kdy ještě nemusí být nastavený {@link #server}.
-     * Uložíme si dispatcher a {@link #registerCommand(ICommandBuilder)} ho použije.
-     */
     public void setCommandDispatcher(Object dispatcher) {
         if (dispatcher instanceof CommandDispatcher<?> cd) {
             @SuppressWarnings("unchecked")

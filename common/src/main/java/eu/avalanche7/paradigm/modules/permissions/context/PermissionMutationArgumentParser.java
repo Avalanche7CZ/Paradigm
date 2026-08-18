@@ -7,7 +7,6 @@ import java.util.function.Supplier;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
 
-/** Parses the optional command flags shared by permission and group mutations. */
 public final class PermissionMutationArgumentParser {
     private final PermissionContextArgumentParser contextParser;
 

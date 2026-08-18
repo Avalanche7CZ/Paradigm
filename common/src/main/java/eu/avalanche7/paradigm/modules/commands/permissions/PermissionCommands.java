@@ -27,10 +27,6 @@ import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
-/**
- * Internal permission/group command registration and mutation handling.
- * - Avalanche7CZ
- */
 public final class PermissionCommands {
     private PermissionCommands() {
     }

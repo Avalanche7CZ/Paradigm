@@ -38,9 +38,6 @@ public class Placeholders {
         }
     }
 
-    /**
-     * Agnostic placeholder resolving using IPlayer interface.
-     */
     public String replacePlaceholders(String text, IPlayer player) {
         if (text == null) return "";
 
@@ -94,10 +91,6 @@ public class Placeholders {
         return resolveExternal(replacedText, null);
     }
 
-    /**
-     * Backward-compatible resolver for native player instances (reflection).
-     * Prefer using {@link #replacePlaceholders(String, IPlayer)} from common code.
-     */
     public String replacePlaceholders(String text, Object player) {
         if (text == null) return "";
 
@@ -301,8 +294,6 @@ public class Placeholders {
             java.lang.reflect.Method getUserManagerMethod = luckPermsClass.getMethod("getUserManager");
             Object userManager = getUserManagerMethod.invoke(luckPerms);
 
-            // Placeholder rendering is synchronous, so only use LuckPerms' loaded-user cache.
-            // Loading from storage here could block chat, commands, or companion API messages.
             java.lang.reflect.Method getUserMethod = userManager.getClass().getMethod("getUser", java.util.UUID.class);
             Object user = getUserMethod.invoke(userManager, uuid);
 
@@ -359,7 +350,7 @@ public class Placeholders {
 
     private static String invokeToString(Object obj) {
         if (obj == null) return null;
-        // Fabric returns Text for getName(); try getString()
+
         Object s = invoke(obj, "getString");
         if (s != null) return String.valueOf(s);
         return String.valueOf(obj);

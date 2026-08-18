@@ -29,7 +29,6 @@ public class PermissionAdminService {
         return mutate(actor, request, true);
     }
 
-    /** Used by already-authorized in-game command handlers. */
     public PermissionMutationResult mutateTrusted(DashboardPrincipal actor, PermissionMutationRequest request) {
         return mutate(actor, request, false);
     }
@@ -136,9 +135,7 @@ public class PermissionAdminService {
         if (actor.console()) {
             return true;
         }
-        // Dashboard sessions carry the authenticated UUID.  Resolve the same
-        // cache/fallback path used by DashboardService instead of requiring
-        // the actor to still be online at mutation time.
+
         return services.getPermissionsHandler().hasPermission(actor.uuid(), DashboardPermission.MANAGE, 4);
     }
 

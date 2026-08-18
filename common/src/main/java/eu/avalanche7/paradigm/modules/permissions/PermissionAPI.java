@@ -26,9 +26,6 @@ import eu.avalanche7.paradigm.storage.model.StoredUserPermissionData;
 import eu.avalanche7.paradigm.storage.repository.PermissionRepository;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 
-/**
- * Internal permission evaluator used when external providers (e.g. LuckPerms) are unavailable.
- */
 public class PermissionAPI {
     private static final int MAX_INHERITANCE_DEPTH = 32;
 
@@ -691,7 +688,6 @@ public class PermissionAPI {
         }
     }
 
-    /** UUIDs which have direct permission or group state in the internal cache. */
     public List<UUID> listUserIds() {
         stateLock.readLock().lock();
         try {
@@ -708,7 +704,6 @@ public class PermissionAPI {
         }
     }
 
-    /** Destructive replace-mode reset. Callers must enforce explicit confirmation. */
     public void resetForMigration() {
         stateLock.writeLock().lock();
         try {

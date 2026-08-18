@@ -4,40 +4,19 @@ import java.util.Optional;
 
 import org.jetbrains.annotations.Nullable;
 
-/**
- * Platform-agnostic command execution context.
- */
 public interface ICommandContext {
 
-    /**
-     * Get the command source (player or console).
-     */
     ICommandSource getSource();
 
-    /**
-     * Get a string argument by name.
-     */
     String getStringArgument(String name);
 
-    /**
-     * Get an integer argument by name.
-     */
     int getIntArgument(String name);
 
-    /**
-     * Get a boolean argument by name.
-     */
     boolean getBooleanArgument(String name);
 
-    /**
-     * Get a player argument by name.
-     */
     @Nullable
     IPlayer getPlayerArgument(String name);
 
-    /**
-     * Optional variants (prefer these in new code).
-     */
     default Optional<String> getStringArgumentOpt(String name) {
         String v = getStringArgument(name);
         return (v == null || v.isEmpty()) ? Optional.empty() : Optional.of(v);
@@ -77,7 +56,6 @@ public interface ICommandContext {
 
     Object getOriginalContext();
 
-    /** Complete Brigadier input, used only for diagnostics. */
     default String getInput() {
         return "";
     }

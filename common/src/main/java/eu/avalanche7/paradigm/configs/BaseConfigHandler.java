@@ -16,10 +16,6 @@ import eu.avalanche7.paradigm.utils.AtomicFileIO;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 import eu.avalanche7.paradigm.utils.JsonValidator;
 
-/**
- * Base config handler that works across platforms (Fabric/Forge).
- * Uses IConfig interface for platform-agnostic path resolution.
- */
 public abstract class BaseConfigHandler<T> {
 
     protected final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
@@ -42,19 +38,10 @@ public abstract class BaseConfigHandler<T> {
         return platformConfig.resolveConfigPath("paradigm/" + configFileName);
     }
 
-    /**
-     * Create a default instance of the config.
-     */
     protected abstract T createDefaultConfig();
 
-    /**
-     * Get the config class type for GSON deserialization.
-     */
     protected abstract Class<T> getConfigClass();
 
-    /**
-     * Merge loaded config values into default config.
-     */
     @SuppressWarnings("unchecked")
     protected void mergeConfigs(T defaults, T loaded) {
         try {
@@ -78,9 +65,6 @@ public abstract class BaseConfigHandler<T> {
         }
     }
 
-    /**
-     * Load config from file, with validation and merging.
-     */
     public T load() {
         T defaultConfig = createDefaultConfig();
         boolean shouldSaveMerged = false;
@@ -138,9 +122,6 @@ public abstract class BaseConfigHandler<T> {
         return defaultConfig;
     }
 
-    /**
-     * Save config to file.
-     */
     public void save(T config) {
         try {
             Path configPath = getConfigPath();

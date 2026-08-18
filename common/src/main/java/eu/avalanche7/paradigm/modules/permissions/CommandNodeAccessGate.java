@@ -18,9 +18,6 @@ public final class CommandNodeAccessGate {
         }
     }
 
-    /** Reflective access avoids a cross-module ClassCastException that a mixin accessor interface
-     * hits on module-based loaders (e.g. NeoForge's ModLauncher), since Brigadier and the mod live
-     * in different Java modules there. */
     public static Object getRequirement(Object commandNode) {
         if (REQUIREMENT_FIELD == null || commandNode == null) {
             return null;

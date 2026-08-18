@@ -13,6 +13,7 @@ import java.util.function.Supplier;
 import eu.avalanche7.paradigm.modules.audit.AuditActionType;
 import eu.avalanche7.paradigm.modules.audit.AuditResult;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardJson;
+import eu.avalanche7.paradigm.modules.dashboard.DashboardMutationFeedback;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardRequestContext;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardResponse;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardService;
@@ -67,13 +68,15 @@ public final class HologramApiHandler {
         Request mutationRequest = request;
 
         try {
-            HologramService.Config config = onServerThread(() -> {
+            HologramMutation mutation = onServerThread(() -> {
+                HologramService.Config before = service().snapshot();
                 apply(action, mutationRequest);
-                return service().snapshot();
+                return new HologramMutation(before, service().snapshot());
             });
             dashboard.audit().dashboard(context.principal(), AuditActionType.HOLOGRAM_CHANGE, AuditResult.SUCCESS,
                     "Hologram " + action + " completed.", auditDetails(action, mutationRequest));
-            return DashboardResponse.apiOk(Map.of("config", config));
+            notifyMutation(context, action, mutationRequest, mutation.before());
+            return DashboardResponse.apiOk(Map.of("config", mutation.after()));
         } catch (ServerThreadUnavailableException exception) {
             return DashboardResponse.apiError(503, "server_busy", exception.getMessage());
         } catch (IllegalArgumentException | IllegalStateException exception) {
@@ -102,6 +105,34 @@ public final class HologramApiHandler {
             case "temporary-update" -> service.updateTemporary(request.id, request.definition, request.expiresAt);
             default -> throw new IllegalArgumentException("Unknown hologram operation.");
         }
+    }
+
+    private void notifyMutation(DashboardRequestContext context, String action, Request request, HologramService.Config before) {
+        List<DashboardMutationFeedback.Change> changes = switch (action) {
+            case "create" -> List.of(DashboardMutationFeedback.add("hologram:" + safe(request.id)));
+            case "update" -> List.of(DashboardMutationFeedback.info("hologram:" + safe(request.id) + " updated"));
+            case "duplicate" -> List.of(DashboardMutationFeedback.add(
+                    "hologram:" + safe(request.id) + " · copy of " + safe(request.originalId)));
+            case "rename" -> List.of(
+                    DashboardMutationFeedback.remove("hologram:" + safe(request.originalId)),
+                    DashboardMutationFeedback.add("hologram:" + safe(request.id)));
+            case "delete" -> List.of(DashboardMutationFeedback.remove("hologram:" + safe(request.id)));
+            case "settings" -> List.of(
+                    DashboardMutationFeedback.pair("holograms.enabled",
+                            before != null ? before.enabled : null, request.enabled),
+                    DashboardMutationFeedback.pair("holograms.defaultViewDistance",
+                            before != null ? before.defaultViewDistance : null, request.defaultViewDistance),
+                    DashboardMutationFeedback.pair("holograms.defaultRefreshIntervalSeconds",
+                            before != null ? before.defaultRefreshIntervalSeconds : null, request.defaultRefreshIntervalSeconds));
+            case "player-location" -> List.of(DashboardMutationFeedback.info(
+                    "hologram:" + safe(request.id) + " moved to player:" + safe(request.player)));
+            case "temporary-remove" -> List.of(DashboardMutationFeedback.remove("temporary hologram:" + safe(request.id)));
+            case "temporary-update" -> List.of(DashboardMutationFeedback.info("temporary hologram:" + safe(request.id) + " updated"));
+            default -> List.of();
+        };
+        DashboardMutationFeedback.notify(
+                dashboard.services(), context.principal(), context.header("X-Paradigm-Locale"),
+                DashboardMutationFeedback.Area.HOLOGRAMS, changes);
     }
 
     private void moveToPlayer(Request request) {
@@ -164,6 +195,9 @@ public final class HologramApiHandler {
 
     private static String safe(String value) {
         return value != null ? value : "";
+    }
+
+    private record HologramMutation(HologramService.Config before, HologramService.Config after) {
     }
 
     private static final class ServerThreadUnavailableException extends RuntimeException {

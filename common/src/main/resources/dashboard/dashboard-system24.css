@@ -1,0 +1,323 @@
+/*
+ * system24 compatibility for dashboard workspaces added after the original
+ * dark theme. All colors come from the existing [data-theme="dark"] tokens in
+ * style.css so the theme keeps its grayscale + purple identity.
+ */
+
+:root[data-theme="dark"] .shell-hub,
+:root[data-theme="dark"] .administration-cards,
+:root[data-theme="dark"] .command-center-cards,
+:root[data-theme="dark"] .shell-overview-panel,
+:root[data-theme="dark"] .shell-player-list,
+:root[data-theme="dark"] .shell-player-detail,
+:root[data-theme="dark"] .servers-directory,
+:root[data-theme="dark"] .servers-detail,
+:root[data-theme="dark"] .permission-ux-overview {
+  border-color: var(--pd-border);
+  background: var(--pd-card-bg-2);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .shell-hub-card,
+:root[data-theme="dark"] .administration-card,
+:root[data-theme="dark"] .command-center-card,
+:root[data-theme="dark"] .shell-health-card,
+:root[data-theme="dark"] .shell-overview-metric,
+:root[data-theme="dark"] .shell-overview-player-list button,
+:root[data-theme="dark"] .shell-activity-list > div,
+:root[data-theme="dark"] .shell-player-facts > div,
+:root[data-theme="dark"] .player-context-summary,
+:root[data-theme="dark"] .servers-detail-fact,
+:root[data-theme="dark"] button.permission-ux-card {
+  border-color: var(--pd-border-light);
+  background: var(--pd-card-bg);
+  color: var(--pd-text-inverse);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .shell-hub-card + .shell-hub-card,
+:root[data-theme="dark"] .administration-card + .administration-card,
+:root[data-theme="dark"] .command-center-card + .command-center-card {
+  border-top-color: var(--pd-border-light);
+}
+
+:root[data-theme="dark"] .shell-hub-card h3,
+:root[data-theme="dark"] .administration-card h2,
+:root[data-theme="dark"] .command-center-card h2,
+:root[data-theme="dark"] .shell-health-card strong,
+:root[data-theme="dark"] .shell-overview-metric strong,
+:root[data-theme="dark"] .servers-detail-player-count strong,
+:root[data-theme="dark"] .permission-ux-card > strong {
+  color: var(--pd-heading);
+}
+
+:root[data-theme="dark"] .shell-hub-card p,
+:root[data-theme="dark"] .administration-card p,
+:root[data-theme="dark"] .command-center-card p,
+:root[data-theme="dark"] .shell-overview-metric span,
+:root[data-theme="dark"] .servers-detail-fact span,
+:root[data-theme="dark"] .player-context-summary span {
+  color: var(--pd-muted);
+}
+
+/* Purple system24 accent for interactive workspace navigation. */
+:root[data-theme="dark"] button.shell-card-link,
+:root[data-theme="dark"] .administration-card > button,
+:root[data-theme="dark"] .command-center-card > button,
+:root[data-theme="dark"] .administration-player-workflow > button {
+  border-color: var(--pd-border);
+  background: var(--pd-panel-light);
+  color: var(--pd-text-inverse);
+}
+
+:root[data-theme="dark"] button.shell-card-link:hover,
+:root[data-theme="dark"] .administration-card > button:hover,
+:root[data-theme="dark"] .command-center-card > button:hover,
+:root[data-theme="dark"] .administration-player-workflow > button:hover {
+  border-color: var(--pd-border-hover);
+  background: var(--pd-hover);
+  color: var(--pd-heading);
+}
+
+:root[data-theme="dark"] .command-center-hub-card {
+  box-shadow: inset 2px 0 0 var(--pd-accent);
+}
+
+:root[data-theme="dark"] .shell-kicker,
+:root[data-theme="dark"] .shell-result-kind,
+:root[data-theme="dark"] .field-owner,
+:root[data-theme="dark"] .field-state,
+:root[data-theme="dark"] .command-center-unavailable,
+:root[data-theme="dark"] .administration-unavailable {
+  color: var(--pd-accent);
+}
+
+/* Overview / health. */
+:root[data-theme="dark"] #overview-grid.shell-overview-grid,
+:root[data-theme="dark"] .shell-player-facts,
+:root[data-theme="dark"] .player-context-summary-grid,
+:root[data-theme="dark"] .servers-detail-grid {
+  border-color: var(--pd-border);
+  background: var(--pd-border-light);
+}
+
+:root[data-theme="dark"] .shell-health-icon {
+  border-color: var(--pd-border);
+  background: var(--pd-panel-light);
+  color: var(--pd-text-inverse);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .shell-health-card.is-healthy .shell-health-icon {
+  border-color: var(--pd-success);
+  background: color-mix(in oklab, var(--pd-success) 14%, transparent);
+  color: var(--pd-success);
+}
+
+:root[data-theme="dark"] .shell-health-card.has-warning .shell-health-icon {
+  border-color: var(--pd-warning);
+  background: color-mix(in oklab, var(--pd-warning) 14%, transparent);
+  color: var(--pd-warning);
+}
+
+:root[data-theme="dark"] .shell-health-card li {
+  background: color-mix(in oklab, var(--pd-warning) 10%, transparent);
+  color: var(--pd-warning);
+}
+
+:root[data-theme="dark"] .shell-health-card li button {
+  border-color: var(--pd-warning);
+  background: color-mix(in oklab, var(--pd-warning) 15%, transparent);
+  color: var(--pd-warning);
+}
+
+/* Players / contextual workspace. */
+:root[data-theme="dark"] button.shell-player-row,
+:root[data-theme="dark"] button.servers-directory-row {
+  border-color: transparent;
+  background: transparent;
+  color: var(--pd-text-inverse);
+}
+
+:root[data-theme="dark"] button.shell-player-row:hover,
+:root[data-theme="dark"] button.servers-directory-row:hover {
+  border-color: var(--pd-border-light);
+  background: var(--pd-hover);
+}
+
+:root[data-theme="dark"] button.shell-player-row.is-active,
+:root[data-theme="dark"] button.servers-directory-row.is-active {
+  border-color: var(--pd-border-hover);
+  background: var(--pd-accent-soft);
+  color: var(--pd-heading);
+  box-shadow: inset 2px 0 0 var(--pd-accent);
+}
+
+:root[data-theme="dark"] .shell-ping,
+:root[data-theme="dark"] .servers-detail-status,
+:root[data-theme="dark"] .player-context-chips > span,
+:root[data-theme="dark"] .player-context-section > header > span,
+:root[data-theme="dark"] .player-context-punishment > header span {
+  border-color: var(--pd-border);
+  background: var(--pd-panel-light);
+  color: var(--pd-text-inverse);
+}
+
+:root[data-theme="dark"] .player-context-tabs {
+  border-bottom-color: var(--pd-divider);
+}
+
+:root[data-theme="dark"] .player-context-tabs button {
+  border-color: transparent;
+  background: transparent;
+  color: var(--pd-muted);
+}
+
+:root[data-theme="dark"] .player-context-tabs button:hover {
+  background: var(--pd-hover);
+  color: var(--pd-heading);
+}
+
+:root[data-theme="dark"] .player-context-tabs button[aria-selected="true"] {
+  border-bottom-color: var(--pd-accent);
+  background: transparent;
+  color: var(--pd-accent);
+}
+
+:root[data-theme="dark"] .player-context-rule,
+:root[data-theme="dark"] .player-context-punishment,
+:root[data-theme="dark"] .player-context-section,
+:root[data-theme="dark"] .permission-group-settings,
+:root[data-theme="dark"] .permission-advanced-options {
+  border-color: var(--pd-border-light);
+  background: var(--pd-card-bg-2);
+  color: var(--pd-text-inverse);
+}
+
+:root[data-theme="dark"] .player-context-summary.is-warning {
+  box-shadow: inset 2px 0 0 var(--pd-warning);
+}
+
+/* Permissions UX. */
+:root[data-theme="dark"] button.permission-ux-card {
+  border-right-color: var(--pd-border-light);
+}
+
+:root[data-theme="dark"] button.permission-ux-card:hover {
+  background: var(--pd-hover);
+}
+
+:root[data-theme="dark"] button.permission-ux-card.is-active {
+  border-color: var(--pd-border-hover);
+  background: var(--pd-accent-soft);
+  color: var(--pd-accent);
+  box-shadow: inset 0 -2px 0 var(--pd-accent);
+}
+
+/* Servers and shared-network control. */
+:root[data-theme="dark"] .servers-detail-player-count {
+  border-color: var(--pd-border-light);
+  background: var(--pd-card-bg-2);
+}
+
+:root[data-theme="dark"] .network-context-switcher {
+  border-color: var(--pd-divider);
+}
+
+:root[data-theme="dark"] .network-context-switcher > span {
+  color: var(--pd-muted);
+}
+
+:root[data-theme="dark"] .network-context-switcher select {
+  border-color: var(--pd-border);
+  background: var(--pd-input-bg);
+  color: var(--pd-text-inverse);
+}
+
+:root[data-theme="dark"] .network-context-switcher select:hover,
+:root[data-theme="dark"] .network-context-switcher select:focus {
+  border-color: var(--pd-accent);
+  background: var(--pd-input-bg);
+  color: var(--pd-heading);
+}
+
+/* Ctrl+K palette / entity results. */
+:root[data-theme="dark"] .shell-palette-backdrop,
+:root[data-theme="dark"] .ux2-review-backdrop {
+  background: color-mix(in oklab, var(--pd-bg-deep) 86%, transparent);
+}
+
+:root[data-theme="dark"] .shell-palette,
+:root[data-theme="dark"] .ux2-review {
+  border-color: var(--pd-border);
+  background: var(--pd-panel);
+  color: var(--pd-text-inverse);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .shell-palette-head,
+:root[data-theme="dark"] .ux2-review-header,
+:root[data-theme="dark"] .ux2-review-summary,
+:root[data-theme="dark"] .ux2-review-actions,
+:root[data-theme="dark"] .ux2-entity-divider {
+  border-color: var(--pd-divider);
+  background: var(--pd-panel);
+  color: var(--pd-text-inverse);
+}
+
+:root[data-theme="dark"] button.shell-palette-result {
+  border-color: transparent;
+  background: transparent;
+  color: var(--pd-text-inverse);
+}
+
+:root[data-theme="dark"] button.shell-palette-result:hover,
+:root[data-theme="dark"] button.shell-palette-result.is-active {
+  border-color: var(--pd-border-hover);
+  background: var(--pd-accent-soft);
+  color: var(--pd-heading);
+}
+
+:root[data-theme="dark"] .ux2-entity-result .shell-result-kind,
+:root[data-theme="dark"] .shell-result-kind {
+  background: transparent;
+  color: var(--pd-accent);
+}
+
+:root[data-theme="dark"] .ux2-change-card {
+  border-color: var(--pd-border-light);
+  background: var(--pd-card-bg-2);
+}
+
+:root[data-theme="dark"] .ux2-review-summary > strong,
+:root[data-theme="dark"] .ux2-review-summary > span,
+:root[data-theme="dark"] .ux2-change-badges span {
+  border-color: var(--pd-border);
+  background: var(--pd-panel-light);
+  color: var(--pd-text-inverse);
+}
+
+:root[data-theme="dark"] .ux2-review-summary > strong {
+  border-color: var(--pd-accent);
+  background: var(--pd-accent-soft);
+  color: var(--pd-accent);
+}
+
+/* Navigation breadcrumbs use the system24 accent instead of cyan hardcodes. */
+:root[data-theme="dark"] button.shell-backlink,
+:root[data-theme="dark"] .command-center-home-back,
+:root[data-theme="dark"] .administration-child-breadcrumb button,
+:root[data-theme="dark"] .command-center-breadcrumb button {
+  border-color: transparent;
+  background: transparent;
+  color: var(--pd-accent);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] button.shell-backlink:hover,
+:root[data-theme="dark"] .command-center-home-back:hover,
+:root[data-theme="dark"] .administration-child-breadcrumb button:hover,
+:root[data-theme="dark"] .command-center-breadcrumb button:hover {
+  color: var(--pd-heading);
+  background: transparent;
+}

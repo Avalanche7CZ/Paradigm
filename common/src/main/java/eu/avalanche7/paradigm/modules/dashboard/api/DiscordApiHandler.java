@@ -1,12 +1,14 @@
 package eu.avalanche7.paradigm.modules.dashboard.api;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import eu.avalanche7.paradigm.configs.DiscordConfigHandler;
 import eu.avalanche7.paradigm.modules.audit.AuditActionType;
 import eu.avalanche7.paradigm.modules.audit.AuditResult;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardJson;
+import eu.avalanche7.paradigm.modules.dashboard.DashboardMutationFeedback;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardRequestContext;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardResponse;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardService;
@@ -83,6 +85,12 @@ public class DiscordApiHandler {
         dashboard.audit().dashboard(ctx.principal(), AuditActionType.DISCORD_CHANGE, AuditResult.SUCCESS,
                 clear ? "Discord bot token cleared." : "Discord bot token replaced.",
                 Map.of("tokenReplaced", String.valueOf(!clear), "tokenCleared", String.valueOf(clear)));
+        DashboardMutationFeedback.notify(
+                dashboard.services(), ctx.principal(), ctx.header("X-Paradigm-Locale"),
+                DashboardMutationFeedback.Area.DISCORD,
+                List.of(clear
+                        ? DashboardMutationFeedback.remove("discord.botToken")
+                        : DashboardMutationFeedback.info("discord.botToken replaced · <hidden>")));
         return DashboardResponse.apiOk(Map.of("botTokenSet", DiscordSecrets.isPresent(config.botToken.get()),
                 "changed", true));
     }

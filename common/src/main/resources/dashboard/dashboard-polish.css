@@ -1,0 +1,274 @@
+/*
+ * Browser-rendered micro-layout corrections.
+ *
+ * Keep this file deliberately boring: only verified alignment, overflow and
+ * theme-integration fixes live here. It must not redefine the dashboard's
+ * visual language or replace the Classic/system24 palettes.
+ */
+
+/* Compact glyph controls need an explicit centering model. */
+#nav-toggle {
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.ux2-review-close {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* Page identity lives in the topbar. Forward local actions there in both themes. */
+.page.active > .page-toolbar.page-action-forwarded {
+  display: none !important;
+}
+
+.page-actions {
+  min-width: 0;
+}
+
+.page-actions > div {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--pd-space-2);
+  flex-wrap: wrap;
+}
+
+.page-actions > input,
+.page-actions > select {
+  width: min(260px, 32vw);
+  min-width: 150px;
+}
+
+/* The topbar already owns the hub title. Do not leave an empty padded strip. */
+.shell-hub-intro {
+  display: none;
+}
+
+.shell-hub-card + .shell-hub-card {
+  border-top: var(--pd-border-width) solid var(--pd-border);
+}
+
+/* Overview values are data, not labels: preserve the complete value. */
+#overview-grid.shell-overview-grid {
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+}
+
+.shell-overview-metric strong {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+}
+
+/* Classic Discord connection rows sit directly on the bright cyan editor surface.
+ * Do not reuse muted-on-dark helper colors there. */
+:root:not([data-theme="dark"]) #discord-connection > .config-row .config-label strong {
+  color: var(--pd-text);
+}
+
+:root:not([data-theme="dark"]) #discord-connection > .config-row .config-label small {
+  color: #07343a;
+  font-weight: 700;
+}
+
+/* Long player identities must not push ping/status outside the detail panel. */
+.shell-player-detail-head > div:first-child {
+  min-width: 0;
+}
+
+.shell-player-detail-head h2 {
+  overflow-wrap: anywhere;
+}
+
+.shell-ping {
+  flex: 0 0 auto;
+}
+
+/* system24 removes the outer margins from its original editor surfaces. Newer
+ * workspace shells must follow the same desktop alignment instead of keeping
+ * the wider Classic inset. */
+@media (min-width: 721px) {
+  :root[data-theme="dark"] .shell-hub,
+  :root[data-theme="dark"] .shell-section-heading,
+  :root[data-theme="dark"] .shell-backlink,
+  :root[data-theme="dark"] .administration-cards,
+  :root[data-theme="dark"] .administration-child-breadcrumb,
+  :root[data-theme="dark"] .command-center-cards,
+  :root[data-theme="dark"] .command-center-home-back,
+  :root[data-theme="dark"] .command-center-breadcrumb,
+  :root[data-theme="dark"] .shell-player-summary,
+  :root[data-theme="dark"] .shell-player-workspace,
+  :root[data-theme="dark"] .permission-ux-overview {
+    margin-left: 0;
+    margin-right: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  /* Width should fill mobile, height should remain content-sized. */
+  .shell-palette-backdrop {
+    align-items: start;
+  }
+
+  .page-actions > input,
+  .page-actions > select {
+    width: min(220px, 42vw);
+    min-width: 120px;
+  }
+}
+
+@media (max-width: 480px) {
+  /* All three contextual tabs fit cleanly; do not show a clipped fourth edge. */
+  .player-context-tabs button {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-right: 4px;
+    padding-left: 4px;
+    font-size: 9px;
+  }
+
+  /* Keep the fixed save surface structured instead of wrapping arbitrarily. */
+  .save-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--pd-space-2) 10px;
+  }
+
+  .save-bar > strong,
+  .save-bar > #apply-state {
+    grid-column: 1 / -1;
+  }
+
+  .save-bar > #apply-state:empty {
+    display: none;
+  }
+
+  .save-bar > #save-changes {
+    justify-self: end;
+  }
+}
+
+/* system24 integration for helper details that still carried Classic colors. */
+:root[data-theme="dark"] .shell-primary-nav,
+:root[data-theme="dark"] .shell-palette-search,
+:root[data-theme="dark"] .shell-palette footer,
+:root[data-theme="dark"] .shell-player-detail-head {
+  border-color: var(--pd-divider);
+}
+
+/* Base shell-kicker is a filled Classic badge. Dark previously inherited that
+ * fill while also making the text purple, producing purple-on-purple labels. */
+:root[data-theme="dark"] .shell-kicker {
+  align-items: center;
+  justify-content: center;
+  border-color: var(--pd-border-hover);
+  background: var(--pd-accent-soft);
+  color: var(--pd-accent);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .shell-overview-player-list,
+:root[data-theme="dark"] .shell-activity-list {
+  background: var(--pd-divider);
+}
+
+:root[data-theme="dark"] .shell-overview-player-list button:hover {
+  background: var(--pd-hover);
+}
+
+:root[data-theme="dark"] button.shell-player-row.is-offline .shell-player-row-state,
+:root[data-theme="dark"] .player-context-loading,
+:root[data-theme="dark"] .player-context-empty {
+  border-color: var(--pd-border);
+  background: var(--pd-card-bg-2);
+  color: var(--pd-muted);
+}
+
+:root[data-theme="dark"] .player-context-section > header,
+:root[data-theme="dark"] .permission-group-settings-body,
+:root[data-theme="dark"] .permission-advanced-grid,
+:root[data-theme="dark"] .servers-schema-fingerprint {
+  border-color: var(--pd-divider);
+}
+
+:root[data-theme="dark"] .shell-player-detail-head.is-offline .shell-ping {
+  border-color: var(--pd-border);
+  background: var(--pd-card-bg-2);
+  color: var(--pd-muted);
+}
+
+:root[data-theme="dark"] .player-context-punishment.is-active {
+  border-color: var(--pd-warning);
+  background: color-mix(in oklab, var(--pd-warning) 8%, var(--pd-card-bg-2));
+  box-shadow: inset 2px 0 0 var(--pd-warning);
+}
+
+:root[data-theme="dark"] .player-context-punishment.is-active > header span {
+  border-color: var(--pd-warning);
+  background: color-mix(in oklab, var(--pd-warning) 14%, transparent);
+  color: var(--pd-warning);
+}
+
+:root[data-theme="dark"] .administration-stats > div,
+:root[data-theme="dark"] .command-center-stats > div {
+  border-color: var(--pd-divider);
+}
+
+:root[data-theme="dark"] .administration-unavailable,
+:root[data-theme="dark"] .command-center-unavailable {
+  border-color: var(--pd-border-hover);
+  background: var(--pd-accent-soft);
+  color: var(--pd-accent);
+}
+
+:root[data-theme="dark"] .servers-detail-status {
+  border-color: var(--pd-success);
+  background: color-mix(in oklab, var(--pd-success) 14%, transparent);
+  color: var(--pd-success);
+}
+
+:root[data-theme="dark"] .servers-detail-head.is-offline .servers-detail-status {
+  border-color: var(--pd-border);
+  background: var(--pd-card-bg-2);
+  color: var(--pd-muted);
+}
+
+:root[data-theme="dark"] .ux2-review-header p {
+  color: var(--pd-muted);
+  font-weight: 500;
+}
+
+:root[data-theme="dark"] .ux2-change-card > header code {
+  border-color: var(--pd-border);
+  background: var(--pd-card-bg);
+  color: var(--pd-muted);
+  box-shadow: none;
+}
+
+:root[data-theme="dark"] .ux2-review-summary .is-warning,
+:root[data-theme="dark"] .ux2-change-badges .is-warning {
+  border-color: var(--pd-warning);
+  background: color-mix(in oklab, var(--pd-warning) 14%, transparent);
+  color: var(--pd-warning);
+}
+
+:root[data-theme="dark"] .ux2-review-summary .is-danger,
+:root[data-theme="dark"] .ux2-change-badges .is-danger {
+  border-color: var(--pd-danger);
+  background: color-mix(in oklab, var(--pd-danger) 14%, transparent);
+  color: var(--pd-danger);
+}
+
+:root[data-theme="dark"] .ux2-review-summary .is-reload,
+:root[data-theme="dark"] .ux2-change-badges .is-reload {
+  border-color: var(--pd-success);
+  background: color-mix(in oklab, var(--pd-success) 14%, transparent);
+  color: var(--pd-success);
+}

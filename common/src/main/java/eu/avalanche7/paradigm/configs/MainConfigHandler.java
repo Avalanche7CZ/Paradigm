@@ -1,7 +1,5 @@
 package eu.avalanche7.paradigm.configs;
 
-
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,10 +17,6 @@ public class MainConfigHandler extends BaseConfigHandler<MainConfigHandler.Confi
         super(LOGGER, platformConfig, "main.json");
     }
 
-    /**
-     * Initialize the handler with platform-specific config.
-     * Call this once during mod initialization.
-     */
     public static void init(IConfig platformConfig, DebugLogger debugLogger) {
         if (INSTANCE == null) {
             synchronized (MainConfigHandler.class) {

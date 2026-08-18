@@ -1,0 +1,167 @@
+/* Progressive disclosure for the existing permissions editor. */
+.permission-ux-overview {
+  margin: var(--pd-space-4) var(--pd-space-6);
+  max-width: var(--pd-max);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--pd-space-3);
+}
+
+button.permission-ux-card {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px var(--pd-space-3);
+  align-items: center;
+  border: var(--pd-border-width) solid var(--pd-border);
+  background: var(--pd-card-bg);
+  color: var(--pd-text-inverse);
+  padding: var(--pd-space-3);
+  box-shadow: var(--pd-shadow-small);
+  text-align: left;
+  text-transform: none;
+}
+
+button.permission-ux-card:hover,
+button.permission-ux-card.is-active {
+  background: rgba(32, 212, 212, 0.14);
+  transform: none;
+}
+
+.permission-ux-card > span {
+  color: var(--pd-muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.permission-ux-card > strong {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  color: var(--pd-accent);
+  font-size: 24px;
+}
+
+.permission-ux-card > small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--pd-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.permission-group-settings,
+.permission-advanced-options {
+  border: 1px solid #2c3976;
+  background: var(--pd-card-bg-2);
+}
+
+.permission-group-settings {
+  margin-bottom: var(--pd-space-4);
+}
+
+.permission-group-settings > summary,
+.permission-advanced-options > summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pd-space-3);
+  padding: var(--pd-space-3);
+  color: var(--pd-text-inverse);
+  list-style: none;
+}
+
+.permission-group-settings > summary::-webkit-details-marker,
+.permission-advanced-options > summary::-webkit-details-marker {
+  display: none;
+}
+
+.permission-group-settings > summary::before,
+.permission-advanced-options > summary::before {
+  content: '+';
+  flex: 0 0 auto;
+  color: var(--pd-accent);
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.permission-group-settings[open] > summary::before,
+.permission-advanced-options[open] > summary::before {
+  content: '−';
+}
+
+.permission-group-settings > summary strong,
+.permission-advanced-options > summary strong {
+  margin-right: auto;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.permission-group-settings > summary span,
+.permission-advanced-options > summary span {
+  overflow: hidden;
+  color: var(--pd-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.permission-advanced-options.is-nondefault > summary {
+  box-shadow: inset 4px 0 0 var(--pd-warning);
+}
+
+.permission-group-settings-body {
+  border-top: 1px solid #2c3976;
+  padding: var(--pd-space-3);
+}
+
+.permission-group-settings-body > .compact-form {
+  margin: 0 0 var(--pd-space-3);
+}
+
+.permission-group-settings-body > #group-save-meta {
+  background: var(--pd-accent);
+}
+
+.permission-advanced-options {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+
+.permission-advanced-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--pd-space-2);
+  border-top: 1px solid #2c3976;
+  padding: var(--pd-space-3);
+}
+
+.permission-advanced-grid > label {
+  min-width: 0;
+}
+
+@media (max-width: 800px) {
+  .permission-ux-overview {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .permission-ux-overview {
+    margin-left: var(--pd-space-4);
+    margin-right: var(--pd-space-4);
+  }
+
+  .permission-group-settings > summary,
+  .permission-advanced-options > summary {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .permission-group-settings > summary span,
+  .permission-advanced-options > summary span {
+    width: 100%;
+    padding-left: 22px;
+  }
+}

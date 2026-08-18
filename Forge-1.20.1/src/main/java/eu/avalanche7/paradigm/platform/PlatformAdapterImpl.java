@@ -588,9 +588,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         return playerNames;
     }
 
-    /**
-     * Volá se z `RegisterCommandsEvent`, kdy ještě nemusí být nastavený `server`.
-     */
     public void setCommandDispatcher(Object dispatcher) {
         if (dispatcher instanceof CommandDispatcher<?> cd) {
             @SuppressWarnings("unchecked")

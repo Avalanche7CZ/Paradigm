@@ -7,7 +7,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 
-/** Immutable loader-neutral permission evaluation context. An empty map means global. */
 public record PermissionContext(Map<String, String> values) {
     public static final Set<String> SUPPORTED_KEYS = Set.of("server", "network", "world", "dimension");
     public static final PermissionContext GLOBAL = new PermissionContext(Map.of());

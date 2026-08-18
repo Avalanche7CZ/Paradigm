@@ -29,7 +29,6 @@ public abstract class PlayerListMixin {
         ci.cancel();
     }
 
-
     @Inject(method = "*(Lnet/minecraft/network/chat/Component;Z)V", at = @At("HEAD"), cancellable = true, remap = false)
     private void paradigm$filterJoinLeaveMessages(Component message, boolean overlay, CallbackInfo ci) {
         if (message == null) return;

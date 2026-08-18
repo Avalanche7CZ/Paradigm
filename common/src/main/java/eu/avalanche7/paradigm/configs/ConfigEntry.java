@@ -4,9 +4,6 @@ public class ConfigEntry<T> {
     public String description;
     public T value;
 
-    /**
-     * No-argument constructor for Gson deserialization.
-     */
     private ConfigEntry() {}
 
     public ConfigEntry(T value) {
@@ -19,10 +16,6 @@ public class ConfigEntry<T> {
         this.description = description;
     }
 
-    /**
-     * Gets the configured value.
-     * @return The value of the configuration entry.
-     */
     public T get() {
         return this.value;
     }

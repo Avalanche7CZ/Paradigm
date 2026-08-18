@@ -3,7 +3,6 @@ package eu.avalanche7.paradigm.utils;
 import java.util.Comparator;
 import java.util.Map;
 
-/** Inserts caller data as parser literals rather than formatting instructions. */
 public final class LiteralPlaceholders {
     private LiteralPlaceholders() {
     }

@@ -4,7 +4,6 @@ import java.util.Set;
 
 import eu.avalanche7.paradigm.modules.holograms.HologramDisplaySettings;
 
-/** Typed loader boundary for server-side hologram entities. */
 public interface IHologramPlatform {
     String OWNER_TAG = "paradigm_hologram";
 
@@ -50,7 +49,6 @@ public interface IHologramPlatform {
 
     boolean isEntityLoaded(String runtimeId);
 
-    /** Updates an existing loaded line, adopts its owned entity, or spawns it. */
     String upsertLine(LineRequest request, String runtimeId);
 
     default String upsertViewerLine(LineRequest request, IPlayer viewer, String runtimeId) {
@@ -82,6 +80,5 @@ public interface IHologramPlatform {
         return Capabilities.legacy();
     }
 
-    /** Removes loaded Paradigm hologram entities which are not present in the supplied definition set. */
     void removeUnknownOwnedLines(Set<String> validOwnershipKeys);
 }

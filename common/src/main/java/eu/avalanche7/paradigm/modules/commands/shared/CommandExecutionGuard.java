@@ -6,7 +6,6 @@ import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandContext;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 
-/** Shared exception boundary used by every loader's Brigadier adapter. */
 public final class CommandExecutionGuard {
     private CommandExecutionGuard() {
     }

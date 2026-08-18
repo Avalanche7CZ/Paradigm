@@ -2,7 +2,6 @@ package eu.avalanche7.paradigm.modules.permissions;
 
 import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
 
-/** Read-only, presentation-neutral permission assignment data shared by commands and dashboard APIs. */
 public record PermissionAssignment(
         String id,
         Kind kind,

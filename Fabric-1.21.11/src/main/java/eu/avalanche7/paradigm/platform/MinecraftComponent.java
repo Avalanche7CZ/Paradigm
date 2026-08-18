@@ -194,7 +194,6 @@ public class MinecraftComponent implements IComponent {
         return new MinecraftComponent(styled);
     }
 
-
     @Override
     public Object getOriginalText() {
         if (component.getString().isEmpty()) {

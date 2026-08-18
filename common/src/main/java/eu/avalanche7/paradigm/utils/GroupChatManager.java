@@ -182,10 +182,6 @@ public class GroupChatManager {
         return true;
     }
 
-    /**
-     * Name-based variant used when platform can't resolve offline targets to IPlayer.
-     * This keeps common fully platform-agnostic while showing correct feedback.
-     */
     public boolean invitePlayer(IPlayer inviter, String targetName) {
         if (inviter == null) return false;
         if (targetName == null || targetName.isBlank()) {

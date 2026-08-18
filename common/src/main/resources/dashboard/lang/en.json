@@ -1,0 +1,1 @@
+{"meta":{"code":"en","name":"English"},"strings":{},"fields":{},"patterns":{"savedChanges":"Saved {count} changes.","restartRequired":"A server restart is required.","reloadRequired":"Apply a module reload to activate every change.","unsavedChanges":"{count} unsaved changes","pageOf":"Page {page} of {pages}","showingRange":"Showing {from}-{to} of {total}"}}

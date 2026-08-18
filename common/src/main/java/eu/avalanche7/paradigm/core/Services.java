@@ -60,7 +60,6 @@ public class Services {
     private volatile eu.avalanche7.paradigm.modules.network.ManagedConfigSyncService managedConfigSyncService;
     private volatile eu.avalanche7.paradigm.modules.network.ServerHeartbeatPublisher serverHeartbeatPublisher;
 
-
     public Services(
             Logger logger,
             MainConfigHandler.Config mainConfig,
@@ -143,11 +142,6 @@ public class Services {
         }
     }
 
-    /**
-     * Re-scans the dispatcher after loader command registration has completed.
-     * The platform-cached dispatcher is authoritative because mapped server
-     * accessor names differ between loaders and game versions.
-     */
     public int refreshDiscoveredCommandPermissions() {
         if (this.permissionsHandlerInstance == null) {
             return 0;
@@ -174,7 +168,6 @@ public class Services {
         }
         return server;
     }
-
 
     public IPlatformAdapter getPlatformAdapter() {
         return platformAdapter;
@@ -241,8 +234,6 @@ public class Services {
         }
         return current;
     }
-
-
 
     public MainConfigHandler.Config getMainConfig() {
         return MainConfigHandler.getConfig();

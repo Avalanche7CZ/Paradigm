@@ -1,0 +1,55 @@
+/* Shared-network context switcher. */
+.network-context-switcher {
+  min-width: 210px;
+  display: grid;
+  gap: 4px;
+  border-left: 1px solid #27346e;
+  padding-left: var(--pd-space-4);
+}
+
+.network-context-switcher > span {
+  color: var(--pd-muted);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.network-context-switcher select {
+  min-height: 32px;
+  max-width: 300px;
+  background: var(--pd-card-bg);
+  color: var(--pd-text-inverse);
+  border-color: #33447f;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.network-context-switcher select:hover,
+.network-context-switcher select:focus {
+  background: #142463;
+  color: var(--pd-text-inverse);
+}
+
+@media (max-width: 1120px) {
+  .network-context-switcher {
+    min-width: 170px;
+  }
+
+  .network-context-switcher select {
+    max-width: 220px;
+  }
+}
+
+@media (max-width: 820px) {
+  .network-context-switcher {
+    width: 100%;
+    border-left: 0;
+    border-top: 1px solid #27346e;
+    padding: var(--pd-space-2) 0 0;
+  }
+
+  .network-context-switcher select {
+    max-width: none;
+  }
+}

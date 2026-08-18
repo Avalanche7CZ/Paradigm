@@ -1,11 +1,14 @@
 package eu.avalanche7.paradigm.modules.dashboard.api;
 
+import java.util.List;
 import java.util.Map;
 
 import eu.avalanche7.paradigm.configs.schema.ConfigValidationResult;
+import eu.avalanche7.paradigm.configs.schema.RemoteConfigSnapshot;
 import eu.avalanche7.paradigm.modules.audit.AuditActionType;
 import eu.avalanche7.paradigm.modules.audit.AuditResult;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardJson;
+import eu.avalanche7.paradigm.modules.dashboard.DashboardMutationFeedback;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardRequestContext;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardResponse;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardService;
@@ -42,6 +45,16 @@ public class RemoteConfigApiHandler {
         if (!authorizedFor(ctx, request.scope, request.serverId)) {
             return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to edit this server's configuration.");
         }
+
+        RemoteConfigSnapshot before = null;
+        try {
+            Object snapshot = dashboard.remoteConfigSnapshotAsync(request.serverId, request.section).get();
+            if (snapshot instanceof RemoteConfigSnapshot remoteSnapshot) {
+                before = remoteSnapshot;
+            }
+        } catch (Throwable ignored) {
+        }
+
         DashboardService.RemoteConfigPatchOutcome outcome;
         try {
             outcome = dashboard.remoteConfigPatchAsync(ctx.principal(), request).get();
@@ -68,6 +81,9 @@ public class RemoteConfigApiHandler {
                     new DashboardResponse.ApiError(code, "The remote config patch was rejected."), result.warnings()));
         }
         dashboard.audit().dashboard(ctx.principal(), AuditActionType.REMOTE_CONFIG_PATCH, AuditResult.SUCCESS, "Remote config patch applied.", details);
+        DashboardMutationFeedback.notifyRemoteConfigPatch(
+                dashboard.services(), ctx.principal(), ctx.header("X-Paradigm-Locale"),
+                before, request, outcome.result().accepted());
         return DashboardResponse.apiOk(outcome);
     }
 
@@ -92,6 +108,13 @@ public class RemoteConfigApiHandler {
         }
         dashboard.audit().dashboard(ctx.principal(), AuditActionType.REMOTE_CONFIG_PATCH, AuditResult.SUCCESS, "Remote config section copied.",
                 Map.of("fromServerId", request.fromServerId, "toServerId", request.toServerId, "section", request.section));
+        if (operationSucceeded(result)) {
+            DashboardMutationFeedback.notify(
+                    dashboard.services(), ctx.principal(), ctx.header("X-Paradigm-Locale"),
+                    DashboardMutationFeedback.Area.NETWORK_CONFIG,
+                    List.of(DashboardMutationFeedback.info(
+                            "section:" + safe(request.section) + " · " + safe(request.fromServerId) + " → " + safe(request.toServerId))));
+        }
         return DashboardResponse.apiOk(result);
     }
 
@@ -111,6 +134,13 @@ public class RemoteConfigApiHandler {
         }
         dashboard.audit().dashboard(ctx.principal(), AuditActionType.REMOTE_CONFIG_ADOPT, AuditResult.SUCCESS, "Section adopted for central management.",
                 Map.of("serverId", request.serverId, "scope", request.scope, "section", request.section));
+        if (operationSucceeded(result)) {
+            DashboardMutationFeedback.notify(
+                    dashboard.services(), ctx.principal(), ctx.header("X-Paradigm-Locale"),
+                    DashboardMutationFeedback.Area.NETWORK_CONFIG,
+                    List.of(DashboardMutationFeedback.info(
+                            "section:" + safe(request.section) + " adopted · " + safe(request.scope) + " · " + safe(request.serverId))));
+        }
         return DashboardResponse.apiOk(result);
     }
 
@@ -119,6 +149,15 @@ public class RemoteConfigApiHandler {
             return dashboard.hasPermission(ctx.principal(), DashboardPermission.NETWORK_MANAGE, 4);
         }
         return dashboard.hasPermission(ctx.principal(), DashboardPermission.CONFIG_EDIT, 4);
+    }
+
+    private static boolean operationSucceeded(Object result) {
+        if (!(result instanceof Map<?, ?> map)) return true;
+        return !Boolean.FALSE.equals(map.get("ok"));
+    }
+
+    private static String safe(String value) {
+        return value != null ? value.trim() : "";
     }
 
     private static DashboardResponse handleFailure(Exception e) {

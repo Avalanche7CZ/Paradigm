@@ -7,7 +7,6 @@ import java.util.Set;
 import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
 import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextType;
 
-/** Pure mapping rules shared by the runtime migration and unit tests. */
 public final class LuckPermsMigrationMapper {
     private LuckPermsMigrationMapper() {
     }

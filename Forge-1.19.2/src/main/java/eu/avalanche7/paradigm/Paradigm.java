@@ -1,10 +1,3 @@
-/*
- * IMPORTANT FOR PORTING (1.20.1 → 1.19.2):
- * Forge 1.19.2 only calls the no-argument constructor of the main mod class.
- * All initialization (event bus registration, services, modules, etc.)
- * MUST be in the no-arg constructor. Do NOT use a constructor with FMLJavaModLoadingContext!
- * If you move init logic to a different constructor, the mod will NOT load.
- */
 
 package eu.avalanche7.paradigm;
 

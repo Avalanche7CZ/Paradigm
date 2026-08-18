@@ -39,7 +39,6 @@ public abstract class ServerStatusMixin {
     @Inject(method = "*(Lnet/minecraft/network/protocol/status/ServerboundStatusRequestPacket;)V", at = @At("HEAD"), cancellable = true, remap = false)
     private void paradigm$modifyStatusRequest(ServerboundStatusRequestPacket packet, CallbackInfo ci) {
 
-
         Services services = Paradigm.getServices();
         if (services == null) {
             ServerStatusDiagnostics.servicesUnavailable("Forge-1.21.1");
@@ -76,7 +75,6 @@ public abstract class ServerStatusMixin {
             }
 
             MOTDConfigHandler.ServerListMOTD selectedMotd = motds.get(new Random().nextInt(motds.size()));
-
 
             String line1 = selectedMotd.line1 != null ? selectedMotd.line1 : "";
             String line2 = selectedMotd.line2 != null ? selectedMotd.line2 : "";
@@ -179,8 +177,6 @@ public abstract class ServerStatusMixin {
                         lineComponent = Component.literal(line);
                     }
 
-                    // 1.21+ status player sample is a String. Avoid §x hex (often sanitized) and instead map
-                    // custom colors to the nearest legacy formatting code (legacy/Forge-1.20.1 behavior).
                     String legacyText = paradigm$componentToLegacyText(lineComponent);
                     if (legacyText.length() > 256) {
                         legacyText = legacyText.substring(0, 256);
@@ -226,7 +222,7 @@ public abstract class ServerStatusMixin {
                 if (formatting != null) {
                     builder.append('§').append(formatting.getChar());
                 } else {
-                    // Custom/hex color: pick nearest legacy formatting code (instead of §x hex).
+
                     builder.append('§').append(paradigm$getNearestFormattingCode(rgb));
                 }
             }
@@ -250,11 +246,11 @@ public abstract class ServerStatusMixin {
 
         int brightness = (r + g + b) / 3;
 
-        if (r > g && r > b) return 'c'; // red-ish
-        if (g > r && g > b) return 'a'; // green-ish
-        if (b > r && b > g) return 'b'; // aqua-ish
-        if (brightness > 128) return 'f'; // white
-        return '7'; // gray
+        if (r > g && r > b) return 'c';
+        if (g > r && g > b) return 'a';
+        if (b > r && b > g) return 'b';
+        if (brightness > 128) return 'f';
+        return '7';
     }
 
     @Unique

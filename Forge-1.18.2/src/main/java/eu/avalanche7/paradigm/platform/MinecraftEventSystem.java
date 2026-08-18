@@ -123,7 +123,7 @@ public class MinecraftEventSystem implements IEventSystem {
             try {
                 MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
                 if (server != null) {
-                    // 1.18 uses broadcastMessage(Component, ChatType, UUID)
+
                     server.getPlayerList().broadcastMessage(new TextComponent(chatEvent.getMessage()), ChatType.CHAT, java.util.UUID.randomUUID());
                 }
             } catch (Throwable failure) {

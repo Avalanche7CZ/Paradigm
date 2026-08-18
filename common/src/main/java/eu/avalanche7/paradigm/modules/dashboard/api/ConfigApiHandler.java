@@ -12,6 +12,7 @@ import eu.avalanche7.paradigm.configs.schema.ConfigSnapshot;
 import eu.avalanche7.paradigm.configs.schema.ConfigValidationResult;
 import eu.avalanche7.paradigm.modules.audit.AuditActionType;
 import eu.avalanche7.paradigm.modules.audit.AuditResult;
+import eu.avalanche7.paradigm.modules.dashboard.DashboardMutationFeedback;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardRequestContext;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardResponse;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardService;
@@ -78,7 +79,8 @@ public class ConfigApiHandler {
         if (managedAccepted) {
             dashboard.services().getManagedConfigSyncService().triggerImmediateSync();
         }
-        result.newRevision(dashboard.schemaRegistry().snapshot().revision());
+        ConfigSnapshot updated = dashboard.schemaRegistry().snapshot();
+        result.newRevision(updated.revision());
 
         Map<String, String> details = Map.of(
                 "accepted", String.valueOf(result.accepted().size()),
@@ -97,6 +99,9 @@ public class ConfigApiHandler {
                 dashboard.audit().dashboard(ctx.principal(), AuditActionType.COOLDOWN_CHANGE, AuditResult.SUCCESS, "Command timing changed.", Map.of("field", key));
             }
         }
+        DashboardMutationFeedback.notifyConfigPatch(
+                dashboard.services(), ctx.principal(), ctx.header("X-Paradigm-Locale"),
+                current, updated, patch.operations(), result.accepted());
         return DashboardResponse.apiOk(result, result.warnings());
     }
 

@@ -1,0 +1,319 @@
+/* Contextual player workspace. */
+.shell-player-counts {
+  display: flex;
+  align-items: center;
+  gap: var(--pd-space-5);
+  flex-wrap: wrap;
+}
+
+.shell-player-counts > div {
+  display: flex;
+  align-items: center;
+  gap: var(--pd-space-3);
+}
+
+#shell-known-count {
+  color: var(--pd-text-inverse);
+  font-size: 20px;
+}
+
+button.shell-player-row.is-offline .shell-player-row-state {
+  border: 1px solid rgba(154, 168, 212, 0.35);
+  background: var(--pd-card-bg);
+  padding: 3px 6px;
+  text-transform: uppercase;
+}
+
+.shell-online-dot.is-offline {
+  background: var(--pd-muted);
+}
+
+.shell-player-detail-head.is-offline .shell-ping {
+  background: var(--pd-card-bg);
+  color: var(--pd-muted);
+}
+
+.player-context-tabs {
+  margin: var(--pd-space-4) 0 0;
+  display: flex;
+  gap: 0;
+  overflow-x: auto;
+}
+
+.player-context-tabs button {
+  flex: 1 0 auto;
+  min-width: 118px;
+  box-shadow: none;
+}
+
+.player-context-tabs button[aria-selected="true"] {
+  background: var(--pd-accent);
+}
+
+.player-context-panels {
+  margin-top: var(--pd-space-3);
+}
+
+.player-context-panel {
+  display: none;
+}
+
+.player-context-panel.is-active {
+  display: grid;
+  gap: var(--pd-space-3);
+}
+
+.player-context-loading,
+.player-context-empty {
+  min-height: 92px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed #40508c;
+  background: rgba(3, 9, 31, 0.55);
+  color: var(--pd-muted);
+  padding: var(--pd-space-4);
+  text-align: center;
+}
+
+.player-context-empty.compact {
+  min-height: 58px;
+}
+
+.player-context-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--pd-space-3);
+}
+
+.player-context-summary {
+  min-width: 0;
+  border: 1px solid #2c3976;
+  background: var(--pd-card-bg);
+  padding: var(--pd-space-3);
+}
+
+.player-context-summary span {
+  display: block;
+  color: var(--pd-muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.player-context-summary strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--pd-text-inverse);
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+
+.player-context-summary.is-warning {
+  border-color: var(--pd-warning);
+  box-shadow: inset 5px 0 0 var(--pd-warning);
+}
+
+.player-context-section {
+  border: 1px solid #2c3976;
+  background: rgba(6, 19, 63, 0.72);
+}
+
+.player-context-section > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pd-space-3);
+  border-bottom: 1px solid #2c3976;
+  padding: 9px 11px;
+}
+
+.player-context-section > header h3 {
+  margin: 0;
+  color: var(--pd-text-inverse);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.player-context-section > header > span {
+  min-width: 28px;
+  border: 1px solid var(--pd-border);
+  background: var(--pd-accent);
+  color: var(--pd-text);
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.player-context-chips {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  padding: var(--pd-space-3);
+}
+
+.player-context-chips > span {
+  display: inline-grid;
+  gap: 1px;
+  border: 1px solid var(--pd-border);
+  background: var(--pd-panel-light);
+  color: var(--pd-text);
+  padding: 5px 8px;
+  font-weight: 900;
+}
+
+.player-context-chips small {
+  font-size: 9px;
+  font-weight: 800;
+  opacity: 0.72;
+  text-transform: uppercase;
+}
+
+.player-context-chips em {
+  color: var(--pd-muted);
+  font-style: normal;
+}
+
+.player-context-rules,
+.player-context-punishments {
+  display: grid;
+  gap: 7px;
+  padding: var(--pd-space-3);
+}
+
+.player-context-rule {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: var(--pd-space-3);
+  align-items: start;
+  border: 1px solid #2c3976;
+  background: var(--pd-card-bg-2);
+  padding: 9px;
+}
+
+.player-context-rule.is-expired {
+  opacity: 0.58;
+}
+
+.player-context-rule-effect {
+  border: 1px solid var(--pd-border);
+  padding: 3px 5px;
+  color: var(--pd-text);
+  font-size: 9px;
+  font-weight: 900;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.player-context-rule.is-allow .player-context-rule-effect {
+  background: var(--pd-success);
+}
+
+.player-context-rule.is-deny .player-context-rule-effect {
+  background: var(--pd-danger);
+}
+
+.player-context-rule.is-group .player-context-rule-effect {
+  background: var(--pd-panel-light);
+}
+
+.player-context-rule strong {
+  display: block;
+  color: var(--pd-text-inverse);
+  overflow-wrap: anywhere;
+}
+
+.player-context-rule small {
+  display: block;
+  margin-top: 3px;
+  color: var(--pd-muted);
+  overflow-wrap: anywhere;
+}
+
+.player-context-punishment {
+  border: 1px solid #2c3976;
+  background: var(--pd-card-bg-2);
+  padding: var(--pd-space-3);
+}
+
+.player-context-punishment.is-active {
+  border-color: var(--pd-warning);
+  box-shadow: inset 5px 0 0 var(--pd-warning);
+}
+
+.player-context-punishment > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pd-space-3);
+}
+
+.player-context-punishment > header strong {
+  color: var(--pd-text-inverse);
+  text-transform: uppercase;
+}
+
+.player-context-punishment > header span {
+  border: 1px solid var(--pd-border);
+  background: var(--pd-panel-light);
+  color: var(--pd-text);
+  padding: 2px 6px;
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.player-context-punishment.is-active > header span {
+  background: var(--pd-warning);
+}
+
+.player-context-punishment p {
+  margin-top: var(--pd-space-2);
+  color: var(--pd-text-inverse);
+}
+
+.player-context-punishment-meta {
+  display: flex;
+  gap: var(--pd-space-3);
+  flex-wrap: wrap;
+  margin-top: var(--pd-space-2);
+  color: var(--pd-muted);
+  font-size: 10px;
+}
+
+.player-context-punishment-meta strong {
+  color: var(--pd-text-inverse);
+}
+
+.player-context-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 2px;
+}
+
+.player-context-footer button {
+  background: var(--pd-accent);
+}
+
+@media (max-width: 760px) {
+  .shell-player-counts {
+    align-items: flex-start;
+  }
+
+  .player-context-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .player-context-rule {
+    grid-template-columns: 1fr;
+  }
+
+  .player-context-rule-effect {
+    width: fit-content;
+  }
+
+  .player-context-punishment > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

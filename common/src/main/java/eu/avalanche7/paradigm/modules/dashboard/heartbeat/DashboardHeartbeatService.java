@@ -6,9 +6,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -93,12 +95,22 @@ public class DashboardHeartbeatService {
             snapshots = loadLocked();
         }
 
+        long now = System.currentTimeMillis();
+        Set<String> runtimeDetails = new HashSet<>();
+        for (DashboardHeartbeat snapshot : snapshots.values()) {
+            if (snapshot != null && snapshot.lastSeenMs() > 0 && now - snapshot.lastSeenMs() <= ONLINE_THRESHOLD_MS) {
+                runtimeDetails.add(snapshot.serverId());
+            }
+        }
+
         StorageService storage = services.getStorageService();
         String networkId = local != null ? local.networkId() : storage.context().serverIdentity().networkId();
         String currentServerId = local != null ? local.serverId() : storage.context().serverIdentity().serverId();
         if (storage.isMysqlActive()) {
             try {
                 for (ServerInstanceInfo instance : storage.servers().listServerInstances()) {
+                    DashboardHeartbeat runtime = snapshots.get(instance.serverId());
+                    boolean hasRuntimeDetails = runtimeDetails.contains(instance.serverId()) && runtime != null;
                     snapshots.put(instance.serverId(), new DashboardHeartbeat(
                             instance.serverId(),
                             instance.networkId(),
@@ -107,13 +119,13 @@ public class DashboardHeartbeatService {
                             instance.minecraftVersion(),
                             instance.loader(),
                             instance.schemaFingerprint(),
-                            "sql",
-                            "unknown",
-                            false,
-                            0,
-                            0,
-                            0,
-                            instance.lastSeenMs()
+                            hasRuntimeDetails ? runtime.activeProvider() : "sql",
+                            hasRuntimeDetails ? runtime.storageHealth() : "unknown",
+                            hasRuntimeDetails && runtime.dashboardEnabled(),
+                            hasRuntimeDetails ? runtime.onlinePlayers() : 0,
+                            hasRuntimeDetails ? runtime.moduleCount() : 0,
+                            hasRuntimeDetails ? runtime.enabledModuleCount() : 0,
+                            Math.max(instance.lastSeenMs(), hasRuntimeDetails ? runtime.lastSeenMs() : 0L)
                     ));
                 }
             } catch (Throwable t) {
@@ -124,14 +136,15 @@ public class DashboardHeartbeatService {
         }
         if (local != null) {
             snapshots.put(local.serverId(), local);
+            runtimeDetails.add(local.serverId());
         }
 
-        long now = System.currentTimeMillis();
         List<Map<String, Object>> rows = new ArrayList<>();
         for (DashboardHeartbeat hb : snapshots.values()) {
             if (hb == null || !networkId.equals(hb.networkId())) {
                 continue;
             }
+            boolean hasRuntimeDetails = runtimeDetails.contains(hb.serverId());
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("serverId", hb.serverId());
             row.put("networkId", hb.networkId());
@@ -141,11 +154,12 @@ public class DashboardHeartbeatService {
             row.put("loader", hb.loader());
             row.put("schemaFingerprint", hb.schemaFingerprint());
             row.put("activeProvider", hb.activeProvider());
-            row.put("storageHealth", hb.storageHealth());
-            row.put("dashboardEnabled", hb.dashboardEnabled());
-            row.put("onlinePlayers", hb.onlinePlayers());
-            row.put("moduleCount", hb.moduleCount());
-            row.put("enabledModuleCount", hb.enabledModuleCount());
+            row.put("storageHealth", hasRuntimeDetails ? hb.storageHealth() : null);
+            row.put("dashboardEnabled", hasRuntimeDetails ? hb.dashboardEnabled() : null);
+            row.put("onlinePlayers", hasRuntimeDetails ? hb.onlinePlayers() : null);
+            row.put("moduleCount", hasRuntimeDetails ? hb.moduleCount() : null);
+            row.put("enabledModuleCount", hasRuntimeDetails ? hb.enabledModuleCount() : null);
+            row.put("runtimeDetailsAvailable", hasRuntimeDetails);
             row.put("lastSeenMs", hb.lastSeenMs());
             row.put("online", hb.lastSeenMs() > 0 && now - hb.lastSeenMs() <= ONLINE_THRESHOLD_MS);
             row.put("current", currentServerId.equals(hb.serverId()));

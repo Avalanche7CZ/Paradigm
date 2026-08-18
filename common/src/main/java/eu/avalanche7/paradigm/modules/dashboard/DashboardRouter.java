@@ -11,6 +11,7 @@ import eu.avalanche7.paradigm.modules.dashboard.api.HologramApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.ModerationApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.OverviewApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.PermissionsApiHandler;
+import eu.avalanche7.paradigm.modules.dashboard.api.PlayerApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.RemoteConfigApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.ServerApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.StaticAssetHandler;
@@ -25,6 +26,7 @@ public class DashboardRouter {
     private final DashboardService dashboard;
     private final AuthApiHandler auth;
     private final OverviewApiHandler overview;
+    private final PlayerApiHandler players;
     private final ServerApiHandler servers;
     private final StorageApiHandler storage;
     private final DiscordApiHandler discord;
@@ -41,6 +43,7 @@ public class DashboardRouter {
         this.dashboard = dashboard;
         this.auth = new AuthApiHandler(dashboard);
         this.overview = new OverviewApiHandler(dashboard);
+        this.players = new PlayerApiHandler(dashboard);
         this.servers = new ServerApiHandler(dashboard);
         this.storage = new StorageApiHandler(dashboard);
         this.discord = new DiscordApiHandler(dashboard);
@@ -82,6 +85,7 @@ public class DashboardRouter {
 
                 if ("POST".equals(method) && "/api/auth/logout".equals(path)) return auth.logout(ctx);
                 if ("GET".equals(method) && "/api/overview".equals(path)) return overview.get(ctx);
+                if ("GET".equals(method) && "/api/players".equals(path)) return players.list(ctx);
                 if ("GET".equals(method) && "/api/servers".equals(path)) return servers.list(ctx);
                 if (path.startsWith("/api/storage/") && mutating(method)
                         && !dashboard.hasPermission(ctx.principal(), ParadigmPermissions.STORAGE_MANAGE)) {

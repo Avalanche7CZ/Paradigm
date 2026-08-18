@@ -181,7 +181,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             return false;
         }
         if (permissionsHandler != null) {
-            // Keep all permission decisions in one place (LuckPerms/internal/vanilla fallback).
+
             return permissionsHandler.hasPermission(mp, permissionNode, vanillaLevel);
         }
 

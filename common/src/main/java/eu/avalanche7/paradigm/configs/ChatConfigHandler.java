@@ -20,10 +20,6 @@ public class ChatConfigHandler extends BaseConfigHandler<ChatConfigHandler.Confi
         super(LOGGER, platformConfig, "chat.json");
     }
 
-    /**
-     * Initialize the handler with platform-specific config.
-     * Call this once during mod initialization.
-     */
     public static void init(IConfig platformConfig, DebugLogger debugLogger) {
         if (INSTANCE == null) {
             synchronized (ChatConfigHandler.class) {

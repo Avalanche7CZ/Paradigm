@@ -4,10 +4,6 @@ import java.util.Set;
 
 import eu.avalanche7.paradigm.modules.commands.shared.CommandCatalog;
 
-/**
- * Root command literals that Paradigm intentionally owns.
- * Used by platform adapters when command-priority mode is enabled.
- */
 public final class ParadigmCommandRoots {
 
     private ParadigmCommandRoots() {

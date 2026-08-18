@@ -1,6 +1,5 @@
 package eu.avalanche7.paradigm.modules.chat;
 
-/** Routing decision for a player-originated chat message. */
 public enum ChatRoute {
     PUBLIC,
     STAFF,

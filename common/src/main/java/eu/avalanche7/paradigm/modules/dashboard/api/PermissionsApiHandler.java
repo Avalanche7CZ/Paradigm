@@ -1,6 +1,7 @@
 package eu.avalanche7.paradigm.modules.dashboard.api;
 
 import eu.avalanche7.paradigm.modules.dashboard.DashboardJson;
+import eu.avalanche7.paradigm.modules.dashboard.DashboardMutationFeedback;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardRequestContext;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardResponse;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardService;
@@ -50,11 +51,25 @@ public class PermissionsApiHandler {
             mutation = new PermissionMutationRequest();
         }
         mutation.action = action;
+
+        Object beforeGroup = null;
+        if ("group_update".equals(action) && mutation.group != null && !mutation.group.isBlank()) {
+            try {
+                beforeGroup = dashboard.permissionGroupAsync(mutation.group).get();
+            } catch (Throwable ignored) {
+            }
+        }
+
         Object result = dashboard.permissionMutationAsync(ctx.principal(), mutation).get();
         if (result instanceof PermissionMutationResult mutationResult
                 && !mutationResult.applied()
                 && !mutationResult.confirmationRequired()) {
             return DashboardResponse.apiError(statusFor(mutationResult.code()), mutationResult.code(), mutationResult.message());
+        }
+        if (result instanceof PermissionMutationResult mutationResult && mutationResult.applied()) {
+            DashboardMutationFeedback.notifyPermissionMutation(
+                    dashboard.services(), ctx.principal(), ctx.header("X-Paradigm-Locale"),
+                    mutation, beforeGroup);
         }
         return DashboardResponse.apiOk(result);
     }
@@ -75,6 +90,14 @@ public class PermissionsApiHandler {
         if (!report.ok()) {
             String message = report.details().isEmpty() ? "LuckPerms migration failed." : report.details().get(0);
             return DashboardResponse.apiError(400, "migration_failed", message);
+        }
+        if (mode != LuckPermsMigrationService.Mode.DRY_RUN) {
+            DashboardMutationFeedback.notify(
+                    dashboard.services(), ctx.principal(), ctx.header("X-Paradigm-Locale"),
+                    DashboardMutationFeedback.Area.PERMISSIONS,
+                    java.util.List.of(DashboardMutationFeedback.info(
+                            "LuckPerms " + direction.name().toLowerCase(java.util.Locale.ROOT).replace('_', ' ')
+                                    + " · " + mode.name().toLowerCase(java.util.Locale.ROOT).replace('_', ' '))));
         }
         return DashboardResponse.apiOk(report, report.details());
     }

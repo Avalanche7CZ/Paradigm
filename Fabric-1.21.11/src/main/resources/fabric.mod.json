@@ -16,7 +16,8 @@
   "environment": "server",
   "entrypoints": {
     "server": [
-      "eu.avalanche7.paradigm.Paradigm"
+      "eu.avalanche7.paradigm.Paradigm",
+      "eu.avalanche7.paradigm.platform.ServerTickMetricsInitializer"
     ]
   },
   "mixins": [

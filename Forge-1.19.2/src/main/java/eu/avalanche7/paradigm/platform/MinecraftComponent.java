@@ -141,7 +141,7 @@ public class MinecraftComponent implements IComponent {
 
     @Override
     public IComponent onClickCopyToClipboard(String text) {
-        // Not available in 1.19.2 ClickEvent actions; fallback to suggest.
+
         return onClickSuggestCommand(text);
     }
 

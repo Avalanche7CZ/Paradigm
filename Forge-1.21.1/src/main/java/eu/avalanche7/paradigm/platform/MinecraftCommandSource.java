@@ -6,9 +6,6 @@ import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerPlayer;
 import javax.annotation.Nullable;
 
-/**
- * Minecraft implementation of ICommandSource
- */
 public class MinecraftCommandSource implements ICommandSource {
     private final CommandSourceStack source;
     private final IPlayer player;

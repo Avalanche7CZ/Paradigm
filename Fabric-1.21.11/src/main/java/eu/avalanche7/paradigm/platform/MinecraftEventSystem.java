@@ -23,10 +23,10 @@ public class MinecraftEventSystem implements IEventSystem {
     private static final CopyOnWriteArrayList<PlayerAdvancementEventListener> advancementListeners = new CopyOnWriteArrayList<>();
 
     public MinecraftEventSystem() {
-        // Chat event registration will be handled via mixin !!!! - By Avalanche7 14.09.2025 - For Now
+
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
             var player = handler.getPlayer();
-            // Run one immediate and one delayed resync to avoid stale client command trees after permission plugins finish loading data.
+
             resyncCommandTree(server, player);
             CompletableFuture.delayedExecutor(2, TimeUnit.SECONDS).execute(() -> server.execute(() -> resyncCommandTree(server, player)));
             if (joinListeners.isEmpty()) return;

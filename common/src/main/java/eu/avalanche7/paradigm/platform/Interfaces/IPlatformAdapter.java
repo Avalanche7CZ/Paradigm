@@ -29,7 +29,7 @@ public interface IPlatformAdapter {
     Object createItemStack(String itemId);
     boolean hasPermission(IPlayer player, String permissionNode);
     boolean hasPermission(IPlayer player, String permissionNode, int vanillaLevel);
-    /** Native vanilla permission-level check only, independent of internal/LuckPerms permission nodes. */
+
     boolean hasVanillaPermissionLevel(IPlayer player, int level);
     void sendSystemMessage(IPlayer player, IComponent message);
     void broadcastSystemMessage(IComponent message);
@@ -64,12 +64,6 @@ public interface IPlatformAdapter {
         return null;
     }
 
-    /**
-     * Rewrites every command node's Brigadier requirement predicate to consult
-     * explicit command-permission grants/denies before falling back to the
-     * original (usually vanilla op-level) check. Called once, after all
-     * commands for this server start have been registered.
-     */
     default void rewireCommandTreePermissions() {
     }
 
@@ -98,22 +92,18 @@ public interface IPlatformAdapter {
     Integer getHighestBlockY(IPlayer player);
     boolean jumpPlayerForward(IPlayer player, int distance);
 
-    /** Updates the header/footer visible to one player without dispatching a command. */
     default boolean setPlayerListHeaderFooter(IPlayer player, IComponent header, IComponent footer) {
         return false;
     }
 
-    /** Updates the native tablist display name for a player. */
     default boolean setPlayerListDisplayName(IPlayer player, @Nullable IComponent displayName) {
         return false;
     }
 
-    /** Applies a native deterministic tab order where the target Minecraft version supports it. */
     default boolean setPlayerListOrder(IPlayer player, int order) {
         return false;
     }
 
-    /** Returns the connection latency in milliseconds, or zero when unavailable. */
     default int getPlayerPing(IPlayer player) {
         return 0;
     }

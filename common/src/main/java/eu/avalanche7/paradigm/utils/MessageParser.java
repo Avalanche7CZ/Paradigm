@@ -45,7 +45,6 @@ public class MessageParser {
 
         IComponent parsed = parseTagBasedMessage(rawMessage, player, null, activeSlots);
 
-
         if (cacheable) {
             messageCache.put(cacheKey, parsed);
         }
@@ -133,7 +132,7 @@ public class MessageParser {
                 case 'm' -> { matcher.appendReplacement(result, "<strikethrough>"); hasStrikethrough = true; }
                 case 'k' -> { matcher.appendReplacement(result, "<obfuscated>"); hasObfuscated = true; }
                 default -> {
-                    // unknown code, ignore
+
                 }
             }
         }

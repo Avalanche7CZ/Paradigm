@@ -142,7 +142,7 @@ public class MinecraftComponent implements IComponent {
 
     @Override
     public IComponent onClickCopyToClipboard(String text) {
-        // Supported in 1.20.1
+
         return new MinecraftComponent(component.copy().withStyle(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, text))));
     }
 

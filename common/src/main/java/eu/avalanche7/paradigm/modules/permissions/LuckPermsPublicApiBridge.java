@@ -12,7 +12,6 @@ import net.luckperms.api.util.Tristate;
 
 import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
 
-/** Isolates optional LuckPerms linkage from classes that must load when LuckPerms is absent. */
 final class LuckPermsPublicApiBridge {
     private LuckPermsPublicApiBridge() {
     }

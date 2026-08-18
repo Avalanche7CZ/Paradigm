@@ -55,24 +55,18 @@ public interface IEventSystem {
         void onPlayerAdvancement(PlayerAdvancementEvent event);
     }
 
-    /** Register chat listener (called for every player chat message). */
     void onPlayerChat(ChatEventListener listener);
 
-    /** Register player join listener. */
     void onPlayerJoin(PlayerJoinEventListener listener);
 
-    /** Register player leave listener. */
     void onPlayerLeave(PlayerLeaveEventListener listener);
 
-    /** Register player death listener. */
     default void onPlayerDeath(PlayerDeathEventListener listener) {
     }
 
-    /** Register player command listener before the command is executed where the platform supports it. */
     default void onPlayerCommand(PlayerCommandEventListener listener) {
     }
 
-    /** Register player advancement listener, fired once when an advancement is fully earned. */
     default void onPlayerAdvancement(PlayerAdvancementEventListener listener) {
     }
 }

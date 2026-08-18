@@ -10,7 +10,6 @@ import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
 
-/** Parses repeatable key=value permission-context arguments for command mutations. */
 public final class PermissionContextArgumentParser {
     private final Supplier<ServerIdentity> identitySupplier;
 

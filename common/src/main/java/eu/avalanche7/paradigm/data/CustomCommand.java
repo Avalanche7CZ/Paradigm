@@ -210,7 +210,7 @@ public class CustomCommand {
     }
     public static class ArgumentDefinition {
         private String name;
-        private String type; // "string", "integer", "boolean", "player", "world", "gamemode", "custom"
+        private String type;
         private boolean required;
         private String errorMessage;
         private List<String> customCompletions;
