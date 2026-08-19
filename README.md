@@ -1,34 +1,32 @@
-# Paradigm Essentials [![Downloads](https://www.modpackindex.com/badge/mod/60637/paradigm/downloads.svg)](https://www.modpackindex.com/mod/60637/paradigm) [![Modpacks](https://www.modpackindex.com/badge/mod/60637/paradigm/modpacks.svg)](https://www.modpackindex.com/mod/60637/paradigm)
+# Paradigm Essentials 
+[![8,956 downloads across all platforms](https://www.modpackindex.com/badge/mod/60637/paradigm-essentials/downloads.svg?style=large)](https://www.modpackindex.com/mod/60637/paradigm-essentials) [![Used in 8 modpacks on Modpack Index](https://www.modpackindex.com/badge/mod/60637/paradigm-essentials/modpacks.svg?style=large)](https://www.modpackindex.com/mod/60637/paradigm-essentials) [![Supports Minecraft 1.12.2 – 1.21.11](https://www.modpackindex.com/badge/mod/60637/paradigm-essentials/version.svg?style=large)](https://www.modpackindex.com/mod/60637/paradigm-essentials)
 
 **Paradigm Essentials** is a modular **server administration suite** for Minecraft.
 
-Manage your server, players, permissions, moderation, communication, and automation from one cozy little mod with a built-in **local web dashboard** for when editing JSON files stops being fun :P
-
-Built for **Forge, Fabric, and NeoForge** servers.
-
-**Version:** `2.2.4`  
+**Version:** `2.4.2b`  
 **Author:** Avalanche7CZ  
 **License:** CC-BY-NC-ND-4.0
 
 ---
 
-# One Mod, Lots of Server features
+# One Mod, all the features you need
 
-Paradigm combines the everyday tools a server needs into one modular system.
+> Paradigm started because I needed a simple announcement mod for Forge (Thats why, older files are named "ForgeAnnouncements").
+> 
+> Then I needed another feature, and another. And eventually I got tired of installing a bunch of different mods just to do different things, each with its own configs, commands and way of working.
+> 
+> So Paradigm slowly became the mod I wanted to have from the start: server administration, communication and automation in one place.
+> 
+> And lately, that is also part of the goal. Give smaller servers and networks access to the kind of tools you usually see on much bigger modded networks, without needing a whole team of developers behind them.
 
-Enable what you need, disable what you dont, and do everything without downloading lots  of separate mods.
+---
 
-### Local Server Dashboard
+
+### Local Server/Network Dashboard
 
 Paradigm includes a built-in **local web dashboard** for server administration and configuration.
 
 - Configuration editors for each module
-- Permission and group management
-- Command settings and cooldowns
-- MOTD editor with formatting tools and previews
-- Custom command editor
-- Storage status and migration tools
-
 **No external panel required. It runs with your server all localy.**
 
 ![dasboard_local_beta](https://cdn.modrinth.com/data/cached_images/0c3711b5d2973fb17ddf9948865c7fd6e53aa844.png)
@@ -37,16 +35,10 @@ Paradigm includes a built-in **local web dashboard** for server administration a
 
 ### Server Administration
 
-A collection of familiar server management and essential :3 commands.
+A collection of familiar server management and essential :3 commands (Inspired by EssentialsX Plugin).
 
-- Homes and `/back`
-- Spawn management
-- Warps
+- /home and `/back`
 - /tpa
-- Fly and movement speed
-- Heal and feed
-- Gamemode shortcuts
-- Time and weather controls
 
 And plenty of admin utilities:
 
@@ -75,17 +67,9 @@ Already using LuckPerms? Paradigm also includes **LuckPerms migration tools** fo
 
 Standard Commands for Moderating Players
 
-- Kicks /kick
-- Bans and temporary bans (/ban, /tempban)
-- IP bans (/ipban)
-- Mutes and temporary mutes (/mute)
-- Warnings (/warn)
-- Jail system (/jail)
 - Punishment history 
 - Active punishment tracking
 - Server and network punishment scopes (for Network bans , using MySQL)
-
-The dashboard provides a player history, like date of the ban, reason etc. 
 
 ---
 
@@ -93,9 +77,8 @@ The dashboard provides a player history, like date of the ban, reason etc.
 
 Keep players and staff connected without needing another chat mods.
 
-- Private messages with `/msg`
-- Quick replies with `/reply` or `/r`
-- Player mentions using `@PlayerName`
+- Private messages with `/msg` and reply
+- Player mentions using `@PlayerName` (inspired by discord mention system)
 - Staff chat `/sc`
 - Private group chats `/groupchat`
 - **CUSTOM **Join and leave messages
@@ -127,11 +110,6 @@ Paradigm includes its own message formatting system (inspired by mini message fo
 - Minecraft colors
 - Hex colors (`&#RRGGBB`)
 - Gradients and styled text
-- Bold, italic, underline, and strikethrough
-- Clickable links
-- Hover text
-- Click-to-run commands
-- Dynamic placeholders
 
 ![In-Game MOTD](https://cdn.modrinth.com/data/cached_images/d3310a386583c554820e482b251b4ab6978b0eb5.png)
 
@@ -142,12 +120,8 @@ Paradigm includes its own message formatting system (inspired by mini message fo
 Make the server a little prettier before players even join.
 
 - Dynamic server-list MOTDs
-- Multiple MOTD profiles
-- Random MOTD rotation
 - Custom server icons
 - Player-count hover customization
-- Personalized in-game welcome MOTD
-- Dashboard MOTD editor with live-style previews and few templates
 
 ![Server List](https://cdn.modrinth.com/data/cached_images/b2a38e9b9fb07f3e41d56be4b947f235f92cb60b_0.webp)
 
@@ -177,56 +151,11 @@ Perfect for server information, links, shortcuts, rules, and other small server-
 
 ---
 
-### Flexible Data Storage
-
-Paradigm can store server data using multiple storage providers.
-
-- JSON
-- SQLite
-- MySQL / MariaDB
-
-Storage status, connection testing, fallback state, and migration dry runs are available directly from the dashboard.
-
-Existing data can be migrated between supported storage providers with conflict handling and migration previews.
-
----
-
 # Modular by Design
 
-Don't need part of Paradigm? Turn it off.
+Dont need part of Paradigm? Turn it off.
 
-Modules and commands can be configured individually, and built-in command roots can be enabled or disabled through the dashboard or in json config.
-
----
-
-## Installation
-
-1. Install the supported **Forge, Fabric, or NeoForge** version for your Minecraft server.
-2. Download the matching Paradigm `.jar`.
-3. Place it in your server's `mods` folder.
-4. Start the server.
-
-Paradigm will generate its configuration and data files automatically.
-
-For Fabric versions, **dont forget Fabric API**. (If you are using downloaded fabric modpack, the API will be there already)
-
----
-
-## Commands
-
-Paradigm contains quite a few commands now. Like... a lot. qwq
-
-Use:
-
-```
-
-/paradigm help
-
-```
-
-for built-in help and module information.
-
-The dashboard also includes searchable command settings for enabling or disabling built-in command roots.
+Modules and commands can be configured individually, and built-in command roots can be enabled or disabled through the dashboard or in config.
 
 ---
 
@@ -243,7 +172,7 @@ I am open to most reasonable requests. Any additional permission must be agreed 
 
 ## Support & Community
 
-Need help, found a bug, or have a cute little feature idea?
+Need help, found a bug, or have feature idea?
 
 Come say hi ♡
 
@@ -257,11 +186,11 @@ Enjoying Paradigm and want to support its development?
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L4Z8L38)
 
-Every bit of support helps me spend more time making Paradigm better and adding more silly server things. ♡
+Every bit of support helps me spend more time making it better and adding more server things. ♡
 
 ---
 
 # Credits
 
-**Paradigm** is developed and maintained with lots of caffeine and questionable sleep decisions by **Avalanche7CZ**.
+**Paradigm** is developed and maintained by **Avalanche7CZ**.
 ```
