@@ -123,9 +123,27 @@
     }
   },
   "permission": {
-    "context": { "global": "глобально", "server": "сервер", "network": "сеть", "world": "мир", "dimension": "измерение", "custom": "пользовательский контекст" },
-    "expiry": { "permanent": "постоянно", "expires_in": "истекает через {duration}", "expired": "истекло", "until": "до {time}" },
-    "assignment": { "id": "id: {id}", "remove": "удалить", "remove_tooltip": "Удалить это назначение", "not_found": "Назначение разрешения {id} не найдено.", "ambiguous": "Совпадает несколько назначений. Используйте их ID назначения." },
+    "context": {
+      "global": "глобально",
+      "server": "сервер",
+      "network": "сеть",
+      "world": "мир",
+      "dimension": "измерение",
+      "custom": "пользовательский контекст"
+    },
+    "expiry": {
+      "permanent": "постоянно",
+      "expires_in": "истекает через {duration}",
+      "expired": "истекло",
+      "until": "до {time}"
+    },
+    "assignment": {
+      "id": "id: {id}",
+      "remove": "удалить",
+      "remove_tooltip": "Удалить это назначение",
+      "not_found": "Назначение разрешения {id} не найдено.",
+      "ambiguous": "Совпадает несколько назначений. Используйте их ID назначения."
+    },
     "panel": {
       "title": "Разрешения",
       "groups": "группы",
@@ -521,10 +539,27 @@
       "ambiguous": "Укажите точный ID наказания. Подходящие ID: {ids}",
       "not_found": "Наказание не найдено или не активно.",
       "detail": "{id} {type} {status} | {player} | {scope} | {reason}",
-      "expiry": { "permanent": "Навсегда", "temporary": "Истекает {expiry}" },
-      "status": { "active": "Активно", "expired": "Истекло", "revoked": "Отменено", "pending": "Ожидает" },
-      "type": { "ban": "Бан", "ip_ban": "IP-бан", "mute": "Мут", "warn": "Предупреждение", "jail": "Тюрьма" },
-      "scope": { "global": "Сеть", "server": "Сервер" }
+      "expiry": {
+        "permanent": "Навсегда",
+        "temporary": "Истекает {expiry}"
+      },
+      "status": {
+        "active": "Активно",
+        "expired": "Истекло",
+        "revoked": "Отменено",
+        "pending": "Ожидает"
+      },
+      "type": {
+        "ban": "Бан",
+        "ip_ban": "IP-бан",
+        "mute": "Мут",
+        "warn": "Предупреждение",
+        "jail": "Тюрьма"
+      },
+      "scope": {
+        "global": "Сеть",
+        "server": "Сервер"
+      }
     },
     "history": {
       "empty": "История наказаний для {player} отсутствует.",
@@ -606,5 +641,41 @@
   },
   "reload": {
     "customcommands_success": "Перезагружено custom commands из конфига: {count}."
+  },
+  "tickets": {
+    "players_only": "Команды тикетов в чате доступны только игрокам. Используйте панель управления.",
+    "created": "Тикет {ticket} создан.",
+    "replied": "Ответ добавлен к {ticket}.",
+    "closed": "Тикет {ticket} закрыт.",
+    "reopened": "Тикет {ticket} открыт заново.",
+    "claimed": "Вы взяли тикет {ticket}.",
+    "unclaimed": "Тикет {ticket} больше никому не назначен.",
+    "resolved": "Тикет {ticket} отмечен как решённый.",
+    "assigned": "Тикет {ticket} назначен игроку {target}.",
+    "priority_changed": "Приоритет тикета {ticket} теперь {value}.",
+    "status_changed": "Статус тикета {ticket} теперь {value}.",
+    "category_changed": "Категория тикета {ticket} теперь {value}.",
+    "error": {
+      "ok": "Готово.",
+      "disabled": "Система тикетов отключена.",
+      "storage_unavailable": "Хранилище тикетов недоступно.",
+      "not_found": "Тикет {ticket} не найден.",
+      "closed": "Тикет {ticket} закрыт. Сначала откройте его заново.",
+      "stale": "Тикет {ticket} изменился, пока вы с ним работали. Обновите и попробуйте снова.",
+      "already_claimed": "Тикет {ticket} уже взят игроком {actor}.",
+      "not_claimed": "Тикет {ticket} никому не назначен.",
+      "invalid_assignee": "{actor} — не игрок, известный Paradigm.",
+      "invalid_status": "Неизвестный статус тикета.",
+      "invalid_transition": "Тикет {ticket} нельзя перевести в этот статус.",
+      "invalid_priority": "Неизвестный приоритет тикета.",
+      "invalid_category": "Неизвестная или отключённая категория тикета.",
+      "urgent_not_allowed": "Вам нельзя устанавливать приоритет URGENT.",
+      "limit_reached": "У вас уже {limit} открытых тикетов.",
+      "cooldown": "Подождите {duration} перед созданием следующего тикета.",
+      "message_empty": "Сообщение не может быть пустым.",
+      "message_too_long": "Ваше сообщение длиннее {limit} символов.",
+      "reopen_window": "Вы больше не можете открыть тикет {ticket}. Обратитесь к персоналу.",
+      "permission_denied": "У вас нет прав на это действие."
+    }
   }
 }

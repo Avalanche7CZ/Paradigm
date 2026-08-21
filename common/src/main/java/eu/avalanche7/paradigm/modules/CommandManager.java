@@ -348,157 +348,19 @@ public class CommandManager implements ParadigmModule {
         executeActions(source, command.getActions(), player, argsTokens, rawArgs);
     }
 
+    private eu.avalanche7.paradigm.modules.actions.ActionContext actionContext(
+            ICommandSource source, IPlayer player, String[] argsTokens, String rawArgs) {
+        return eu.avalanche7.paradigm.modules.actions.ActionContext.builder(services)
+                .source(source)
+                .player(player)
+                .args(argsTokens)
+                .rawArgs(rawArgs)
+                .origin("custom_command")
+                .build();
+    }
+
     private void executeActions(ICommandSource source, List<CustomCommand.Action> actions, IPlayer player, String[] argsTokens, String rawArgs) {
-        if (actions == null) return;
-
-        for (CustomCommand.Action action : actions) {
-            String type = action.getType();
-            if (type == null) type = "";
-
-            switch (type) {
-                case "message" -> {
-                    if (action.getText() != null) {
-                        for (String line : action.getText()) {
-                            String expandedLine = expandCommand(line, player, argsTokens, rawArgs);
-                            IComponent formatted = services.getMessageParser().parseMessage(expandedLine, player);
-                            platform.sendSuccess(source, formatted, false);
-                        }
-                    }
-                }
-                case "teleport" -> {
-                    if (player != null && action.getX() != null && action.getY() != null && action.getZ() != null) {
-                        platform.teleportPlayer(player, action.getX(), action.getY(), action.getZ());
-                    } else if (player == null) {
-                        platform.sendFailure(source, services.getMessageParser().parseMessage("&cTeleport action can only be performed by a player.", null));
-                    } else {
-                        platform.sendFailure(source, services.getMessageParser().parseMessage("&cInvalid teleport coordinates.", player));
-                    }
-                }
-                case "run_command", "runcmd", "command" -> {
-                    if (action.getCommands() != null) {
-                        for (String cmd : action.getCommands()) {
-                            String processed = expandCommand(cmd, player, argsTokens, rawArgs);
-                            platform.executeCommandAs(source, processed);
-                        }
-                    }
-                }
-                case "run_console" -> {
-                    if (action.getCommands() != null) {
-                        for (String cmd : action.getCommands()) {
-                            String processed = expandCommand(cmd, player, argsTokens, rawArgs);
-                            platform.executeCommandAsConsole(processed);
-                        }
-                    }
-                }
-                case "conditional" -> {
-                    if (checkAllConditions(source, action.getConditions(), player)) {
-                        executeActions(source, action.getOnSuccess(), player, argsTokens, rawArgs);
-                    } else {
-                        executeActions(source, action.getOnFailure(), player, argsTokens, rawArgs);
-                    }
-                }
-                default -> platform.sendFailure(source,
-                        services.getMessageParser().parseMessage("&cUnknown action type: " + type, player));
-            }
-        }
-    }
-
-    private String expandCommand(String cmd, IPlayer player, String[] argsTokens, String rawArgs) {
-        String out = platform.replacePlaceholders(cmd, player);
-
-        if (out.contains("$*")) {
-            out = out.replace("$*", rawArgs == null ? "" : rawArgs);
-        }
-
-        for (int i = 0; i < argsTokens.length; i++) {
-            String token = "$" + (i + 1);
-            if (out.contains(token)) {
-                String argValue = argsTokens[i];
-                if (argValue == null || argValue.isEmpty()) {
-                    argValue = "";
-                }
-                out = out.replace(token, argValue);
-            }
-        }
-
-        out = out.replaceAll("\\$[1-9][0-9]*", "");
-        return out.trim();
-    }
-
-    private boolean checkAllConditions(ICommandSource source, List<CustomCommand.Condition> conditions, IPlayer player) {
-        if (conditions == null || conditions.isEmpty()) {
-            return true;
-        }
-        for (CustomCommand.Condition condition : conditions) {
-            if (!checkCondition(source, condition, player)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private boolean checkCondition(ICommandSource source, CustomCommand.Condition condition, IPlayer player) {
-        boolean result;
-
-        if (player == null) {
-            switch (condition.getType()) {
-                case "has_permission", "has_item", "is_op" -> {
-                    services.getDebugLogger().debugLog("Conditional check '" + condition.getType() + "' requires a player, but was run from console. Failing condition.");
-                    return false;
-                }
-            }
-        }
-
-        switch (condition.getType()) {
-            case "has_permission" -> result = (player != null && condition.getValue() != null)
-                    && services.getPermissionsHandler().hasPermission(player, condition.getValue());
-            case "has_item" -> result = (player != null && condition.getValue() != null)
-                    && platform.playerHasItem(player, condition.getValue(), condition.getItemAmount());
-            case "health_above" -> {
-                if (player == null || player.getHealth() == null || condition.getValue() == null) {
-                    result = false;
-                } else {
-                    double limit;
-                    try {
-                        limit = Double.parseDouble(condition.getValue());
-                    } catch (NumberFormatException e) {
-                        platform.sendFailure(source,
-                                services.getMessageParser().parseMessage("&cInvalid health value for condition: " + condition.getValue(), player));
-                        return false;
-                    }
-                    result = player.getHealth() > limit;
-                }
-            }
-            case "health_below" -> {
-                if (player == null || player.getHealth() == null || condition.getValue() == null) {
-                    result = false;
-                } else {
-                    double limit;
-                    try {
-                        limit = Double.parseDouble(condition.getValue());
-                    } catch (NumberFormatException e) {
-                        platform.sendFailure(source,
-                                services.getMessageParser().parseMessage("&cInvalid health value for condition: " + condition.getValue(), player));
-                        return false;
-                    }
-                    result = player.getHealth() < limit;
-                }
-            }
-            case "is_op" -> {
-                int level = 2;
-                try {
-                    if (condition.getValue() != null) level = Integer.parseInt(condition.getValue());
-                } catch (NumberFormatException ignored) {}
-                result = player != null && services.getPermissionsHandler().hasPermission(player, "minecraft.command.op", level);
-            }
-            default -> {
-                platform.sendFailure(source,
-                        services.getMessageParser().parseMessage("&cUnknown condition type: " + condition.getType(), player));
-                return false;
-            }
-        }
-
-        return condition.isNegate() != result;
+        services.getActionDispatcher().execute(actions, actionContext(source, player, argsTokens, rawArgs));
     }
 
     @Override

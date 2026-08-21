@@ -35,7 +35,56 @@ public final class PermissionCommands {
         return root
                 .then(buildHomeBranch(platform, services))
                 .then(buildPermissionBranch(platform, services))
-                .then(buildGroupBranch(platform, services));
+                .then(buildGroupBranch(platform, services))
+                .then(buildTrackBranch(platform, services))
+                .then(buildRankBranch(platform, services, "promote"))
+                .then(buildRankBranch(platform, services, "demote"));
+    }
+
+    private static ICommandBuilder buildTrackBranch(IPlatformAdapter platform, Services services) {
+        ICommandBuilder root = platform.createCommandBuilder().literal("track")
+                .requires(source -> hasGroupManagePermission(source, services))
+                .executes(context -> {
+                    String names = services.getPermissionsHandler().listPermissionTracks().stream().map(track -> track.name()).collect(java.util.stream.Collectors.joining(", "));
+                    platform.sendSuccess(context.getSource(), platform.createLiteralComponent(names.isBlank() ? "No permission tracks." : "Tracks: " + names), false);
+                    return 1;
+                });
+        root.then(platform.createCommandBuilder().literal("create").then(platform.createCommandBuilder().argument("track", ICommandBuilder.ArgumentType.WORD)
+                .executes(context -> mutateTrack(context.getSource(), services, "track_create", context.getStringArgument("track"), null, null, null))));
+        root.then(platform.createCommandBuilder().literal("delete").then(platform.createCommandBuilder().argument("track", ICommandBuilder.ArgumentType.WORD)
+                .suggests((context, input) -> trackSuggestions(services, input))
+                .executes(context -> mutateTrack(context.getSource(), services, "track_delete", context.getStringArgument("track"), null, null, null))));
+        root.then(platform.createCommandBuilder().literal("info").then(platform.createCommandBuilder().argument("track", ICommandBuilder.ArgumentType.WORD)
+                .suggests((context, input) -> trackSuggestions(services, input))
+                .executes(context -> showTrack(context.getSource(), platform, services, context.getStringArgument("track")))));
+        root.then(platform.createCommandBuilder().literal("clear").then(platform.createCommandBuilder().argument("track", ICommandBuilder.ArgumentType.WORD)
+                .suggests((context, input) -> trackSuggestions(services, input))
+                .executes(context -> mutateTrack(context.getSource(), services, "track_clear", context.getStringArgument("track"), null, null, null))));
+        root.then(platform.createCommandBuilder().literal("append").then(platform.createCommandBuilder().argument("track", ICommandBuilder.ArgumentType.WORD)
+                .suggests((context, input) -> trackSuggestions(services, input))
+                .then(platform.createCommandBuilder().argument("group", ICommandBuilder.ArgumentType.WORD)
+                        .suggests((context, input) -> services.getPermissionsHandler().listPermissionGroups())
+                        .executes(context -> mutateTrack(context.getSource(), services, "track_append", context.getStringArgument("track"), context.getStringArgument("group"), null, null)))));
+        root.then(platform.createCommandBuilder().literal("remove").then(platform.createCommandBuilder().argument("track", ICommandBuilder.ArgumentType.WORD)
+                .suggests((context, input) -> trackSuggestions(services, input))
+                .then(platform.createCommandBuilder().argument("group", ICommandBuilder.ArgumentType.WORD)
+                        .executes(context -> mutateTrack(context.getSource(), services, "track_remove", context.getStringArgument("track"), context.getStringArgument("group"), null, null)))));
+        root.then(platform.createCommandBuilder().literal("move").then(platform.createCommandBuilder().argument("track", ICommandBuilder.ArgumentType.WORD)
+                .suggests((context, input) -> trackSuggestions(services, input))
+                .then(platform.createCommandBuilder().argument("group", ICommandBuilder.ArgumentType.WORD)
+                        .then(platform.createCommandBuilder().argument("position", ICommandBuilder.ArgumentType.INTEGER)
+                                .executes(context -> mutateTrack(context.getSource(), services, "track_move", context.getStringArgument("track"), context.getStringArgument("group"), null, context.getIntArgument("position")))))));
+        return root;
+    }
+
+    private static ICommandBuilder buildRankBranch(IPlatformAdapter platform, Services services, String action) {
+        return platform.createCommandBuilder().literal(action)
+                .requires(source -> hasGroupManagePermission(source, services))
+                .then(platform.createCommandBuilder().argument("player", ICommandBuilder.ArgumentType.WORD)
+                        .then(platform.createCommandBuilder().argument("track", ICommandBuilder.ArgumentType.WORD)
+                                .suggests((context, input) -> trackSuggestions(services, input))
+                                .executes(context -> mutateRank(context.getSource(), services, action,
+                                        context.getStringArgument("player"), context.getStringArgument("track")))));
     }
 
     private static ICommandBuilder buildHomeBranch(IPlatformAdapter platform, Services services) {
@@ -98,6 +147,7 @@ public final class PermissionCommands {
                 + (report.dryRun() ? " (dry-run)" : "") + ": groups=" + report.groups()
                 + ", users=" + report.users() + ", permissions=" + report.permissions()
                 + ", memberships=" + report.memberships() + ", parents=" + report.parents()
+                + ", tracks=" + report.tracks()
                 + ", conflicts=" + report.conflicts() + ", skipped=" + report.skipped();
         if (report.ok()) platform.sendSuccess(source, platform.createLiteralComponent(summary), false);
         else platform.sendFailure(source, platform.createLiteralComponent(summary));
@@ -228,9 +278,13 @@ public final class PermissionCommands {
         ICommandBuilder setPrefix = buildGroupTextMetadataCommand(platform, services, "setprefix", "prefix");
         ICommandBuilder setSuffix = buildGroupTextMetadataCommand(platform, services, "setsuffix", "suffix");
         ICommandBuilder setDescription = buildGroupTextMetadataCommand(platform, services, "setdescription", "description");
+        ICommandBuilder showTracks = platform.createCommandBuilder().literal("showtracks")
+                .then(platform.createCommandBuilder().argument("group", ICommandBuilder.ArgumentType.WORD)
+                        .suggests((context, input) -> services.getPermissionsHandler().listPermissionGroups())
+                        .executes(context -> showGroupTracks(context.getSource(), platform, services, context.getStringArgument("group"))));
 
         return root.then(list).then(add).then(remove).then(info).then(parent).then(groupPermissions)
-                .then(setWeight).then(setPrefix).then(setSuffix).then(setDescription).then(buildUserBranch(platform, services));
+                .then(setWeight).then(setPrefix).then(setSuffix).then(setDescription).then(showTracks).then(buildUserBranch(platform, services));
     }
 
     private static ICommandBuilder buildGroupPermissionBranch(IPlatformAdapter platform, Services services) {
@@ -333,7 +387,30 @@ public final class PermissionCommands {
                 .then(platform.createCommandBuilder().literal("list").then(platform.createCommandBuilder()
                         .argument("player", ICommandBuilder.ArgumentType.WORD)
                         .executes(context -> showUserInfo(context.getSource(), services, context.getStringArgument("player")))))
+                .then(platform.createCommandBuilder().literal("showtracks").then(platform.createCommandBuilder()
+                        .argument("player", ICommandBuilder.ArgumentType.WORD)
+                        .executes(context -> showUserTracks(context.getSource(), platform, services, context.getStringArgument("player")))))
+                .then(userTrackOperation(platform, services, "promote"))
+                .then(userTrackOperation(platform, services, "demote"))
+                .then(userTrackOperation(platform, services, "cleartrack"))
+                .then(userTrackOperation(platform, services, "settrack"))
                 .then(userPermission);
+    }
+
+    private static ICommandBuilder userTrackOperation(IPlatformAdapter platform, Services services, String action) {
+        ICommandBuilder track = platform.createCommandBuilder().argument("track", ICommandBuilder.ArgumentType.WORD)
+                .suggests((context, input) -> trackSuggestions(services, input));
+        if ("settrack".equals(action)) {
+            track.then(platform.createCommandBuilder().argument("group", ICommandBuilder.ArgumentType.WORD)
+                    .suggests((context, input) -> services.getPermissionsHandler().listPermissionGroups())
+                    .executes(context -> mutateUserTrack(context.getSource(), services, action, context.getStringArgument("player"),
+                            context.getStringArgument("track"), context.getStringArgument("group"))));
+        } else {
+            track.executes(context -> mutateUserTrack(context.getSource(), services, action, context.getStringArgument("player"),
+                    context.getStringArgument("track"), null));
+        }
+        return platform.createCommandBuilder().literal(action).then(platform.createCommandBuilder()
+                .argument("player", ICommandBuilder.ArgumentType.WORD).then(track));
     }
 
     private static ICommandBuilder buildUserPermissionBranch(IPlatformAdapter platform, Services services) {
@@ -625,6 +702,99 @@ public final class PermissionCommands {
 
     private static PermissionMutationResult mutate(ICommandSource source, Services services, PermissionMutationRequest request) {
         return services.getPermissionAdminService().mutateTrusted(commandPrincipal(source), request);
+    }
+
+    private static int mutateTrack(ICommandSource source, Services services, String action, String track, String group, String target, Integer position) {
+        PermissionMutationRequest request = request(action, group, null, null, null, false, PermissionContextSet.empty(), null);
+        request.track = track;
+        request.target = target;
+        request.position = position;
+        PermissionMutationResult result = mutate(source, services, request);
+        if (!result.applied()) {
+            PermissionCommandMessages.send(source, services, "group.manage.track_fail", result.message());
+            return 0;
+        }
+        PermissionCommandMessages.send(source, services, "group.manage.track_ok", result.message());
+        return 1;
+    }
+
+    private static int mutateRank(ICommandSource source, Services services, String action, String player, String track) {
+        UUID uuid = PermissionCommandArguments.resolvePlayerUuid(services, player);
+        if (uuid == null) {
+            PermissionCommandMessages.send(source, services, "group.manage.user_invalid", "Player must be online name or UUID.");
+            return 0;
+        }
+        PermissionMutationRequest request = request(action, null, null, null, uuid.toString(), false, PermissionContextSet.empty(), null);
+        request.track = track;
+        PermissionMutationResult result = mutate(source, services, request);
+        if (!result.applied()) {
+            PermissionCommandMessages.send(source, services, "group.manage.track_rank_fail", result.message());
+            return 0;
+        }
+        PermissionCommandMessages.send(source, services, "group.manage.track_rank_ok", result.message());
+        return 1;
+    }
+
+    private static int mutateUserTrack(ICommandSource source, Services services, String action, String player, String track, String group) {
+        UUID uuid = PermissionCommandArguments.resolvePlayerUuid(services, player);
+        if (uuid == null) {
+            PermissionCommandMessages.send(source, services, "group.manage.user_invalid", "Player must be online name or UUID.");
+            return 0;
+        }
+        PermissionMutationRequest request = request(action, group, null, null, uuid.toString(), false, PermissionContextSet.empty(), null);
+        request.track = track;
+        PermissionMutationResult result = mutate(source, services, request);
+        if (!result.applied()) {
+            PermissionCommandMessages.send(source, services, "group.manage.track_rank_fail", result.message());
+            return 0;
+        }
+        PermissionCommandMessages.send(source, services, "group.manage.track_rank_ok", result.message());
+        return 1;
+    }
+
+    private static int showTrack(ICommandSource source, IPlatformAdapter platform, Services services, String name) {
+        var track = services.getPermissionsHandler().getPermissionTrack(name);
+        if (track == null) {
+            platform.sendFailure(source, platform.createLiteralComponent("Track was not found."));
+            return 0;
+        }
+        String ranks = track.groups().isEmpty() ? "(empty)" : String.join(" -> ", track.groups());
+        platform.sendSuccess(source, platform.createLiteralComponent(track.name() + ": " + ranks), false);
+        return 1;
+    }
+
+    private static int showUserTracks(ICommandSource source, IPlatformAdapter platform, Services services, String player) {
+        UUID uuid = PermissionCommandArguments.resolvePlayerUuid(services, player);
+        if (uuid == null) {
+            platform.sendFailure(source, platform.createLiteralComponent("Player must be online name or UUID."));
+            return 0;
+        }
+        PermissionAPI.UserInfo info = services.getPermissionsHandler().getPlayerPermissionInfo(uuid);
+        List<String> direct = info != null ? info.groupAssignments().stream()
+                .filter(assignment -> assignment.kind() == PermissionAssignment.Kind.USER_GROUP && !assignment.expired())
+                .map(assignment -> assignment.value()).toList() : List.of();
+        List<String> lines = new ArrayList<>();
+        for (var track : services.getPermissionsHandler().listPermissionTracks()) {
+            int position = -1;
+            for (int index = 0; index < track.groups().size(); index++) if (direct.contains(track.groups().get(index))) { position = index + 1; break; }
+            lines.add(track.name() + ": " + (position > 0 ? track.groups().get(position - 1) + " (" + position + "/" + track.groups().size() + ")" : "not on track"));
+        }
+        platform.sendSuccess(source, platform.createLiteralComponent(lines.isEmpty() ? "No permission tracks." : String.join("; ", lines)), false);
+        return 1;
+    }
+
+    private static int showGroupTracks(ICommandSource source, IPlatformAdapter platform, Services services, String group) {
+        List<String> tracks = new ArrayList<>();
+        for (var track : services.getPermissionsHandler().listPermissionTracks()) {
+            int index = track.groups().indexOf(group.toLowerCase(Locale.ROOT));
+            if (index >= 0) tracks.add(track.name() + " (" + (index + 1) + "/" + track.groups().size() + ")");
+        }
+        platform.sendSuccess(source, platform.createLiteralComponent(tracks.isEmpty() ? "Group is not on a track." : String.join("; ", tracks)), false);
+        return 1;
+    }
+
+    private static List<String> trackSuggestions(Services services, String input) {
+        return filterSuggestions(services.getPermissionsHandler().listPermissionTracks().stream().map(track -> track.name()).toList(), input);
     }
 
     private static DashboardPrincipal commandPrincipal(ICommandSource source) {

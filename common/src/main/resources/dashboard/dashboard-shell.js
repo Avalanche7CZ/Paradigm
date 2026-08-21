@@ -3,7 +3,7 @@
 
   const COPY = {
     en: {
-      overview: 'Overview', configuration: 'Configuration', administration: 'Administration', network: 'Network', system: 'System', settings: 'Settings',
+      overview: 'Overview', configuration: 'Configuration', administration: 'Administration', network: 'Network', system: 'System', settings: 'Settings', tickets: 'Tickets',
       searchParadigm: 'Search Paradigm...', configureServer: 'Configure your server', configureServerHelp: 'Choose an area. The existing editors stay exactly where they are, but you no longer need to remember where every setting lives.',
       general: 'General', generalHelp: 'Modules, command families and administration features.', communication: 'Communication', communicationHelp: 'Chat, announcements and Discord.',
       gameplay: 'Gameplay', gameplayHelp: 'Teleports, command availability and command timing.', presentation: 'Presentation', presentationHelp: 'MOTD, tablist and holograms.',
@@ -14,7 +14,7 @@
       searchHelp: 'Type a page, feature, setting label or config key.', esc: 'Esc', enter: 'Enter', generalSettings: 'General settings'
     },
     cs: {
-      overview: 'Přehled', configuration: 'Konfigurace', administration: 'Administrace', network: 'Síť', system: 'Systém', settings: 'Nastavení',
+      overview: 'Přehled', configuration: 'Konfigurace', administration: 'Administrace', network: 'Síť', system: 'Systém', settings: 'Nastavení', tickets: 'Tikety',
       searchParadigm: 'Hledat v Paradigmu...', configureServer: 'Nastavení serveru', configureServerHelp: 'Vyber oblast. Existující editory zůstávají na svém místě, ale nemusíš si pamatovat, kde je každá volba.',
       general: 'Obecné', generalHelp: 'Moduly, skupiny příkazů a administrační funkce.', communication: 'Komunikace', communicationHelp: 'Chat, oznámení a Discord.',
       gameplay: 'Gameplay', gameplayHelp: 'Teleporty, dostupnost příkazů a jejich časování.', presentation: 'Vzhled', presentationHelp: 'MOTD, tablist a hologramy.',
@@ -25,7 +25,7 @@
       searchHelp: 'Napiš stránku, funkci, název nastavení nebo config key.', esc: 'Esc', enter: 'Enter', generalSettings: 'Obecná nastavení'
     },
     ru: {
-      overview: 'Обзор', configuration: 'Конфигурация', administration: 'Администрирование', network: 'Сеть', system: 'Система', settings: 'Настройки',
+      overview: 'Обзор', configuration: 'Конфигурация', administration: 'Администрирование', network: 'Сеть', system: 'Система', settings: 'Настройки', tickets: 'Тикеты',
       searchParadigm: 'Поиск в Paradigm...', configureServer: 'Настройка сервера', configureServerHelp: 'Выберите раздел. Существующие редакторы остаются на месте, но больше не нужно помнить, где находится каждая настройка.',
       general: 'Общие', generalHelp: 'Модули, группы команд и административные функции.', communication: 'Связь', communicationHelp: 'Чат, объявления и Discord.',
       gameplay: 'Геймплей', gameplayHelp: 'Телепорты, доступность команд и тайминги.', presentation: 'Оформление', presentationHelp: 'MOTD, tablist и голограммы.',
@@ -39,22 +39,22 @@
 
   const PAGE_FALLBACKS = {
     overview: 'Overview', general: 'Configuration', teleports: 'Teleports', chat: 'Chat Editor', announcements: 'Announcements', restart: 'Restart',
-    motd: 'MOTD Editor', tablist: 'Tablist', holograms: 'Holograms', customCommands: 'Custom Commands', commands: 'Command Settings', cooldowns: 'Cooldowns',
-    discord: 'Discord', permissions: 'Permission Editor', moderation: 'Moderation', audit: 'Audit', servers: 'Servers', storage: 'Storage', dashboard: 'Settings', storageConfig: 'Storage Configuration'
+    motd: 'MOTD Editor', tablist: 'Tablist', holograms: 'Holograms', menus: 'Menus', customCommands: 'Custom Commands', commands: 'Command Settings', cooldowns: 'Cooldowns',
+    discord: 'Discord', permissions: 'Permission Editor', moderation: 'Moderation', audit: 'Audit', servers: 'Servers', storage: 'Storage', dashboard: 'Settings', storageConfig: 'Storage Configuration', tickets: 'Tickets'
   };
 
   const CONFIG_CARDS = [
     { title: 'general', help: 'generalHelp', links: [['general', 'generalSettings']] },
     { title: 'communication', help: 'communicationHelp', links: [['chat'], ['announcements'], ['discord']] },
     { title: 'gameplay', help: 'gameplayHelp', links: [['teleports'], ['commands'], ['cooldowns']] },
-    { title: 'presentation', help: 'presentationHelp', links: [['motd'], ['tablist'], ['holograms']] },
+    { title: 'presentation', help: 'presentationHelp', links: [['motd'], ['tablist'], ['holograms'], ['menus']] },
     { title: 'automation', help: 'automationHelp', links: [['restart'], ['announcements'], ['customCommands']] },
     { title: 'integrations', help: 'integrationsHelp', links: [['discord'], ['storage']] }
   ];
 
-  const CONFIG_DETAIL_PAGES = ['teleports', 'chat', 'announcements', 'restart', 'motd', 'tablist', 'holograms', 'customCommands', 'commands', 'cooldowns', 'discord'];
+  const CONFIG_DETAIL_PAGES = ['teleports', 'chat', 'announcements', 'restart', 'motd', 'tablist', 'holograms', 'menus', 'customCommands', 'commands', 'cooldowns', 'discord'];
   const SETTINGS_DETAIL_PAGES = ['storage', 'storageConfig'];
-  const SEARCH_PAGES = ['overview', 'general', ...CONFIG_DETAIL_PAGES, 'permissions', 'moderation', 'audit', 'servers', 'storage', 'dashboard', 'storageConfig'];
+  const SEARCH_PAGES = ['overview', 'general', ...CONFIG_DETAIL_PAGES, 'permissions', 'moderation', 'tickets', 'audit', 'servers', 'storage', 'dashboard', 'storageConfig'];
 
   let networkActive = false;
   let palette = null;
@@ -145,7 +145,7 @@
     empty.textContent = 'No matching pages.';
     navigation.replaceChildren(
       makeNavGroup('', [['overview', tr('overview')], ['general', tr('configuration')]], { className: 'shell-primary-nav' }),
-      makeNavGroup(tr('administration'), [['permissions', pageLabel('permissions')], ['moderation', pageLabel('moderation')], ['audit', pageLabel('audit')]]),
+      makeNavGroup(tr('administration'), [['permissions', pageLabel('permissions')], ['moderation', pageLabel('moderation')], ['tickets', pageLabel('tickets')], ['audit', pageLabel('audit')]]),
       makeNavGroup(tr('network'), [['servers', pageLabel('servers')]], { network: true }),
       makeNavGroup(tr('system'), [['dashboard', tr('settings')]]),
       empty

@@ -50,8 +50,10 @@ import eu.avalanche7.paradigm.modules.commands.moderation.WarnCommand;
 import eu.avalanche7.paradigm.modules.dashboard.LocalDashboardModule;
 import eu.avalanche7.paradigm.modules.discord.DiscordModule;
 import eu.avalanche7.paradigm.modules.holograms.Holograms;
+import eu.avalanche7.paradigm.modules.menus.Menus;
 import eu.avalanche7.paradigm.modules.playtime.PlaytimeModule;
 import eu.avalanche7.paradigm.modules.tab.Tablist;
+import eu.avalanche7.paradigm.modules.tickets.TicketsModule;
 import eu.avalanche7.paradigm.utils.GroupChatManager;
 
 public final class ParadigmModules {
@@ -91,6 +93,7 @@ public final class ParadigmModules {
     private static void playerCommands(List<ParadigmModule> modules) {
         modules.add(new CommandManager());
         modules.add(new Holograms());
+        modules.add(new Menus());
         modules.add(new HomeCommand());
         modules.add(new TpaCommand());
         modules.add(new WarpCommand());
@@ -129,6 +132,7 @@ public final class ParadigmModules {
         modules.add(new NearCommand());
         modules.add(new WhoisCommand());
         modules.add(new MovementUtilityCommand());
+        modules.add(new TicketsModule());
         modules.add(new LocalDashboardModule());
         modules.add(new Reload());
     }

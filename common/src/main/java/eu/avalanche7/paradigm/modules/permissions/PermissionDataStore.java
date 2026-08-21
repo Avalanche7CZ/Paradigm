@@ -107,6 +107,8 @@ public class PermissionDataStore {
         public String defaultGroup = "default";
         public Map<String, GroupEntry> groups = new LinkedHashMap<>();
         public Map<String, UserEntry> users = new LinkedHashMap<>();
+        /** Tracks intentionally retain their member order. */
+        public Map<String, List<String>> tracks = new LinkedHashMap<>();
 
         public static PermissionState createDefault() {
             PermissionState state = new PermissionState();
@@ -126,6 +128,9 @@ public class PermissionDataStore {
             }
             if (users == null) {
                 users = new LinkedHashMap<>();
+            }
+            if (tracks == null) {
+                tracks = new LinkedHashMap<>();
             }
 
             Map<String, GroupEntry> normalizedGroups = new LinkedHashMap<>();
@@ -155,6 +160,21 @@ public class PermissionDataStore {
                 normalizedUsers.put(normalizedUuid, normalizedEntry);
             }
             users = normalizedUsers;
+
+            Map<String, List<String>> normalizedTracks = new LinkedHashMap<>();
+            for (Map.Entry<String, List<String>> entry : tracks.entrySet()) {
+                String track = normalizeGroupName(entry.getKey());
+                if (track == null || normalizedTracks.containsKey(track)) continue;
+                List<String> members = new ArrayList<>();
+                if (entry.getValue() != null) {
+                    for (String group : entry.getValue()) {
+                        String normalized = normalizeGroupName(group);
+                        if (normalized != null && groups.containsKey(normalized) && !members.contains(normalized)) members.add(normalized);
+                    }
+                }
+                normalizedTracks.put(track, members);
+            }
+            tracks = normalizedTracks;
 
             String defaultKey = defaultGroup.toLowerCase(Locale.ROOT);
             if (!groups.containsKey(defaultKey)) {

@@ -62,6 +62,14 @@ public class PermissionAdminService {
             return result(false, "invalid_expiry", e.getMessage(), false);
         }
 
+        if (action.startsWith("track_") || Set.of("promote", "demote", "settrack", "cleartrack").contains(action)) {
+            PermissionMutationResult trackResult = mutateTrack(actor, safe, action, contexts, expiresAtMs);
+            if (trackResult.applied() && services.getPlatformAdapter() != null) {
+                try { services.getPlatformAdapter().refreshAllPlayerCommandTrees(); } catch (Throwable ignored) { }
+            }
+            return trackResult;
+        }
+
         boolean denied = Boolean.TRUE.equals(safe.denied) || permission.startsWith("-");
         if (permission.startsWith("-")) {
             permission = permission.substring(1);
@@ -245,6 +253,43 @@ public class PermissionAdminService {
         if (audit != null) {
             audit.dashboard(actor, type, result, message, details);
         }
+    }
+
+    private PermissionMutationResult mutateTrack(DashboardPrincipal actor, PermissionMutationRequest request, String action,
+                                                 PermissionContextSet contexts, Long expiresAtMs) {
+        String track = text(request.track);
+        if (track.isBlank()) track = text(request.group);
+        PermissionTrackResult changed;
+        if (action.startsWith("track_")) {
+            changed = services.getPermissionsHandler().mutatePermissionTrack(action, track, text(request.group), text(request.target), request.position);
+        } else {
+            UUID user = resolveUuid(request.user);
+            String operation = switch (action) {
+                case "settrack" -> "set";
+                case "cleartrack" -> "clear";
+                default -> action;
+            };
+            changed = services.getPermissionsHandler().movePlayerOnTrack(user, track, contexts, operation,
+                    Boolean.TRUE.equals(request.dontAddToFirst), Boolean.TRUE.equals(request.dontRemoveFromFirst),
+                    expiresAtMs, actor != null ? actor.name() : "dashboard", text(request.group));
+        }
+        Map<String, String> auditDetails = new LinkedHashMap<>();
+        auditDetails.put("action", action);
+        auditDetails.put("track", track);
+        auditDetails.put("user", text(request.user));
+        auditDetails.put("oldPosition", changed.oldPosition() != null ? String.valueOf(changed.oldPosition()) : "");
+        auditDetails.put("newPosition", changed.newPosition() != null ? String.valueOf(changed.newPosition()) : "");
+        auditDetails.put("contexts", contexts.canonical());
+        auditDetails.put("expiresAtMs", expiresAtMs != null ? String.valueOf(expiresAtMs) : "");
+        if (!changed.conflictingGroups().isEmpty()) auditDetails.put("conflictingGroups", String.join(",", changed.conflictingGroups()));
+        audit(actor, AuditActionType.GROUP_CHANGE, changed.applied() ? AuditResult.SUCCESS : AuditResult.FAILED,
+                changed.applied() ? "Track mutation applied." : "Track mutation rejected.", auditDetails);
+        Map<String, Object> details = new LinkedHashMap<>();
+        details.put("track", changed.track());
+        details.put("oldPosition", changed.oldPosition());
+        details.put("newPosition", changed.newPosition());
+        details.put("conflictingGroups", changed.conflictingGroups());
+        return new PermissionMutationResult(changed.applied(), changed.code(), changed.message(), false, details);
     }
 
     private static AuditActionType auditType(String action) {

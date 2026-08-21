@@ -5,6 +5,7 @@ import java.util.Optional;
 
 import eu.avalanche7.paradigm.storage.model.StoredPermissionGroup;
 import eu.avalanche7.paradigm.storage.model.StoredPermissionNode;
+import eu.avalanche7.paradigm.storage.model.StoredPermissionTrack;
 import eu.avalanche7.paradigm.storage.model.StoredUserPermissionData;
 
 public interface PermissionRepository {
@@ -12,6 +13,11 @@ public interface PermissionRepository {
     Optional<StoredPermissionGroup> getGroup(String groupName);
     void saveGroup(StoredPermissionGroup group);
     boolean deleteGroup(String groupName);
+
+    default List<StoredPermissionTrack> listTracks() { return List.of(); }
+    default Optional<StoredPermissionTrack> getTrack(String trackName) { return Optional.empty(); }
+    default void saveTrack(StoredPermissionTrack track) { throw new UnsupportedOperationException("Tracks are not supported"); }
+    default boolean deleteTrack(String trackName) { return false; }
 
     void addGroupParent(String groupName, String parentName);
     boolean removeGroupParent(String groupName, String parentName);

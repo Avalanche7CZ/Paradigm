@@ -14,6 +14,7 @@ import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
 import eu.avalanche7.paradigm.storage.model.StoredAdminState;
 import eu.avalanche7.paradigm.storage.model.StoredJailState;
 import eu.avalanche7.paradigm.storage.model.StoredPermissionGroup;
+import eu.avalanche7.paradigm.storage.model.StoredPermissionTrack;
 import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
 import eu.avalanche7.paradigm.storage.model.StoredPunishment;
 import eu.avalanche7.paradigm.storage.model.StoredUserPermissionData;
@@ -202,6 +203,15 @@ public class StorageMigrationService {
                     () -> target.permissions().saveGroup(group))) {
                 counter.permissionGroups++;
             }
+        }
+        for (StoredPermissionTrack track : source.permissions().listTracks()) {
+            if (track == null || track.name() == null || track.name().isBlank()) {
+                counter.skipped++;
+                continue;
+            }
+            transfer(counter, "permission track " + track.name(),
+                    () -> target.permissions().getTrack(track.name()).isPresent(),
+                    () -> target.permissions().saveTrack(track));
         }
         for (StoredUserPermissionData user : source.permissions().listUsers()) {
             if (user == null || user.uuid() == null || user.uuid().isBlank()) {

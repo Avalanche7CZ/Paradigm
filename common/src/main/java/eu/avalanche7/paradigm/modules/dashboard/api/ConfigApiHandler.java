@@ -2,9 +2,14 @@ package eu.avalanche7.paradigm.modules.dashboard.api;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
+import eu.avalanche7.paradigm.configs.schema.ConfigCategory;
 import eu.avalanche7.paradigm.configs.schema.ConfigField;
 import eu.avalanche7.paradigm.configs.schema.ConfigPatch;
 import eu.avalanche7.paradigm.configs.schema.ConfigPatchOperation;
@@ -16,6 +21,8 @@ import eu.avalanche7.paradigm.modules.dashboard.DashboardMutationFeedback;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardRequestContext;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardResponse;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardService;
+import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardAuthorization;
+import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
 
 public class ConfigApiHandler {
     private final DashboardService dashboard;
@@ -25,7 +32,19 @@ public class ConfigApiHandler {
     }
 
     public DashboardResponse snapshot(DashboardRequestContext ctx) {
-        return DashboardResponse.apiOk(dashboard.schemaRegistry().snapshot());
+        ConfigSnapshot full = dashboard.schemaRegistry().snapshot();
+        DashboardPrincipal principal = ctx.principal();
+        Set<String> viewableCategories = full.categories().stream()
+                .map(ConfigCategory::id)
+                .filter(category -> dashboard.canViewConfigCategory(principal, category))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        List<ConfigField> visibleFields = full.fields().stream()
+                .filter(field -> viewableCategories.contains(field.category()))
+                .toList();
+        List<ConfigCategory> visibleCategories = full.categories().stream()
+                .filter(category -> viewableCategories.contains(category.id()))
+                .toList();
+        return DashboardResponse.apiOk(new ConfigSnapshot(full.revision(), full.createdAtMs(), visibleCategories, visibleFields));
     }
 
     public DashboardResponse patch(DashboardRequestContext ctx) {
@@ -52,6 +71,22 @@ public class ConfigApiHandler {
         Map<String, ConfigField> fieldsByKey = new HashMap<>();
         for (ConfigField field : current.fields()) {
             fieldsByKey.put(field.key(), field);
+        }
+
+        Set<String> touchedCategories = new LinkedHashSet<>();
+        for (ConfigPatchOperation op : patch.operations()) {
+            ConfigField field = op != null ? fieldsByKey.get(op.key()) : null;
+            if (field != null) {
+                touchedCategories.add(field.category());
+            }
+        }
+        if (!dashboard.canEditConfigCategories(ctx.principal(), touchedCategories)) {
+            ConfigValidationResult denied = new ConfigValidationResult();
+            denied.reject("<permission>", "You do not have permission to edit one or more of the affected configuration sections.");
+            dashboard.audit().dashboard(ctx.principal(), AuditActionType.CONFIG_PATCH, AuditResult.DENIED,
+                    "Config patch rejected: insufficient section permission.", Map.of("categories", String.join(",", touchedCategories)));
+            return DashboardResponse.json(403, new DashboardResponse.ApiEnvelope(false, denied,
+                    new DashboardResponse.ApiError("permission_denied", "You do not have permission to edit one or more of the affected configuration sections."), denied.warnings()));
         }
 
         List<ConfigPatchOperation> unmanagedOps = new ArrayList<>();
@@ -108,6 +143,10 @@ public class ConfigApiHandler {
     public DashboardResponse apply(DashboardRequestContext ctx) throws Exception {
         ApplyRequest request = eu.avalanche7.paradigm.modules.dashboard.DashboardJson.fromJson(ctx.bodyReader(), ApplyRequest.class);
         String page = request != null ? request.page : "";
+        Set<String> categories = DashboardAuthorization.categoriesForPage(page != null ? page.toLowerCase(Locale.ROOT) : "");
+        if (!dashboard.canEditConfigCategories(ctx.principal(), categories)) {
+            return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to reload this configuration section.");
+        }
         Object result = dashboard.applyConfigAsync(page).get();
         dashboard.audit().dashboard(ctx.principal(), AuditActionType.CONFIG_PATCH, AuditResult.SUCCESS,
                 "Dashboard config reload applied.", java.util.Map.of("page", page != null ? page : ""));

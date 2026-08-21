@@ -11,6 +11,7 @@ import eu.avalanche7.paradigm.modules.audit.AuditResult;
 import eu.avalanche7.paradigm.modules.audit.AuditService;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
 import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
+import eu.avalanche7.paradigm.modules.permissions.PermissionDefinition;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
@@ -83,15 +84,15 @@ public class LocalDashboardModule implements ParadigmModule {
                 .then(platform.createCommandBuilder().literal("open").executes(ctx -> open(ctx.getSource())))
                 .then(platform.createCommandBuilder().literal("status").executes(ctx -> status(ctx.getSource())))
                 .then(platform.createCommandBuilder().literal("token").executes(ctx -> token(ctx.getSource())))
-                .then(platform.createCommandBuilder().literal("start").executes(ctx -> start(ctx.getSource())))
-                .then(platform.createCommandBuilder().literal("stop").executes(ctx -> stop(ctx.getSource())))
-                .then(platform.createCommandBuilder().literal("reload").executes(ctx -> reload(ctx.getSource())));
+                .then(platform.createCommandBuilder().literal("start").requires(src -> hasManagePermission(src, services)).executes(ctx -> start(ctx.getSource())))
+                .then(platform.createCommandBuilder().literal("stop").requires(src -> hasManagePermission(src, services)).executes(ctx -> stop(ctx.getSource())))
+                .then(platform.createCommandBuilder().literal("reload").requires(src -> hasManagePermission(src, services)).executes(ctx -> reload(ctx.getSource())));
     }
 
     public ICommandBuilder buildAuditCommandBranch(IPlatformAdapter platform, Services services) {
         ICommandBuilder root = platform.createCommandBuilder()
                 .literal("audit")
-                .requires(src -> hasPermission(src, services))
+                .requires(src -> hasAuditPermission(src, services))
                 .executes(ctx -> auditRecent(ctx.getSource()));
 
         return root
@@ -275,6 +276,18 @@ public class LocalDashboardModule implements ParadigmModule {
     }
 
     private boolean hasPermission(ICommandSource source, Services services) {
+        return hasAnyPermission(source, services, ParadigmPermissions.DASHBOARD_MANAGE, ParadigmPermissions.DASHBOARD_ACCESS);
+    }
+
+    private boolean hasManagePermission(ICommandSource source, Services services) {
+        return hasAnyPermission(source, services, ParadigmPermissions.DASHBOARD_MANAGE);
+    }
+
+    private boolean hasAuditPermission(ICommandSource source, Services services) {
+        return hasAnyPermission(source, services, ParadigmPermissions.DASHBOARD_MANAGE, ParadigmPermissions.DASHBOARD_AUDIT);
+    }
+
+    private boolean hasAnyPermission(ICommandSource source, Services services, PermissionDefinition... permissions) {
         if (source == null) {
             return false;
         }
@@ -282,8 +295,15 @@ public class LocalDashboardModule implements ParadigmModule {
             return true;
         }
         IPlayer player = source.getPlayer();
-        return player != null
-                && services.getPermissionsHandler().hasPermission(player, ParadigmPermissions.DASHBOARD_MANAGE);
+        if (player == null) {
+            return false;
+        }
+        for (PermissionDefinition permission : permissions) {
+            if (services.getPermissionsHandler().hasPermission(player, permission)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void send(ICommandSource source, String key, String fallback, String... placeholders) {

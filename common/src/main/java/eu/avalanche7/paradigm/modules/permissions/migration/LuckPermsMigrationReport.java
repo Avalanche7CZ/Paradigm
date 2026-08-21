@@ -11,6 +11,7 @@ public record LuckPermsMigrationReport(
         int memberships,
         int parents,
         int metadata,
+        int tracks,
         int conflicts,
         int skipped,
         List<String> details

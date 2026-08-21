@@ -156,6 +156,10 @@ public interface IPlatformAdapter {
         return null;
     }
 
+    default IMenuPlatform getMenuPlatform() {
+        return null;
+    }
+
     ICommandBuilder createCommandBuilder();
     void registerCommand(ICommandBuilder builder);
 

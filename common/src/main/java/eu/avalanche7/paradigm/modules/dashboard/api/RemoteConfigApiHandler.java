@@ -31,7 +31,7 @@ public class RemoteConfigApiHandler {
             return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to view other servers.");
         }
         try {
-            return DashboardResponse.apiOk(dashboard.remoteConfigSnapshotAsync(serverId, categories).get());
+            return DashboardResponse.apiOk(dashboard.remoteConfigSnapshotAsync(ctx.principal(), serverId, categories).get());
         } catch (Exception e) {
             return handleFailure(e);
         }
@@ -42,13 +42,13 @@ public class RemoteConfigApiHandler {
         if (request == null) {
             return DashboardResponse.apiError(400, "invalid_request", "Request body is required.");
         }
-        if (!authorizedFor(ctx, request.scope, request.serverId)) {
+        if (!authorizedFor(ctx, request.scope, request.serverId, request.section)) {
             return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to edit this server's configuration.");
         }
 
         RemoteConfigSnapshot before = null;
         try {
-            Object snapshot = dashboard.remoteConfigSnapshotAsync(request.serverId, request.section).get();
+            Object snapshot = dashboard.remoteConfigSnapshotAsync(ctx.principal(), request.serverId, request.section).get();
             if (snapshot instanceof RemoteConfigSnapshot remoteSnapshot) {
                 before = remoteSnapshot;
             }
@@ -96,7 +96,7 @@ public class RemoteConfigApiHandler {
                 || dashboard.requiresNetworkManage("SERVER", request.toServerId);
         boolean authorized = crossServer
                 ? dashboard.hasPermission(ctx.principal(), DashboardPermission.NETWORK_MANAGE, 4)
-                : dashboard.hasPermission(ctx.principal(), DashboardPermission.CONFIG_EDIT, 4);
+                : dashboard.canEditConfigCategories(ctx.principal(), java.util.Set.of(request.section));
         if (!authorized) {
             return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to copy configuration between servers.");
         }
@@ -123,7 +123,7 @@ public class RemoteConfigApiHandler {
         if (request == null) {
             return DashboardResponse.apiError(400, "invalid_request", "Request body is required.");
         }
-        if (!authorizedFor(ctx, request.scope, request.serverId)) {
+        if (!authorizedFor(ctx, request.scope, request.serverId, request.section)) {
             return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to adopt configuration for this server.");
         }
         Object result;
@@ -144,11 +144,11 @@ public class RemoteConfigApiHandler {
         return DashboardResponse.apiOk(result);
     }
 
-    private boolean authorizedFor(DashboardRequestContext ctx, String scope, String serverId) {
+    private boolean authorizedFor(DashboardRequestContext ctx, String scope, String serverId, String section) {
         if (dashboard.requiresNetworkManage(scope, serverId)) {
             return dashboard.hasPermission(ctx.principal(), DashboardPermission.NETWORK_MANAGE, 4);
         }
-        return dashboard.hasPermission(ctx.principal(), DashboardPermission.CONFIG_EDIT, 4);
+        return dashboard.canEditConfigCategories(ctx.principal(), java.util.Set.of(section));
     }
 
     private static boolean operationSucceeded(Object result) {

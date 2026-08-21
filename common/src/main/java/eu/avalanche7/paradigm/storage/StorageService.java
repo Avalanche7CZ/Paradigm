@@ -446,6 +446,7 @@ public class StorageService implements AutoCloseable {
     public ServerRepository servers() { return requireProvider().servers(); }
     public eu.avalanche7.paradigm.storage.repository.ManagedConfigRepository managedConfig() { return requireProvider().managedConfig(); }
     public AuditRepository audit() { return requireProvider().audit(); }
+    public eu.avalanche7.paradigm.modules.tickets.TicketRepository tickets() { return requireProvider().tickets(); }
     public StorageContext context() { return context; }
     public StorageConfig config() { return config; }
 

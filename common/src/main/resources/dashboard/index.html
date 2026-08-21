@@ -29,6 +29,7 @@
         <button data-page-target="motd">MOTD Editor</button>
         <button data-page-target="tablist">Tablist</button>
         <button data-page-target="holograms">Holograms</button>
+        <button data-page-target="menus">Menus</button>
         <button data-page-target="customCommands">Custom Commands</button>
         <button data-page-target="commands">Command Settings</button>
         <button data-page-target="cooldowns">Cooldowns</button>
@@ -123,6 +124,16 @@
         </div>
       </section>
 
+
+      <section data-page="menus" class="page">
+        <div class="page-toolbar"><div><strong>Menus</strong><span>Server-side inventory GUIs: slots, conditions, and click actions.</span></div><div><button id="menu-reload">Reload Definitions</button><button id="menu-new">New Menu</button></div></div>
+        <div id="menu-problems" class="editor-section hidden"></div>
+        <div class="master-detail menu-workspace">
+          <aside><div id="menu-list" class="selection-list"></div></aside>
+          <div id="menu-editor" class="detail-editor empty-detail">Select a menu or create one.</div>
+        </div>
+      </section>
+
       <section data-page="customCommands" class="page"><div class="page-toolbar"><div><strong>Custom Commands</strong><span>Create and edit structured command definitions.</span></div><div><input id="custom-command-search" type="search" aria-label="Search custom commands" placeholder="Search commands"><button id="custom-command-new">New Command</button><button id="custom-command-reload">Reload Definitions</button></div></div><div class="master-detail"><aside><div id="custom-command-list" class="selection-list"></div></aside><div id="custom-command-editor" class="detail-editor empty-detail">Select a command or create one.</div></div></section>
 
       <section data-page="commands" class="page config-page" data-categories="commands"><div class="page-toolbar"><div><strong>Command Settings</strong><span>Search and enable built-in command roots.</span></div><input id="command-search" type="search" aria-label="Search built-in commands" placeholder="Search commands"></div><div id="command-fields" class="config-sections"></div></section>
@@ -131,7 +142,7 @@
 
       <section data-page="discord" class="page config-page" data-categories="discord"><div class="page-toolbar"><div><strong>Discord Integration</strong><span>Chat relay, notifications, and connection state.</span></div><button class="advanced-toggle">Advanced details</button></div><div id="discord-connection" class="editor-section">Loading Discord connection state.</div><div id="discord-fields" class="config-sections"></div></section>
 
-      <section data-page="permissions" class="page"><div class="page-toolbar"><div><strong>Permission Editor</strong><span id="permissions-summary">Groups, users, and discovered nodes.</span></div><button data-refresh="permissions">Refresh</button></div><details class="editor-section"><summary>LuckPerms Migration</summary><div class="compact-form"><label>Direction<select id="luckperms-direction"><option value="import">LuckPerms to Paradigm</option><option value="export">Paradigm to LuckPerms</option></select></label><label>Mode<select id="luckperms-mode"><option value="dry-run">Dry run</option><option value="merge">Merge</option><option value="replace">Replace</option></select></label><button id="luckperms-migrate">Run Migration</button></div><pre id="luckperms-report" class="advanced-detail">No migration has been run.</pre></details><div class="segmented" id="permission-tabs"><button data-permission-view="groups">Groups</button><button data-permission-view="users">Users</button><button data-permission-view="nodes">Node Search</button></div><div class="master-detail permission-workspace"><aside><input id="permissions-search" type="search" aria-label="Search permission targets" placeholder="Search"><div id="permission-target-list" class="selection-list"></div><div id="permission-list-pagination" class="pagination"></div></aside><div id="permission-editor" class="detail-editor empty-detail">Select a group or user.</div></div></section>
+      <section data-page="permissions" class="page"><div class="page-toolbar"><div><strong>Permission Editor</strong><span id="permissions-summary">Groups, users, tracks, and discovered nodes.</span></div><button data-refresh="permissions">Refresh</button></div><details class="editor-section"><summary>LuckPerms Migration</summary><div class="compact-form"><label>Direction<select id="luckperms-direction"><option value="import">LuckPerms to Paradigm</option><option value="export">Paradigm to LuckPerms</option></select></label><label>Mode<select id="luckperms-mode"><option value="dry-run">Dry run</option><option value="merge">Merge</option><option value="replace">Replace</option></select></label><button id="luckperms-migrate">Run Migration</button></div><pre id="luckperms-report" class="advanced-detail">No migration has been run.</pre></details><div class="segmented" id="permission-tabs"><button data-permission-view="groups">Groups</button><button data-permission-view="users">Users</button><button data-permission-view="tracks">Tracks</button><button data-permission-view="nodes">Node Search</button></div><div class="master-detail permission-workspace"><aside><input id="permissions-search" type="search" aria-label="Search permission targets" placeholder="Search"><div id="permission-target-list" class="selection-list"></div><div id="permission-list-pagination" class="pagination"></div></aside><div id="permission-editor" class="detail-editor empty-detail">Select a group, user, or track.</div></div></section>
 
       <section data-page="moderation" class="page"><div class="page-toolbar"><div><strong>Moderation</strong><span>Player history, active state, and actions.</span></div><button data-refresh="moderation">Refresh</button></div><div class="master-detail"><aside><input id="moderation-search" type="search" aria-label="Player name or UUID" placeholder="Player name or UUID"><button id="moderation-find">Find Player</button><div id="moderation-results" class="selection-list"></div></aside><div id="moderation-editor" class="detail-editor empty-detail">Search for a player to review or moderate.</div></div></section>
 

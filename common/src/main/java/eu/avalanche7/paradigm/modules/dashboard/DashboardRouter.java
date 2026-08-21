@@ -8,6 +8,7 @@ import eu.avalanche7.paradigm.modules.dashboard.api.ConfigApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.CustomCommandApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.DiscordApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.HologramApiHandler;
+import eu.avalanche7.paradigm.modules.dashboard.api.MenuApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.ModerationApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.OverviewApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.PermissionsApiHandler;
@@ -16,11 +17,12 @@ import eu.avalanche7.paradigm.modules.dashboard.api.RemoteConfigApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.ServerApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.StaticAssetHandler;
 import eu.avalanche7.paradigm.modules.dashboard.api.StorageApiHandler;
-import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPermission;
+import eu.avalanche7.paradigm.modules.dashboard.api.TicketApiHandler;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardSession;
 import eu.avalanche7.paradigm.modules.moderation.ModerationActionType;
 import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
+import eu.avalanche7.paradigm.modules.permissions.PermissionDefinition;
 
 public class DashboardRouter {
     private final DashboardService dashboard;
@@ -37,6 +39,8 @@ public class DashboardRouter {
     private final ModerationApiHandler moderation;
     private final AuditApiHandler audit;
     private final HologramApiHandler holograms;
+    private final MenuApiHandler menus;
+    private final TicketApiHandler tickets;
     private final StaticAssetHandler staticAssets;
 
     public DashboardRouter(DashboardService dashboard) {
@@ -54,6 +58,8 @@ public class DashboardRouter {
         this.moderation = new ModerationApiHandler(dashboard);
         this.audit = new AuditApiHandler(dashboard);
         this.holograms = new HologramApiHandler(dashboard);
+        this.menus = new MenuApiHandler(dashboard);
+        this.tickets = new TicketApiHandler(dashboard);
         this.staticAssets = new StaticAssetHandler(dashboard.config());
     }
 
@@ -84,12 +90,31 @@ public class DashboardRouter {
                 }
 
                 if ("POST".equals(method) && "/api/auth/logout".equals(path)) return auth.logout(ctx);
-                if ("GET".equals(method) && "/api/overview".equals(path)) return overview.get(ctx);
+
+                if ("GET".equals(method) && "/api/overview".equals(path)) {
+                    DashboardResponse denied = denyPage(ctx, ParadigmPermissions.DASHBOARD_OVERVIEW, "You do not have permission to view the overview.");
+                    return denied != null ? denied : overview.get(ctx);
+                }
                 if ("GET".equals(method) && "/api/players".equals(path)) return players.list(ctx);
-                if ("GET".equals(method) && "/api/servers".equals(path)) return servers.list(ctx);
-                if (path.startsWith("/api/storage/") && mutating(method)
-                        && !dashboard.hasPermission(ctx.principal(), ParadigmPermissions.STORAGE_MANAGE)) {
-                    return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to manage storage.");
+                if ("GET".equals(method) && "/api/servers".equals(path)) {
+                    DashboardResponse denied = denyPage(ctx, ParadigmPermissions.DASHBOARD_SERVERS, "You do not have permission to view servers.");
+                    return denied != null ? denied : servers.list(ctx);
+                }
+
+                if (path.startsWith("/api/storage/configuration")) {
+                    if ("GET".equals(method)) {
+                        DashboardResponse denied = denyPage(ctx, ParadigmPermissions.DASHBOARD_STORAGECONFIG_VIEW, "You do not have permission to view storage configuration.");
+                        if (denied != null) return denied;
+                    } else if (mutating(method) && !dashboard.canAccessPage(ctx.principal(), ParadigmPermissions.DASHBOARD_STORAGECONFIG_EDIT, ParadigmPermissions.STORAGE_MANAGE)) {
+                        return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to edit storage configuration.");
+                    }
+                } else if (path.startsWith("/api/storage/")) {
+                    if ("GET".equals(method)) {
+                        DashboardResponse denied = denyPage(ctx, ParadigmPermissions.DASHBOARD_STORAGE, "You do not have permission to view storage runtime status.");
+                        if (denied != null) return denied;
+                    } else if (mutating(method) && !dashboard.hasPermission(ctx.principal(), ParadigmPermissions.STORAGE_MANAGE)) {
+                        return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to manage storage.");
+                    }
                 }
                 if ("GET".equals(method) && "/api/storage/status".equals(path)) return storage.status(ctx);
                 if ("POST".equals(method) && "/api/storage/test".equals(path)) return storage.test(ctx);
@@ -99,18 +124,17 @@ public class DashboardRouter {
                 if ("GET".equals(method) && "/api/storage/configuration".equals(path)) return storage.configuration(ctx);
                 if ("POST".equals(method) && "/api/storage/configuration".equals(path)) return storage.saveConfiguration(ctx);
                 if ("POST".equals(method) && "/api/storage/configuration/test".equals(path)) return storage.testConfiguration(ctx);
-                if (path.startsWith("/api/discord")
-                        && !dashboard.hasPermission(ctx.principal(), ParadigmPermissions.DISCORD_MANAGE)) {
-                    return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to manage the Discord integration.");
+
+                {
+                    DashboardResponse denied = guardResource(ctx, method, path, "/api/discord", "the Discord integration",
+                            ParadigmPermissions.DISCORD_MANAGE, ParadigmPermissions.DASHBOARD_CONFIG_DISCORD_VIEW, ParadigmPermissions.DISCORD_MANAGE);
+                    if (denied != null) return denied;
                 }
                 if ("GET".equals(method) && "/api/discord/status".equals(path)) return discord.status(ctx);
                 if ("POST".equals(method) && "/api/discord/token".equals(path)) return discord.saveToken(ctx);
                 if ("POST".equals(method) && "/api/discord/test".equals(path)) return discord.test(ctx);
                 if ("POST".equals(method) && "/api/discord/reconnect".equals(path)) return discord.reconnect(ctx);
-                if (path.startsWith("/api/config/") && mutating(method)
-                        && !dashboard.hasPermission(ctx.principal(), DashboardPermission.CONFIG_EDIT, 4)) {
-                    return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to edit configuration.");
-                }
+
                 if ("GET".equals(method) && "/api/config/snapshot".equals(path)) return config.snapshot(ctx);
                 if ("POST".equals(method) && "/api/config/patch".equals(path)) return config.patch(ctx);
                 if ("POST".equals(method) && "/api/config/apply".equals(path)) return config.apply(ctx);
@@ -123,11 +147,15 @@ public class DashboardRouter {
                 if ("POST".equals(method) && "/api/remote-config/copy".equals(path)) return remoteConfig.copy(ctx);
                 if ("POST".equals(method) && "/api/remote-config/adopt".equals(path)) return remoteConfig.adopt(ctx);
 
-                if ("GET".equals(method) && "/api/audit/recent".equals(path)) return audit.recent(ctx);
+                if ("GET".equals(method) && "/api/audit/recent".equals(path)) {
+                    DashboardResponse denied = denyPage(ctx, ParadigmPermissions.DASHBOARD_AUDIT, "You do not have permission to view the audit log.");
+                    return denied != null ? denied : audit.recent(ctx);
+                }
 
-                if (path.startsWith("/api/holograms")
-                        && !dashboard.hasPermission(ctx.principal(), ParadigmPermissions.HOLOGRAM_MANAGE)) {
-                    return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to manage holograms.");
+                {
+                    DashboardResponse denied = guardResource(ctx, method, path, "/api/holograms", "holograms",
+                            ParadigmPermissions.HOLOGRAM_MANAGE, ParadigmPermissions.DASHBOARD_CONFIG_HOLOGRAMS_VIEW, ParadigmPermissions.HOLOGRAM_MANAGE);
+                    if (denied != null) return denied;
                 }
                 if ("GET".equals(method) && "/api/holograms".equals(path)) return holograms.list(ctx);
                 if ("GET".equals(method) && "/api/holograms/item".equals(path)) return holograms.get(ctx);
@@ -139,9 +167,40 @@ public class DashboardRouter {
                     return holograms.mutate(ctx, action);
                 }
 
-                if (path.startsWith("/api/custom-commands")
-                        && !dashboard.hasPermission(ctx.principal(), DashboardPermission.CONFIG_EDIT, 4)) {
-                    return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to edit custom commands.");
+                {
+                    DashboardResponse denied = guardResource(ctx, method, path, "/api/tickets", "tickets",
+                            ParadigmPermissions.TICKET_MANAGE, ParadigmPermissions.DASHBOARD_TICKETS, ParadigmPermissions.TICKET_MANAGE);
+                    if (denied != null) return denied;
+                }
+                if ("GET".equals(method) && "/api/tickets".equals(path)) return tickets.list(ctx);
+                if ("GET".equals(method) && "/api/tickets/item".equals(path)) return tickets.get(ctx);
+                if ("POST".equals(method) && path.startsWith("/api/tickets/")) {
+                    String ticketAction = path.substring("/api/tickets/".length());
+                    if (!TicketApiHandler.ACTIONS.contains(ticketAction)) {
+                        return DashboardResponse.apiError(400, "invalid_request", "Unknown ticket operation.");
+                    }
+                    return tickets.mutate(ctx, ticketAction);
+                }
+
+                {
+                    DashboardResponse denied = guardResource(ctx, method, path, "/api/menus", "menus",
+                            ParadigmPermissions.MENU_MANAGE, ParadigmPermissions.DASHBOARD_CONFIG_MENUS_VIEW, ParadigmPermissions.MENU_MANAGE);
+                    if (denied != null) return denied;
+                }
+                if ("GET".equals(method) && "/api/menus".equals(path)) return menus.list(ctx);
+                if ("GET".equals(method) && "/api/menus/item".equals(path)) return menus.get(ctx);
+                if ("POST".equals(method) && path.startsWith("/api/menus/")) {
+                    String action = path.substring("/api/menus/".length());
+                    if (!MenuApiHandler.ACTIONS.contains(action)) {
+                        return DashboardResponse.apiError(400, "invalid_request", "Unknown menu operation.");
+                    }
+                    return menus.mutate(ctx, action);
+                }
+
+                {
+                    DashboardResponse denied = guardResource(ctx, method, path, "/api/custom-commands", "custom commands",
+                            ParadigmPermissions.CONFIG_EDIT, ParadigmPermissions.DASHBOARD_CONFIG_CUSTOMCOMMANDS_VIEW, ParadigmPermissions.CONFIG_EDIT);
+                    if (denied != null) return denied;
                 }
                 if ("GET".equals(method) && "/api/custom-commands".equals(path)) return customCommands.list(ctx);
                 if ("GET".equals(method) && "/api/custom-commands/item".equals(path)) return customCommands.get(ctx);
@@ -153,8 +212,10 @@ public class DashboardRouter {
                     return customCommands.mutate(ctx, action);
                 }
 
-                if (path.startsWith("/api/permissions/") && !dashboard.hasPermission(ctx.principal(), ParadigmPermissions.GROUP_MANAGE)) {
-                    return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to view permissions.");
+                {
+                    DashboardResponse denied = guardResource(ctx, method, path, "/api/permissions/", "permissions",
+                            ParadigmPermissions.GROUP_MANAGE, ParadigmPermissions.DASHBOARD_PERMISSIONS, ParadigmPermissions.GROUP_MANAGE);
+                    if (denied != null) return denied;
                 }
                 if ("GET".equals(method) && "/api/permissions/summary".equals(path)) return permissions.summary(ctx);
                 if ("GET".equals(method) && "/api/permissions/groups".equals(path)) return permissions.groups(ctx);
@@ -162,6 +223,7 @@ public class DashboardRouter {
                 if ("GET".equals(method) && "/api/permissions/users".equals(path)) return permissions.users(ctx);
                 if ("GET".equals(method) && "/api/permissions/user".equals(path)) return permissions.user(ctx);
                 if ("GET".equals(method) && "/api/permissions/nodes".equals(path)) return permissions.nodes(ctx);
+                if ("GET".equals(method) && "/api/permissions/tracks".equals(path)) return permissions.tracks(ctx);
                 if ("GET".equals(method) && "/api/permissions/effective".equals(path)) return permissions.effective(ctx);
                 if ("POST".equals(method) && "/api/permissions/migrate/luckperms".equals(path)) return permissions.migrateLuckPerms(ctx);
                 if ("POST".equals(method) && "/api/permissions/group/create".equals(path)) return permissions.mutate(ctx, "group_create");
@@ -175,9 +237,19 @@ public class DashboardRouter {
                 if ("POST".equals(method) && "/api/permissions/user/permission/remove".equals(path)) return permissions.mutate(ctx, "user_permission_remove");
                 if ("POST".equals(method) && "/api/permissions/user/group/add".equals(path)) return permissions.mutate(ctx, "user_group_add");
                 if ("POST".equals(method) && "/api/permissions/user/group/remove".equals(path)) return permissions.mutate(ctx, "user_group_remove");
+                if ("POST".equals(method) && path.startsWith("/api/permissions/track/")) {
+                    String action = "track_" + path.substring("/api/permissions/track/".length());
+                    if (java.util.Set.of("track_create", "track_delete", "track_rename", "track_clone", "track_clear", "track_append", "track_insert", "track_remove", "track_move").contains(action)) return permissions.mutate(ctx, action);
+                }
+                if ("POST".equals(method) && path.startsWith("/api/permissions/user/track/")) {
+                    String action = path.substring("/api/permissions/user/track/".length());
+                    if (java.util.Set.of("promote", "demote", "settrack", "cleartrack").contains(action)) return permissions.mutate(ctx, action);
+                }
 
-                if (path.startsWith("/api/moderation/") && !canViewModeration(ctx.principal())) {
-                    return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to view moderation.");
+                if (path.startsWith("/api/moderation/")) {
+                    DashboardResponse denied = denyPage(ctx, ParadigmPermissions.DASHBOARD_MODERATION, "You do not have permission to view moderation.",
+                            ParadigmPermissions.KICK, ParadigmPermissions.BAN, ParadigmPermissions.WARN, ParadigmPermissions.JAIL);
+                    if (denied != null) return denied;
                 }
                 if ("GET".equals(method) && "/api/moderation/recent".equals(path)) return moderation.recent(ctx);
                 if ("GET".equals(method) && "/api/moderation/active".equals(path)) return moderation.active(ctx);
@@ -208,6 +280,30 @@ public class DashboardRouter {
         }
     }
 
+    /** Returns an error response if the principal cannot view this page, or null if access is allowed. */
+    private DashboardResponse denyPage(DashboardRequestContext ctx, PermissionDefinition page, String message, PermissionDefinition... legacy) {
+        return dashboard.canAccessPage(ctx.principal(), page, legacy) ? null : DashboardResponse.apiError(403, "permission_denied", message);
+    }
+
+    /**
+     * Gates a resource whose GET routes need dashboard-page visibility and whose mutating routes
+     * need the resource's own feature-management permission (unchanged from the pre-granular
+     * behavior - the new page permission never grants mutation by itself).
+     */
+    private DashboardResponse guardResource(DashboardRequestContext ctx, String method, String path, String prefix, String resourceName,
+            PermissionDefinition managePermission, PermissionDefinition viewPage, PermissionDefinition... viewLegacy) {
+        if (!path.startsWith(prefix)) {
+            return null;
+        }
+        if ("GET".equals(method)) {
+            return denyPage(ctx, viewPage, "You do not have permission to view " + resourceName + ".", viewLegacy);
+        }
+        if (mutating(method) && !dashboard.hasPermission(ctx.principal(), managePermission)) {
+            return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to manage " + resourceName + ".");
+        }
+        return null;
+    }
+
     private DashboardSession session(HttpExchange exchange) {
         if (!dashboard.config().requireLogin) {
             return null;
@@ -229,13 +325,6 @@ public class DashboardRouter {
             return true;
         }
         return dashboard.auth().validateCsrf(ctx.session(), ctx.header("X-Paradigm-CSRF"));
-    }
-
-    private boolean canViewModeration(DashboardPrincipal principal) {
-        return dashboard.hasPermission(principal, ParadigmPermissions.KICK)
-                || dashboard.hasPermission(principal, ParadigmPermissions.BAN)
-                || dashboard.hasPermission(principal, ParadigmPermissions.WARN)
-                || dashboard.hasPermission(principal, ParadigmPermissions.JAIL);
     }
 
     private boolean canRunModerationAction(DashboardPrincipal principal, String action) {

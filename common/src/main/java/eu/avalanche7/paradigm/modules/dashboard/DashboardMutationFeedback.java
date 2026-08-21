@@ -38,7 +38,9 @@ public final class DashboardMutationFeedback {
         NETWORK_CONFIG,
         CUSTOM_COMMANDS,
         HOLOGRAMS,
-        MODERATION
+        MODERATION,
+        TICKETS,
+        MENUS
     }
 
     public enum Kind {
@@ -524,6 +526,8 @@ public final class DashboardMutationFeedback {
             case CUSTOM_COMMANDS -> tr(locale, "CUSTOM COMMANDS", "VLASTNÍ PŘÍKAZY", "СВОИ КОМАНДЫ");
             case HOLOGRAMS -> tr(locale, "HOLOGRAMS", "HOLOGRAMY", "ГОЛОГРАММЫ");
             case MODERATION -> tr(locale, "MODERATION", "MODERACE", "МОДЕРАЦИЯ");
+            case TICKETS -> tr(locale, "TICKETS", "TIKETY", "ТИКЕТЫ");
+            case MENUS -> tr(locale, "MENUS", "MENU", "МЕНЮ");
         };
     }
 

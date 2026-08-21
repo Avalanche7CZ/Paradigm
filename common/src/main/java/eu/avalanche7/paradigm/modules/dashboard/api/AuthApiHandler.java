@@ -31,6 +31,7 @@ public class AuthApiHandler {
         data.put("running", dashboard.running());
         data.put("principal", ctx.principal());
         data.put("csrfToken", ctx.session() != null ? ctx.session().csrfToken() : null);
+        data.put("capabilities", ctx.principal() != null ? dashboard.capabilities(ctx.principal()) : null);
         return DashboardResponse.apiOk(data);
     }
 
@@ -51,10 +52,14 @@ public class AuthApiHandler {
         dashboard.audit().dashboard(issued.session().principal(), AuditActionType.DASHBOARD_LOGIN, AuditResult.SUCCESS, "Dashboard login succeeded.", Map.of());
         String secure = dashboard.baseUrl().startsWith("https://") ? "; Secure" : "";
         String cookie = COOKIE_NAME + "=" + issued.token() + "; Path=/; HttpOnly; SameSite=Lax; Max-Age=" + Math.max(60, dashboard.config().sessionMinutes * 60) + secure;
+        Map<String, Object> loginData = new LinkedHashMap<>();
+        loginData.put("principal", issued.session().principal());
+        loginData.put("csrfToken", issued.csrfToken());
+        loginData.put("capabilities", dashboard.capabilities(issued.session().principal()));
         return DashboardResponse.bytes(
                 200,
                 "application/json; charset=utf-8",
-                eu.avalanche7.paradigm.modules.dashboard.DashboardJson.toJson(new DashboardResponse.ApiEnvelope(true, Map.of("principal", issued.session().principal(), "csrfToken", issued.csrfToken()), null, java.util.List.of())).getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                eu.avalanche7.paradigm.modules.dashboard.DashboardJson.toJson(new DashboardResponse.ApiEnvelope(true, loginData, null, java.util.List.of())).getBytes(java.nio.charset.StandardCharsets.UTF_8),
                 Map.of("Set-Cookie", cookie, "Cache-Control", "no-store")
         );
     }

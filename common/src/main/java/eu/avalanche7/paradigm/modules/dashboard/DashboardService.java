@@ -41,12 +41,13 @@ import eu.avalanche7.paradigm.modules.audit.AuditResult;
 import eu.avalanche7.paradigm.modules.audit.AuditService;
 import eu.avalanche7.paradigm.modules.commands.Reload;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardAuthService;
-import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPermission;
+import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardAuthorization;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
 import eu.avalanche7.paradigm.modules.dashboard.customcommands.CustomCommandAdminService;
 import eu.avalanche7.paradigm.modules.dashboard.heartbeat.DashboardHeartbeatService;
 import eu.avalanche7.paradigm.modules.moderation.ModerationActionRequest;
 import eu.avalanche7.paradigm.modules.moderation.ModerationService;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.modules.permissions.PermissionAdminService;
 import eu.avalanche7.paradigm.modules.permissions.PermissionAssignmentId;
 import eu.avalanche7.paradigm.modules.permissions.PermissionDefinition;
@@ -232,7 +233,7 @@ public class DashboardService implements AutoCloseable {
         if (principal.console()) {
             return true;
         }
-        return services.getPermissionsHandler().hasPermission(principal.uuid(), DashboardPermission.MANAGE, 4);
+        return DashboardAuthorization.canAccessDashboard(check(principal));
     }
 
     public boolean hasPermission(DashboardPrincipal principal, PermissionDefinition permission) {
@@ -247,6 +248,47 @@ public class DashboardService implements AutoCloseable {
             return true;
         }
         return services.getPermissionsHandler().hasPermission(principal.uuid(), permission, fallbackLevel);
+    }
+
+    public boolean canAccessPage(DashboardPrincipal principal, PermissionDefinition pagePermission, PermissionDefinition... legacyAlternatives) {
+        if (principal == null) {
+            return false;
+        }
+        if (principal.console()) {
+            return true;
+        }
+        return DashboardAuthorization.canAccessPage(check(principal), pagePermission, legacyAlternatives);
+    }
+
+    public boolean canViewConfigCategory(DashboardPrincipal principal, String category) {
+        if (principal == null) {
+            return false;
+        }
+        if (principal.console()) {
+            return true;
+        }
+        return DashboardAuthorization.canViewConfigCategory(check(principal), category);
+    }
+
+    public boolean canEditConfigCategories(DashboardPrincipal principal, Set<String> categories) {
+        if (principal == null) {
+            return false;
+        }
+        if (principal.console()) {
+            return true;
+        }
+        return DashboardAuthorization.canEditAllCategories(check(principal), categories);
+    }
+
+    public DashboardAuthorization.Capabilities capabilities(DashboardPrincipal principal) {
+        if (principal != null && principal.console()) {
+            return DashboardAuthorization.computeCapabilities(permission -> true);
+        }
+        return DashboardAuthorization.computeCapabilities(check(principal));
+    }
+
+    private DashboardAuthorization.PermissionCheck check(DashboardPrincipal principal) {
+        return permission -> hasPermission(principal, permission);
     }
 
     public CompletableFuture<Object> overviewAsync() {
@@ -340,11 +382,11 @@ public class DashboardService implements AutoCloseable {
         return result;
     }
 
-    public CompletableFuture<Object> remoteConfigSnapshotAsync(String serverId, String categoriesCsv) {
-        return CompletableFuture.supplyAsync(() -> buildRemoteSnapshot(serverId, categoriesCsv), executor);
+    public CompletableFuture<Object> remoteConfigSnapshotAsync(DashboardPrincipal principal, String serverId, String categoriesCsv) {
+        return CompletableFuture.supplyAsync(() -> buildRemoteSnapshot(principal, serverId, categoriesCsv), executor);
     }
 
-    private RemoteConfigSnapshot buildRemoteSnapshot(String rawServerId, String categoriesCsv) {
+    private RemoteConfigSnapshot buildRemoteSnapshot(DashboardPrincipal principal, String rawServerId, String categoriesCsv) {
         StorageService storage = services.getStorageService();
         if (storage == null || !storage.isMysqlActive()) {
             throw new IllegalStateException("Remote server management requires shared MySQL storage.");
@@ -365,7 +407,21 @@ public class DashboardService implements AutoCloseable {
         boolean schemaCompatible = targetFingerprint != null && !targetFingerprint.isBlank() && targetFingerprint.equals(hostFingerprint);
 
         ConfigSnapshot snapshot = registry.snapshot();
-        Set<String> categoryFilter = parseCategories(categoriesCsv);
+        Set<String> requestedCategoryFilter = parseCategories(categoriesCsv);
+        final Set<String> categoryFilter;
+        if (!hasPermission(principal, ParadigmPermissions.NETWORK_MANAGE) && !hasPermission(principal, ParadigmPermissions.DASHBOARD_MANAGE)) {
+            Set<String> viewable = snapshot.fields().stream()
+                    .map(ConfigField::category)
+                    .distinct()
+                    .filter(RemoteConfigEligibility::isManagedCategory)
+                    .filter(category -> canViewConfigCategory(principal, category))
+                    .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+            categoryFilter = requestedCategoryFilter == null ? viewable
+                    : requestedCategoryFilter.stream().filter(viewable::contains)
+                            .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+        } else {
+            categoryFilter = requestedCategoryFilter;
+        }
 
         Map<String, ManagedConfigEntry> globalBySection = new HashMap<>();
         Map<String, ManagedConfigEntry> serverBySection = new HashMap<>();
@@ -707,12 +763,14 @@ public class DashboardService implements AutoCloseable {
             Map<String, Object> data = new LinkedHashMap<>();
             int groupCount = safeList(() -> services.getStorageService().permissions().listGroups()).size();
             int userCount = safeList(() -> services.getStorageService().permissions().listUsers()).size();
+            int trackCount = permissions.listPermissionTracks().size();
             int nodeCount = permissions.knownPermissionNodes().size();
             data.put("internalEnabled", permissions.isInternalPermissionsEnabled());
             data.put("externalCommandPermissions", permissions.isExternalCommandPermissionsEnabled());
             data.put("externalMode", permissions.isExternalCommandStrictMode() ? "strict" : "deny_only");
             data.put("groups", groupCount);
             data.put("users", userCount);
+            data.put("tracks", trackCount);
             data.put("nodes", nodeCount);
             var identity = services.getStorageService().context().serverIdentity();
             data.put("serverId", identity != null ? identity.serverId() : "");
@@ -888,6 +946,10 @@ public class DashboardService implements AutoCloseable {
 
     public CompletableFuture<Object> permissionMutationAsync(DashboardPrincipal actor, PermissionMutationRequest mutation) {
         return CompletableFuture.supplyAsync(() -> permissionAdminService.mutate(actor, mutation), executor);
+    }
+
+    public CompletableFuture<Object> permissionTracksAsync() {
+        return CompletableFuture.supplyAsync(() -> Map.of("tracks", services.getPermissionsHandler().listPermissionTracks()), executor);
     }
 
     private static Map<String, Object> permissionAssignment(String kind, String owner, String target, StoredPermissionNode node) {

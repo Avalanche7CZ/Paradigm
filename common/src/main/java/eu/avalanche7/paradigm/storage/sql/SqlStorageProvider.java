@@ -4,6 +4,8 @@ import org.slf4j.Logger;
 
 import eu.avalanche7.paradigm.modules.audit.AuditRepository;
 import eu.avalanche7.paradigm.modules.audit.SqlAuditRepository;
+import eu.avalanche7.paradigm.modules.tickets.SqlTicketRepository;
+import eu.avalanche7.paradigm.modules.tickets.TicketRepository;
 import eu.avalanche7.paradigm.storage.StorageConfig;
 import eu.avalanche7.paradigm.storage.StorageProvider;
 import eu.avalanche7.paradigm.storage.StorageProviderType;
@@ -37,6 +39,7 @@ public class SqlStorageProvider implements StorageProvider {
     private ServerRepository servers;
     private ManagedConfigRepository managedConfig;
     private AuditRepository audit;
+    private TicketRepository tickets;
     private boolean serverRegistered;
 
     public SqlStorageProvider(
@@ -69,6 +72,7 @@ public class SqlStorageProvider implements StorageProvider {
         this.servers = new SqlServerRepository(executor);
         this.managedConfig = new SqlManagedConfigRepository(executor);
         this.audit = new SqlAuditRepository(executor);
+        this.tickets = new SqlTicketRepository(executor, context);
         if (identityService != null) {
             serverRegistered = identityService.registerWith(servers);
         }
@@ -87,6 +91,7 @@ public class SqlStorageProvider implements StorageProvider {
     @Override public ServerRepository servers() { return servers; }
     @Override public ManagedConfigRepository managedConfig() { return managedConfig; }
     @Override public AuditRepository audit() { return audit; }
+    @Override public TicketRepository tickets() { return tickets; }
 
     @Override
     public StorageService.StorageTestResult test() {

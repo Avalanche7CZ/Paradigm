@@ -46,6 +46,8 @@ public final class CommandCatalog {
             entry("seen", true, false, true, "seen"),
             entry("afk", true, false, true, "afk"),
             entry("playtime", true, false, true, "playtime"),
+            entry("ticket", true, false, true, "ticket"),
+            entry("tickets", true, false, true, "tickets"),
             entry("ignore", true, false, true, "ignore"),
             entry("unignore", true, false, true, "unignore"),
             entry("speed", true, false, true, "speed"),
@@ -139,6 +141,7 @@ public final class CommandCatalog {
         own(modules, "Seen", "seen");
         own(modules, "Afk", "afk");
         own(modules, "Playtime", "playtime");
+        own(modules, "Tickets", "ticket", "tickets");
         own(modules, "Ignore", "ignore", "unignore");
         own(modules, "Speed", "speed");
         own(modules, "Feed", "feed");

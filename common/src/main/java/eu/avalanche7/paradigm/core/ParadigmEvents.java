@@ -8,6 +8,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
+import eu.avalanche7.paradigm.modules.tickets.Ticket;
+import eu.avalanche7.paradigm.modules.tickets.TicketEvent;
 
 public final class ParadigmEvents {
     private static final Logger LOGGER = LoggerFactory.getLogger(ParadigmEvents.class);
@@ -29,6 +31,27 @@ public final class ParadigmEvents {
         }
 
         default void onRestartImminent() {
+        }
+
+        default void onTicketCreated(Ticket ticket, TicketEvent event) {
+        }
+
+        default void onTicketReplied(Ticket ticket, TicketEvent event) {
+        }
+
+        default void onTicketClaimed(Ticket ticket, TicketEvent event) {
+        }
+
+        default void onTicketAssigned(Ticket ticket, TicketEvent event) {
+        }
+
+        default void onTicketResolved(Ticket ticket, TicketEvent event) {
+        }
+
+        default void onTicketClosed(Ticket ticket, TicketEvent event) {
+        }
+
+        default void onTicketReopened(Ticket ticket, TicketEvent event) {
         }
     }
 
@@ -76,6 +99,48 @@ public final class ParadigmEvents {
 
     public void restartImminent() {
         dispatch(Listener::onRestartImminent);
+    }
+
+    public void ticketCreated(Ticket ticket, TicketEvent event) {
+        if (ticket != null) {
+            dispatch(listener -> listener.onTicketCreated(ticket, event));
+        }
+    }
+
+    public void ticketReplied(Ticket ticket, TicketEvent event) {
+        if (ticket != null) {
+            dispatch(listener -> listener.onTicketReplied(ticket, event));
+        }
+    }
+
+    public void ticketClaimed(Ticket ticket, TicketEvent event) {
+        if (ticket != null) {
+            dispatch(listener -> listener.onTicketClaimed(ticket, event));
+        }
+    }
+
+    public void ticketAssigned(Ticket ticket, TicketEvent event) {
+        if (ticket != null) {
+            dispatch(listener -> listener.onTicketAssigned(ticket, event));
+        }
+    }
+
+    public void ticketResolved(Ticket ticket, TicketEvent event) {
+        if (ticket != null) {
+            dispatch(listener -> listener.onTicketResolved(ticket, event));
+        }
+    }
+
+    public void ticketClosed(Ticket ticket, TicketEvent event) {
+        if (ticket != null) {
+            dispatch(listener -> listener.onTicketClosed(ticket, event));
+        }
+    }
+
+    public void ticketReopened(Ticket ticket, TicketEvent event) {
+        if (ticket != null) {
+            dispatch(listener -> listener.onTicketReopened(ticket, event));
+        }
     }
 
     private void dispatch(Consumer<Listener> action) {

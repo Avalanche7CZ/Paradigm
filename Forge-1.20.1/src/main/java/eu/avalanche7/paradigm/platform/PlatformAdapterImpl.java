@@ -568,6 +568,13 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         return new MinecraftHologramPlatform(this);
     }
 
+    private final MinecraftMenuPlatform menuPlatform = new MinecraftMenuPlatform();
+
+    @Override
+    public eu.avalanche7.paradigm.platform.Interfaces.IMenuPlatform getMenuPlatform() {
+        return menuPlatform;
+    }
+
     @Override
     public List<String> getWorldNames() {
         List<String> worldNames = new ArrayList<>();

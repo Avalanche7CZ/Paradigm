@@ -19,4 +19,8 @@ public class ConfigEntry<T> {
     public T get() {
         return this.value;
     }
+
+    public static <T> T valueOf(ConfigEntry<T> entry, T fallback) {
+        return entry != null && entry.value != null ? entry.value : fallback;
+    }
 }

@@ -4,6 +4,8 @@ import java.util.Objects;
 
 import org.slf4j.Logger;
 
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.DebugLogger;
@@ -59,6 +61,27 @@ public final class PlayerMessenger {
                 debugLogger.debugLog("Failed to send command message to player: " + failure);
             }
         }
+    }
+
+    public int broadcastToPermission(PermissionsHandler permissions, String permissionNode, IComponent message) {
+        if (permissions == null || permissionNode == null || message == null) {
+            return 0;
+        }
+        int delivered = 0;
+        for (IPlayer online : platform.getOnlinePlayers()) {
+            if (online == null || !permissions.hasPermission(online, permissionNode)) {
+                continue;
+            }
+            try {
+                platform.sendSystemMessage(online, message);
+                delivered++;
+            } catch (RuntimeException failure) {
+                if (logger != null) {
+                    logger.warn("[Paradigm] Messaging: failed to broadcast to {}.", online.getName(), failure);
+                }
+            }
+        }
+        return delivered;
     }
 
     public void logToConsole(String header, String fallback, String... placeholders) {

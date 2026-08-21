@@ -8,14 +8,23 @@ import eu.avalanche7.paradigm.configs.*;
 import eu.avalanche7.paradigm.data.AdminUtilityDataStore;
 import eu.avalanche7.paradigm.data.ModerationDataStore;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
+import eu.avalanche7.paradigm.modules.actions.ActionDispatcher;
+import eu.avalanche7.paradigm.modules.actions.ActionRegistry;
+import eu.avalanche7.paradigm.modules.actions.BuiltinActions;
+import eu.avalanche7.paradigm.modules.actions.BuiltinConditions;
+import eu.avalanche7.paradigm.modules.actions.ConditionRegistry;
 import eu.avalanche7.paradigm.modules.audit.AuditService;
 import eu.avalanche7.paradigm.modules.chat.ChatFormatter;
 import eu.avalanche7.paradigm.modules.dashboard.customcommands.CustomCommandAdminService;
 import eu.avalanche7.paradigm.modules.discord.DiscordService;
 import eu.avalanche7.paradigm.modules.holograms.HologramService;
+import eu.avalanche7.paradigm.modules.menus.MenuActions;
+import eu.avalanche7.paradigm.modules.menus.MenuRegistry;
+import eu.avalanche7.paradigm.modules.menus.MenuService;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentService;
 import eu.avalanche7.paradigm.modules.permissions.PermissionAdminService;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
+import eu.avalanche7.paradigm.modules.tickets.TicketService;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.storage.StorageService;
 import eu.avalanche7.paradigm.utils.*;
@@ -48,6 +57,9 @@ public class Services {
     private final IPlatformAdapter platformAdapter;
 
     private volatile AuditService auditService;
+    private volatile TicketService ticketService;
+    private volatile ActionDispatcher actionDispatcher;
+    private volatile MenuService menuService;
     private volatile PermissionAdminService permissionAdminService;
     private volatile CustomCommandAdminService customCommandAdminService;
     private volatile PunishmentService punishmentService;
@@ -318,6 +330,49 @@ public class Services {
         synchronized (this) {
             if (auditService == null) auditService = new AuditService(this, ForkJoinPool.commonPool());
             return auditService;
+        }
+    }
+
+    public TicketService getTicketService() {
+        TicketService current = ticketService;
+        if (current != null) return current;
+        synchronized (this) {
+            if (ticketService == null) {
+                ticketService = new TicketService(this);
+            }
+            return ticketService;
+        }
+    }
+
+    public ActionDispatcher getActionDispatcher() {
+        ActionDispatcher current = actionDispatcher;
+        if (current != null) return current;
+        synchronized (this) {
+            if (actionDispatcher == null) {
+                ActionRegistry actions =
+                        new ActionRegistry();
+                ConditionRegistry conditions =
+                        new ConditionRegistry();
+                BuiltinActions.register(actions, this);
+                BuiltinConditions.register(conditions, this);
+                MenuActions.register(actions, this, this::getMenuService);
+                actionDispatcher = new ActionDispatcher(this, actions, conditions);
+            }
+            return actionDispatcher;
+        }
+    }
+
+    public MenuService getMenuService() {
+        MenuService current = menuService;
+        if (current != null) return current;
+        synchronized (this) {
+            if (menuService == null) {
+                menuService = new MenuService(
+                        this,
+                        new MenuRegistry(),
+                        getActionDispatcher());
+            }
+            return menuService;
         }
     }
 

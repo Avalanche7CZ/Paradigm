@@ -17,9 +17,11 @@ public class StaticAssetHandler {
             "dashboard-network-context.css",
             "dashboard-permissions-ux.css",
             "dashboard-commands.css",
+            "dashboard-menus.css",
             "dashboard-servers.css",
             "dashboard-layout.css",
             "dashboard-system24.css",
+            "dashboard-tickets.css",
             "dashboard-polish.css"
     );
 
@@ -35,8 +37,11 @@ public class StaticAssetHandler {
             "dashboard-performance.js",
             "dashboard-permissions-ux.js",
             "dashboard-commands.js",
+            "dashboard-menus.js",
             "dashboard-servers.js",
             "dashboard-nav-context.js",
+            "dashboard-tickets.js",
+            "dashboard-capabilities.js",
             "dashboard-session-reset.js",
             "dashboard-polish.js"
     );

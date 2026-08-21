@@ -153,12 +153,33 @@ public class CustomCommand {
         private List<String> text;
         private Integer x, y, z;
         private List<String> commands;
+        private String menu;
 
         private List<Condition> conditions;
         private List<Action> on_success;
         private List<Action> on_failure;
 
         private Action() {}
+
+        public static Action openMenu(String menuId) {
+            Action action = new Action();
+            action.type = "open_menu";
+            action.menu = menuId;
+            return action;
+        }
+
+        public static Action of(String type) {
+            Action action = new Action();
+            action.type = type;
+            return action;
+        }
+
+        public static Action message(List<String> lines) {
+            Action action = new Action();
+            action.type = "message";
+            action.text = lines;
+            return action;
+        }
 
         public Action(String type, List<String> text, Integer x, Integer y, Integer z, List<String> commands, List<Condition> conditions, List<Action> on_success, List<Action> on_failure) {
             this.type = type;
@@ -194,6 +215,10 @@ public class CustomCommand {
 
         public List<String> getCommands() {
             return commands;
+        }
+
+        public String getMenu() {
+            return menu;
         }
 
         public List<Condition> getConditions() {

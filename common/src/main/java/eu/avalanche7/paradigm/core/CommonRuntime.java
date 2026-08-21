@@ -48,6 +48,7 @@ public final class CommonRuntime {
         TablistConfigHandler.init(platformConfig, bootstrapDebugLogger);
         DiscordConfigHandler.init(platformConfig, bootstrapDebugLogger);
         AfkConfigHandler.init(platformConfig, bootstrapDebugLogger);
+        TicketsConfigHandler.init(platformConfig, bootstrapDebugLogger);
 
         DebugLogger debugLogger = new DebugLogger(MainConfigHandler.getConfig());
         CMConfig cmConfig = new CMConfig(debugLogger, platformConfig);

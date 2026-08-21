@@ -4,6 +4,8 @@ const state = {
   editPages: new Map(),
   errors: new Map(),
   csrf: null,
+  capabilities: null,
+  currentPageEditable: null,
   page: 'overview',
   advanced: false,
   permissionView: 'groups',
@@ -171,6 +173,7 @@ const pageInfo = {
   motd: ['MOTD Editor', 'Join and server-list presentation.'],
   tablist: ['Tablist', 'Player-list formatting, sorting, and world overrides.'],
   holograms: ['Holograms', 'Server-side text displays, locations, and refresh behavior.'],
+  menus: ['Menus', 'Server-side inventory GUI definitions, slots, conditions, and actions.'],
   customCommands: ['Custom Commands', 'Structured custom command definitions.'],
   commands: ['Command Settings', 'Built-in command availability.'],
   cooldowns: ['Cooldowns', 'Cooldown and warmup timing.'],
@@ -209,6 +212,7 @@ async function checkAuth() {
     const status = await api('/api/auth/status');
     if (status.authenticated || !status.requireLogin) {
       state.csrf = status.csrfToken || null;
+      state.capabilities = status.capabilities || null;
       showApp(status.principal);
     } else showLogin();
   } catch (error) {
@@ -234,8 +238,9 @@ function showApp(principal) {
   $('login-panel').classList.add('hidden');
   $('app-panel').classList.remove('hidden');
   $('session-state').textContent = principal?.name ? principal.name : 'Local Admin';
-  const initial = validPage(location.hash.slice(1)) ? location.hash.slice(1) : 'overview';
-  navigate(initial, false);
+  document.dispatchEvent(new CustomEvent('paradigm:capabilities-changed', { detail: state.capabilities }));
+  const requested = validPage(location.hash.slice(1)) ? location.hash.slice(1) : 'overview';
+  navigate(accessiblePage(requested), false);
   loadConfigSnapshot();
 }
 
@@ -245,6 +250,7 @@ async function login(fromUrl = false) {
   try {
     const data = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ token }) });
     state.csrf = data.csrfToken || null;
+    state.capabilities = data.capabilities || null;
     if (fromUrl) history.replaceState(null, '', `${location.pathname}${location.hash || '#overview'}`);
     setMessage('login-message', '');
     showApp(data.principal);
@@ -261,8 +267,28 @@ async function logout() {
 
 function validPage(page) { return Object.prototype.hasOwnProperty.call(pageInfo, page); }
 
+function pageAccessible(page) {
+  if (!state.capabilities || !state.capabilities.pages) return true;
+  return state.capabilities.pages[page] !== false;
+}
+
+function pageEditable(page) {
+  if (!state.capabilities || !state.capabilities.config) return true;
+  const section = state.capabilities.config[page];
+  return !section || section.edit !== false;
+}
+
+function firstAccessiblePage() {
+  return Object.keys(pageInfo).find(pageAccessible) || 'overview';
+}
+
+function accessiblePage(page) {
+  return (validPage(page) && pageAccessible(page)) ? page : firstAccessiblePage();
+}
+
 function navigate(page, updateHash = true) {
   if (!validPage(page)) page = 'overview';
+  if (!pageAccessible(page)) page = firstAccessiblePage();
   state.page = page;
   document.querySelectorAll('[data-page-target]').forEach(button => {
     const active = button.dataset.pageTarget === page;
@@ -290,6 +316,7 @@ async function requestNavigate(page) {
 }
 
 async function loadPage(page) {
+  if (!pageAccessible(page)) return;
   if (page === 'overview') await loadOverview();
   if (page === 'servers') await loadServers();
   if (page === 'storage') await loadStorage();
@@ -298,6 +325,7 @@ async function loadPage(page) {
   if (page === 'permissions') await loadPermissions();
   if (page === 'customCommands') await loadCustomCommands();
   if (page === 'holograms') await loadHolograms();
+  if (page === 'menus' && window.ParadigmMenus) await window.ParadigmMenus.load();
   if (page === 'moderation') await loadModeration();
   if (page === 'audit') await loadAudit();
   if (state.snapshot) renderConfiguration();
@@ -330,17 +358,17 @@ function pageCategories(page = state.page) {
 
 function renderConfiguration() {
   if (!state.snapshot) return;
-  renderConfigContainer('general-fields', fieldsFor(['modules', 'command_groups', 'admin_utilities']), 'general');
-  renderConfigContainer('teleport-fields', fieldsFor(['teleports']), 'teleports');
+  renderConfigContainer('general-fields', fieldsFor(['modules', 'command_groups', 'admin_utilities']), 'general', { readOnly: !pageEditable('general') });
+  renderConfigContainer('teleport-fields', fieldsFor(['teleports']), 'teleports', { readOnly: !pageEditable('teleports') });
   renderChat();
   renderAnnouncements();
   renderRestart();
   renderMotd();
   renderTablist();
   if (state.page === 'moderation' && $('moderation-ban-screen')) renderModerationBanScreen();
-  renderConfigContainer('command-fields', filterByInput(fieldsFor(['commands']), 'command-search'), 'commands');
-  renderConfigContainer('cooldown-fields', filterByInput(fieldsFor(['cooldowns']), 'cooldown-search'), 'cooldowns');
-  renderConfigContainer('dashboard-fields', fieldsFor(['dashboard']), 'dashboard');
+  renderConfigContainer('command-fields', filterByInput(fieldsFor(['commands']), 'command-search'), 'commands', { readOnly: !pageEditable('commands') });
+  renderConfigContainer('cooldown-fields', filterByInput(fieldsFor(['cooldowns']), 'cooldown-search'), 'cooldowns', { readOnly: !pageEditable('cooldowns') });
+  renderConfigContainer('dashboard-fields', fieldsFor(['dashboard']), 'dashboard', { readOnly: !pageEditable('dashboard') });
   renderDiscord();
   updateSaveBar();
 }
@@ -380,7 +408,7 @@ function configRow(field, page, options = {}) {
   const origin = field.origin ? `<span class="origin-badge origin-${attr(field.origin)}">${esc(field.origin)}</span>` : '';
   return `<div class="config-row ${dirty ? 'is-dirty' : ''} ${error ? 'has-error' : ''}" data-field-row="${attr(field.key)}">
     <div class="config-label"><strong>${esc(humanLabel(field))}</strong>${origin}<small>${esc(field.help || '')}</small>${reload ? `<span class="reload-note">${esc(reload)}</span>` : ''}<span class="advanced-detail">${esc(field.key)} · ${esc(field.owner || '')} · ${esc(field.type)} · default ${esc(display(field.defaultValue?.value))}</span>${error ? `<div class="field-error">${esc(error)}</div>` : ''}</div>
-    <div class="config-control"><div class="config-control-line">${control}${field.editable ? `<button type="button" data-reset-field="${attr(field.key)}" title="Reset to default">Reset</button>` : ''}</div></div>
+    <div class="config-control"><div class="config-control-line">${control}${field.editable && !options.readOnly ? `<button type="button" data-reset-field="${attr(field.key)}" title="Reset to default">Reset</button>` : ''}</div></div>
   </div>`;
 }
 
@@ -392,7 +420,7 @@ function humanLabel(field) {
 
 function configControl(field, value, options = {}) {
   const label = attr(humanLabel(field));
-  if (!field.editable || field.type === 'READ_ONLY_TEXT') return `<div class="readonly-value">${esc(display(value))}</div>`;
+  if (!field.editable || field.type === 'READ_ONLY_TEXT' || options.readOnly) return `<div class="readonly-value">${esc(display(value))}</div>`;
   if (field.type === 'SECRET_MASKED') return `<div class="readonly-value">${field.value?.set ? 'Configured' : 'Not configured'}</div>`;
   if (field.type === 'BOOLEAN') return `<label class="switch"><input data-config-key="${attr(field.key)}" data-config-type="BOOLEAN" type="checkbox" aria-label="${label}" ${value ? 'checked' : ''}><span aria-hidden="true"></span></label>`;
   if (field.type === 'ENUM') return `<select data-config-key="${attr(field.key)}" data-config-type="ENUM" aria-label="${label}">${(field.options || []).map(option => `<option ${option === value ? 'selected' : ''}>${esc(option)}</option>`).join('')}</select>`;
@@ -541,9 +569,10 @@ function clearEdits() { state.edits.clear(); state.editPages.clear(); state.erro
 
 function updateSaveBar() {
   const count = [...state.editPages.values()].filter(page => page === state.page).length;
+  state.currentPageEditable = pageEditable(state.page);
   $('unsaved-count').textContent = count;
   $('save-bar').classList.toggle('hidden', count === 0);
-  $('save-changes').disabled = count === 0;
+  $('save-changes').disabled = count === 0 || state.currentPageEditable === false;
   const restart = [...state.edits.keys()].some(key => findField(key)?.reloadBehavior === 'RESTART_REQUIRED');
   const reload = [...state.edits.keys()].some(key => findField(key)?.reloadBehavior === 'RELOAD_REQUIRED');
   $('apply-state').textContent = restart ? 'Restart required' : reload ? 'Reload required' : 'Applies live';
@@ -584,10 +613,11 @@ const NAME_MARK = '\u0001';
 function renderChat() {
   const fields = fieldsFor(['chat']);
   const root = $('chat-fields');
+  const readOnly = !pageEditable('chat');
   const rest = fields.filter(field => !PLAYER_NAME_KEYS.includes(field.key));
   const featureFields = rest.filter(field => !isFormattedChatField(field));
   const formattedFields = rest.filter(isFormattedChatField);
-  root.innerHTML = `${featureFields.length ? `<section class="config-section"><h2>Features</h2>${featureFields.map(field => configRow(field, 'chat')).join('')}</section>` : ''}<section class="config-section formatted-fields-section"><h2>Formatting and Messages</h2>${formattedFields.map(chatFormatRow).join('')}</section>${playerNameEditor(fields)}`;
+  root.innerHTML = `${featureFields.length ? `<section class="config-section"><h2>Features</h2>${featureFields.map(field => configRow(field, 'chat', { readOnly })).join('')}</section>` : ''}<section class="config-section formatted-fields-section"><h2>Formatting and Messages</h2>${formattedFields.map(chatFormatRow).join('')}</section>${playerNameEditor(fields)}`;
   wireConfigControls(root, 'chat');
   wireFormattingEditors(root, 'chat', renderChatFieldPreview);
   wirePreviewDisclosures(root, renderChatFieldPreview);
@@ -857,8 +887,9 @@ function renderDiscord() {
   const root = $('discord-fields');
   if (!root) return;
   const fields = fieldsFor(['discord']);
+  const readOnly = !pageEditable('discord');
   root.innerHTML = fields.length
-    ? `<section class="config-section"><h2>Discord</h2>${fields.map(field => isDiscordMessageField(field) ? discordMessageRow(field) : configRow(field, 'discord')).join('')}</section>`
+    ? `<section class="config-section"><h2>Discord</h2>${fields.map(field => isDiscordMessageField(field) ? discordMessageRow(field) : configRow(field, 'discord', { readOnly })).join('')}</section>`
     : empty('No Discord settings found.');
   root.querySelectorAll('.discord-template-preview').forEach(panel => panel.setAttribute('aria-label', 'Rendered Discord message preview'));
   wireConfigControls(root, 'discord');
@@ -998,7 +1029,7 @@ function renderAnnouncements() {
   const fields = fieldsFor(['announcements']);
   const messageFields = fields.filter(field => field.type === 'STRING_LIST' && /Messages$/.test(field.key));
   const bossbarColor = fields.find(field => /bossbarColor$/.test(field.key));
-  renderConfigContainer('announcement-settings', fields.filter(field => !messageFields.includes(field) && field !== bossbarColor), 'announcements', { groupBy: field => /Interval|Time/.test(field.key) ? 'Timing' : /Enable/.test(field.key) ? 'Channels' : 'Presentation' });
+  renderConfigContainer('announcement-settings', fields.filter(field => !messageFields.includes(field) && field !== bossbarColor), 'announcements', { readOnly: !pageEditable('announcements'), groupBy: field => /Interval|Time/.test(field.key) ? 'Timing' : /Enable/.test(field.key) ? 'Channels' : 'Presentation' });
   const root = $('announcement-editor');
   if (!root) return;
   root.innerHTML = `<h2>Announcement Messages</h2><p>Edit, duplicate, delete, and reorder messages for each channel.</p>${messageFields.map(field => announcementChannel(field, bossbarColor)).join('')}`;
@@ -1056,7 +1087,7 @@ function renderRestart() {
   const root = $('restart-settings');
   root.innerHTML = `${restartScheduleEditor()}<div id="restart-other-settings" class="config-sections"></div>`;
   wireRestartSchedule(root);
-  renderConfigContainer('restart-other-settings', otherFields, 'restart', { groupBy: field => /Message|Reason/.test(field.key) ? 'Messages' : /Enabled|UseChat/.test(field.key) ? 'Warning Channels' : 'Presentation' });
+  renderConfigContainer('restart-other-settings', otherFields, 'restart', { readOnly: !pageEditable('restart'), groupBy: field => /Message|Reason/.test(field.key) ? 'Messages' : /Enabled|UseChat/.test(field.key) ? 'Warning Channels' : 'Presentation' });
   renderRestartActions(warningFields);
   updateRestartSummary();
 }
@@ -1228,10 +1259,11 @@ function renderMotdPreview(lines, panel = document.querySelector('[data-preview-
 function renderMotdSettings(fields) {
   const root = $('motd-settings');
   if (!root) return;
+  const readOnly = !pageEditable('motd');
   const rows = fields.map(field => {
     const value = valueOf(field.key);
     const focused = /\.line[12]$|hoverText$/.test(field.key);
-    const control = focused && field.editable ? `<div class="motd-format-layout"><div class="motd-format-editor">${formattingToolbar(field.key)}<textarea class="format-editor auto-grow" rows="${/hoverText$/.test(field.key) ? 4 : 2}" data-config-key="${attr(field.key)}" data-config-type="STRING">${esc(value || '')}</textarea></div>${collapsiblePreview(`motd:${field.key}`, 'compact-preview')}</div>` : configControl(field, value);
+    const control = focused && field.editable && !readOnly ? `<div class="motd-format-layout"><div class="motd-format-editor">${formattingToolbar(field.key)}<textarea class="format-editor auto-grow" rows="${/hoverText$/.test(field.key) ? 4 : 2}" data-config-key="${attr(field.key)}" data-config-type="STRING">${esc(value || '')}</textarea></div>${collapsiblePreview(`motd:${field.key}`, 'compact-preview')}</div>` : configControl(field, value, { readOnly });
     return `<div class="config-row ${focused ? 'wide-editor-row' : ''}"><div class="config-label"><strong>${esc(humanLabel(field))}</strong><small>${esc(field.help || '')}</small></div><div class="config-control"><div class="config-control-line">${control}</div></div></div>`;
   }).join('');
   root.innerHTML = `<section class="config-section"><h2>Server List</h2>${rows}</section>`;
@@ -2033,12 +2065,14 @@ async function loadPermissions() {
       ? api('/api/permissions/groups')
       : state.permissionView === 'users'
         ? api(`/api/permissions/users?query=${query}&page=${page}&pageSize=${state.pageSize}`)
+        : state.permissionView === 'tracks'
+          ? api('/api/permissions/tracks')
         : api(`/api/permissions/nodes?query=${query}&page=${page}&pageSize=${state.pageSize}`);
     const [summary, data] = await Promise.all([summaryPromise, dataPromise]);
     state.permissionData.summary = summary;
     state.permissionData[state.permissionView] = data[state.permissionView] || [];
     state.permissionData.total = data.total ?? state.permissionData[state.permissionView].length;
-    $('permissions-summary').textContent = `${summary.groups} groups · ${summary.users} configured permission subjects · ${summary.nodes} nodes`;
+    $('permissions-summary').textContent = `${summary.groups} groups · ${summary.users} configured permission subjects · ${summary.tracks ?? (state.permissionData.tracks || []).length} tracks · ${summary.nodes} nodes`;
     document.querySelectorAll('[data-permission-view]').forEach(button => button.classList.toggle('active', button.dataset.permissionView === state.permissionView));
     renderPermissionTargetList();
     if (state.selectedPermissionTarget) renderPermissionEditor();
@@ -2077,6 +2111,12 @@ function renderPermissionTargetList() {
     $('permission-create-group').addEventListener('click', createPermissionGroup);
   } else if (state.permissionView === 'users') {
     root.innerHTML = items.length ? items.map(user => `<button class="selection-item ${selectedPermission('user', user.uuid) ? 'active' : ''}" data-permission-kind="user" data-permission-id="${attr(user.uuid)}"><strong>${esc(user.name || user.uuid)}</strong><small>${user.online ? 'Online' : 'Offline'} · ${user.groups || 0} groups · ${user.permissions || 0} direct</small></button>`).join('') : empty('No players found.');
+  } else if (state.permissionView === 'tracks') {
+    root.innerHTML = `<button id="permission-create-track">Create Track</button>${items.map(track => `<button class="selection-item ${selectedPermission('track', track.name) ? 'active' : ''}" data-permission-kind="track" data-permission-id="${attr(track.name)}"><strong>${esc(track.name)}</strong><small>${(track.groups || []).length} ranks</small></button>`).join('')}`;
+    $('permission-create-track').addEventListener('click', async () => {
+      const name = await promptAction('Create Track', 'Choose a name for the ordered permission track.', '', 'Track name');
+      if (name) permissionMutation('track_create', { track: name });
+    });
   } else {
     root.innerHTML = items.length ? items.map(node => `<button class="selection-item ${selectedPermission('node', node.node) ? 'active' : ''}" data-permission-kind="node" data-permission-id="${attr(node.node)}"><strong>${esc(node.node)}</strong><small>${esc(node.source || 'Paradigm')} · ${esc(node.description || '')}</small></button>`).join('') : empty('No permission nodes found.');
   }
@@ -2095,7 +2135,19 @@ async function renderPermissionEditor() {
   if (!selected) return;
   if (selected.kind === 'group') return renderGroupEditor(state.permissionData.groups.find(group => group.name === selected.id));
   if (selected.kind === 'user') return renderUserEditor(state.permissionData.users.find(user => user.uuid === selected.id));
+  if (selected.kind === 'track') return renderTrackEditor(state.permissionData.tracks.find(track => track.name === selected.id));
   return renderNodeEditor(state.permissionData.nodes.find(node => node.node === selected.id));
+}
+
+function renderTrackEditor(track) {
+  if (!track) return;
+  const root = $('permission-editor');
+  root.className = 'detail-editor permission-subject-editor';
+  root.innerHTML = `<div class="detail-header"><div><h2>${esc(track.name)}</h2><span>Ordered ranks, lowest to highest.</span></div><div class="detail-header-actions"><button id="track-clear">Clear</button><button id="track-delete" class="danger">Delete</button></div></div><section class="permission-section"><h2>Ranks</h2><ol>${(track.groups || []).map((group, index) => `<li>${esc(group)} <button data-track-remove="${attr(group)}">Remove</button></li>`).join('') || '<li>No ranks.</li>'}</ol><div class="compact-form"><label>Group<select id="track-group-select">${(state.permissionData.groups || []).map(group => `<option>${esc(group.name)}</option>`).join('')}</select></label><button id="track-append">Append Rank</button></div></section>`;
+  $('track-clear').addEventListener('click', () => permissionMutation('track_clear', { track: track.name }));
+  $('track-delete').addEventListener('click', async () => { if (await confirmAction(`Delete track ${track.name}?`, true)) permissionMutation('track_delete', { track: track.name }); });
+  $('track-append').addEventListener('click', () => permissionMutation('track_append', { track: track.name, group: $('track-group-select').value }));
+  root.querySelectorAll('[data-track-remove]').forEach(button => button.addEventListener('click', () => permissionMutation('track_remove', { track: track.name, group: button.dataset.trackRemove })));
 }
 
 function renderGroupEditor(group) {
@@ -2321,7 +2373,11 @@ async function permissionMutation(action, body) {
       group_parent_add: 'group/parent/add', group_parent_remove: 'group/parent/remove',
       group_permission_add: 'group/permission/add', group_permission_remove: 'group/permission/remove',
       user_permission_add: 'user/permission/add', user_permission_remove: 'user/permission/remove',
-      user_group_add: 'user/group/add', user_group_remove: 'user/group/remove'
+      user_group_add: 'user/group/add', user_group_remove: 'user/group/remove',
+      track_create: 'track/create', track_delete: 'track/delete', track_clear: 'track/clear',
+      track_append: 'track/append', track_remove: 'track/remove', track_insert: 'track/insert', track_move: 'track/move',
+      track_clone: 'track/clone', track_rename: 'track/rename', promote: 'user/track/promote', demote: 'user/track/demote',
+      settrack: 'user/track/settrack', cleartrack: 'user/track/cleartrack'
     })[action];
     const result = await api(`/api/permissions/${path}`, { method: 'POST', body: JSON.stringify(body) });
     if (!result.applied && result.confirmationRequired) {

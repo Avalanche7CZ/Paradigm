@@ -11,6 +11,7 @@ import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
 import eu.avalanche7.paradigm.storage.identity.StorageContext;
 import eu.avalanche7.paradigm.storage.model.StoredPermissionGroup;
 import eu.avalanche7.paradigm.storage.model.StoredPermissionNode;
+import eu.avalanche7.paradigm.storage.model.StoredPermissionTrack;
 import eu.avalanche7.paradigm.storage.model.StoredUserPermissionData;
 import eu.avalanche7.paradigm.storage.repository.PermissionRepository;
 
@@ -75,7 +76,59 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
             });
             sql.update("DELETE FROM permission_group_permissions WHERE group_name = ?", ps -> ps.setString(1, groupName));
             sql.update("DELETE FROM permission_user_groups WHERE group_name = ?", ps -> ps.setString(1, groupName));
+            sql.update("DELETE FROM permission_track_members WHERE group_name = ?", ps -> ps.setString(1, groupName));
             return sql.update("DELETE FROM permission_groups WHERE name = ?", ps -> ps.setString(1, groupName)) > 0;
+        });
+    }
+
+    @Override
+    public List<StoredPermissionTrack> listTracks() {
+        return sql.query("SELECT name FROM permission_tracks ORDER BY name", null, rs -> {
+            List<StoredPermissionTrack> result = new ArrayList<>();
+            while (rs.next()) getTrack(rs.getString("name")).ifPresent(result::add);
+            return result;
+        });
+    }
+
+    @Override
+    public Optional<StoredPermissionTrack> getTrack(String trackName) {
+        String name = normalize(trackName);
+        return sql.query("SELECT name FROM permission_tracks WHERE name = ?", ps -> ps.setString(1, name), rs -> {
+            if (!rs.next()) return Optional.empty();
+            List<String> groups = sql.query("SELECT group_name FROM permission_track_members WHERE track_name = ? ORDER BY position", ps -> ps.setString(1, name), members -> {
+                List<String> result = new ArrayList<>();
+                while (members.next()) result.add(members.getString("group_name"));
+                return result;
+            });
+            return Optional.of(new StoredPermissionTrack(name, groups));
+        });
+    }
+
+    @Override
+    public void saveTrack(StoredPermissionTrack track) {
+        if (track == null || track.name() == null) return;
+        sql.transaction(() -> {
+            sql.update("DELETE FROM permission_track_members WHERE track_name = ?", ps -> ps.setString(1, track.name()));
+            sql.update("DELETE FROM permission_tracks WHERE name = ?", ps -> ps.setString(1, track.name()));
+            sql.update("INSERT INTO permission_tracks(name) VALUES(?)", ps -> ps.setString(1, track.name()));
+            for (int index = 0; index < track.groups().size(); index++) {
+                int position = index + 1;
+                String group = track.groups().get(index);
+                sql.update("INSERT INTO permission_track_members(track_name, group_name, position) VALUES(?, ?, ?)", ps -> {
+                    ps.setString(1, track.name());
+                    ps.setString(2, group);
+                    ps.setInt(3, position);
+                });
+            }
+        });
+    }
+
+    @Override
+    public boolean deleteTrack(String trackName) {
+        String name = normalize(trackName);
+        return sql.transaction(() -> {
+            sql.update("DELETE FROM permission_track_members WHERE track_name = ?", ps -> ps.setString(1, name));
+            return sql.update("DELETE FROM permission_tracks WHERE name = ?", ps -> ps.setString(1, name)) > 0;
         });
     }
 

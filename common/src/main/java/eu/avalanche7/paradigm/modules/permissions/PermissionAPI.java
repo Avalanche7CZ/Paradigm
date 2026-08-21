@@ -22,6 +22,7 @@ import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.model.StoredPermissionGroup;
 import eu.avalanche7.paradigm.storage.model.StoredPermissionNode;
+import eu.avalanche7.paradigm.storage.model.StoredPermissionTrack;
 import eu.avalanche7.paradigm.storage.model.StoredUserPermissionData;
 import eu.avalanche7.paradigm.storage.repository.PermissionRepository;
 import eu.avalanche7.paradigm.utils.DebugLogger;
@@ -88,6 +89,295 @@ public class PermissionAPI {
         return stateVersion.get();
     }
 
+    public List<StoredPermissionTrack> listTracks() {
+        stateLock.readLock().lock();
+        try {
+            List<StoredPermissionTrack> tracks = new ArrayList<>();
+            for (Map.Entry<String, List<String>> entry : state.tracks.entrySet()) {
+                tracks.add(new StoredPermissionTrack(entry.getKey(), entry.getValue()));
+            }
+            return List.copyOf(tracks);
+        } finally {
+            stateLock.readLock().unlock();
+        }
+    }
+
+    public StoredPermissionTrack getTrack(String trackName) {
+        String track = normalizeGroupName(trackName);
+        if (track == null) return null;
+        stateLock.readLock().lock();
+        try {
+            List<String> groups = state.tracks.get(track);
+            return groups == null ? null : new StoredPermissionTrack(track, groups);
+        } finally {
+            stateLock.readLock().unlock();
+        }
+    }
+
+    public PermissionTrackResult createTrack(String trackName) {
+        String track = normalizeGroupName(trackName);
+        if (track == null) return trackResult(false, "invalid_position", "Track name is invalid.", track, null, null);
+        stateLock.writeLock().lock();
+        try {
+            if (state.tracks.containsKey(track)) return trackResult(false, "duplicate_group", "Track already exists.", track, null, null);
+            state.tracks.put(track, new ArrayList<>());
+            saveLocked();
+            return trackResult(true, "ok", "Track created.", track, null, null);
+        } finally { stateLock.writeLock().unlock(); }
+    }
+
+    public PermissionTrackResult deleteTrack(String trackName) {
+        String track = normalizeGroupName(trackName);
+        stateLock.writeLock().lock();
+        try {
+            if (track == null || state.tracks.remove(track) == null) return trackResult(false, "track_not_found", "Track was not found.", track, null, null);
+            saveLocked();
+            return trackResult(true, "ok", "Track deleted.", track, null, null);
+        } finally { stateLock.writeLock().unlock(); }
+    }
+
+    public PermissionTrackResult renameTrack(String trackName, String newName) {
+        String track = normalizeGroupName(trackName);
+        String renamed = normalizeGroupName(newName);
+        stateLock.writeLock().lock();
+        try {
+            List<String> groups = track != null ? state.tracks.get(track) : null;
+            if (groups == null) return trackResult(false, "track_not_found", "Track was not found.", track, null, null);
+            if (renamed == null) return trackResult(false, "invalid_position", "Track name is invalid.", track, null, null);
+            if (!track.equals(renamed) && state.tracks.containsKey(renamed)) return trackResult(false, "duplicate_group", "Track already exists.", track, null, null);
+            if (!track.equals(renamed)) {
+                state.tracks.remove(track);
+                state.tracks.put(renamed, groups);
+                saveLocked();
+            }
+            return trackResult(true, "ok", "Track renamed.", renamed, null, null);
+        } finally { stateLock.writeLock().unlock(); }
+    }
+
+    public PermissionTrackResult cloneTrack(String sourceName, String targetName) {
+        String source = normalizeGroupName(sourceName);
+        String target = normalizeGroupName(targetName);
+        stateLock.writeLock().lock();
+        try {
+            List<String> groups = source != null ? state.tracks.get(source) : null;
+            if (groups == null) return trackResult(false, "track_not_found", "Track was not found.", source, null, null);
+            if (target == null) return trackResult(false, "invalid_position", "Track name is invalid.", source, null, null);
+            if (state.tracks.containsKey(target)) return trackResult(false, "duplicate_group", "Track already exists.", target, null, null);
+            state.tracks.put(target, new ArrayList<>(groups));
+            saveLocked();
+            return trackResult(true, "ok", "Track cloned.", target, null, null);
+        } finally { stateLock.writeLock().unlock(); }
+    }
+
+    public PermissionTrackResult clearTrack(String trackName) {
+        String track = normalizeGroupName(trackName);
+        stateLock.writeLock().lock();
+        try {
+            List<String> groups = track != null ? state.tracks.get(track) : null;
+            if (groups == null) return trackResult(false, "track_not_found", "Track was not found.", track, null, null);
+            if (groups.isEmpty()) return trackResult(true, "ok", "Track already empty.", track, null, null);
+            groups.clear();
+            saveLocked();
+            return trackResult(true, "ok", "Track cleared.", track, null, null);
+        } finally { stateLock.writeLock().unlock(); }
+    }
+
+    public PermissionTrackResult insertTrackGroup(String trackName, String groupName, int position) {
+        String track = normalizeGroupName(trackName);
+        String group = normalizeGroupName(groupName);
+        stateLock.writeLock().lock();
+        try {
+            List<String> groups = track != null ? state.tracks.get(track) : null;
+            if (groups == null) return trackResult(false, "track_not_found", "Track was not found.", track, null, null);
+            if (group == null || !state.groups.containsKey(group)) return trackResult(false, "group_not_found", "Group was not found.", track, null, null);
+            if (groups.contains(group)) return trackResult(false, "duplicate_group", "Group is already on the track.", track, null, null);
+            if (position < 1 || position > groups.size() + 1) return trackResult(false, "invalid_position", "Position is invalid.", track, null, null);
+            groups.add(position - 1, group);
+            saveLocked();
+            return trackResult(true, "ok", "Group added to track.", track, null, position);
+        } finally { stateLock.writeLock().unlock(); }
+    }
+
+    public PermissionTrackResult appendTrackGroup(String trackName, String groupName) {
+        String track = normalizeGroupName(trackName);
+        stateLock.readLock().lock();
+        int position;
+        try { position = track != null && state.tracks.get(track) != null ? state.tracks.get(track).size() + 1 : 1; }
+        finally { stateLock.readLock().unlock(); }
+        return insertTrackGroup(trackName, groupName, position);
+    }
+
+    public PermissionTrackResult removeTrackGroup(String trackName, String groupName) {
+        String track = normalizeGroupName(trackName);
+        String group = normalizeGroupName(groupName);
+        stateLock.writeLock().lock();
+        try {
+            List<String> groups = track != null ? state.tracks.get(track) : null;
+            if (groups == null) return trackResult(false, "track_not_found", "Track was not found.", track, null, null);
+            int index = groups.indexOf(group);
+            if (index < 0) return trackResult(false, "not_on_track", "Group is not on track.", track, null, null);
+            groups.remove(index);
+            saveLocked();
+            return trackResult(true, "ok", "Group removed from track.", track, index + 1, null);
+        } finally { stateLock.writeLock().unlock(); }
+    }
+
+    public PermissionTrackResult moveTrackGroup(String trackName, String groupName, int position) {
+        String track = normalizeGroupName(trackName);
+        String group = normalizeGroupName(groupName);
+        stateLock.writeLock().lock();
+        try {
+            List<String> groups = track != null ? state.tracks.get(track) : null;
+            if (groups == null) return trackResult(false, "track_not_found", "Track was not found.", track, null, null);
+            int index = groups.indexOf(group);
+            if (index < 0) return trackResult(false, "not_on_track", "Group is not on track.", track, null, null);
+            if (position < 1 || position > groups.size()) return trackResult(false, "invalid_position", "Position is invalid.", track, index + 1, null);
+            groups.remove(index);
+            groups.add(position - 1, group);
+            saveLocked();
+            return trackResult(true, "ok", "Group moved on track.", track, index + 1, position);
+        } finally { stateLock.writeLock().unlock(); }
+    }
+
+    /**
+     * Moves one direct assignment through an ordered track. The selected contexts must match
+     * exactly; inherited groups are deliberately not considered ranks.
+     */
+    public PermissionTrackResult moveUserOnTrack(UUID playerUuid, String trackName, PermissionContextSet contextSet,
+                                                  String operation, boolean dontAddToFirst, boolean dontRemoveFromFirst,
+                                                  Long requestedExpiry, String assignedBy, String requestedGroup) {
+        String track = normalizeGroupName(trackName);
+        String requested = normalizeGroupName(requestedGroup);
+        PermissionContextSet contexts = contextSet != null ? contextSet : PermissionContextSet.empty();
+        String mode = operation != null ? operation.trim().toLowerCase(Locale.ROOT) : "";
+        if (playerUuid == null) return trackResult(false, "not_on_track", "User was not found.", track, null, null);
+        stateLock.writeLock().lock();
+        try {
+            List<String> ranks = track != null ? state.tracks.get(track) : null;
+            if (ranks == null) return trackResult(false, "track_not_found", "Track was not found.", track, null, null);
+            if (ranks.isEmpty()) return trackResult(false, "not_on_track", "Track has no ranks.", track, null, null);
+            String uuid = playerUuid.toString().toLowerCase(Locale.ROOT);
+            PermissionDataStore.UserEntry user = state.users.computeIfAbsent(uuid, ignored -> new PermissionDataStore.UserEntry());
+            user.normalize();
+            List<DirectTrackAssignment> assignments = directTrackAssignments(user, ranks, contexts);
+            if (assignments.size() > 1) {
+                List<String> conflicts = assignments.stream().map(DirectTrackAssignment::group).toList();
+                return new PermissionTrackResult(false, "ambiguous_track_position", "User has multiple direct track ranks.", track, null, null, conflicts);
+            }
+            DirectTrackAssignment current = assignments.isEmpty() ? null : assignments.get(0);
+            int currentPosition = current != null ? ranks.indexOf(current.group()) + 1 : 0;
+            boolean implicitDefault = current == null && contexts.isEmpty() && ranks.get(0).equals(normalizeGroupName(state.defaultGroup));
+
+            if ("clear".equals(mode)) {
+                if (current == null) return trackResult(false, "not_on_track", "User is not on track.", track, null, null);
+                removeDirectAssignments(user, assignments, contexts, uuid);
+                saveLocked();
+                return trackResult(true, "ok", "Track rank cleared.", track, currentPosition, null);
+            }
+
+            if ("set".equals(mode)) {
+                int target = ranks.indexOf(requested);
+                if (target < 0) return trackResult(false, "not_on_track", "Requested group is not on track.", track, currentPosition, null);
+                DirectTrackAssignment preserve = current != null && current.group().equals(requested) ? current : null;
+                removeDirectAssignments(user, assignments, contexts, uuid);
+                if (preserve != null) addExistingAssignment(user, preserve, contexts);
+                else addDirectAssignment(user, uuid, requested, contexts, requestedExpiry, assignedBy);
+                saveLocked();
+                return trackResult(true, "ok", "Track rank set.", track, currentPosition == 0 ? null : currentPosition, target + 1);
+            }
+
+            if (!"promote".equals(mode) && !"demote".equals(mode)) {
+                return trackResult(false, "invalid_position", "Unknown track operation.", track, null, null);
+            }
+            if (current != null && requestedExpiry != null && current.expiresAtMs() != null && !requestedExpiry.equals(current.expiresAtMs())) {
+                return trackResult(false, "invalid_position", "Existing rank expiry cannot be overridden.", track, currentPosition, null);
+            }
+            if ("promote".equals(mode)) {
+                if (current == null) {
+                    if (dontAddToFirst) return trackResult(false, "not_on_track", "User is not on track.", track, null, null);
+                    int target = implicitDefault && ranks.size() > 1 ? 2 : 1;
+                    addDirectAssignment(user, uuid, ranks.get(target - 1), contexts, requestedExpiry, assignedBy);
+                    saveLocked();
+                    return trackResult(true, "ok", "User promoted on track.", track, implicitDefault ? 1 : null, target);
+                }
+                if (currentPosition >= ranks.size()) return trackResult(false, "already_highest", "User is already highest on track.", track, currentPosition, currentPosition);
+                replaceDirectAssignment(user, current, ranks.get(currentPosition), contexts, uuid);
+                saveLocked();
+                return trackResult(true, "ok", "User promoted on track.", track, currentPosition, currentPosition + 1);
+            }
+
+            if (current == null) {
+                return implicitDefault
+                        ? trackResult(false, "already_lowest", "Implicit default rank is never removed.", track, 1, 1)
+                        : trackResult(false, "not_on_track", "User is not on track.", track, null, null);
+            }
+            if (currentPosition == 1) {
+                if (dontRemoveFromFirst) return trackResult(false, "already_lowest", "User is already lowest on track.", track, 1, 1);
+                removeDirectAssignments(user, assignments, contexts, uuid);
+                saveLocked();
+                return trackResult(true, "ok", "Lowest track rank removed.", track, 1, null);
+            }
+            replaceDirectAssignment(user, current, ranks.get(currentPosition - 2), contexts, uuid);
+            saveLocked();
+            return trackResult(true, "ok", "User demoted on track.", track, currentPosition, currentPosition - 1);
+        } finally { stateLock.writeLock().unlock(); }
+    }
+
+    private List<DirectTrackAssignment> directTrackAssignments(PermissionDataStore.UserEntry user, List<String> ranks, PermissionContextSet contexts) {
+        List<DirectTrackAssignment> result = new ArrayList<>();
+        long now = System.currentTimeMillis();
+        if (contexts.isEmpty() && user.groups != null) {
+            for (int index = 0; index < user.groups.size(); index++) {
+                String group = normalizeGroupName(user.groups.get(index));
+                if (ranks.contains(group)) result.add(new DirectTrackAssignment(group, index, null, null));
+            }
+        }
+        if (user.contextualGroups != null) {
+            for (int index = 0; index < user.contextualGroups.size(); index++) {
+                PermissionDataStore.GroupAssignmentEntry assignment = user.contextualGroups.get(index);
+                if (assignment != null && ranks.contains(normalizeGroupName(assignment.group)) && contexts.equals(assignment.contextSet())
+                        && (assignment.expiresAtMs == null || assignment.expiresAtMs > now)) {
+                    result.add(new DirectTrackAssignment(normalizeGroupName(assignment.group), index, assignment, assignment.expiresAtMs));
+                }
+            }
+        }
+        return result;
+    }
+
+    private void replaceDirectAssignment(PermissionDataStore.UserEntry user, DirectTrackAssignment assignment, String target,
+                                         PermissionContextSet contexts, String uuid) {
+        if (assignment.entry() != null) assignment.entry().group = target;
+        else if (user.groups != null && assignment.index() >= 0 && assignment.index() < user.groups.size()) user.groups.set(assignment.index(), target);
+    }
+
+    private void removeDirectAssignments(PermissionDataStore.UserEntry user, List<DirectTrackAssignment> assignments,
+                                         PermissionContextSet contexts, String uuid) {
+        if (user.groups != null && contexts.isEmpty()) {
+            Set<Integer> indices = new HashSet<>();
+            for (DirectTrackAssignment assignment : assignments) if (assignment.entry() == null) indices.add(assignment.index());
+            for (int index = user.groups.size() - 1; index >= 0; index--) if (indices.contains(index)) user.groups.remove(index);
+        }
+        if (user.contextualGroups != null) user.contextualGroups.removeIf(assignments.stream().map(DirectTrackAssignment::entry).filter(java.util.Objects::nonNull).toList()::contains);
+    }
+
+    private void addExistingAssignment(PermissionDataStore.UserEntry user, DirectTrackAssignment assignment, PermissionContextSet contexts) {
+        if (assignment.entry() != null) user.contextualGroups.add(assignment.entry());
+        else if (contexts.isEmpty()) user.groups.add(assignment.group());
+    }
+
+    private void addDirectAssignment(PermissionDataStore.UserEntry user, String uuid, String group, PermissionContextSet contexts,
+                                     Long expiresAtMs, String assignedBy) {
+        if (contexts.isEmpty() && expiresAtMs == null) user.groups.add(group);
+        else user.contextualGroups.add(new PermissionDataStore.GroupAssignmentEntry(PermissionAssignmentId.generated(), group, contexts,
+                expiresAtMs, System.currentTimeMillis(), assignedBy != null ? assignedBy : ""));
+    }
+
+    private static PermissionTrackResult trackResult(boolean applied, String code, String message, String track, Integer oldPosition, Integer newPosition) {
+        return PermissionTrackResult.of(applied, code, message, track, oldPosition, newPosition);
+    }
+
+    private record DirectTrackAssignment(String group, int index, PermissionDataStore.GroupAssignmentEntry entry, Long expiresAtMs) { }
+
     public boolean createGroup(String groupName) {
         String normalized = normalizeGroupName(groupName);
         if (normalized == null) {
@@ -143,6 +433,9 @@ public class PermissionAPI {
                 if (user.contextualGroups != null) {
                     user.contextualGroups.removeIf(g -> g != null && normalized.equals(normalizeGroupName(g.group)));
                 }
+            }
+            for (List<String> track : state.tracks.values()) {
+                if (track != null) track.removeIf(member -> normalized.equals(normalizeGroupName(member)));
             }
             if (playerDataStore != null) {
                 for (PlayerDataStore.PlayerEntry player : playerDataStore.listPlayerEntries()) {
@@ -1331,6 +1624,7 @@ public class PermissionAPI {
         PermissionDataStore.PermissionState loaded = new PermissionDataStore.PermissionState();
         loaded.groups = new LinkedHashMap<>();
         loaded.users = new LinkedHashMap<>();
+        loaded.tracks = new LinkedHashMap<>();
 
         for (StoredPermissionGroup group : repository.listGroups()) {
             if (group == null) {
@@ -1371,6 +1665,18 @@ public class PermissionAPI {
             loaded = PermissionDataStore.PermissionState.createDefault();
             saveStateToRepository(repository, loaded);
             return loaded;
+        }
+
+        for (StoredPermissionTrack track : repository.listTracks()) {
+            if (track == null) continue;
+            String name = normalizeGroupName(track.name());
+            if (name == null) continue;
+            List<String> members = new ArrayList<>();
+            for (String group : track.groups()) {
+                String normalized = normalizeGroupName(group);
+                if (normalized != null && loaded.groups.containsKey(normalized) && !members.contains(normalized)) members.add(normalized);
+            }
+            loaded.tracks.put(name, members);
         }
 
         long now = System.currentTimeMillis();
@@ -1425,6 +1731,15 @@ public class PermissionAPI {
 
     private void saveStateToRepository(PermissionRepository repository, PermissionDataStore.PermissionState snapshot) {
         snapshot.normalize();
+
+        Set<String> desiredTracks = new LinkedHashSet<>(snapshot.tracks.keySet());
+        for (StoredPermissionTrack existing : repository.listTracks()) {
+            String name = existing != null ? normalizeGroupName(existing.name()) : null;
+            if (name != null && !desiredTracks.contains(name)) repository.deleteTrack(name);
+        }
+        for (Map.Entry<String, List<String>> entry : snapshot.tracks.entrySet()) {
+            repository.saveTrack(new StoredPermissionTrack(entry.getKey(), entry.getValue()));
+        }
 
         Set<String> desiredGroups = new LinkedHashSet<>(snapshot.groups.keySet());
         for (StoredPermissionGroup existing : repository.listGroups()) {
@@ -1612,6 +1927,10 @@ public class PermissionAPI {
                 userCopy.contextualGroups = user.contextualGroups != null ? copyGroups(user.contextualGroups) : new ArrayList<>();
             }
             copy.users.put(entry.getKey(), userCopy);
+        }
+        copy.tracks = new LinkedHashMap<>();
+        for (Map.Entry<String, List<String>> entry : source.tracks.entrySet()) {
+            copy.tracks.put(entry.getKey(), entry.getValue() != null ? new ArrayList<>(entry.getValue()) : new ArrayList<>());
         }
         copy.normalize();
         return copy;

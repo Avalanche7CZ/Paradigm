@@ -6,6 +6,9 @@ public class PermissionMutationRequest {
     public String action;
     public String group;
     public String parent;
+    public String track;
+    public String target;
+    public Integer position;
     public String permission;
     public String assignmentId;
     public String user;
@@ -17,4 +20,6 @@ public class PermissionMutationRequest {
     public Boolean permanent;
     public Boolean denied;
     public Boolean confirmed;
+    public Boolean dontAddToFirst;
+    public Boolean dontRemoveFromFirst;
 }

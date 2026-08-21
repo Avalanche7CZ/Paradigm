@@ -32,6 +32,10 @@ public final class ParadigmPermissions {
             def("paradigm.command.toggle", OP, "Allows enabling/disabling Paradigm commands at runtime via /paradigm command.");
     public static final PermissionDefinition HOLOGRAM_MANAGE =
             def("paradigm.hologram.manage", OWNER, "Allows creating and managing Paradigm holograms.");
+    public static final PermissionDefinition MENU_MANAGE =
+            def("paradigm.menu.manage", OP, "Allows listing, reloading and opening Paradigm menus with /paradigm menu.");
+    public static final PermissionDefinition MENU_OPEN_OTHERS =
+            def("paradigm.menu.open.others", OP, "Allows opening a Paradigm menu for another player.");
     public static final PermissionDefinition STORAGE_MANAGE =
             def("paradigm.storage.manage", OP, "Allows viewing and testing Paradigm storage providers with /paradigm storage.");
     public static final PermissionDefinition TABLIST_MANAGE =
@@ -146,7 +150,90 @@ public final class ParadigmPermissions {
     public static final PermissionDefinition JAIL_MANAGE =
             def("paradigm.jail.manage", OP, "Allows setting the jail location with /setjail.");
     public static final PermissionDefinition DASHBOARD_MANAGE =
-            def("paradigm.dashboard.manage", OWNER, "Allows managing and logging in to the local Paradigm admin dashboard.");
+            def("paradigm.dashboard.manage", OWNER,
+                    "Full dashboard superadmin: bypasses every dashboard page and config-section permission check below.");
+
+    public static final PermissionDefinition DASHBOARD_ACCESS =
+            def("paradigm.dashboard.access", OWNER, "Allows authenticating to and opening the local Paradigm dashboard. Does not by itself grant access to any dashboard page.");
+    public static final PermissionDefinition DASHBOARD_OVERVIEW =
+            def("paradigm.dashboard.overview", OWNER, "Allows viewing the dashboard Overview page.");
+    public static final PermissionDefinition DASHBOARD_SERVERS =
+            def("paradigm.dashboard.servers", OWNER, "Allows viewing the dashboard Servers page.");
+    public static final PermissionDefinition DASHBOARD_STORAGE =
+            def("paradigm.dashboard.storage", OWNER, "Allows viewing the dashboard Storage Runtime page (status, health, repair check).");
+    public static final PermissionDefinition DASHBOARD_AUDIT =
+            def("paradigm.dashboard.audit", OWNER, "Allows viewing the dashboard Audit page.");
+    public static final PermissionDefinition DASHBOARD_PERMISSIONS =
+            def("paradigm.dashboard.permissions", OWNER, "Allows viewing the dashboard Permission Editor page.");
+    public static final PermissionDefinition DASHBOARD_MODERATION =
+            def("paradigm.dashboard.moderation", OWNER, "Allows viewing the dashboard Moderation page.");
+    public static final PermissionDefinition DASHBOARD_TICKETS =
+            def("paradigm.dashboard.tickets", OWNER, "Allows viewing the dashboard Tickets page.");
+
+    public static final PermissionDefinition DASHBOARD_CONFIG_GENERAL_VIEW =
+            def("paradigm.dashboard.config.general.view", OWNER, "Allows viewing the dashboard General configuration page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_GENERAL_EDIT =
+            def("paradigm.dashboard.config.general.edit", OWNER, "Allows editing the dashboard General configuration page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_TELEPORTS_VIEW =
+            def("paradigm.dashboard.config.teleports.view", OWNER, "Allows viewing the dashboard Teleports configuration page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_TELEPORTS_EDIT =
+            def("paradigm.dashboard.config.teleports.edit", OWNER, "Allows editing the dashboard Teleports configuration page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_CHAT_VIEW =
+            def("paradigm.dashboard.config.chat.view", OWNER, "Allows viewing the dashboard Chat Editor page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_CHAT_EDIT =
+            def("paradigm.dashboard.config.chat.edit", OWNER, "Allows editing the dashboard Chat Editor page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_ANNOUNCEMENTS_VIEW =
+            def("paradigm.dashboard.config.announcements.view", OWNER, "Allows viewing the dashboard Announcements page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_ANNOUNCEMENTS_EDIT =
+            def("paradigm.dashboard.config.announcements.edit", OWNER, "Allows editing the dashboard Announcements page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_RESTART_VIEW =
+            def("paradigm.dashboard.config.restart.view", OWNER, "Allows viewing the dashboard Restart page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_RESTART_EDIT =
+            def("paradigm.dashboard.config.restart.edit", OWNER, "Allows editing the dashboard Restart page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_MOTD_VIEW =
+            def("paradigm.dashboard.config.motd.view", OWNER, "Allows viewing the dashboard MOTD Editor page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_MOTD_EDIT =
+            def("paradigm.dashboard.config.motd.edit", OWNER, "Allows editing the dashboard MOTD Editor page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_TABLIST_VIEW =
+            def("paradigm.dashboard.config.tablist.view", OWNER, "Allows viewing the dashboard Tablist page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_TABLIST_EDIT =
+            def("paradigm.dashboard.config.tablist.edit", OWNER, "Allows editing the dashboard Tablist page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_COMMANDS_VIEW =
+            def("paradigm.dashboard.config.commands.view", OWNER, "Allows viewing the dashboard Command Settings page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_COMMANDS_EDIT =
+            def("paradigm.dashboard.config.commands.edit", OWNER, "Allows editing the dashboard Command Settings page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_COOLDOWNS_VIEW =
+            def("paradigm.dashboard.config.cooldowns.view", OWNER, "Allows viewing the dashboard Cooldowns page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_COOLDOWNS_EDIT =
+            def("paradigm.dashboard.config.cooldowns.edit", OWNER, "Allows editing the dashboard Cooldowns page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_DASHBOARD_VIEW =
+            def("paradigm.dashboard.config.dashboard.view", OWNER, "Allows viewing the dashboard Dashboard-settings page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_DASHBOARD_EDIT =
+            def("paradigm.dashboard.config.dashboard.edit", OWNER, "Allows editing the dashboard Dashboard-settings page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_DISCORD_VIEW =
+            def("paradigm.dashboard.config.discord.view", OWNER, "Allows viewing the dashboard Discord page.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_DISCORD_EDIT =
+            def("paradigm.dashboard.config.discord.edit", OWNER, "Allows editing the dashboard Discord page.");
+
+    public static final PermissionDefinition DASHBOARD_CONFIG_HOLOGRAMS_VIEW =
+            def("paradigm.dashboard.config.holograms.view", OWNER, "Allows viewing the dashboard Holograms page. Creating/editing holograms still requires paradigm.hologram.manage.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_MENUS_VIEW =
+            def("paradigm.dashboard.config.menus.view", OWNER, "Allows viewing the dashboard Menus page. Creating/editing menus still requires paradigm.menu.manage.");
+    public static final PermissionDefinition DASHBOARD_CONFIG_CUSTOMCOMMANDS_VIEW =
+            def("paradigm.dashboard.config.customcommands.view", OWNER, "Allows viewing the dashboard Custom Commands page. Creating/editing commands still requires paradigm.config.edit.");
+
+    public static final PermissionDefinition DASHBOARD_STORAGECONFIG_VIEW =
+            def("paradigm.dashboard.storageconfig.view", OWNER, "Allows viewing the dashboard Storage Configuration page.");
+    public static final PermissionDefinition DASHBOARD_STORAGECONFIG_EDIT =
+            def("paradigm.dashboard.storageconfig.edit", OWNER, "Allows editing the dashboard Storage Configuration page.");
+
+    public static final PermissionDefinition CONFIG_VIEW =
+            def("paradigm.config.view", OWNER, "Legacy/broad permission: view access to every config-schema page of the local dashboard. Superseded by the granular paradigm.dashboard.config.<section>.view nodes but preserved as a backwards-compatible OR-grant.");
+    public static final PermissionDefinition CONFIG_EDIT =
+            def("paradigm.config.edit", OWNER, "Legacy/broad permission: edit access to every config-schema page of the local dashboard, and to Custom Commands. Superseded by the granular paradigm.dashboard.config.<section>.edit nodes but preserved as a backwards-compatible OR-grant.");
+    public static final PermissionDefinition NETWORK_MANAGE =
+            def("paradigm.network.manage", OWNER, "Allows managing remote/network-scoped configuration for other servers via the dashboard.");
+
     public static final PermissionDefinition VANISH =
             def("paradigm.vanish", OP, "Allows toggling vanish mode.");
     public static final PermissionDefinition VANISH_OTHERS =
@@ -180,9 +267,43 @@ public final class ParadigmPermissions {
     public static final PermissionDefinition RTP =
             def("paradigm.rtp", EVERYONE, "Allows random teleporting within your current dimension with /rtp.");
 
+    public static final PermissionDefinition TICKET_CREATE =
+            def("paradigm.ticket.create", EVERYONE, "Allows opening a support ticket with /ticket create.");
+    public static final PermissionDefinition TICKET_VIEW =
+            def("paradigm.ticket.view", EVERYONE, "Allows listing and viewing your own support tickets.");
+    public static final PermissionDefinition TICKET_REPLY =
+            def("paradigm.ticket.reply", EVERYONE, "Allows replying to your own support tickets.");
+    public static final PermissionDefinition TICKET_CLOSE =
+            def("paradigm.ticket.close", EVERYONE, "Allows closing your own support tickets.");
+    public static final PermissionDefinition TICKET_REOPEN =
+            def("paradigm.ticket.reopen", EVERYONE, "Allows reopening your own resolved tickets within the configured window.");
+    public static final PermissionDefinition TICKET_PRIORITY_URGENT =
+            def("paradigm.ticket.priority.urgent", OP, "Allows setting URGENT priority on a ticket.");
+    public static final PermissionDefinition TICKET_STAFF_VIEW =
+            def("paradigm.ticket.staff.view", OP, "Allows viewing every support ticket with /tickets.");
+    public static final PermissionDefinition TICKET_STAFF_REPLY =
+            def("paradigm.ticket.staff.reply", OP, "Allows replying to any support ticket as staff.");
+    public static final PermissionDefinition TICKET_STAFF_CLAIM =
+            def("paradigm.ticket.staff.claim", OP, "Allows claiming and unclaiming support tickets.");
+    public static final PermissionDefinition TICKET_STAFF_ASSIGN =
+            def("paradigm.ticket.staff.assign", OP, "Allows assigning a support ticket to another staff member.");
+    public static final PermissionDefinition TICKET_STAFF_PRIORITY =
+            def("paradigm.ticket.staff.priority", OP, "Allows changing the priority of any support ticket.");
+    public static final PermissionDefinition TICKET_STAFF_STATUS =
+            def("paradigm.ticket.staff.status", OP, "Allows overriding the status and category of any support ticket.");
+    public static final PermissionDefinition TICKET_STAFF_RESOLVE =
+            def("paradigm.ticket.staff.resolve", OP, "Allows marking any support ticket as resolved.");
+    public static final PermissionDefinition TICKET_STAFF_CLOSE =
+            def("paradigm.ticket.staff.close", OP, "Allows closing any support ticket.");
+    public static final PermissionDefinition TICKET_STAFF_REOPEN =
+            def("paradigm.ticket.staff.reopen", OP, "Allows reopening any resolved or closed support ticket.");
+    public static final PermissionDefinition TICKET_MANAGE =
+            def("paradigm.ticket.manage", OP, "Allows managing support tickets from the Paradigm dashboard.");
+
     private static final List<PermissionDefinition> ALL = List.of(
             STAFF_CHAT, MENTION_EVERYONE, MENTION_PLAYER, RESTART_MANAGE, BROADCAST, GROUP_CHAT,
-            RELOAD, COMMAND_TOGGLE, HOLOGRAM_MANAGE, STORAGE_MANAGE, TABLIST_MANAGE, GROUP_MANAGE, DISCORD_MANAGE,
+            RELOAD, COMMAND_TOGGLE, HOLOGRAM_MANAGE, MENU_MANAGE, MENU_OPEN_OTHERS, STORAGE_MANAGE, TABLIST_MANAGE,
+            GROUP_MANAGE, DISCORD_MANAGE,
             PRIVATE_MESSAGE, PRIVATE_REPLY, SOCIAL_SPY, SPAWN, SET_SPAWN, SEEN, IGNORE,
             AFK, PLAYTIME, PLAYTIME_OTHERS,
             GAMEMODE, GAMEMODE_OTHERS, FLY, FLY_OTHERS, CLEAR_INVENTORY, CLEAR_INVENTORY_OTHERS,
@@ -191,8 +312,29 @@ public final class ParadigmPermissions {
             BACK, TPA, TPA_HERE, TPA_ACCEPT, TPA_DENY, TPA_CANCEL,
             WARP_USE, WARP_WILDCARD, WARP_SET, WARP_DELETE, WARP_LIST, WARP_INFO,
             KICK, BAN, TEMP_BAN, IP_BAN, MUTE, TEMP_MUTE, WARN, JAIL, JAIL_MANAGE,
-            DASHBOARD_MANAGE, VANISH, VANISH_OTHERS, GOD, GOD_OTHERS, INVENTORY_SEE, ENDER_SEE,
-            REPAIR, REPAIR_OTHERS, ENCHANT, ENCHANT_OTHERS, SUDO, NEAR, WHOIS, TOP, JUMP, RTP);
+            DASHBOARD_MANAGE,
+            DASHBOARD_ACCESS, DASHBOARD_OVERVIEW, DASHBOARD_SERVERS, DASHBOARD_STORAGE, DASHBOARD_AUDIT,
+            DASHBOARD_PERMISSIONS, DASHBOARD_MODERATION, DASHBOARD_TICKETS,
+            DASHBOARD_CONFIG_GENERAL_VIEW, DASHBOARD_CONFIG_GENERAL_EDIT,
+            DASHBOARD_CONFIG_TELEPORTS_VIEW, DASHBOARD_CONFIG_TELEPORTS_EDIT,
+            DASHBOARD_CONFIG_CHAT_VIEW, DASHBOARD_CONFIG_CHAT_EDIT,
+            DASHBOARD_CONFIG_ANNOUNCEMENTS_VIEW, DASHBOARD_CONFIG_ANNOUNCEMENTS_EDIT,
+            DASHBOARD_CONFIG_RESTART_VIEW, DASHBOARD_CONFIG_RESTART_EDIT,
+            DASHBOARD_CONFIG_MOTD_VIEW, DASHBOARD_CONFIG_MOTD_EDIT,
+            DASHBOARD_CONFIG_TABLIST_VIEW, DASHBOARD_CONFIG_TABLIST_EDIT,
+            DASHBOARD_CONFIG_COMMANDS_VIEW, DASHBOARD_CONFIG_COMMANDS_EDIT,
+            DASHBOARD_CONFIG_COOLDOWNS_VIEW, DASHBOARD_CONFIG_COOLDOWNS_EDIT,
+            DASHBOARD_CONFIG_DASHBOARD_VIEW, DASHBOARD_CONFIG_DASHBOARD_EDIT,
+            DASHBOARD_CONFIG_DISCORD_VIEW, DASHBOARD_CONFIG_DISCORD_EDIT,
+            DASHBOARD_CONFIG_HOLOGRAMS_VIEW, DASHBOARD_CONFIG_MENUS_VIEW, DASHBOARD_CONFIG_CUSTOMCOMMANDS_VIEW,
+            DASHBOARD_STORAGECONFIG_VIEW, DASHBOARD_STORAGECONFIG_EDIT,
+            CONFIG_VIEW, CONFIG_EDIT, NETWORK_MANAGE,
+            VANISH, VANISH_OTHERS, GOD, GOD_OTHERS, INVENTORY_SEE, ENDER_SEE,
+            REPAIR, REPAIR_OTHERS, ENCHANT, ENCHANT_OTHERS, SUDO, NEAR, WHOIS, TOP, JUMP, RTP,
+            TICKET_CREATE, TICKET_VIEW, TICKET_REPLY, TICKET_CLOSE, TICKET_REOPEN, TICKET_PRIORITY_URGENT,
+            TICKET_STAFF_VIEW, TICKET_STAFF_REPLY, TICKET_STAFF_CLAIM, TICKET_STAFF_ASSIGN,
+            TICKET_STAFF_PRIORITY, TICKET_STAFF_STATUS, TICKET_STAFF_RESOLVE, TICKET_STAFF_CLOSE,
+            TICKET_STAFF_REOPEN, TICKET_MANAGE);
 
     private static final Map<String, PermissionDefinition> BY_NODE = indexByNode(ALL);
 

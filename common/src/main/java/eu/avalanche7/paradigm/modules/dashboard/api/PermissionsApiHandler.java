@@ -40,6 +40,10 @@ public class PermissionsApiHandler {
         return DashboardResponse.apiOk(dashboard.permissionNodesAsync(ctx.query().get("query"), integer(ctx, "page", 1), integer(ctx, "pageSize", 25)).get());
     }
 
+    public DashboardResponse tracks(DashboardRequestContext ctx) throws Exception {
+        return DashboardResponse.apiOk(dashboard.permissionTracksAsync().get());
+    }
+
     public DashboardResponse effective(DashboardRequestContext ctx) throws Exception {
         return DashboardResponse.apiOk(dashboard.permissionEffectiveAsync(ctx.query().get("uuidOrName"), ctx.query().get("query"),
                 integer(ctx, "page", 1), integer(ctx, "pageSize", 25)).get());

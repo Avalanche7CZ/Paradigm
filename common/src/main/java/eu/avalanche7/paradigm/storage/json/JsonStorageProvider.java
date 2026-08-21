@@ -8,6 +8,8 @@ import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.data.WarpStore;
 import eu.avalanche7.paradigm.modules.audit.AuditRepository;
 import eu.avalanche7.paradigm.modules.audit.JsonAuditRepository;
+import eu.avalanche7.paradigm.modules.tickets.JsonTicketRepository;
+import eu.avalanche7.paradigm.modules.tickets.TicketRepository;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.storage.StorageProvider;
 import eu.avalanche7.paradigm.storage.StorageProviderType;
@@ -31,6 +33,7 @@ public class JsonStorageProvider implements StorageProvider {
     private final ServerRepository servers;
     private final ManagedConfigRepository managedConfig;
     private final AuditRepository audit;
+    private final TicketRepository tickets;
 
     public JsonStorageProvider(
             Logger logger,
@@ -50,6 +53,7 @@ public class JsonStorageProvider implements StorageProvider {
         this.servers = new JsonServerRepository(context);
         this.managedConfig = new JsonManagedConfigRepository();
         this.audit = new JsonAuditRepository(config, logger);
+        this.tickets = new JsonTicketRepository(config, context, logger);
     }
 
     @Override public StorageProviderType type() { return StorageProviderType.JSON; }
@@ -63,6 +67,7 @@ public class JsonStorageProvider implements StorageProvider {
     @Override public ServerRepository servers() { return servers; }
     @Override public ManagedConfigRepository managedConfig() { return managedConfig; }
     @Override public AuditRepository audit() { return audit; }
+    @Override public TicketRepository tickets() { return tickets; }
     @Override public StorageService.StorageTestResult test() {
         return new StorageService.StorageTestResult(true, "json", true, "JSON provider is available.", 0, "not_needed", "not_needed");
     }

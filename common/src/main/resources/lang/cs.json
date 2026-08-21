@@ -123,9 +123,27 @@
     "invite_rate_limit": "Počkej prosím {seconds}s před odesláním další pozvánky."
   },
   "permission": {
-    "context": { "global": "globální", "server": "server", "network": "síť", "world": "svět", "dimension": "dimenze", "custom": "vlastní kontext" },
-    "expiry": { "permanent": "trvalé", "expires_in": "vyprší za {duration}", "expired": "vypršelo", "until": "do {time}" },
-    "assignment": { "id": "id: {id}", "remove": "odebrat", "remove_tooltip": "Odebrat toto přiřazení", "not_found": "Přiřazení oprávnění {id} nebylo nalezeno.", "ambiguous": "Odpovídá více přiřazení. Použij jejich ID přiřazení." },
+    "context": {
+      "global": "globální",
+      "server": "server",
+      "network": "síť",
+      "world": "svět",
+      "dimension": "dimenze",
+      "custom": "vlastní kontext"
+    },
+    "expiry": {
+      "permanent": "trvalé",
+      "expires_in": "vyprší za {duration}",
+      "expired": "vypršelo",
+      "until": "do {time}"
+    },
+    "assignment": {
+      "id": "id: {id}",
+      "remove": "odebrat",
+      "remove_tooltip": "Odebrat toto přiřazení",
+      "not_found": "Přiřazení oprávnění {id} nebylo nalezeno.",
+      "ambiguous": "Odpovídá více přiřazení. Použij jejich ID přiřazení."
+    },
     "panel": {
       "title": "Oprávnění",
       "groups": "skupiny",
@@ -521,10 +539,27 @@
       "ambiguous": "Použij přesné ID trestu. Odpovídající ID: {ids}",
       "not_found": "Trest nebyl nalezen nebo není aktivní.",
       "detail": "{id} {type} {status} | {player} | {scope} | {reason}",
-      "expiry": { "permanent": "Trvalý", "temporary": "Vyprší {expiry}" },
-      "status": { "active": "Aktivní", "expired": "Vypršel", "revoked": "Zrušen", "pending": "Čeká" },
-      "type": { "ban": "Ban", "ip_ban": "IP ban", "mute": "Umlčení", "warn": "Varování", "jail": "Vězení" },
-      "scope": { "global": "Síť", "server": "Server" }
+      "expiry": {
+        "permanent": "Trvalý",
+        "temporary": "Vyprší {expiry}"
+      },
+      "status": {
+        "active": "Aktivní",
+        "expired": "Vypršel",
+        "revoked": "Zrušen",
+        "pending": "Čeká"
+      },
+      "type": {
+        "ban": "Ban",
+        "ip_ban": "IP ban",
+        "mute": "Umlčení",
+        "warn": "Varování",
+        "jail": "Vězení"
+      },
+      "scope": {
+        "global": "Síť",
+        "server": "Server"
+      }
     },
     "history": {
       "empty": "Pro hráče {player} nebyla nalezena historie trestů.",
@@ -606,5 +641,41 @@
   },
   "reload": {
     "customcommands_success": "Načteno {count} custom commands z configu."
+  },
+  "tickets": {
+    "players_only": "Příkazy ticketů v chatu mohou používat pouze hráči. Použij nástěnku.",
+    "created": "Ticket {ticket} byl vytvořen.",
+    "replied": "Odpověď byla přidána k {ticket}.",
+    "closed": "Ticket {ticket} byl uzavřen.",
+    "reopened": "Ticket {ticket} byl znovu otevřen.",
+    "claimed": "Převzal jsi ticket {ticket}.",
+    "unclaimed": "Ticket {ticket} už nikomu nepatří.",
+    "resolved": "Ticket {ticket} byl označen jako vyřešený.",
+    "assigned": "Ticket {ticket} byl přidělen hráči {target}.",
+    "priority_changed": "Priorita ticketu {ticket} je nyní {value}.",
+    "status_changed": "Stav ticketu {ticket} je nyní {value}.",
+    "category_changed": "Kategorie ticketu {ticket} je nyní {value}.",
+    "error": {
+      "ok": "Hotovo.",
+      "disabled": "Systém ticketů je vypnutý.",
+      "storage_unavailable": "Úložiště ticketů není dostupné.",
+      "not_found": "Ticket {ticket} nebyl nalezen.",
+      "closed": "Ticket {ticket} je uzavřený. Nejprve jej znovu otevři.",
+      "stale": "Ticket {ticket} se mezitím změnil. Načti jej znovu a zkus to znovu.",
+      "already_claimed": "Ticket {ticket} už převzal {actor}.",
+      "not_claimed": "Ticket {ticket} není nikomu přidělen.",
+      "invalid_assignee": "{actor} není hráč, kterého by Paradigm znal.",
+      "invalid_status": "Neznámý stav ticketu.",
+      "invalid_transition": "Ticket {ticket} nelze převést do tohoto stavu.",
+      "invalid_priority": "Neznámá priorita ticketu.",
+      "invalid_category": "Neznámá nebo vypnutá kategorie ticketu.",
+      "urgent_not_allowed": "Nemůžeš nastavit prioritu URGENT.",
+      "limit_reached": "Už máš {limit} otevřených ticketů.",
+      "cooldown": "Před vytvořením dalšího ticketu počkej {duration}.",
+      "message_empty": "Tvoje zpráva nemůže být prázdná.",
+      "message_too_long": "Tvoje zpráva je delší než {limit} znaků.",
+      "reopen_window": "Ticket {ticket} už nemůžeš znovu otevřít. Požádej personál.",
+      "permission_denied": "Na tuto akci nemáš oprávnění."
+    }
   }
 }

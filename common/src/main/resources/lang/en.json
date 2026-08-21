@@ -123,9 +123,27 @@
     }
   },
   "permission": {
-    "context": { "global": "global", "server": "server", "network": "network", "world": "world", "dimension": "dimension", "custom": "custom context" },
-    "expiry": { "permanent": "permanent", "expires_in": "expires in {duration}", "expired": "expired", "until": "until {time}" },
-    "assignment": { "id": "id: {id}", "remove": "remove", "remove_tooltip": "Remove this assignment", "not_found": "Permission assignment {id} was not found.", "ambiguous": "More than one assignment matches. Use its assignment id." },
+    "context": {
+      "global": "global",
+      "server": "server",
+      "network": "network",
+      "world": "world",
+      "dimension": "dimension",
+      "custom": "custom context"
+    },
+    "expiry": {
+      "permanent": "permanent",
+      "expires_in": "expires in {duration}",
+      "expired": "expired",
+      "until": "until {time}"
+    },
+    "assignment": {
+      "id": "id: {id}",
+      "remove": "remove",
+      "remove_tooltip": "Remove this assignment",
+      "not_found": "Permission assignment {id} was not found.",
+      "ambiguous": "More than one assignment matches. Use its assignment id."
+    },
     "panel": {
       "title": "Permissions",
       "groups": "groups",
@@ -521,10 +539,27 @@
       "ambiguous": "Use an exact punishment ID. Matching IDs: {ids}",
       "not_found": "Punishment was not found or is not active.",
       "detail": "{id} {type} {status} | {player} | {scope} | {reason}",
-      "expiry": { "permanent": "Permanent", "temporary": "Expires {expiry}" },
-      "status": { "active": "Active", "expired": "Expired", "revoked": "Revoked", "pending": "Pending" },
-      "type": { "ban": "Ban", "ip_ban": "IP ban", "mute": "Mute", "warn": "Warning", "jail": "Jail" },
-      "scope": { "global": "Network", "server": "Server" }
+      "expiry": {
+        "permanent": "Permanent",
+        "temporary": "Expires {expiry}"
+      },
+      "status": {
+        "active": "Active",
+        "expired": "Expired",
+        "revoked": "Revoked",
+        "pending": "Pending"
+      },
+      "type": {
+        "ban": "Ban",
+        "ip_ban": "IP ban",
+        "mute": "Mute",
+        "warn": "Warning",
+        "jail": "Jail"
+      },
+      "scope": {
+        "global": "Network",
+        "server": "Server"
+      }
     },
     "history": {
       "empty": "No punishment history for {player}.",
@@ -606,5 +641,41 @@
   },
   "reload": {
     "customcommands_success": "Reloaded {count} custom commands from config."
+  },
+  "tickets": {
+    "players_only": "Only players can use ticket commands in chat. Use the dashboard instead.",
+    "created": "Ticket {ticket} created.",
+    "replied": "Reply added to {ticket}.",
+    "closed": "Ticket {ticket} closed.",
+    "reopened": "Ticket {ticket} reopened.",
+    "claimed": "You claimed ticket {ticket}.",
+    "unclaimed": "Ticket {ticket} is no longer assigned.",
+    "resolved": "Ticket {ticket} marked resolved.",
+    "assigned": "Ticket {ticket} assigned to {target}.",
+    "priority_changed": "Ticket {ticket} priority is now {value}.",
+    "status_changed": "Ticket {ticket} status is now {value}.",
+    "category_changed": "Ticket {ticket} category is now {value}.",
+    "error": {
+      "ok": "Done.",
+      "disabled": "The ticket system is disabled.",
+      "storage_unavailable": "Ticket storage is unavailable.",
+      "not_found": "Ticket {ticket} was not found.",
+      "closed": "Ticket {ticket} is closed. Reopen it first.",
+      "stale": "Ticket {ticket} changed while you were working on it. Reload and try again.",
+      "already_claimed": "Ticket {ticket} is already claimed by {actor}.",
+      "not_claimed": "Ticket {ticket} is not assigned to anyone.",
+      "invalid_assignee": "{actor} is not a player Paradigm knows about.",
+      "invalid_status": "Unknown ticket status.",
+      "invalid_transition": "Ticket {ticket} cannot move to that status.",
+      "invalid_priority": "Unknown ticket priority.",
+      "invalid_category": "Unknown or disabled ticket category.",
+      "urgent_not_allowed": "You may not set URGENT priority.",
+      "limit_reached": "You already have {limit} open tickets.",
+      "cooldown": "Please wait {duration} before creating another ticket.",
+      "message_empty": "Your message cannot be empty.",
+      "message_too_long": "Your message is longer than {limit} characters.",
+      "reopen_window": "Ticket {ticket} can no longer be reopened by you. Ask staff.",
+      "permission_denied": "You do not have permission to do that."
+    }
   }
 }

@@ -20,12 +20,14 @@ import eu.avalanche7.paradigm.modules.CommandManager;
 import eu.avalanche7.paradigm.modules.Restart;
 import eu.avalanche7.paradigm.modules.commands.moderation.PunishmentCommands;
 import eu.avalanche7.paradigm.modules.commands.permissions.PermissionCommands;
+import eu.avalanche7.paradigm.modules.commands.shared.ChatUi;
 import eu.avalanche7.paradigm.modules.commands.shared.CommandCatalog;
 import eu.avalanche7.paradigm.modules.dashboard.LocalDashboardModule;
 import eu.avalanche7.paradigm.modules.discord.DiscordModule;
 import eu.avalanche7.paradigm.modules.holograms.Holograms;
 import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.modules.tab.Tablist;
+import eu.avalanche7.paradigm.modules.tickets.TicketsModule;
 import eu.avalanche7.paradigm.platform.Interfaces.*;
 import eu.avalanche7.paradigm.storage.StorageService;
 import eu.avalanche7.paradigm.storage.migration.StorageMigrationOptions;
@@ -77,6 +79,7 @@ public class Reload implements ParadigmModule {
                                 case "tablist" -> { TablistConfigHandler.reload(); msg = "Tablist config reloaded."; }
                                 case "discord" -> { DiscordConfigHandler.reload(); msg = "Discord config reloaded."; }
                                 case "afk" -> { AfkConfigHandler.reload(); msg = "AFK config reloaded."; }
+                                case "tickets" -> { TicketsConfigHandler.reload(); msg = "Tickets config reloaded."; }
                                 case "customcommands" -> {
                                     CommandManager.reloadCustomCommands(services);
                                     msg = "Custom commands config reloaded.";
@@ -92,6 +95,7 @@ public class Reload implements ParadigmModule {
                                     TablistConfigHandler.reload();
                                     DiscordConfigHandler.reload();
                                     AfkConfigHandler.reload();
+                                    TicketsConfigHandler.reload();
                                     CommandManager.reloadCustomCommands(services);
                                     msg = "All configs reloaded.";
                                 }
@@ -123,6 +127,10 @@ public class Reload implements ParadigmModule {
                             if ("afk".equals(cfg) || "all".equals(cfg)) {
                                 services.getAfkService().restart();
                             }
+                            if ("tickets".equals(cfg) || "all".equals(cfg)) {
+                                TicketsModule ticketsModule = TicketsModule.current();
+                                if (ticketsModule != null) ticketsModule.reloadTasks();
+                            }
 
                             platform.sendSuccess(ctx.getSource(), platform.createLiteralComponent("§a" + msg), true);
                             return 1;
@@ -149,6 +157,11 @@ public class Reload implements ParadigmModule {
         Holograms holograms = Holograms.current();
         if (holograms != null) {
             paradigm = paradigm.then(holograms.buildCommandBranch());
+        }
+
+        eu.avalanche7.paradigm.modules.menus.Menus menus = eu.avalanche7.paradigm.modules.menus.Menus.current();
+        if (menus != null) {
+            paradigm = paradigm.then(menus.buildCommandBranch());
         }
 
         DiscordModule discord = DiscordModule.current();
@@ -692,35 +705,27 @@ public class Reload implements ParadigmModule {
     }
 
     private IComponent header(Services services, String title) {
-        return services.getPlatformAdapter().createEmptyComponent()
-                .append(text(services, "---- ", "475569"))
-                .append(text(services, "[P] ", "A78BFA").withFormatting("bold"))
-                .append(text(services, title, "F8FAFC").withFormatting("bold"));
+        return ChatUi.header(services, title);
     }
 
     private IComponent row(Services services) {
-        return services.getPlatformAdapter().createEmptyComponent();
+        return ChatUi.row(services);
     }
 
     private IComponent space(Services services) {
-        return services.getPlatformAdapter().createComponentFromLiteral(" ");
+        return ChatUi.space(services);
     }
 
     private IComponent text(Services services, String value, String color) {
-        return services.getPlatformAdapter().createComponentFromLiteral(value != null ? value : "").withColorHex(color);
+        return ChatUi.text(services, value, color);
     }
 
     private IComponent button(Services services, String label, String command, boolean run, String hover) {
-        return button(services, label, command, run, hover, run ? "60A5FA" : "FBBF24");
+        return ChatUi.button(services, label, command, run, hover);
     }
 
     private IComponent button(Services services, String label, String command, boolean run, String hover, String color) {
-        IComponent component = services.getPlatformAdapter()
-                .createComponentFromLiteral(label)
-                .withColorHex(color)
-                .withFormatting("bold")
-                .onHoverText(hover != null ? hover : command);
-        return run ? component.onClickRunCommand(command) : component.onClickSuggestCommand(command);
+        return ChatUi.button(services, label, command, run, hover, color);
     }
 
 }

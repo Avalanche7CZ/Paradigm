@@ -1,10 +1,12 @@
 package eu.avalanche7.paradigm.modules.dashboard.auth;
 
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
+
 public final class DashboardPermission {
-    public static final String MANAGE = "paradigm.dashboard.manage";
-    public static final String CONFIG_VIEW = "paradigm.config.view";
-    public static final String CONFIG_EDIT = "paradigm.config.edit";
-    public static final String NETWORK_MANAGE = "paradigm.network.manage";
+    public static final String MANAGE = ParadigmPermissions.DASHBOARD_MANAGE.node();
+    public static final String CONFIG_VIEW = ParadigmPermissions.CONFIG_VIEW.node();
+    public static final String CONFIG_EDIT = ParadigmPermissions.CONFIG_EDIT.node();
+    public static final String NETWORK_MANAGE = ParadigmPermissions.NETWORK_MANAGE.node();
 
     private DashboardPermission() {
     }

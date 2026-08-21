@@ -12,6 +12,7 @@ import eu.avalanche7.paradigm.modules.permissions.PermissionDataStore;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.storage.model.StoredPermissionGroup;
 import eu.avalanche7.paradigm.storage.model.StoredPermissionNode;
+import eu.avalanche7.paradigm.storage.model.StoredPermissionTrack;
 import eu.avalanche7.paradigm.storage.model.StoredUserPermissionData;
 import eu.avalanche7.paradigm.storage.repository.PermissionRepository;
 import eu.avalanche7.paradigm.utils.DebugLogger;
@@ -96,6 +97,9 @@ public class JsonPermissionRepository implements PermissionRepository {
                 changed |= user.contextualGroups.removeIf(group -> group != null && key.equals(normalize(group.group)));
             }
         }
+        for (List<String> track : state.tracks.values()) {
+            if (track != null) changed |= track.removeIf(member -> key.equals(normalize(member)));
+        }
 
         if (playerDataStore != null) {
             for (PlayerDataStore.PlayerEntry player : playerDataStore.listPlayerEntries()) {
@@ -109,6 +113,42 @@ public class JsonPermissionRepository implements PermissionRepository {
             state.normalize();
             permissionStore.save(state);
         }
+        return changed;
+    }
+
+    @Override
+    public List<StoredPermissionTrack> listTracks() {
+        PermissionDataStore.PermissionState state = permissionStore.load();
+        List<StoredPermissionTrack> result = new ArrayList<>();
+        for (var entry : state.tracks.entrySet()) result.add(new StoredPermissionTrack(entry.getKey(), entry.getValue()));
+        return result;
+    }
+
+    @Override
+    public Optional<StoredPermissionTrack> getTrack(String trackName) {
+        String key = normalize(trackName);
+        if (key == null) return Optional.empty();
+        PermissionDataStore.PermissionState state = permissionStore.load();
+        List<String> groups = state.tracks.get(key);
+        return groups == null ? Optional.empty() : Optional.of(new StoredPermissionTrack(key, groups));
+    }
+
+    @Override
+    public void saveTrack(StoredPermissionTrack track) {
+        if (track == null || normalize(track.name()) == null) return;
+        PermissionDataStore.PermissionState state = permissionStore.load();
+        state.tracks.put(normalize(track.name()), new ArrayList<>(track.groups()));
+        state.normalize();
+        permissionStore.save(state);
+    }
+
+    @Override
+    public boolean deleteTrack(String trackName) {
+        String key = normalize(trackName);
+        if (key == null) return false;
+        PermissionDataStore.PermissionState state = permissionStore.load();
+        boolean changed = state.tracks.remove(key) != null;
+        if (changed) permissionStore.save(state);
         return changed;
     }
 

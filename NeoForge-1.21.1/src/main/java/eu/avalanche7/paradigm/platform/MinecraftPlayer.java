@@ -104,6 +104,33 @@ public class MinecraftPlayer implements IPlayer {
         }
     }
 
+    @Override
+    public Integer getLevel() {
+        try {
+            return player.experienceLevel;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    @Override
+    public Double getHealth() {
+        try {
+            return (double) player.getHealth();
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    @Override
+    public Double getMaxHealth() {
+        try {
+            return (double) player.getMaxHealth();
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     public static IPlayer of(ServerPlayer player) {
         return new MinecraftPlayer(player);
     }

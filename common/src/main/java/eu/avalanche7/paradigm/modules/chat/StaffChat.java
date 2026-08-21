@@ -133,9 +133,8 @@ public class StaffChat implements ParadigmModule {
         String formattedMessage = String.format(chatConfig.staffChatFormat.value, sender.getName(), message);
         IComponent chatComponent = services.getMessageParser().parseMessage(formattedMessage, sender);
 
-        platform.getOnlinePlayers().stream()
-                .filter(onlinePlayer -> services.getPermissionsHandler().hasPermission(onlinePlayer, PermissionsHandler.STAFF_CHAT_PERMISSION))
-                .forEach(staffMember -> platform.sendSystemMessage(staffMember, chatComponent));
+        services.getPlayerMessenger().broadcastToPermission(services.getPermissionsHandler(),
+                PermissionsHandler.STAFF_CHAT_PERMISSION, chatComponent);
 
         services.getLogger().info("(StaffChat) {}: {}", sender.getName(), message);
     }

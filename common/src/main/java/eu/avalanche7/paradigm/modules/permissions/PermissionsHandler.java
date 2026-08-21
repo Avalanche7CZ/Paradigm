@@ -954,6 +954,40 @@ public class PermissionsHandler {
         return internalPermissionApi.listGroups();
     }
 
+    public java.util.List<eu.avalanche7.paradigm.storage.model.StoredPermissionTrack> listPermissionTracks() {
+        return isInternalPermissionsEnabled() ? internalPermissionApi.listTracks() : java.util.List.of();
+    }
+
+    public eu.avalanche7.paradigm.storage.model.StoredPermissionTrack getPermissionTrack(String track) {
+        return isInternalPermissionsEnabled() ? internalPermissionApi.getTrack(track) : null;
+    }
+
+    public PermissionTrackResult mutatePermissionTrack(String action, String track, String group, String target, Integer position) {
+        if (!isInternalPermissionsEnabled()) return PermissionTrackResult.of(false, "storage_unavailable", "Internal permissions are disabled.", track, null, null);
+        return switch (action) {
+            case "track_create" -> internalPermissionApi.createTrack(track);
+            case "track_delete" -> internalPermissionApi.deleteTrack(track);
+            case "track_rename" -> internalPermissionApi.renameTrack(track, target);
+            case "track_clone" -> internalPermissionApi.cloneTrack(track, target);
+            case "track_clear" -> internalPermissionApi.clearTrack(track);
+            case "track_append" -> internalPermissionApi.appendTrackGroup(track, group);
+            case "track_insert" -> internalPermissionApi.insertTrackGroup(track, group, position != null ? position : 0);
+            case "track_remove" -> internalPermissionApi.removeTrackGroup(track, group);
+            case "track_move" -> internalPermissionApi.moveTrackGroup(track, group, position != null ? position : 0);
+            default -> PermissionTrackResult.of(false, "invalid_position", "Unknown track operation.", track, null, null);
+        };
+    }
+
+    public PermissionTrackResult movePlayerOnTrack(UUID player, String track, PermissionContextSet contexts, String operation,
+                                                    boolean dontAddToFirst, boolean dontRemoveFromFirst, Long expiry,
+                                                    String actor, String targetGroup) {
+        if (!isInternalPermissionsEnabled()) return PermissionTrackResult.of(false, "storage_unavailable", "Internal permissions are disabled.", track, null, null);
+        PermissionTrackResult result = internalPermissionApi.moveUserOnTrack(player, track, contexts, operation,
+                dontAddToFirst, dontRemoveFromFirst, expiry, actor, targetGroup);
+        if (result.applied()) refreshPlayerCommandTree(player);
+        return result;
+    }
+
     public java.util.List<UUID> listPermissionUsers() {
         return isInternalPermissionsEnabled() ? internalPermissionApi.listUserIds() : java.util.List.of();
     }

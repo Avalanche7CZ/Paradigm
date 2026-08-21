@@ -22,6 +22,7 @@ import net.luckperms.api.node.types.PermissionNode;
 import net.luckperms.api.node.types.PrefixNode;
 import net.luckperms.api.node.types.SuffixNode;
 import net.luckperms.api.node.types.WeightNode;
+import net.luckperms.api.track.Track;
 
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.permissions.PermissionAPI;
@@ -71,7 +72,12 @@ public final class LuckPermsMigrationService {
             users.add(new UserSnapshot(uuid, captureNodes(user)));
             api.getUserManager().cleanupUser(user);
         }
-        return new Snapshot(List.copyOf(groups), List.copyOf(users));
+        api.getTrackManager().loadAllTracks().join();
+        List<TrackSnapshot> tracks = new ArrayList<>();
+        for (Track track : api.getTrackManager().getLoadedTracks()) {
+            tracks.add(new TrackSnapshot(track.getName(), List.copyOf(track.getGroups())));
+        }
+        return new Snapshot(List.copyOf(groups), List.copyOf(users), List.copyOf(tracks));
     }
 
     private GroupSnapshot captureGroup(Group group) {
@@ -120,6 +126,7 @@ public final class LuckPermsMigrationService {
             if (!group.suffix().isEmpty()) applyMetadata(handler, group.name(), "suffix", group.suffix(), mode, report);
             for (NodeSnapshot node : group.nodes()) applyGroupNode(handler, group.name(), node, mode, report);
         }
+        for (TrackSnapshot track : snapshot.tracks()) applyImportTrack(handler, track, mode, report);
         for (UserSnapshot user : snapshot.users()) {
             report.users++;
             for (NodeSnapshot node : user.nodes()) applyUserNode(handler, user.uuid(), node, mode, report);
@@ -130,6 +137,25 @@ public final class LuckPermsMigrationService {
     private void applyMetadata(PermissionsHandler handler, String group, String field, String value, Mode mode, MutableReport report) {
         report.metadata++;
         if (mode != Mode.DRY_RUN && !handler.setPermissionGroupMetadata(group, field, value)) report.conflicts++;
+    }
+
+    private void applyImportTrack(PermissionsHandler handler, TrackSnapshot track, Mode mode, MutableReport report) {
+        report.tracks++;
+        var existing = handler.getPermissionTrack(track.name());
+        if (mode == Mode.MERGE && existing != null && !existing.groups().isEmpty() && !existing.groups().equals(track.groups())) {
+            report.conflicts++;
+            report.details.add("track " + track.name() + ": existing order differs");
+            return;
+        }
+        if (mode != Mode.DRY_RUN && existing == null) handler.mutatePermissionTrack("track_create", track.name(), null, null, null);
+        if (mode != Mode.DRY_RUN && existing != null && mode == Mode.REPLACE) handler.mutatePermissionTrack("track_clear", track.name(), null, null, null);
+        for (String group : track.groups()) {
+            if (!handler.listPermissionGroups().contains(group)) {
+                report.skip("track " + track.name() + ": missing group " + group);
+                continue;
+            }
+            if (mode != Mode.DRY_RUN) handler.mutatePermissionTrack("track_append", track.name(), group, null, null);
+        }
     }
 
     private void applyGroupNode(PermissionsHandler handler, String group, NodeSnapshot node, Mode mode, MutableReport report) {
@@ -179,6 +205,8 @@ public final class LuckPermsMigrationService {
                 api.getUserManager().saveUser(user).join();
                 api.getUserManager().cleanupUser(user);
             }
+            api.getTrackManager().loadAllTracks().join();
+            for (Track track : api.getTrackManager().getLoadedTracks()) api.getTrackManager().deleteTrack(track).join();
         }
 
         for (String name : handler.listPermissionGroups()) {
@@ -220,6 +248,28 @@ public final class LuckPermsMigrationService {
             if (mode != Mode.DRY_RUN) api.getUserManager().saveUser(user).join();
             api.getUserManager().cleanupUser(user);
         }
+        api.getTrackManager().loadAllTracks().join();
+        for (var sourceTrack : handler.listPermissionTracks()) {
+            report.tracks++;
+            Track target = api.getTrackManager().getTrack(sourceTrack.name());
+            if (target != null && mode == Mode.MERGE && !target.getGroups().equals(sourceTrack.groups())) {
+                report.conflicts++;
+                report.details.add("track " + sourceTrack.name() + ": existing order differs");
+                continue;
+            }
+            if (mode == Mode.DRY_RUN) continue;
+            if (target == null) target = api.getTrackManager().createAndLoadTrack(sourceTrack.name()).join();
+            if (mode == Mode.REPLACE) target.clearGroups();
+            for (String groupName : sourceTrack.groups()) {
+                Group group = api.getGroupManager().getGroup(groupName);
+                if (group == null) {
+                    report.skip("track " + sourceTrack.name() + ": missing group " + groupName);
+                    continue;
+                }
+                if (!target.containsGroup(groupName)) target.appendGroup(group);
+            }
+            api.getTrackManager().saveTrack(target).join();
+        }
         return report.finish();
     }
 
@@ -256,7 +306,7 @@ public final class LuckPermsMigrationService {
     }
 
     private static LuckPermsMigrationReport failure(Mode mode, String detail) {
-        return new LuckPermsMigrationReport(false, mode == Mode.DRY_RUN, 0, 0, 0, 0, 0, 0, 0, 0, List.of(detail));
+        return new LuckPermsMigrationReport(false, mode == Mode.DRY_RUN, 0, 0, 0, 0, 0, 0, 0, 0, 0, List.of(detail));
     }
 
     private enum Kind { PERMISSION, INHERITANCE }
@@ -265,16 +315,17 @@ public final class LuckPermsMigrationService {
     }
     private record GroupSnapshot(String name, int weight, String prefix, String suffix, List<NodeSnapshot> nodes) { }
     private record UserSnapshot(UUID uuid, List<NodeSnapshot> nodes) { }
-    private record Snapshot(List<GroupSnapshot> groups, List<UserSnapshot> users) { }
+    private record TrackSnapshot(String name, List<String> groups) { }
+    private record Snapshot(List<GroupSnapshot> groups, List<UserSnapshot> users, List<TrackSnapshot> tracks) { }
 
     private static final class MutableReport {
         private final boolean dryRun;
-        private int groups, users, permissions, memberships, parents, metadata, conflicts, skipped;
+        private int groups, users, permissions, memberships, parents, metadata, tracks, conflicts, skipped;
         private final List<String> details = new ArrayList<>();
         private MutableReport(boolean dryRun) { this.dryRun = dryRun; }
         private void skip(String detail) { skipped++; if (details.size() < 100) details.add(detail); }
         private LuckPermsMigrationReport finish() {
-            return new LuckPermsMigrationReport(true, dryRun, groups, users, permissions, memberships, parents, metadata, conflicts, skipped, details);
+            return new LuckPermsMigrationReport(true, dryRun, groups, users, permissions, memberships, parents, metadata, tracks, conflicts, skipped, details);
         }
     }
 }

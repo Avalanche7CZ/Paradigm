@@ -9,8 +9,7 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
 public class Placeholders {
 
-    private Object luckPerms;
-    private Boolean luckPermsAvailable = null;
+    private Boolean luckPermsClassPresent = null;
     private static volatile Function<IPlayer, PermissionMeta> permissionMetaResolver;
     private static volatile ToIntFunction<IPlayer> pingResolver;
     private static volatile Function<IPlayer, PlayerActivity> activityResolver;
@@ -30,16 +29,23 @@ public class Placeholders {
         activityResolver = resolver;
     }
 
-    private void initLuckPerms() {
-        if (luckPermsAvailable != null) return;
-
+    private Object resolveLuckPerms() {
+        if (luckPermsClassPresent == null) {
+            try {
+                Class.forName("net.luckperms.api.LuckPermsProvider", false, Placeholders.class.getClassLoader());
+                luckPermsClassPresent = true;
+            } catch (ClassNotFoundException | LinkageError absent) {
+                luckPermsClassPresent = false;
+            }
+        }
+        if (!luckPermsClassPresent) {
+            return null;
+        }
         try {
             Class<?> providerClass = Class.forName("net.luckperms.api.LuckPermsProvider");
-            java.lang.reflect.Method getMethod = providerClass.getMethod("get");
-            this.luckPerms = getMethod.invoke(null);
-            this.luckPermsAvailable = true;
-        } catch (Exception e) {
-            this.luckPermsAvailable = false;
+            return providerClass.getMethod("get").invoke(null);
+        } catch (Exception notReadyYet) {
+            return null;
         }
     }
 
@@ -76,9 +82,9 @@ public class Placeholders {
             }
             replacedText = replaceActivityPlaceholders(replacedText, player);
 
-            initLuckPerms();
-            if (luckPermsAvailable != null && luckPermsAvailable) {
-                replacedText = replaceLuckPermsPlaceholders(replacedText, player.getOriginalPlayer());
+            Object luckPerms = resolveLuckPerms();
+            if (luckPerms != null) {
+                replacedText = replaceLuckPermsPlaceholders(replacedText, player.getOriginalPlayer(), luckPerms);
             } else {
                 replacedText = replaceInternalPermissionPlaceholders(replacedText, player);
             }
@@ -161,10 +167,9 @@ public class Placeholders {
             replacedText = stripRuntimePlaceholders(replacedText);
             replacedText = stripActivityPlaceholders(replacedText);
 
-            initLuckPerms();
-
-            if (luckPermsAvailable != null && luckPermsAvailable) {
-                replacedText = replaceLuckPermsPlaceholders(replacedText, player);
+            Object luckPerms = resolveLuckPerms();
+            if (luckPerms != null) {
+                replacedText = replaceLuckPermsPlaceholders(replacedText, player, luckPerms);
             } else {
                 replacedText = replaceInternalPermissionPlaceholders(replacedText, null);
             }
@@ -336,7 +341,7 @@ public class Placeholders {
         return replaced;
     }
 
-    private String replaceLuckPermsPlaceholders(String text, Object player) {
+    private String replaceLuckPermsPlaceholders(String text, Object player, Object luckPerms) {
         try {
             Object uuidObj = invoke(player, "getUuid");
             if (uuidObj == null) uuidObj = invoke(player, "getUUID");
