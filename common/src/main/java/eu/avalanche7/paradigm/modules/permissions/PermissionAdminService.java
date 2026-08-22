@@ -9,7 +9,7 @@ import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.audit.AuditActionType;
 import eu.avalanche7.paradigm.modules.audit.AuditResult;
 import eu.avalanche7.paradigm.modules.audit.AuditService;
-import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPermission;
+import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardAuthorization;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
 import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
 import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextType;
@@ -63,6 +63,10 @@ public class PermissionAdminService {
         }
 
         if (action.startsWith("track_") || Set.of("promote", "demote", "settrack", "cleartrack").contains(action)) {
+            String trackArgumentError = trackArgumentError(action, safe, expiresAtMs);
+            if (trackArgumentError != null) {
+                return result(false, trackArgumentError.startsWith("Expiry") ? "invalid_expiry" : "invalid_argument", trackArgumentError, false);
+            }
             PermissionMutationResult trackResult = mutateTrack(actor, safe, action, contexts, expiresAtMs);
             if (trackResult.applied() && services.getPlatformAdapter() != null) {
                 try { services.getPlatformAdapter().refreshAllPlayerCommandTrees(); } catch (Throwable ignored) { }
@@ -144,7 +148,9 @@ public class PermissionAdminService {
             return true;
         }
 
-        return services.getPermissionsHandler().hasPermission(actor.uuid(), DashboardPermission.MANAGE, 4);
+        DashboardAuthorization.PermissionCheck check = permission ->
+                services.getPermissionsHandler().hasPermission(actor.uuid(), permission.node(), permission.fallbackLevel());
+        return DashboardAuthorization.canManagePermissions(check);
     }
 
     private static boolean updateGroupMetadata(eu.avalanche7.paradigm.modules.permissions.PermissionsHandler handler, String group, Map<String, String> metadata) {
@@ -271,7 +277,8 @@ public class PermissionAdminService {
             };
             changed = services.getPermissionsHandler().movePlayerOnTrack(user, track, contexts, operation,
                     Boolean.TRUE.equals(request.dontAddToFirst), Boolean.TRUE.equals(request.dontRemoveFromFirst),
-                    expiresAtMs, actor != null ? actor.name() : "dashboard", text(request.group));
+                    expiresAtMs, expiresAtMs != null || Boolean.TRUE.equals(request.permanent),
+                    actor != null ? actor.name() : "dashboard", text(request.group));
         }
         Map<String, String> auditDetails = new LinkedHashMap<>();
         auditDetails.put("action", action);
@@ -290,6 +297,20 @@ public class PermissionAdminService {
         details.put("newPosition", changed.newPosition());
         details.put("conflictingGroups", changed.conflictingGroups());
         return new PermissionMutationResult(changed.applied(), changed.code(), changed.message(), false, details);
+    }
+
+    private static String trackArgumentError(String action, PermissionMutationRequest request, Long expiresAtMs) {
+        boolean expiryRequested = expiresAtMs != null || Boolean.TRUE.equals(request.permanent);
+        if (expiryRequested && !"promote".equals(action) && !"settrack".equals(action)) {
+            return "Expiry is only valid when assigning a track rank.";
+        }
+        if (Boolean.TRUE.equals(request.dontAddToFirst) && !"promote".equals(action)) {
+            return "--dont-add-to-first is only valid for promote.";
+        }
+        if (Boolean.TRUE.equals(request.dontRemoveFromFirst) && !"demote".equals(action)) {
+            return "--dont-remove-from-first is only valid for demote.";
+        }
+        return null;
     }
 
     private static AuditActionType auditType(String action) {

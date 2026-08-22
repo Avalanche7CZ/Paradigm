@@ -15,10 +15,16 @@ public final class PermissionMutationArgumentParser {
     }
 
     public Result parse(String tail, ICommandSource source, boolean allowExpiry) {
+        return parse(tail, source, allowExpiry, false);
+    }
+
+    public Result parse(String tail, ICommandSource source, boolean allowExpiry, boolean allowTrackFlags) {
         List<String> tokens = tokenize(tail);
         List<String> rawContexts = new ArrayList<>();
         String expiry = null;
         boolean permanent = false;
+        boolean dontAddToFirst = false;
+        boolean dontRemoveFromFirst = false;
 
         for (int index = 0; index < tokens.size(); index++) {
             String token = tokens.get(index);
@@ -40,6 +46,14 @@ public final class PermissionMutationArgumentParser {
                     return Result.error("invalid_expiry", "--permanent cannot be combined with --expires.");
                 }
                 permanent = true;
+            } else if ("--dont-add-to-first".equals(token)) {
+                if (!allowTrackFlags) return Result.error("invalid_context", "Unknown permission flag: " + token);
+                if (dontAddToFirst) return Result.error("invalid_context", "--dont-add-to-first may only be used once.");
+                dontAddToFirst = true;
+            } else if ("--dont-remove-from-first".equals(token)) {
+                if (!allowTrackFlags) return Result.error("invalid_context", "Unknown permission flag: " + token);
+                if (dontRemoveFromFirst) return Result.error("invalid_context", "--dont-remove-from-first may only be used once.");
+                dontRemoveFromFirst = true;
             } else {
                 return Result.error("invalid_context", "Unknown permission flag: " + token);
             }
@@ -53,7 +67,7 @@ public final class PermissionMutationArgumentParser {
         if (!expires.valid()) {
             return Result.error(expires.code(), expires.message());
         }
-        return Result.ok(contexts.contexts(), expires.expiresAtMs());
+        return Result.ok(contexts.contexts(), expires.expiresAtMs(), expiry != null || permanent, dontAddToFirst, dontRemoveFromFirst);
     }
 
     private static List<String> tokenize(String raw) {
@@ -63,13 +77,14 @@ public final class PermissionMutationArgumentParser {
         return List.of(raw.trim().split("\\s+"));
     }
 
-    public record Result(PermissionContextSet contexts, Long expiresAtMs, String code, String message) {
-        public static Result ok(PermissionContextSet contexts, Long expiresAtMs) {
-            return new Result(contexts, expiresAtMs, "ok", "");
+    public record Result(PermissionContextSet contexts, Long expiresAtMs, boolean expirySpecified, boolean dontAddToFirst,
+                         boolean dontRemoveFromFirst, String code, String message) {
+        public static Result ok(PermissionContextSet contexts, Long expiresAtMs, boolean expirySpecified, boolean dontAddToFirst, boolean dontRemoveFromFirst) {
+            return new Result(contexts, expiresAtMs, expirySpecified, dontAddToFirst, dontRemoveFromFirst, "ok", "");
         }
 
         public static Result error(String code, String message) {
-            return new Result(null, null, code, message);
+            return new Result(null, null, false, false, false, code, message);
         }
 
         public boolean valid() {

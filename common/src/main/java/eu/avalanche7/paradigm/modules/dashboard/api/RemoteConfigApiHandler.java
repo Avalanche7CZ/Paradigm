@@ -94,9 +94,8 @@ public class RemoteConfigApiHandler {
         }
         boolean crossServer = dashboard.requiresNetworkManage("SERVER", request.fromServerId)
                 || dashboard.requiresNetworkManage("SERVER", request.toServerId);
-        boolean authorized = crossServer
-                ? dashboard.hasPermission(ctx.principal(), DashboardPermission.NETWORK_MANAGE, 4)
-                : dashboard.canEditConfigCategories(ctx.principal(), java.util.Set.of(request.section));
+        boolean authorized = dashboard.canEditConfigCategories(ctx.principal(), java.util.Set.of(request.section))
+                && (!crossServer || dashboard.hasPermission(ctx.principal(), DashboardPermission.NETWORK_MANAGE, 4));
         if (!authorized) {
             return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to copy configuration between servers.");
         }
@@ -145,10 +144,9 @@ public class RemoteConfigApiHandler {
     }
 
     private boolean authorizedFor(DashboardRequestContext ctx, String scope, String serverId, String section) {
-        if (dashboard.requiresNetworkManage(scope, serverId)) {
-            return dashboard.hasPermission(ctx.principal(), DashboardPermission.NETWORK_MANAGE, 4);
-        }
-        return dashboard.canEditConfigCategories(ctx.principal(), java.util.Set.of(section));
+        boolean canEditSection = dashboard.canEditConfigCategories(ctx.principal(), java.util.Set.of(section));
+        return canEditSection && (!dashboard.requiresNetworkManage(scope, serverId)
+                || dashboard.hasPermission(ctx.principal(), DashboardPermission.NETWORK_MANAGE, 4));
     }
 
     private static boolean operationSucceeded(Object result) {

@@ -63,15 +63,31 @@ public final class PermissionCommands {
         root.then(platform.createCommandBuilder().literal("append").then(platform.createCommandBuilder().argument("track", ICommandBuilder.ArgumentType.WORD)
                 .suggests((context, input) -> trackSuggestions(services, input))
                 .then(platform.createCommandBuilder().argument("group", ICommandBuilder.ArgumentType.WORD)
-                        .suggests((context, input) -> services.getPermissionsHandler().listPermissionGroups())
+                        .suggests((context, input) -> trackCandidateSuggestions(services, context.getStringArgument("track"), input))
                         .executes(context -> mutateTrack(context.getSource(), services, "track_append", context.getStringArgument("track"), context.getStringArgument("group"), null, null)))));
+        root.then(platform.createCommandBuilder().literal("insert").then(platform.createCommandBuilder().argument("track", ICommandBuilder.ArgumentType.WORD)
+                .suggests((context, input) -> trackSuggestions(services, input))
+                .then(platform.createCommandBuilder().argument("group", ICommandBuilder.ArgumentType.WORD)
+                        .suggests((context, input) -> trackCandidateSuggestions(services, context.getStringArgument("track"), input))
+                        .then(platform.createCommandBuilder().argument("position", ICommandBuilder.ArgumentType.INTEGER)
+                                .executes(context -> mutateTrack(context.getSource(), services, "track_insert", context.getStringArgument("track"), context.getStringArgument("group"), null, context.getIntArgument("position")))))));
+        root.then(platform.createCommandBuilder().literal("rename").then(platform.createCommandBuilder().argument("track", ICommandBuilder.ArgumentType.WORD)
+                .suggests((context, input) -> trackSuggestions(services, input))
+                .then(platform.createCommandBuilder().argument("newName", ICommandBuilder.ArgumentType.WORD)
+                        .executes(context -> mutateTrack(context.getSource(), services, "track_rename", context.getStringArgument("track"), null, context.getStringArgument("newName"), null)))));
+        root.then(platform.createCommandBuilder().literal("clone").then(platform.createCommandBuilder().argument("track", ICommandBuilder.ArgumentType.WORD)
+                .suggests((context, input) -> trackSuggestions(services, input))
+                .then(platform.createCommandBuilder().argument("newName", ICommandBuilder.ArgumentType.WORD)
+                        .executes(context -> mutateTrack(context.getSource(), services, "track_clone", context.getStringArgument("track"), null, context.getStringArgument("newName"), null)))));
         root.then(platform.createCommandBuilder().literal("remove").then(platform.createCommandBuilder().argument("track", ICommandBuilder.ArgumentType.WORD)
                 .suggests((context, input) -> trackSuggestions(services, input))
                 .then(platform.createCommandBuilder().argument("group", ICommandBuilder.ArgumentType.WORD)
+                        .suggests((context, input) -> trackGroupSuggestions(services, context.getStringArgument("track"), input))
                         .executes(context -> mutateTrack(context.getSource(), services, "track_remove", context.getStringArgument("track"), context.getStringArgument("group"), null, null)))));
         root.then(platform.createCommandBuilder().literal("move").then(platform.createCommandBuilder().argument("track", ICommandBuilder.ArgumentType.WORD)
                 .suggests((context, input) -> trackSuggestions(services, input))
                 .then(platform.createCommandBuilder().argument("group", ICommandBuilder.ArgumentType.WORD)
+                        .suggests((context, input) -> trackGroupSuggestions(services, context.getStringArgument("track"), input))
                         .then(platform.createCommandBuilder().argument("position", ICommandBuilder.ArgumentType.INTEGER)
                                 .executes(context -> mutateTrack(context.getSource(), services, "track_move", context.getStringArgument("track"), context.getStringArgument("group"), null, context.getIntArgument("position")))))));
         return root;
@@ -84,7 +100,10 @@ public final class PermissionCommands {
                         .then(platform.createCommandBuilder().argument("track", ICommandBuilder.ArgumentType.WORD)
                                 .suggests((context, input) -> trackSuggestions(services, input))
                                 .executes(context -> mutateRank(context.getSource(), services, action,
-                                        context.getStringArgument("player"), context.getStringArgument("track")))));
+                                        context.getStringArgument("player"), context.getStringArgument("track"), ""))
+                                .then(platform.createCommandBuilder().argument("flags", ICommandBuilder.ArgumentType.GREEDY_STRING)
+                                        .executes(context -> mutateRank(context.getSource(), services, action,
+                                                context.getStringArgument("player"), context.getStringArgument("track"), context.getStringArgument("flags"))))));
     }
 
     private static ICommandBuilder buildHomeBranch(IPlatformAdapter platform, Services services) {
@@ -402,12 +421,18 @@ public final class PermissionCommands {
                 .suggests((context, input) -> trackSuggestions(services, input));
         if ("settrack".equals(action)) {
             track.then(platform.createCommandBuilder().argument("group", ICommandBuilder.ArgumentType.WORD)
-                    .suggests((context, input) -> services.getPermissionsHandler().listPermissionGroups())
+                    .suggests((context, input) -> trackGroupSuggestions(services, context.getStringArgument("track"), input))
                     .executes(context -> mutateUserTrack(context.getSource(), services, action, context.getStringArgument("player"),
-                            context.getStringArgument("track"), context.getStringArgument("group"))));
+                            context.getStringArgument("track"), context.getStringArgument("group"), ""))
+                    .then(platform.createCommandBuilder().argument("flags", ICommandBuilder.ArgumentType.GREEDY_STRING)
+                            .executes(context -> mutateUserTrack(context.getSource(), services, action, context.getStringArgument("player"),
+                                    context.getStringArgument("track"), context.getStringArgument("group"), context.getStringArgument("flags")))));
         } else {
             track.executes(context -> mutateUserTrack(context.getSource(), services, action, context.getStringArgument("player"),
-                    context.getStringArgument("track"), null));
+                    context.getStringArgument("track"), null, ""))
+                    .then(platform.createCommandBuilder().argument("flags", ICommandBuilder.ArgumentType.GREEDY_STRING)
+                            .executes(context -> mutateUserTrack(context.getSource(), services, action, context.getStringArgument("player"),
+                                    context.getStringArgument("track"), null, context.getStringArgument("flags"))));
         }
         return platform.createCommandBuilder().literal(action).then(platform.createCommandBuilder()
                 .argument("player", ICommandBuilder.ArgumentType.WORD).then(track));
@@ -718,14 +743,21 @@ public final class PermissionCommands {
         return 1;
     }
 
-    private static int mutateRank(ICommandSource source, Services services, String action, String player, String track) {
+    private static int mutateRank(ICommandSource source, Services services, String action, String player, String track, String flags) {
         UUID uuid = PermissionCommandArguments.resolvePlayerUuid(services, player);
         if (uuid == null) {
             PermissionCommandMessages.send(source, services, "group.manage.user_invalid", "Player must be online name or UUID.");
             return 0;
         }
-        PermissionMutationRequest request = request(action, null, null, null, uuid.toString(), false, PermissionContextSet.empty(), null);
+        PermissionMutationArgumentParser.Result arguments = PermissionCommandArguments.parse(source, services, flags, true, true);
+        if (!arguments.valid()) return PermissionCommandMessages.argumentError(source, services, arguments.code(), arguments.message());
+        String invalid = invalidTrackArguments(action, arguments);
+        if (invalid != null) return PermissionCommandMessages.argumentError(source, services, "invalid_argument", invalid);
+        PermissionMutationRequest request = request(action, null, null, null, uuid.toString(), false, arguments.contexts(), arguments.expiresAtMs());
+        applyTrackExpiry(request, arguments);
         request.track = track;
+        request.dontAddToFirst = arguments.dontAddToFirst();
+        request.dontRemoveFromFirst = arguments.dontRemoveFromFirst();
         PermissionMutationResult result = mutate(source, services, request);
         if (!result.applied()) {
             PermissionCommandMessages.send(source, services, "group.manage.track_rank_fail", result.message());
@@ -735,14 +767,21 @@ public final class PermissionCommands {
         return 1;
     }
 
-    private static int mutateUserTrack(ICommandSource source, Services services, String action, String player, String track, String group) {
+    private static int mutateUserTrack(ICommandSource source, Services services, String action, String player, String track, String group, String flags) {
         UUID uuid = PermissionCommandArguments.resolvePlayerUuid(services, player);
         if (uuid == null) {
             PermissionCommandMessages.send(source, services, "group.manage.user_invalid", "Player must be online name or UUID.");
             return 0;
         }
-        PermissionMutationRequest request = request(action, group, null, null, uuid.toString(), false, PermissionContextSet.empty(), null);
+        PermissionMutationArgumentParser.Result arguments = PermissionCommandArguments.parse(source, services, flags, true, true);
+        if (!arguments.valid()) return PermissionCommandMessages.argumentError(source, services, arguments.code(), arguments.message());
+        String invalid = invalidTrackArguments(action, arguments);
+        if (invalid != null) return PermissionCommandMessages.argumentError(source, services, "invalid_argument", invalid);
+        PermissionMutationRequest request = request(action, group, null, null, uuid.toString(), false, arguments.contexts(), arguments.expiresAtMs());
+        applyTrackExpiry(request, arguments);
         request.track = track;
+        request.dontAddToFirst = arguments.dontAddToFirst();
+        request.dontRemoveFromFirst = arguments.dontRemoveFromFirst();
         PermissionMutationResult result = mutate(source, services, request);
         if (!result.applied()) {
             PermissionCommandMessages.send(source, services, "group.manage.track_rank_fail", result.message());
@@ -797,6 +836,35 @@ public final class PermissionCommands {
         return filterSuggestions(services.getPermissionsHandler().listPermissionTracks().stream().map(track -> track.name()).toList(), input);
     }
 
+    private static List<String> trackGroupSuggestions(Services services, String trackName, String input) {
+        var track = services.getPermissionsHandler().getPermissionTrack(trackName);
+        return track != null ? filterSuggestions(track.groups(), input) : List.of();
+    }
+
+    private static List<String> trackCandidateSuggestions(Services services, String trackName, String input) {
+        var track = services.getPermissionsHandler().getPermissionTrack(trackName);
+        if (track == null) return List.of();
+        return filterSuggestions(services.getPermissionsHandler().listPermissionGroups().stream()
+                .filter(group -> !track.groups().contains(group)).toList(), input);
+    }
+
+    private static String invalidTrackArguments(String action, PermissionMutationArgumentParser.Result arguments) {
+        if (arguments.expirySpecified() && !"promote".equals(action) && !"settrack".equals(action)) {
+            return "Expiry is only valid when assigning a track rank.";
+        }
+        if (arguments.dontAddToFirst() && !"promote".equals(action)) {
+            return "--dont-add-to-first is only valid for promote.";
+        }
+        if (arguments.dontRemoveFromFirst() && !"demote".equals(action)) {
+            return "--dont-remove-from-first is only valid for demote.";
+        }
+        return null;
+    }
+
+    private static void applyTrackExpiry(PermissionMutationRequest request, PermissionMutationArgumentParser.Result arguments) {
+        if (arguments.expirySpecified() && arguments.expiresAtMs() == null) request.permanent = true;
+    }
+
     private static DashboardPrincipal commandPrincipal(ICommandSource source) {
         IPlayer player = source != null ? source.getPlayer() : null;
         return new DashboardPrincipal(player != null ? player.getUUID() : null,
@@ -816,7 +884,7 @@ public final class PermissionCommands {
         request.contexts = contexts != null ? contexts.asMap() : Map.of();
         request.scope = contexts != null && !contexts.isEmpty() ? "custom" : "global";
         request.expiresAtMs = expiresAtMs;
-        request.permanent = expiresAtMs == null;
+        request.permanent = null;
         request.confirmed = true;
         return request;
     }

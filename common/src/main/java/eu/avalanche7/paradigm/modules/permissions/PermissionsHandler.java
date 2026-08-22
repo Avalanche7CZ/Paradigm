@@ -981,9 +981,16 @@ public class PermissionsHandler {
     public PermissionTrackResult movePlayerOnTrack(UUID player, String track, PermissionContextSet contexts, String operation,
                                                     boolean dontAddToFirst, boolean dontRemoveFromFirst, Long expiry,
                                                     String actor, String targetGroup) {
+        return movePlayerOnTrack(player, track, contexts, operation, dontAddToFirst, dontRemoveFromFirst, expiry,
+                expiry != null, actor, targetGroup);
+    }
+
+    public PermissionTrackResult movePlayerOnTrack(UUID player, String track, PermissionContextSet contexts, String operation,
+                                                    boolean dontAddToFirst, boolean dontRemoveFromFirst, Long expiry,
+                                                    boolean expiryRequested, String actor, String targetGroup) {
         if (!isInternalPermissionsEnabled()) return PermissionTrackResult.of(false, "storage_unavailable", "Internal permissions are disabled.", track, null, null);
         PermissionTrackResult result = internalPermissionApi.moveUserOnTrack(player, track, contexts, operation,
-                dontAddToFirst, dontRemoveFromFirst, expiry, actor, targetGroup);
+                dontAddToFirst, dontRemoveFromFirst, expiry, expiryRequested, actor, targetGroup);
         if (result.applied()) refreshPlayerCommandTree(player);
         return result;
     }

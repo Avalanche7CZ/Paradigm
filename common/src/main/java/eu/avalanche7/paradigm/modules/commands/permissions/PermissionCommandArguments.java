@@ -12,8 +12,13 @@ public final class PermissionCommandArguments {
     }
 
     public static PermissionMutationArgumentParser.Result parse(ICommandSource source, Services services, String flags, boolean allowExpiry) {
+        return parse(source, services, flags, allowExpiry, false);
+    }
+
+    public static PermissionMutationArgumentParser.Result parse(ICommandSource source, Services services, String flags,
+                                                                 boolean allowExpiry, boolean allowTrackFlags) {
         return new PermissionMutationArgumentParser(() -> services.getStorageService() != null && services.getStorageService().context() != null
-                ? services.getStorageService().context().serverIdentity() : null).parse(flags, source, allowExpiry);
+                ? services.getStorageService().context().serverIdentity() : null).parse(flags, source, allowExpiry, allowTrackFlags);
     }
 
     public static UUID resolvePlayerUuid(Services services, String input) {

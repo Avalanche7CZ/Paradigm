@@ -239,13 +239,17 @@ public class PermissionAPI {
         } finally { stateLock.writeLock().unlock(); }
     }
 
-    /**
-     * Moves one direct assignment through an ordered track. The selected contexts must match
-     * exactly; inherited groups are deliberately not considered ranks.
-     */
     public PermissionTrackResult moveUserOnTrack(UUID playerUuid, String trackName, PermissionContextSet contextSet,
                                                   String operation, boolean dontAddToFirst, boolean dontRemoveFromFirst,
                                                   Long requestedExpiry, String assignedBy, String requestedGroup) {
+        return moveUserOnTrack(playerUuid, trackName, contextSet, operation, dontAddToFirst, dontRemoveFromFirst,
+                requestedExpiry, requestedExpiry != null, assignedBy, requestedGroup);
+    }
+
+    public PermissionTrackResult moveUserOnTrack(UUID playerUuid, String trackName, PermissionContextSet contextSet,
+                                                  String operation, boolean dontAddToFirst, boolean dontRemoveFromFirst,
+                                                  Long requestedExpiry, boolean expiryRequested, String assignedBy,
+                                                  String requestedGroup) {
         String track = normalizeGroupName(trackName);
         String requested = normalizeGroupName(requestedGroup);
         PermissionContextSet contexts = contextSet != null ? contextSet : PermissionContextSet.empty();
@@ -259,7 +263,7 @@ public class PermissionAPI {
             String uuid = playerUuid.toString().toLowerCase(Locale.ROOT);
             PermissionDataStore.UserEntry user = state.users.computeIfAbsent(uuid, ignored -> new PermissionDataStore.UserEntry());
             user.normalize();
-            List<DirectTrackAssignment> assignments = directTrackAssignments(user, ranks, contexts);
+            List<DirectTrackAssignment> assignments = directTrackAssignments(user, uuid, ranks, contexts);
             if (assignments.size() > 1) {
                 List<String> conflicts = assignments.stream().map(DirectTrackAssignment::group).toList();
                 return new PermissionTrackResult(false, "ambiguous_track_position", "User has multiple direct track ranks.", track, null, null, conflicts);
@@ -279,9 +283,14 @@ public class PermissionAPI {
                 int target = ranks.indexOf(requested);
                 if (target < 0) return trackResult(false, "not_on_track", "Requested group is not on track.", track, currentPosition, null);
                 DirectTrackAssignment preserve = current != null && current.group().equals(requested) ? current : null;
+                if (preserve != null && expiryRequested) {
+                    return trackResult(false, "invalid_position", "Existing rank expiry cannot be overridden.", track, currentPosition, currentPosition);
+                }
                 removeDirectAssignments(user, assignments, contexts, uuid);
-                if (preserve != null) addExistingAssignment(user, preserve, contexts);
-                else addDirectAssignment(user, uuid, requested, contexts, requestedExpiry, assignedBy);
+                boolean targetIsImplicitDefault = contexts.isEmpty()
+                        && target == 0 && requested.equals(normalizeGroupName(state.defaultGroup));
+                if (preserve != null && !targetIsImplicitDefault) addExistingAssignment(user, uuid, preserve, contexts);
+                else if (!targetIsImplicitDefault) addDirectAssignment(user, uuid, requested, contexts, requestedExpiry, assignedBy);
                 saveLocked();
                 return trackResult(true, "ok", "Track rank set.", track, currentPosition == 0 ? null : currentPosition, target + 1);
             }
@@ -289,12 +298,15 @@ public class PermissionAPI {
             if (!"promote".equals(mode) && !"demote".equals(mode)) {
                 return trackResult(false, "invalid_position", "Unknown track operation.", track, null, null);
             }
-            if (current != null && requestedExpiry != null && current.expiresAtMs() != null && !requestedExpiry.equals(current.expiresAtMs())) {
+            if (current != null && expiryRequested) {
                 return trackResult(false, "invalid_position", "Existing rank expiry cannot be overridden.", track, currentPosition, null);
             }
             if ("promote".equals(mode)) {
                 if (current == null) {
                     if (dontAddToFirst) return trackResult(false, "not_on_track", "User is not on track.", track, null, null);
+                    if (implicitDefault && ranks.size() == 1) {
+                        return trackResult(false, "already_highest", "User is already highest on track.", track, 1, 1);
+                    }
                     int target = implicitDefault && ranks.size() > 1 ? 2 : 1;
                     addDirectAssignment(user, uuid, ranks.get(target - 1), contexts, requestedExpiry, assignedBy);
                     saveLocked();
@@ -317,19 +329,32 @@ public class PermissionAPI {
                 saveLocked();
                 return trackResult(true, "ok", "Lowest track rank removed.", track, 1, null);
             }
-            replaceDirectAssignment(user, current, ranks.get(currentPosition - 2), contexts, uuid);
+            String target = ranks.get(currentPosition - 2);
+            if (contexts.isEmpty() && target.equals(normalizeGroupName(state.defaultGroup))) {
+                removeDirectAssignments(user, assignments, contexts, uuid);
+            } else {
+                replaceDirectAssignment(user, current, target, contexts, uuid);
+            }
             saveLocked();
             return trackResult(true, "ok", "User demoted on track.", track, currentPosition, currentPosition - 1);
         } finally { stateLock.writeLock().unlock(); }
     }
 
-    private List<DirectTrackAssignment> directTrackAssignments(PermissionDataStore.UserEntry user, List<String> ranks, PermissionContextSet contexts) {
+    private List<DirectTrackAssignment> directTrackAssignments(PermissionDataStore.UserEntry user, String uuid, List<String> ranks, PermissionContextSet contexts) {
         List<DirectTrackAssignment> result = new ArrayList<>();
         long now = System.currentTimeMillis();
         if (contexts.isEmpty() && user.groups != null) {
             for (int index = 0; index < user.groups.size(); index++) {
                 String group = normalizeGroupName(user.groups.get(index));
-                if (ranks.contains(group)) result.add(new DirectTrackAssignment(group, index, null, null));
+                if (ranks.contains(group)) result.add(new DirectTrackAssignment(group, index, null, null, null));
+            }
+        }
+        if (contexts.isEmpty() && playerDataStore != null) {
+            for (PlayerDataStore.TemporaryGroupEntry temporary : playerDataStore.getTemporaryGroups(uuid)) {
+                String group = temporary != null ? normalizeGroupName(temporary.getGroup()) : null;
+                if (group != null && ranks.contains(group)) {
+                    result.add(new DirectTrackAssignment(group, -1, null, temporary, temporary.getExpiresAtMs()));
+                }
             }
         }
         if (user.contextualGroups != null) {
@@ -337,7 +362,7 @@ public class PermissionAPI {
                 PermissionDataStore.GroupAssignmentEntry assignment = user.contextualGroups.get(index);
                 if (assignment != null && ranks.contains(normalizeGroupName(assignment.group)) && contexts.equals(assignment.contextSet())
                         && (assignment.expiresAtMs == null || assignment.expiresAtMs > now)) {
-                    result.add(new DirectTrackAssignment(normalizeGroupName(assignment.group), index, assignment, assignment.expiresAtMs));
+                    result.add(new DirectTrackAssignment(normalizeGroupName(assignment.group), index, assignment, null, assignment.expiresAtMs));
                 }
             }
         }
@@ -346,7 +371,11 @@ public class PermissionAPI {
 
     private void replaceDirectAssignment(PermissionDataStore.UserEntry user, DirectTrackAssignment assignment, String target,
                                          PermissionContextSet contexts, String uuid) {
-        if (assignment.entry() != null) assignment.entry().group = target;
+        if (assignment.temporary() != null && playerDataStore != null) {
+            PlayerDataStore.TemporaryGroupEntry temporary = assignment.temporary();
+            playerDataStore.removeTemporaryGroup(uuid, assignment.group());
+            playerDataStore.setTemporaryGroup(uuid, target, temporary.getExpiresAtMs(), temporary.getAssignedAtMs(), temporary.getAssignedBy());
+        } else if (assignment.entry() != null) assignment.entry().group = target;
         else if (user.groups != null && assignment.index() >= 0 && assignment.index() < user.groups.size()) user.groups.set(assignment.index(), target);
     }
 
@@ -357,17 +386,27 @@ public class PermissionAPI {
             for (DirectTrackAssignment assignment : assignments) if (assignment.entry() == null) indices.add(assignment.index());
             for (int index = user.groups.size() - 1; index >= 0; index--) if (indices.contains(index)) user.groups.remove(index);
         }
+        if (contexts.isEmpty() && playerDataStore != null) {
+            for (DirectTrackAssignment assignment : assignments) {
+                if (assignment.temporary() != null) playerDataStore.removeTemporaryGroup(uuid, assignment.group());
+            }
+        }
         if (user.contextualGroups != null) user.contextualGroups.removeIf(assignments.stream().map(DirectTrackAssignment::entry).filter(java.util.Objects::nonNull).toList()::contains);
     }
 
-    private void addExistingAssignment(PermissionDataStore.UserEntry user, DirectTrackAssignment assignment, PermissionContextSet contexts) {
-        if (assignment.entry() != null) user.contextualGroups.add(assignment.entry());
+    private void addExistingAssignment(PermissionDataStore.UserEntry user, String uuid, DirectTrackAssignment assignment, PermissionContextSet contexts) {
+        if (assignment.temporary() != null && playerDataStore != null) {
+            PlayerDataStore.TemporaryGroupEntry temporary = assignment.temporary();
+            playerDataStore.setTemporaryGroup(uuid, assignment.group(), temporary.getExpiresAtMs(), temporary.getAssignedAtMs(), temporary.getAssignedBy());
+        } else if (assignment.entry() != null) user.contextualGroups.add(assignment.entry());
         else if (contexts.isEmpty()) user.groups.add(assignment.group());
     }
 
     private void addDirectAssignment(PermissionDataStore.UserEntry user, String uuid, String group, PermissionContextSet contexts,
                                      Long expiresAtMs, String assignedBy) {
-        if (contexts.isEmpty() && expiresAtMs == null) user.groups.add(group);
+        if (contexts.isEmpty() && expiresAtMs != null && playerDataStore != null) {
+            playerDataStore.setTemporaryGroup(uuid, group, expiresAtMs, System.currentTimeMillis(), assignedBy != null ? assignedBy : "");
+        } else if (contexts.isEmpty() && expiresAtMs == null) user.groups.add(group);
         else user.contextualGroups.add(new PermissionDataStore.GroupAssignmentEntry(PermissionAssignmentId.generated(), group, contexts,
                 expiresAtMs, System.currentTimeMillis(), assignedBy != null ? assignedBy : ""));
     }
@@ -376,7 +415,8 @@ public class PermissionAPI {
         return PermissionTrackResult.of(applied, code, message, track, oldPosition, newPosition);
     }
 
-    private record DirectTrackAssignment(String group, int index, PermissionDataStore.GroupAssignmentEntry entry, Long expiresAtMs) { }
+    private record DirectTrackAssignment(String group, int index, PermissionDataStore.GroupAssignmentEntry entry,
+                                         PlayerDataStore.TemporaryGroupEntry temporary, Long expiresAtMs) { }
 
     public boolean createGroup(String groupName) {
         String normalized = normalizeGroupName(groupName);

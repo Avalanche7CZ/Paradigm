@@ -103,9 +103,10 @@ public class DashboardRouter {
 
                 if (path.startsWith("/api/storage/configuration")) {
                     if ("GET".equals(method)) {
-                        DashboardResponse denied = denyPage(ctx, ParadigmPermissions.DASHBOARD_STORAGECONFIG_VIEW, "You do not have permission to view storage configuration.");
-                        if (denied != null) return denied;
-                    } else if (mutating(method) && !dashboard.canAccessPage(ctx.principal(), ParadigmPermissions.DASHBOARD_STORAGECONFIG_EDIT, ParadigmPermissions.STORAGE_MANAGE)) {
+                        if (!dashboard.canViewConfigCategory(ctx.principal(), "storage")) {
+                            return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to view storage configuration.");
+                        }
+                    } else if (mutating(method) && !dashboard.canEditConfigCategory(ctx.principal(), "storage")) {
                         return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to edit storage configuration.");
                     }
                 } else if (path.startsWith("/api/storage/")) {
@@ -125,10 +126,18 @@ public class DashboardRouter {
                 if ("POST".equals(method) && "/api/storage/configuration".equals(path)) return storage.saveConfiguration(ctx);
                 if ("POST".equals(method) && "/api/storage/configuration/test".equals(path)) return storage.testConfiguration(ctx);
 
-                {
-                    DashboardResponse denied = guardResource(ctx, method, path, "/api/discord", "the Discord integration",
-                            ParadigmPermissions.DISCORD_MANAGE, ParadigmPermissions.DASHBOARD_CONFIG_DISCORD_VIEW, ParadigmPermissions.DISCORD_MANAGE);
-                    if (denied != null) return denied;
+                if (path.startsWith("/api/discord")) {
+                    if ("GET".equals(method) && !dashboard.canViewConfigCategory(ctx.principal(), "discord")) {
+                        return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to view the Discord integration.");
+                    }
+                    if ("POST".equals(method) && "/api/discord/token".equals(path)
+                            && !dashboard.canEditConfigCategory(ctx.principal(), "discord")) {
+                        return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to edit Discord configuration.");
+                    }
+                    if (mutating(method) && !"/api/discord/token".equals(path)
+                            && !dashboard.hasPermission(ctx.principal(), ParadigmPermissions.DISCORD_MANAGE)) {
+                        return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to manage the Discord integration.");
+                    }
                 }
                 if ("GET".equals(method) && "/api/discord/status".equals(path)) return discord.status(ctx);
                 if ("POST".equals(method) && "/api/discord/token".equals(path)) return discord.saveToken(ctx);
@@ -212,10 +221,14 @@ public class DashboardRouter {
                     return customCommands.mutate(ctx, action);
                 }
 
-                {
-                    DashboardResponse denied = guardResource(ctx, method, path, "/api/permissions/", "permissions",
-                            ParadigmPermissions.GROUP_MANAGE, ParadigmPermissions.DASHBOARD_PERMISSIONS, ParadigmPermissions.GROUP_MANAGE);
-                    if (denied != null) return denied;
+                if (path.startsWith("/api/permissions/")) {
+                    if ("GET".equals(method)) {
+                        DashboardResponse denied = denyPage(ctx, ParadigmPermissions.DASHBOARD_PERMISSIONS,
+                                "You do not have permission to view permissions.", ParadigmPermissions.GROUP_MANAGE);
+                        if (denied != null) return denied;
+                    } else if (mutating(method) && !dashboard.canManagePermissions(ctx.principal())) {
+                        return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to manage dashboard permissions.");
+                    }
                 }
                 if ("GET".equals(method) && "/api/permissions/summary".equals(path)) return permissions.summary(ctx);
                 if ("GET".equals(method) && "/api/permissions/groups".equals(path)) return permissions.groups(ctx);

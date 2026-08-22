@@ -61,19 +61,6 @@ public class TicketService {
         long now = System.currentTimeMillis();
 
         int maxOpen = ConfigEntry.valueOf(config.maxOpenTicketsPerPlayer, 3);
-        TicketError limitError = TicketWorkflow.validateOpenLimit(
-                repository.countActiveByCreator(networkId, creatorUuid), maxOpen);
-        if (limitError.isFailure()) {
-            return TicketOutcome.fail(limitError, null, Map.of("limit", String.valueOf(maxOpen)));
-        }
-        long cooldownRemaining = TicketWorkflow.cooldownRemainingMs(
-                repository.lastCreatedAtByCreator(networkId, creatorUuid).orElse(null),
-                now,
-                ConfigEntry.valueOf(config.createCooldownSeconds, 120));
-        if (cooldownRemaining > 0) {
-            return TicketOutcome.fail(TicketError.TICKET_COOLDOWN, null,
-                    Map.of("remainingMs", String.valueOf(cooldownRemaining)));
-        }
 
         final long number;
         try {
@@ -96,12 +83,26 @@ public class TicketService {
         TicketEvent createdEvent = new TicketEvent(TicketIds.eventId(), ticketId, networkId, ticketKey,
                 TicketEventType.CREATED, creatorUuid, actor.name(), serverId, null, TicketStatus.OPEN.name(), now);
 
-        TicketWriteResult result = repository.createTicket(new TicketCreate(ticket, firstMessage, createdEvent));
+        TicketWriteResult result = repository.createTicketIfAllowed(new TicketCreate(ticket, firstMessage, createdEvent), maxOpen,
+                ConfigEntry.valueOf(config.createCooldownSeconds, 120) * 1000L);
+        if (result.status() == TicketWriteResult.Status.LIMIT_REACHED) {
+            return TicketOutcome.fail(TicketError.TICKET_LIMIT_REACHED, null, Map.of("limit", String.valueOf(maxOpen)));
+        }
+        if (result.status() == TicketWriteResult.Status.COOLDOWN) {
+            long remainingMs = result.cooldownRemainingMs() != null
+                    ? result.cooldownRemainingMs()
+                    : ConfigEntry.valueOf(config.createCooldownSeconds, 120) * 1000L;
+            return TicketOutcome.fail(TicketError.TICKET_COOLDOWN, null,
+                    Map.of("remainingMs", String.valueOf(remainingMs)));
+        }
         if (!result.ok()) {
             return translate(result, ticketKey);
         }
-        publish(events -> events.ticketCreated(result.ticket(), createdEvent));
-        notify(target -> target.ticketCreated(result.ticket(), createdEvent));
+        TicketEvent admittedEvent = new TicketEvent(createdEvent.eventId(), createdEvent.ticketId(), createdEvent.networkId(),
+                createdEvent.ticketKey(), createdEvent.eventType(), createdEvent.actorUuid(), createdEvent.actorName(),
+                createdEvent.serverId(), createdEvent.oldValue(), createdEvent.newValue(), result.ticket().createdAtMs());
+        publish(events -> events.ticketCreated(result.ticket(), admittedEvent));
+        notify(target -> target.ticketCreated(result.ticket(), admittedEvent));
         return TicketOutcome.ok(result.ticket());
     }
 
@@ -743,6 +744,8 @@ public class TicketService {
             case ALREADY_CLAIMED -> TicketOutcome.fail(TicketError.ALREADY_CLAIMED, result.ticket(),
                     Map.of("ticket", String.valueOf(ticketKey),
                             "actor", result.ticket() != null ? String.valueOf(result.ticket().assigneeName()) : ""));
+            case LIMIT_REACHED -> TicketOutcome.fail(TicketError.TICKET_LIMIT_REACHED);
+            case COOLDOWN -> TicketOutcome.fail(TicketError.TICKET_COOLDOWN);
             case UNSUPPORTED -> TicketOutcome.fail(TicketError.STORAGE_UNAVAILABLE);
             case OK -> TicketOutcome.ok(result.ticket());
         };

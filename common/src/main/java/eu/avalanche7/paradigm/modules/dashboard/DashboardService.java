@@ -260,6 +260,16 @@ public class DashboardService implements AutoCloseable {
         return DashboardAuthorization.canAccessPage(check(principal), pagePermission, legacyAlternatives);
     }
 
+    public boolean canManagePermissions(DashboardPrincipal principal) {
+        if (principal == null) {
+            return false;
+        }
+        if (principal.console()) {
+            return true;
+        }
+        return DashboardAuthorization.canManagePermissions(check(principal));
+    }
+
     public boolean canViewConfigCategory(DashboardPrincipal principal, String category) {
         if (principal == null) {
             return false;
@@ -278,6 +288,16 @@ public class DashboardService implements AutoCloseable {
             return true;
         }
         return DashboardAuthorization.canEditAllCategories(check(principal), categories);
+    }
+
+    public boolean canEditConfigCategory(DashboardPrincipal principal, String category) {
+        if (principal == null) {
+            return false;
+        }
+        if (principal.console()) {
+            return true;
+        }
+        return DashboardAuthorization.canEditConfigCategory(check(principal), category);
     }
 
     public DashboardAuthorization.Capabilities capabilities(DashboardPrincipal principal) {

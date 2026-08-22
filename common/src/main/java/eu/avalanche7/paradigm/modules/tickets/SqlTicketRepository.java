@@ -40,9 +40,16 @@ public class SqlTicketRepository implements TicketRepository {
             int updated = sql.update("UPDATE tickets_sequence SET next_value = next_value + 1 WHERE network_id = ?",
                     ps -> ps.setString(1, network));
             if (updated == 0) {
-                sql.update("INSERT INTO tickets_sequence(network_id, next_value) VALUES(?, 1)",
-                        ps -> ps.setString(1, network));
-                return 1L;
+                try {
+                    sql.update("INSERT INTO tickets_sequence(network_id, next_value) VALUES(?, 1)",
+                            ps -> ps.setString(1, network));
+                    return 1L;
+                } catch (RuntimeException failure) {
+                    if (!isSequenceConflict(failure)) throw failure;
+                    int retried = sql.update("UPDATE tickets_sequence SET next_value = next_value + 1 WHERE network_id = ?",
+                            ps -> ps.setString(1, network));
+                    if (retried == 0) throw failure;
+                }
             }
             return sql.query("SELECT next_value FROM tickets_sequence WHERE network_id = ?",
                     ps -> ps.setString(1, network),
@@ -63,6 +70,34 @@ public class SqlTicketRepository implements TicketRepository {
                 insertEvent(create.createdEvent());
             }
             return TicketWriteResult.ok(ticket);
+        });
+    }
+
+    @Override
+    public TicketWriteResult createTicketIfAllowed(TicketCreate create, int maxOpen, long cooldownMs) {
+        Ticket ticket = create.ticket();
+        String network = network(ticket.networkId());
+        return sql.transaction(() -> {
+            sql.update("UPDATE tickets_sequence SET next_value = next_value WHERE network_id = ?",
+                    ps -> ps.setString(1, network));
+            long nowMs = System.currentTimeMillis();
+            int active = sql.query("SELECT COUNT(*) AS total FROM tickets WHERE network_id = ? AND LOWER(creator_uuid) = ? "
+                            + "AND status NOT IN ('RESOLVED', 'CLOSED')",
+                    ps -> { ps.setString(1, network); ps.setString(2, ticket.creatorUuid().toLowerCase(Locale.ROOT)); },
+                    rs -> rs.next() ? rs.getInt("total") : 0);
+            if (maxOpen > 0 && active >= maxOpen) return TicketWriteResult.limitReached();
+            Long latest = sql.query("SELECT MAX(created_at_ms) AS latest FROM tickets WHERE network_id = ? AND LOWER(creator_uuid) = ?",
+                    ps -> { ps.setString(1, network); ps.setString(2, ticket.creatorUuid().toLowerCase(Locale.ROOT)); },
+                    rs -> { if (!rs.next()) return null; long value = rs.getLong("latest"); return rs.wasNull() ? null : value; });
+            if (cooldownMs > 0 && latest != null && nowMs - latest < cooldownMs) {
+                return TicketWriteResult.cooldown(cooldownMs - Math.max(0L, nowMs - latest));
+            }
+            TicketCreate admitted = create.withCreatedAtMs(nowMs);
+            sql.update("INSERT INTO tickets(" + TICKET_COLUMNS + ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    ps -> bindTicket(ps, admitted.ticket()));
+            if (admitted.firstMessage() != null) insertMessage(admitted.firstMessage());
+            if (admitted.createdEvent() != null) insertEvent(admitted.createdEvent());
+            return TicketWriteResult.ok(admitted.ticket());
         });
     }
 
@@ -508,5 +543,15 @@ public class SqlTicketRepository implements TicketRepository {
             return networkId;
         }
         return context != null ? context.networkId() : "default";
+    }
+
+    private static boolean isSequenceConflict(Throwable failure) {
+        for (Throwable current = failure; current != null; current = current.getCause()) {
+            if (current instanceof SQLException sqlFailure) {
+                String state = sqlFailure.getSQLState();
+                if ((state != null && state.startsWith("23")) || sqlFailure.getErrorCode() == 19) return true;
+            }
+        }
+        return false;
     }
 }

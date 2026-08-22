@@ -90,6 +90,12 @@ public final class DashboardAuthorization {
         return hasManageBypass(check) || check.test(ParadigmPermissions.DASHBOARD_ACCESS);
     }
 
+    public static boolean canManagePermissions(PermissionCheck check) {
+        return hasManageBypass(check) || (canAccessDashboard(check)
+                && check.test(ParadigmPermissions.DASHBOARD_PERMISSIONS)
+                && check.test(ParadigmPermissions.GROUP_MANAGE));
+    }
+
     public static boolean canAccessPage(PermissionCheck check, PermissionDefinition pagePermission, PermissionDefinition... legacyAlternatives) {
         if (hasManageBypass(check) || check.test(pagePermission)) {
             return true;

@@ -295,7 +295,7 @@ public final class MenuService {
             Map<String, String> values = session.contextValues();
             OpenResult access = accessResult(player, definition, values);
             if (access != OpenResult.OPENED) {
-                closeSession(session);
+                terminateSession(session, player, true, false);
                 continue;
             }
 
@@ -313,6 +313,10 @@ public final class MenuService {
     }
 
     private void terminateSession(MenuSession session, @Nullable IPlayer player, boolean closeHandle) {
+        terminateSession(session, player, closeHandle, true);
+    }
+
+    private void terminateSession(MenuSession session, @Nullable IPlayer player, boolean closeHandle, boolean runOnClose) {
         session.cancelRefreshTask();
         session.markClosed();
         IMenuPlatform.Handle handle = session.handle();
@@ -322,7 +326,7 @@ public final class MenuService {
         }
         MenuDefinition definition = registry.get(session.menuId());
         IPlayer resolvedPlayer = player != null ? player : playerOf(session.viewer());
-        if (definition != null && resolvedPlayer != null && !definition.onClose.isEmpty()) {
+        if (runOnClose && definition != null && resolvedPlayer != null && !definition.onClose.isEmpty()) {
             dispatcher.execute(definition.onClose, buildContext(resolvedPlayer, definition, session.contextValues()));
         }
     }
@@ -392,6 +396,10 @@ public final class MenuService {
         MenuDefinition definition = registry.get(session.menuId());
         if (definition == null) {
             close(player);
+            return;
+        }
+        if (accessResult(player, definition, session.contextValues()) != OpenResult.OPENED) {
+            terminateSession(session, player, true, false);
             return;
         }
         MenuSlot menuSlot = definition.slotAt(slot);

@@ -10,6 +10,19 @@ public interface TicketRepository {
 
     TicketWriteResult createTicket(TicketCreate create);
 
+    default TicketWriteResult createTicketIfAllowed(TicketCreate create, int maxOpen, long cooldownMs) {
+        Ticket ticket = create.ticket();
+        long nowMs = System.currentTimeMillis();
+        if (maxOpen > 0 && countActiveByCreator(ticket.networkId(), ticket.creatorUuid()) >= maxOpen) {
+            return TicketWriteResult.limitReached();
+        }
+        Long latest = lastCreatedAtByCreator(ticket.networkId(), ticket.creatorUuid()).orElse(null);
+        if (cooldownMs > 0 && latest != null && nowMs - latest < cooldownMs) {
+            return TicketWriteResult.cooldown(cooldownMs - Math.max(0L, nowMs - latest));
+        }
+        return createTicket(create);
+    }
+
     TicketWriteResult applyMutation(TicketMutation mutation);
 
     Optional<Ticket> findTicket(String networkId, String ticketKey);

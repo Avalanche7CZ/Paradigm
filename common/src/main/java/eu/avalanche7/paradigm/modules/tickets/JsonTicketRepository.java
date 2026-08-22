@@ -78,6 +78,24 @@ public class JsonTicketRepository implements TicketRepository {
     }
 
     @Override
+    public TicketWriteResult createTicketIfAllowed(TicketCreate create, int maxOpen, long cooldownMs) {
+        synchronized (lock) {
+            long nowMs = System.currentTimeMillis();
+            ensureIndex();
+            Ticket ticket = create.ticket();
+            List<Ticket> existing = new ArrayList<>(indexOf(network(ticket.networkId())).values());
+            long active = existing.stream().filter(value -> value.status().isActive() && value.isCreatedBy(ticket.creatorUuid())).count();
+            if (maxOpen > 0 && active >= maxOpen) return TicketWriteResult.limitReached();
+            Optional<Long> latest = existing.stream().filter(value -> value.isCreatedBy(ticket.creatorUuid()))
+                    .map(Ticket::createdAtMs).max(Comparator.naturalOrder());
+            if (cooldownMs > 0 && latest.isPresent() && nowMs - latest.get() < cooldownMs) {
+                return TicketWriteResult.cooldown(cooldownMs - Math.max(0L, nowMs - latest.get()));
+            }
+            return createTicket(create.withCreatedAtMs(nowMs));
+        }
+    }
+
+    @Override
     public TicketWriteResult applyMutation(TicketMutation mutation) {
         synchronized (lock) {
             ensureIndex();
