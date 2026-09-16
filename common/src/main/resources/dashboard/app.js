@@ -1941,9 +1941,10 @@ function renderActions(actions, path) {
     let fields = '';
     if (type === 'message') fields = `<label>Message lines<textarea data-action-field="text">${esc((action.text || []).join('\n'))}</textarea></label>`;
     else if (type === 'teleport') fields = `<div class="compact-form"><label>X<input data-action-field="x" type="number" value="${attr(action.x ?? 0)}"></label><label>Y<input data-action-field="y" type="number" value="${attr(action.y ?? 64)}"></label><label>Z<input data-action-field="z" type="number" value="${attr(action.z ?? 0)}"></label></div>`;
+    else if (type === 'open_menu') fields = `<label>Menu ID<input data-action-field="menu" value="${attr(action.menu || '')}" placeholder="main"></label>`;
     else if (type === 'conditional') fields = `<h3>Conditions</h3><div data-condition-list>${renderConditions(action.conditions || [])}</div><button data-add-condition>Add Condition</button><h3>On Success</h3><div>${renderActions(action.on_success || [], `${actionPath}.on_success`)}</div><button data-add-action-path="${actionPath}.on_success">Add Success Action</button><h3>On Failure</h3><div>${renderActions(action.on_failure || [], `${actionPath}.on_failure`)}</div><button data-add-action-path="${actionPath}.on_failure">Add Failure Action</button>`;
     else fields = `<label>Commands, one per line<textarea data-action-field="commands">${esc((action.commands || []).join('\n'))}</textarea></label>`;
-    return `<div class="command-action" data-action-path="${attr(actionPath)}"><div class="detail-header"><label>Action type<select data-action-field="type">${['message','teleport','run_command','run_console','conditional'].map(option => `<option ${option === type ? 'selected' : ''}>${option}</option>`).join('')}</select></label><div class="detail-header-actions"><button data-action-move="up" title="Move up" aria-label="Move action up">&#8593;</button><button data-action-move="down" title="Move down" aria-label="Move action down">&#8595;</button><button data-action-duplicate>Duplicate</button><button data-action-remove class="danger">Delete</button></div></div>${fields}</div>`;
+    return `<div class="command-action" data-action-path="${attr(actionPath)}"><div class="detail-header"><label>Action type<select data-action-field="type">${['message','teleport','open_menu','run_command','run_console','conditional'].map(option => `<option ${option === type ? 'selected' : ''}>${option}</option>`).join('')}</select></label><div class="detail-header-actions"><button data-action-move="up" title="Move up" aria-label="Move action up">&#8593;</button><button data-action-move="down" title="Move down" aria-label="Move action down">&#8595;</button><button data-action-duplicate>Duplicate</button><button data-action-remove class="danger">Delete</button></div></div>${fields}</div>`;
   }).join('');
   return rows || '<div class="empty-state">No actions configured.</div>';
 }
@@ -2010,6 +2011,7 @@ function normalizeAction(action) {
   Object.keys(action).filter(key => key !== 'type').forEach(key => delete action[key]);
   if (type === 'message') action.text = [''];
   if (type === 'teleport') Object.assign(action, { x: 0, y: 64, z: 0 });
+  if (type === 'open_menu') action.menu = '';
   if (['run_command','run_console'].includes(type)) action.commands = [''];
   if (type === 'conditional') Object.assign(action, { conditions: [], on_success: [], on_failure: [] });
 }

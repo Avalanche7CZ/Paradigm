@@ -31,7 +31,7 @@ import eu.avalanche7.paradigm.modules.dashboard.DashboardJson;
 public final class CustomCommandAdminService {
     private static final Pattern NAME = Pattern.compile("[a-z0-9][a-z0-9_-]{0,31}");
     private static final Pattern PERMISSION = Pattern.compile("[A-Za-z0-9_*.-]{1,128}");
-    private static final Set<String> ACTIONS = Set.of("message", "teleport", "run_command", "runcmd", "command", "run_console", "conditional");
+    private static final Set<String> ACTIONS = Set.of("message", "teleport", "open_menu", "run_command", "runcmd", "command", "run_console", "conditional");
     private static final Set<String> CONDITIONS = Set.of("has_permission", "has_item", "health_above", "health_below", "is_op");
     private static final String MANAGED_FILE = "dashboard-commands.json";
 
@@ -180,6 +180,7 @@ public final class CustomCommandAdminService {
             if (("run_command".equals(type) || "runcmd".equals(type) || "command".equals(type) || "run_console".equals(type))
                     && array(action, "commands").isEmpty()) throw new IllegalArgumentException("Command actions require at least one command.");
             if ("teleport".equals(type) && (!action.has("x") || !action.has("y") || !action.has("z"))) throw new IllegalArgumentException("Teleport actions require x, y, and z.");
+            if ("open_menu".equals(type) && text(string(action, "menu")).isBlank()) throw new IllegalArgumentException("Open menu actions require a menu ID.");
             for (JsonElement conditionElement : array(action, "conditions")) {
                 if (!conditionElement.isJsonObject()) throw new IllegalArgumentException("Every condition must be an object.");
                 String condition = string(conditionElement.getAsJsonObject(), "type").toLowerCase(Locale.ROOT);
