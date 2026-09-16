@@ -2110,7 +2110,13 @@ function renderPermissionTargetList() {
     root.innerHTML = `<button id="permission-create-group">Create Group</button>${items.map(group => `<button class="selection-item ${selectedPermission('group', group.name) ? 'active' : ''}" data-permission-kind="group" data-permission-id="${attr(group.name)}"><strong>${esc(group.name)}</strong><small>${group.permissionCount} direct permissions · ${esc((group.parents || []).join(', ') || 'no parent')}</small></button>`).join('')}`;
     $('permission-create-group').addEventListener('click', createPermissionGroup);
   } else if (state.permissionView === 'users') {
-    root.innerHTML = items.length ? items.map(user => `<button class="selection-item ${selectedPermission('user', user.uuid) ? 'active' : ''}" data-permission-kind="user" data-permission-id="${attr(user.uuid)}"><strong>${esc(user.name || user.uuid)}</strong><small>${user.online ? 'Online' : 'Offline'} · ${user.groups || 0} groups · ${user.permissions || 0} direct</small></button>`).join('') : empty('No players found.');
+    root.innerHTML = items.length ? items.map(user => {
+      const effectiveGroups = Array.isArray(user.effectiveGroups) ? user.effectiveGroups : [];
+      const groupSummary = effectiveGroups.length
+        ? `${effectiveGroups.length} effective group${effectiveGroups.length === 1 ? '' : 's'} (${effectiveGroups.join(', ')})`
+        : `${user.groups || 0} direct groups`;
+      return `<button class="selection-item ${selectedPermission('user', user.uuid) ? 'active' : ''}" data-permission-kind="user" data-permission-id="${attr(user.uuid)}"><strong>${esc(user.name || user.uuid)}</strong><small>${user.online ? 'Online' : 'Offline'} · ${esc(groupSummary)} · ${user.permissions || 0} direct permissions</small></button>`;
+    }).join('') : empty('No players found.');
   } else if (state.permissionView === 'tracks') {
     root.innerHTML = `<button id="permission-create-track">Create Track</button>${items.map(track => `<button class="selection-item ${selectedPermission('track', track.name) ? 'active' : ''}" data-permission-kind="track" data-permission-id="${attr(track.name)}"><strong>${esc(track.name)}</strong><small>${(track.groups || []).length} ranks</small></button>`).join('')}`;
     $('permission-create-track').addEventListener('click', async () => {
@@ -2188,8 +2194,10 @@ function renderUserEditor(user) {
   const assignments = user.assignments || [];
   const groupAssignments = assignments.filter(item => item.kind === 'user group');
   const permissions = assignments.filter(item => item.kind !== 'user group');
+  const effectiveGroups = Array.isArray(user.effectiveGroups) ? user.effectiveGroups : [];
+  const implicitGroups = effectiveGroups.filter(group => !groupAssignments.some(assignment => assignment.node === group));
   root.innerHTML = `<div class="detail-header permission-subject-header"><div><h2>${esc(user.name || user.uuid)}</h2><span>${esc(user.uuid)} · ${user.online ? 'Online' : 'Offline'} · last seen ${relativeTime(user.lastSeenMs)}</span><span id="user-primary-group">Primary group: loading...</span></div></div>
-    <section class="permission-section"><h2>Group Memberships</h2>${assignmentTable(groupAssignments)}<div class="compact-form"><label>Group<select id="user-group-select">${state.permissionData.groups.map(group => `<option>${esc(group.name)}</option>`).join('')}</select></label>${contextExpiryForm('user-group')}<button id="user-group-add">Add Group</button></div></section>
+    <section class="permission-section"><h2>Group Memberships</h2>${implicitGroups.length ? `<p class="permission-effective-groups">Implicit default: ${implicitGroups.map(esc).join(', ')}</p>` : ''}${assignmentTable(groupAssignments)}<div class="compact-form"><label>Group<select id="user-group-select">${state.permissionData.groups.map(group => `<option>${esc(group.name)}</option>`).join('')}</select></label>${contextExpiryForm('user-group')}<button id="user-group-add">Add Group</button></div></section>
     <section class="permission-section direct-permissions"><h2>Direct Permissions</h2>${assignmentTable(permissions)}</section>
     <section class="permission-section permission-add-section"><h2>Add Direct Permission</h2>${permissionAddForm('user')}</section>
     <section class="permission-section effective-permissions-section"><div class="detail-header"><h2>Effective Permissions</h2><input id="effective-search" placeholder="Filter effective nodes"></div><div id="effective-permissions">Loading effective permissions...</div></section>`;

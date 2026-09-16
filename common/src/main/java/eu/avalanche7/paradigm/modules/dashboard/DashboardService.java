@@ -48,6 +48,7 @@ import eu.avalanche7.paradigm.modules.dashboard.heartbeat.DashboardHeartbeatServ
 import eu.avalanche7.paradigm.modules.moderation.ModerationActionRequest;
 import eu.avalanche7.paradigm.modules.moderation.ModerationService;
 import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
+import eu.avalanche7.paradigm.modules.permissions.PermissionAPI;
 import eu.avalanche7.paradigm.modules.permissions.PermissionAdminService;
 import eu.avalanche7.paradigm.modules.permissions.PermissionAssignmentId;
 import eu.avalanche7.paradigm.modules.permissions.PermissionDefinition;
@@ -887,6 +888,15 @@ public class DashboardService implements AutoCloseable {
                         && !name.toLowerCase(java.util.Locale.ROOT).contains(q)) {
                     continue;
                 }
+                try {
+                    var metadata = services.getPermissionsHandler().resolvePlayerMetadata(UUID.fromString(uuid));
+                    if (metadata != null) {
+                        row.put("primaryGroup", metadata.primaryGroup());
+                        row.put("effectiveGroups", metadata.groups());
+                    }
+                } catch (IllegalArgumentException ignored) {
+                    // Player profile UUIDs are validated elsewhere; leave malformed legacy rows undecorated.
+                }
                 rows.add(row);
             }
             rows.sort(java.util.Comparator.comparing(row -> safeText((String) row.get("name")), String.CASE_INSENSITIVE_ORDER));
@@ -901,11 +911,34 @@ public class DashboardService implements AutoCloseable {
             if (uuid == null) {
                 return (Object) Map.of("user", null);
             }
+            var info = services.getPermissionsHandler().getPlayerPermissionInfo(uuid);
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("uuid", uuid.toString());
-            data.put("info", services.getPermissionsHandler().getPlayerPermissionInfo(uuid));
+            data.put("info", permissionUserInfo(info));
             return (Object) Map.of("user", data);
         }, executor);
+    }
+
+    static Map<String, Object> permissionUserInfo(PermissionAPI.UserInfo info) {
+        if (info == null) return null;
+
+        Set<String> directlyAssigned = new java.util.HashSet<>();
+        directlyAssigned.addAll(info.permanentGroups());
+        for (PermissionAPI.TemporaryGroupInfo group : info.temporaryGroups()) {
+            if (group != null && group.group() != null) directlyAssigned.add(group.group());
+        }
+
+        List<String> implicitGroups = info.meta() == null ? List.of() : info.meta().groups().stream()
+                .filter(group -> !directlyAssigned.contains(group))
+                .toList();
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("assignments", info.assignments());
+        result.put("groupAssignments", info.groupAssignments());
+        result.put("permanentGroups", info.permanentGroups());
+        result.put("temporaryGroups", info.temporaryGroups());
+        result.put("implicitGroups", implicitGroups);
+        result.put("meta", info.meta());
+        return result;
     }
 
     public CompletableFuture<Object> permissionNodesAsync(String query, int page, int pageSize) {

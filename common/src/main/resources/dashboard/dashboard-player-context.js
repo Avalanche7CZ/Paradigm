@@ -4,7 +4,7 @@
   const COPY = {
     en: {
       overview: 'Overview', permissions: 'Permissions', moderation: 'Moderation', loading: 'Loading...', noPermissionData: 'No Paradigm permission data for this player.',
-      primaryGroup: 'Primary group', groups: 'Groups', directPermissions: 'Direct permissions', groupAssignments: 'Group assignments', noDirectPermissions: 'No direct permission assignments.',
+      primaryGroup: 'Primary group', groups: 'Groups', directPermissions: 'Direct permissions', groupAssignments: 'Group assignments', noDirectPermissions: 'No direct permission assignments.', implicit: 'Implicit default',
       allow: 'Allow', deny: 'Deny', groupAssignment: 'Group', temporary: 'Temporary', expires: 'Expires', context: 'Context', openPermissionEditor: 'Open permission editor',
       punishmentHistory: 'Punishment history', activePunishments: 'Active', noPunishments: 'No moderation history for this player.', reason: 'Reason', moderator: 'Moderator', status: 'Status',
       created: 'Created', openModeration: 'Open moderation', permissionUnavailable: 'Permission data is unavailable.', moderationUnavailable: 'Moderation data is unavailable.',
@@ -12,7 +12,7 @@
     },
     cs: {
       overview: 'Přehled', permissions: 'Oprávnění', moderation: 'Moderace', loading: 'Načítám...', noPermissionData: 'Pro tohoto hráče nejsou v Paradigmu permission data.',
-      primaryGroup: 'Primární skupina', groups: 'Skupiny', directPermissions: 'Přímá oprávnění', groupAssignments: 'Přiřazení skupin', noDirectPermissions: 'Žádná přímá permission přiřazení.',
+      primaryGroup: 'Primární skupina', groups: 'Skupiny', directPermissions: 'Přímá oprávnění', groupAssignments: 'Přiřazení skupin', noDirectPermissions: 'Žádná přímá permission přiřazení.', implicit: 'Výchozí (implicitní)',
       allow: 'Povolit', deny: 'Zakázat', groupAssignment: 'Skupina', temporary: 'Dočasné', expires: 'Vyprší', context: 'Kontext', openPermissionEditor: 'Otevřít editor oprávnění',
       punishmentHistory: 'Historie trestů', activePunishments: 'Aktivní', noPunishments: 'Tento hráč nemá historii moderace.', reason: 'Důvod', moderator: 'Moderátor', status: 'Stav',
       created: 'Vytvořeno', openModeration: 'Otevřít moderaci', permissionUnavailable: 'Permission data nejsou dostupná.', moderationUnavailable: 'Data moderace nejsou dostupná.',
@@ -20,7 +20,7 @@
     },
     ru: {
       overview: 'Обзор', permissions: 'Права', moderation: 'Модерация', loading: 'Загрузка...', noPermissionData: 'Для этого игрока нет данных прав Paradigm.',
-      primaryGroup: 'Основная группа', groups: 'Группы', directPermissions: 'Прямые права', groupAssignments: 'Назначения групп', noDirectPermissions: 'Нет прямых назначений прав.',
+      primaryGroup: 'Основная группа', groups: 'Группы', directPermissions: 'Прямые права', groupAssignments: 'Назначения групп', noDirectPermissions: 'Нет прямых назначений прав.', implicit: 'Неявная группа по умолчанию',
       allow: 'Разрешить', deny: 'Запретить', groupAssignment: 'Группа', temporary: 'Временно', expires: 'Истекает', context: 'Контекст', openPermissionEditor: 'Открыть редактор прав',
       punishmentHistory: 'История наказаний', activePunishments: 'Активные', noPunishments: 'У игрока нет истории модерации.', reason: 'Причина', moderator: 'Модератор', status: 'Статус',
       created: 'Создано', openModeration: 'Открыть модерацию', permissionUnavailable: 'Данные прав недоступны.', moderationUnavailable: 'Данные модерации недоступны.',
@@ -169,6 +169,9 @@
       const permanent = Array.isArray(info.permanentGroups) ? info.permanentGroups : [];
       const temporary = Array.isArray(info.temporaryGroups) ? info.temporaryGroups : [];
       const resolved = Array.isArray(meta.groups) ? meta.groups : [...permanent, ...temporary.map(group => group.group)].filter(Boolean);
+      const implicit = Array.isArray(info.implicitGroups)
+        ? info.implicitGroups
+        : resolved.filter(group => !permanent.includes(group) && !temporary.some(entry => entry.group === group));
       const assignments = Array.isArray(info.assignments) ? info.assignments : [];
       const groupAssignments = Array.isArray(info.groupAssignments) ? info.groupAssignments : [];
       panel.innerHTML = `
@@ -177,11 +180,12 @@
           ${summaryCard(tr('inheritedGroups'), resolved.length ? resolved.join(', ') : '—')}
         </div>
         <section class="player-context-section">
-          <header><h3>${esc(tr('groups'))}</h3><span>${permanent.length + temporary.length}</span></header>
+          <header><h3>${esc(tr('groups'))}</h3><span>${permanent.length + temporary.length + implicit.length}</span></header>
           <div class="player-context-chips">
             ${permanent.map(group => `<span>${esc(group)}<small>${esc(tr('permanent'))}</small></span>`).join('')}
             ${temporary.map(group => `<span>${esc(group.group || '-')}<small>${esc(tr('temporary'))}${group.expiresAtMs ? ` · ${esc(formatDate(group.expiresAtMs))}` : ''}</small></span>`).join('')}
-            ${!permanent.length && !temporary.length ? '<em>—</em>' : ''}
+            ${implicit.map(group => `<span>${esc(group)}<small>${esc(tr('implicit'))}</small></span>`).join('')}
+            ${!permanent.length && !temporary.length && !implicit.length ? '<em>—</em>' : ''}
           </div>
         </section>
         <section class="player-context-section">
