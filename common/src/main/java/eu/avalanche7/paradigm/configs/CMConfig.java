@@ -12,13 +12,18 @@ import java.util.stream.Stream;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import eu.avalanche7.paradigm.data.CustomCommand;
+import eu.avalanche7.paradigm.modules.actions.PlayerInputService;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.utils.AtomicFileIO;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 
 public class CMConfig {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(CMConfig.class);
 
     private final Gson gson = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
     private final Path configFolderPath;
@@ -67,7 +72,14 @@ public class CMConfig {
                                     if (commands != null) {
                                         for (CustomCommand command : commands) {
                                             if (command != null && command.getName() != null && !command.getName().trim().isEmpty()) {
-                                                this.loadedCommands.add(command);
+                                                try {
+                                                    PlayerInputService.validateActions(command.getActions(),
+                                                            "custom command '" + command.getName() + "'", 0);
+                                                    this.loadedCommands.add(command);
+                                                } catch (IllegalArgumentException invalid) {
+                                                    LOGGER.warn("CMConfig: skipped invalid command in {}: {}",
+                                                            file.getFileName(), invalid.getMessage());
+                                                }
                                             } else {
                                                 this.debugLogger.debugLog("CMConfig: Skipped a null or invalid command entry in file: " + file.getFileName());
                                             }

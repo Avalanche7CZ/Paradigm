@@ -168,7 +168,12 @@ public final class MenuStore {
     }
 
     public MenuDefinition fromJson(String json) {
-        MenuDefinition definition = gson.fromJson(json, MenuDefinition.class);
+        MenuDefinition definition;
+        try {
+            definition = gson.fromJson(json, MenuDefinition.class);
+        } catch (JsonParseException malformed) {
+            throw new IllegalArgumentException("Malformed menu definition: " + rootMessage(malformed), malformed);
+        }
         if (definition == null) {
             throw new IllegalArgumentException("The menu definition is empty.");
         }

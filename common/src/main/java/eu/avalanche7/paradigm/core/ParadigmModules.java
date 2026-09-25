@@ -8,6 +8,7 @@ import eu.avalanche7.paradigm.modules.CommandManager;
 import eu.avalanche7.paradigm.modules.Mentions;
 import eu.avalanche7.paradigm.modules.Restart;
 import eu.avalanche7.paradigm.modules.StorageLifecycle;
+import eu.avalanche7.paradigm.modules.actions.PlayerInputModule;
 import eu.avalanche7.paradigm.modules.afk.AfkModule;
 import eu.avalanche7.paradigm.modules.chat.GroupChat;
 import eu.avalanche7.paradigm.modules.chat.JoinLeaveMessages;
@@ -72,6 +73,7 @@ public final class ParadigmModules {
     }
 
     private static void core(List<ParadigmModule> modules) {
+        modules.add(new PlayerInputModule());
         modules.add(new StorageLifecycle());
         modules.add(new Help());
         modules.add(new Announcements());

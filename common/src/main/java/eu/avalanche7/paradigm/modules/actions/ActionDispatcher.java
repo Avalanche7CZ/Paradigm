@@ -31,13 +31,13 @@ public final class ActionDispatcher {
         execute(list, context, 0);
     }
 
-    private void execute(List<CustomCommand.Action> list, ActionContext context, int depth) {
+    private boolean execute(List<CustomCommand.Action> list, ActionContext context, int depth) {
         if (list == null || list.isEmpty() || context == null) {
-            return;
+            return false;
         }
         if (depth > MAX_DEPTH) {
             fail(context, "&cAction nesting is too deep; aborting.");
-            return;
+            return false;
         }
         for (CustomCommand.Action action : list) {
             if (action == null) {
@@ -45,11 +45,9 @@ public final class ActionDispatcher {
             }
             String type = action.getType();
             if (isConditional(type)) {
-                if (testAll(action.getConditions(), context)) {
-                    execute(action.getOnSuccess(), context, depth + 1);
-                } else {
-                    execute(action.getOnFailure(), context, depth + 1);
-                }
+                boolean pending = execute(testAll(action.getConditions(), context)
+                        ? action.getOnSuccess() : action.getOnFailure(), context, depth + 1);
+                if (pending) return true;
                 continue;
             }
             ActionRegistry.Handler handler = actions.get(type);
@@ -65,7 +63,9 @@ public final class ActionDispatcher {
                 }
                 fail(context, "&cAction '" + type + "' failed: " + failure.getMessage());
             }
+            if ("await_input".equals(actions.canonicalType(type))) return true;
         }
+        return false;
     }
 
     public boolean testAll(List<CustomCommand.Condition> list, ActionContext context) {

@@ -254,6 +254,14 @@ public final class MenuService {
         terminateSession(session, player, true);
     }
 
+    public void closeForInput(IPlayer player) {
+        UUID viewer = uuidOf(player);
+        MenuSession session = viewer != null ? sessions.get(viewer) : null;
+        if (session != null) {
+            terminateSession(session, player, true, false);
+        }
+    }
+
     public void closeAll() {
         for (MenuSession session : List.copyOf(sessions.values())) {
             session.cancelRefreshTask();

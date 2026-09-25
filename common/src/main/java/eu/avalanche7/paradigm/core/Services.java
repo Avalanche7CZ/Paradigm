@@ -13,6 +13,7 @@ import eu.avalanche7.paradigm.modules.actions.ActionRegistry;
 import eu.avalanche7.paradigm.modules.actions.BuiltinActions;
 import eu.avalanche7.paradigm.modules.actions.BuiltinConditions;
 import eu.avalanche7.paradigm.modules.actions.ConditionRegistry;
+import eu.avalanche7.paradigm.modules.actions.PlayerInputService;
 import eu.avalanche7.paradigm.modules.audit.AuditService;
 import eu.avalanche7.paradigm.modules.chat.ChatFormatter;
 import eu.avalanche7.paradigm.modules.dashboard.customcommands.CustomCommandAdminService;
@@ -59,6 +60,7 @@ public class Services {
     private volatile AuditService auditService;
     private volatile TicketService ticketService;
     private volatile ActionDispatcher actionDispatcher;
+    private volatile PlayerInputService playerInputService;
     private volatile MenuService menuService;
     private volatile PermissionAdminService permissionAdminService;
     private volatile CustomCommandAdminService customCommandAdminService;
@@ -142,6 +144,10 @@ public class Services {
     }
 
     public void shutdown() {
+        PlayerInputService input = this.playerInputService;
+        if (input != null) {
+            input.shutdown();
+        }
         PunishmentService punishments = this.punishmentService;
         if (punishments != null) {
             try {
@@ -359,6 +365,17 @@ public class Services {
                 actionDispatcher = new ActionDispatcher(this, actions, conditions);
             }
             return actionDispatcher;
+        }
+    }
+
+    public PlayerInputService getPlayerInputService() {
+        PlayerInputService current = playerInputService;
+        if (current != null) return current;
+        synchronized (this) {
+            if (playerInputService == null) {
+                playerInputService = new PlayerInputService(this);
+            }
+            return playerInputService;
         }
     }
 

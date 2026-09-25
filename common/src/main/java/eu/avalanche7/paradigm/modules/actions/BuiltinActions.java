@@ -14,6 +14,8 @@ public final class BuiltinActions {
     }
 
     public static void register(ActionRegistry registry, Services services) {
+        registry.register("await_input", (action, context) ->
+                services.getPlayerInputService().start(action, context));
         registry.register("message", (action, context) -> {
             List<String> text = action.getText();
             if (text == null) {

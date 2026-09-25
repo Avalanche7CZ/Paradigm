@@ -154,6 +154,8 @@ public class CustomCommand {
         private Integer x, y, z;
         private List<String> commands;
         private String menu;
+        private String key;
+        private Integer timeout;
 
         private List<Condition> conditions;
         private List<Action> on_success;
@@ -178,6 +180,18 @@ public class CustomCommand {
             Action action = new Action();
             action.type = "message";
             action.text = lines;
+            return action;
+        }
+
+        public static Action awaitInput(String key, Integer timeout, List<String> prompt,
+                List<Action> onSuccess, List<Action> onFailure) {
+            Action action = new Action();
+            action.type = "await_input";
+            action.key = key;
+            action.timeout = timeout;
+            action.text = prompt != null ? List.copyOf(prompt) : null;
+            action.on_success = onSuccess != null ? List.copyOf(onSuccess) : null;
+            action.on_failure = onFailure != null ? List.copyOf(onFailure) : null;
             return action;
         }
 
@@ -219,6 +233,14 @@ public class CustomCommand {
 
         public String getMenu() {
             return menu;
+        }
+
+        public String getKey() {
+            return key;
+        }
+
+        public Integer getTimeout() {
+            return timeout;
         }
 
         public List<Condition> getConditions() {

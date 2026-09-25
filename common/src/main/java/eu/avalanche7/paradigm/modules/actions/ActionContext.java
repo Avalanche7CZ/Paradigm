@@ -2,8 +2,12 @@ package eu.avalanche7.paradigm.modules.actions;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -15,6 +19,7 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 public final class ActionContext {
 
     private static final String[] NO_ARGS = new String[0];
+    private static final Pattern VALUE_TOKEN = Pattern.compile("\\{([a-z][a-z0-9_]*)\\}");
 
     private final Services services;
     private final ICommandSource source;
@@ -22,6 +27,7 @@ public final class ActionContext {
     private final String[] argsTokens;
     private final String rawArgs;
     private final Map<String, String> values;
+    private final Set<String> literalKeys;
     private final String origin;
 
     private ActionContext(Builder builder) {
@@ -31,6 +37,7 @@ public final class ActionContext {
         this.argsTokens = builder.argsTokens != null ? builder.argsTokens.clone() : NO_ARGS;
         this.rawArgs = builder.rawArgs != null ? builder.rawArgs : String.join(" ", this.argsTokens);
         this.values = Collections.unmodifiableMap(new LinkedHashMap<>(builder.values));
+        this.literalKeys = Collections.unmodifiableSet(new LinkedHashSet<>(builder.literalKeys));
         this.origin = builder.origin != null ? builder.origin : "unknown";
     }
 
@@ -114,6 +121,7 @@ public final class ActionContext {
                 .rawArgs(rawArgs)
                 .origin(origin);
         builder.values.putAll(values);
+        builder.literalKeys.addAll(literalKeys);
         return builder;
     }
 
@@ -123,6 +131,7 @@ public final class ActionContext {
         }
         String out = text;
         for (Map.Entry<String, String> entry : values.entrySet()) {
+            if (literalKeys.contains(entry.getKey())) continue;
             String token = "{" + entry.getKey() + "}";
             if (out.contains(token)) {
                 out = out.replace(token, entry.getValue() != null ? entry.getValue() : "");
@@ -142,12 +151,22 @@ public final class ActionContext {
             out = out.replace("$*", rawArgs != null ? rawArgs : "");
         }
         out = out.replaceAll("\\$[1-9][0-9]*", "");
-        return out.trim();
+        if (literalKeys.isEmpty()) return out.trim();
+        Matcher matcher = VALUE_TOKEN.matcher(out);
+        StringBuffer expanded = new StringBuffer();
+        while (matcher.find()) {
+            String key = matcher.group(1);
+            matcher.appendReplacement(expanded, literalKeys.contains(key)
+                    ? Matcher.quoteReplacement(values.get(key)) : Matcher.quoteReplacement(matcher.group()));
+        }
+        matcher.appendTail(expanded);
+        return expanded.toString().trim();
     }
 
     public static final class Builder {
         private final Services services;
         private final Map<String, String> values = new LinkedHashMap<>();
+        private final Set<String> literalKeys = new LinkedHashSet<>();
         private ICommandSource source;
         private IPlayer player;
         private String[] argsTokens;
@@ -189,7 +208,14 @@ public final class ActionContext {
         public Builder value(String key, @Nullable String value) {
             if (key != null && !key.isBlank()) {
                 values.put(key.trim().toLowerCase(Locale.ROOT), value != null ? value : "");
+                literalKeys.remove(key.trim().toLowerCase(Locale.ROOT));
             }
+            return this;
+        }
+
+        public Builder literalValue(String key, @Nullable String value) {
+            value(key, value);
+            if (key != null && !key.isBlank()) literalKeys.add(key.trim().toLowerCase(Locale.ROOT));
             return this;
         }
 

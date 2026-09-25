@@ -32,6 +32,7 @@ public final class CommandCatalog {
             entry("mention", true, false, true, "mention"),
             entry("restart", true, false, true, "restart"),
             entry("customcommands", true, false, true, "customcommandsreload"),
+            entry("paradigminput", true, true, true, "paradigminput"),
             entry("sc", true, false, true, "sc"),
             entry("groupchat", true, false, true, "groupchat"),
             entry("hologram", true, false, true, "hologram", "holo"),
@@ -133,6 +134,7 @@ public final class CommandCatalog {
         own(modules, "Mentions", "mention");
         own(modules, "Restart", "restart");
         own(modules, "CustomCommands", "customcommands");
+        own(modules, "PlayerInput", "paradigminput");
         own(modules, "StaffChat", "sc");
         own(modules, "GroupChat", "groupchat");
         own(modules, "Holograms", "hologram");

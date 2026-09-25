@@ -243,10 +243,13 @@
         <textarea id="menu-s-conditions" rows="3" spellcheck="false">${esc(conditionsToText(slot.visibleIf))}</textarea></label>
       <label class="menu-block">Click actions (any click)
         <textarea id="menu-s-actions" rows="3" spellcheck="false">${esc(actionsToText(slot.actions))}</textarea></label>
+      ${renderInputEditor(slot, 'actions')}
       <label class="menu-block">Left-click actions
         <textarea id="menu-s-left" rows="2" spellcheck="false">${esc(actionsToText(slot.leftActions))}</textarea></label>
+      ${renderInputEditor(slot, 'leftActions')}
       <label class="menu-block">Right-click actions
         <textarea id="menu-s-right" rows="2" spellcheck="false">${esc(actionsToText(slot.rightActions))}</textarea></label>
+      ${renderInputEditor(slot, 'rightActions')}
       <p class="menu-hint">Action syntax: <code>open_menu &lt;id&gt;</code>, <code>close_menu</code>, <code>menu_back</code>,
         <code>message &lt;text&gt;</code>, <code>run_command &lt;cmd&gt;</code>, <code>run_console &lt;cmd&gt;</code>.
         Condition syntax: <code>has_permission node</code>, <code>is_op</code>, <code>in_world id</code>.</p>
@@ -273,7 +276,7 @@
   }
 
   function actionsToText(actions) {
-    return (actions || []).map(action => {
+    return (actions || []).filter(action => action.type !== 'await_input').map(action => {
       if (action.type === 'open_menu') return `open_menu ${action.menu || ''}`.trim();
       if (action.type === 'message') return `message ${(action.text || []).join(' | ')}`.trim();
       if (action.type === 'run_command' || action.type === 'run_console') {
@@ -281,6 +284,20 @@
       }
       return action.type || '';
     }).join('\n');
+  }
+
+  function renderInputEditor(slot, field) {
+    const action = (slot[field] || []).find(item => item.type === 'await_input');
+    if (!action) return `<button type="button" data-input-add="${field}">Add input prompt</button>`;
+    return `<div class="menu-input-editor" data-input-editor="${field}">
+      <div class="detail-header"><h3>Input prompt</h3><button type="button" data-input-remove="${field}" class="danger">Remove</button></div>
+      <div class="menu-slot-grid"><label>Input key<input data-input-field="key" value="${esc(action.key || 'input')}"></label>
+      <label>Timeout (seconds)<input data-input-field="timeout" type="number" min="1" max="3600" value="${esc(action.timeout ?? 60)}"></label></div>
+      <label class="menu-block">Prompt lines<textarea data-input-field="text" rows="2">${esc((action.text || []).join('\n'))}</textarea></label>
+      <label class="menu-block">On success actions<textarea data-input-field="on_success" rows="2" placeholder="run_command ticket create report {message}">${esc(actionsToText(action.on_success))}</textarea></label>
+      <label class="menu-block">On failure actions (cancel or timeout)<textarea data-input-field="on_failure" rows="2">${esc(actionsToText(action.on_failure))}</textarea></label>
+      <p class="menu-hint">The input prompt runs after the actions above it. Its continuation runs only after a reply. Use one action per line.</p>
+    </div>`;
   }
 
   function textToActions(text) {
@@ -361,9 +378,29 @@
         markDirty();
       });
       bind('menu-s-conditions', event => { slot.visibleIf = textToConditions(event.target.value); markDirty(); });
-      bind('menu-s-actions', event => { slot.actions = textToActions(event.target.value); markDirty(); });
-      bind('menu-s-left', event => { slot.leftActions = textToActions(event.target.value); markDirty(); });
-      bind('menu-s-right', event => { slot.rightActions = textToActions(event.target.value); markDirty(); });
+      bind('menu-s-actions', event => { slot.actions = [...textToActions(event.target.value), ...slot.actions.filter(action => action.type === 'await_input')]; markDirty(); });
+      bind('menu-s-left', event => { slot.leftActions = [...textToActions(event.target.value), ...slot.leftActions.filter(action => action.type === 'await_input')]; markDirty(); });
+      bind('menu-s-right', event => { slot.rightActions = [...textToActions(event.target.value), ...slot.rightActions.filter(action => action.type === 'await_input')]; markDirty(); });
+      document.querySelectorAll('#menu-slot-editor [data-input-add]').forEach(button => button.addEventListener('click', () => {
+        slot[button.dataset.inputAdd].push({ type: 'await_input', key: 'input', timeout: 60, text: ['Type your message in chat.'], on_success: [{ type: 'message', text: ['Received: {input}'] }], on_failure: [] });
+        markDirty();
+        renderEditor();
+      }));
+      document.querySelectorAll('#menu-slot-editor [data-input-remove]').forEach(button => button.addEventListener('click', () => {
+        slot[button.dataset.inputRemove] = slot[button.dataset.inputRemove].filter(action => action.type !== 'await_input');
+        markDirty();
+        renderEditor();
+      }));
+      document.querySelectorAll('#menu-slot-editor [data-input-editor]').forEach(card => {
+        const action = slot[card.dataset.inputEditor].find(item => item.type === 'await_input');
+        card.querySelectorAll('[data-input-field]').forEach(input => input.addEventListener('input', () => {
+          const field = input.dataset.inputField;
+          action[field] = field === 'text' ? input.value.split('\n')
+            : field === 'on_success' || field === 'on_failure' ? textToActions(input.value)
+            : field === 'timeout' ? Number(input.value) : input.value;
+          markDirty();
+        }));
+      });
     }
 
     bind('menu-raw', event => {

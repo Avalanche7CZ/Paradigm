@@ -10,6 +10,7 @@ import java.util.regex.Pattern;
 import org.jetbrains.annotations.Nullable;
 
 import eu.avalanche7.paradigm.data.CustomCommand;
+import eu.avalanche7.paradigm.modules.actions.PlayerInputService;
 
 public final class MenuDefinition {
 
@@ -108,6 +109,7 @@ public final class MenuDefinition {
             onClose = new ArrayList<>();
         }
         onClose.removeIf(java.util.Objects::isNull);
+        PlayerInputService.validateActions(onClose, "onClose", 0);
         if (slots == null) {
             slots = new ArrayList<>();
         }
@@ -123,9 +125,13 @@ public final class MenuDefinition {
         Set<Integer> seen = new HashSet<>();
         for (MenuSlot slot : slots) {
             slot.normalize(size);
+            PlayerInputService.validateActions(slot.actions, "slot " + slot.slot + " actions", 0);
+            PlayerInputService.validateActions(slot.leftActions, "slot " + slot.slot + " leftActions", 0);
+            PlayerInputService.validateActions(slot.rightActions, "slot " + slot.slot + " rightActions", 0);
             if (!seen.add(slot.slot)) {
                 throw new IllegalArgumentException("Menu '" + id + "' defines slot " + slot.slot + " more than once.");
             }
         }
     }
+
 }

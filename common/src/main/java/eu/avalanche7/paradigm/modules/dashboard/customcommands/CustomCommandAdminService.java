@@ -18,9 +18,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 
 import eu.avalanche7.paradigm.core.Services;
@@ -29,6 +31,7 @@ import eu.avalanche7.paradigm.modules.CommandManager;
 import eu.avalanche7.paradigm.modules.actions.ActionDispatcher;
 import eu.avalanche7.paradigm.modules.actions.ActionRegistry;
 import eu.avalanche7.paradigm.modules.actions.ConditionRegistry;
+import eu.avalanche7.paradigm.modules.actions.PlayerInputService;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardJson;
 
 public final class CustomCommandAdminService {
@@ -190,12 +193,28 @@ public final class CustomCommandAdminService {
 
     private void validateActions(JsonArray actions, int depth) {
         if (depth > 6) throw new IllegalArgumentException("Conditional action nesting is too deep.");
-        for (JsonElement element : actions) {
+        for (int index = 0; index < actions.size(); index++) {
+            JsonElement element = actions.get(index);
             if (!element.isJsonObject()) throw new IllegalArgumentException("Every action must be an object.");
             JsonObject action = element.getAsJsonObject();
             String type = string(action, "type").toLowerCase(Locale.ROOT);
             String canonical = ActionDispatcher.isConditional(type) ? "conditional" : actionRegistry.canonicalType(type);
             if (canonical == null) throw new IllegalArgumentException("Unsupported action type: " + type);
+            if ("await_input".equals(canonical)) {
+                requireInputString(action, "key");
+                requireInputNumber(action, "timeout");
+                requireInputArray(action, "text");
+                requireInputArray(action, "on_success");
+                requireInputArray(action, "on_failure");
+                try {
+                    PlayerInputService.validate(new Gson().fromJson(action, CustomCommand.Action.class));
+                } catch (JsonParseException invalid) {
+                    throw new IllegalArgumentException("Malformed await_input action: " + invalid.getMessage(), invalid);
+                }
+                if (index != actions.size() - 1) {
+                    throw new IllegalArgumentException("await_input must be the last action in its list; use on_success for subsequent actions.");
+                }
+            }
             if (("message".equals(canonical) || "actionbar".equals(canonical) || "title".equals(canonical) || "sound".equals(canonical))
                     && array(action, "text").isEmpty()) throw new IllegalArgumentException("Action " + type + " requires text.");
             if ("sound".equals(canonical) && stringAt(array(action, "text"), 0).isBlank())
@@ -212,6 +231,37 @@ public final class CustomCommandAdminService {
             }
             validateActions(array(action, "on_success"), depth + 1);
             validateActions(array(action, "on_failure"), depth + 1);
+        }
+    }
+
+    private static void requireInputString(JsonObject action, String field) {
+        JsonElement value = action.get(field);
+        if (value != null && !value.isJsonNull()
+                && (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString())) {
+            throw new IllegalArgumentException("await_input " + field + " must be text.");
+        }
+    }
+
+    private static void requireInputNumber(JsonObject action, String field) {
+        JsonElement value = action.get(field);
+        if (value != null && !value.isJsonNull()
+                && (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isNumber()
+                || !value.getAsString().matches("[0-9]+"))) {
+            throw new IllegalArgumentException("await_input " + field + " must be an integer number of seconds.");
+        }
+    }
+
+    private static void requireInputArray(JsonObject action, String field) {
+        JsonElement value = action.get(field);
+        if (value != null && !value.isJsonNull() && !value.isJsonArray()) {
+            throw new IllegalArgumentException("await_input " + field + " must be a list.");
+        }
+        if ("text".equals(field) && value != null && value.isJsonArray()) {
+            for (JsonElement line : value.getAsJsonArray()) {
+                if (!line.isJsonPrimitive() || !line.getAsJsonPrimitive().isString()) {
+                    throw new IllegalArgumentException("await_input text must contain only text lines.");
+                }
+            }
         }
     }
 
