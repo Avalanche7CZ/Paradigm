@@ -18,6 +18,7 @@ import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.StorageService;
+import eu.avalanche7.paradigm.utils.CommandPriority;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 import eu.avalanche7.paradigm.utils.Placeholders;
 
@@ -436,6 +437,11 @@ public class PermissionsHandler {
         }
 
         if (isExternalCommandStrictMode()) {
+            List<String> tokens = PermissionNodeRegistry.commandTokens(commandLine);
+            if (!tokens.isEmpty() && platform != null
+                    && CommandPriority.ownsRootLiteral(platform.getCommandDispatcher(), tokens.get(0))) {
+                return CommandGuardResult.allowed(commandLine, firstCandidate(candidates), "paradigm_owned");
+            }
             if (hasOperatorBypass(player)) {
                 return CommandGuardResult.allowed(commandLine, firstCandidate(candidates), "strict_op_fallback");
             }

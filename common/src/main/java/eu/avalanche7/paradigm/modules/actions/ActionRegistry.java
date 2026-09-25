@@ -28,4 +28,10 @@ public final class ActionRegistry extends TypeRegistry<ActionRegistry.Entry> {
         Entry entry = entry(type);
         return entry != null ? entry.handler() : null;
     }
+
+    @Nullable
+    public String canonicalType(String type) {
+        Entry entry = entry(type);
+        return entry != null ? entry.type() : null;
+    }
 }

@@ -22,7 +22,11 @@ public final class CustomCommandApiHandler {
     }
 
     public DashboardResponse list(DashboardRequestContext ctx) throws Exception {
-        return DashboardResponse.apiOk(Map.of("commands", dashboard.customCommandsAsync(ctx.query().get("query")).get()));
+        CustomCommandAdminService admin = dashboard.services().getCustomCommandAdminService();
+        return DashboardResponse.apiOk(Map.of(
+                "commands", dashboard.customCommandsAsync(ctx.query().get("query")).get(),
+                "actionTypes", admin.actionTypes(),
+                "conditionTypes", admin.conditionTypes()));
     }
 
     public DashboardResponse get(DashboardRequestContext ctx) throws Exception {

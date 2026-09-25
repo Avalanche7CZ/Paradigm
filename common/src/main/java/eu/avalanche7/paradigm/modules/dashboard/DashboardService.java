@@ -869,8 +869,8 @@ public class DashboardService implements AutoCloseable {
                     assignment.put("kind", "user group");
                     assignment.put("owner", user.name() != null ? user.name() : user.uuid());
                     assignment.put("target", user.uuid());
-                    assignment.put("id", PermissionAssignmentId.ensure(group.assignmentId(), "user_group", user.uuid(), group.groupName(), false,
-                            group.contextSet(), group.expiresAtMs(), group.assignedBy() + "@" + group.assignedAtMs()));
+                    assignment.put("id", PermissionAssignmentId.ensure(group.assignmentId(), "USER_GROUP", user.uuid(), group.groupName(), false,
+                            group.contextSet(), group.expiresAtMs(), group.expiresAtMs() == null ? "legacy" : group.assignedBy() + "@" + group.assignedAtMs()));
                     assignment.put("node", group.groupName());
                     assignment.put("denied", false);
                     assignment.put("contexts", group.contextSet().asMap());
@@ -1010,8 +1010,8 @@ public class DashboardService implements AutoCloseable {
         assignment.put("kind", kind);
         assignment.put("owner", owner);
         assignment.put("target", target);
-        assignment.put("id", PermissionAssignmentId.ensure(node.assignmentId(), kind.replace(' ', '_'), target, node.permission(), node.denied(),
-                node.contextSet(), node.expiresAtMs(), ""));
+        assignment.put("id", PermissionAssignmentId.ensure(node.assignmentId(), kind.replace(' ', '_').toUpperCase(java.util.Locale.ROOT), target, node.permission(), node.denied(),
+                node.contextSet(), node.expiresAtMs(), "legacy"));
         assignment.put("node", node.permission());
         assignment.put("denied", node.denied());
         assignment.put("contexts", node.contextSet().asMap());

@@ -504,6 +504,7 @@ public final class PermissionCommands {
                     "{parent}", parent, "{group}", group);
             return 0;
         }
+        services.getPlatformAdapter().refreshAllPlayerCommandTrees();
         PermissionCommandMessages.send(source, services,
                 add ? "group.manage.parent_add_ok" : "group.manage.parent_remove_ok",
                 add ? "Added parent {parent} to {group}." : "Removed parent {parent} from {group}.",

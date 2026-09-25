@@ -16,6 +16,8 @@ const state = {
   commandDraft: null,
   commandIsNew: false,
   commandDirty: false,
+  commandActionTypes: [],
+  commandConditionTypes: [],
   auditPage: 1,
   auditRows: [],
   auditTotal: 0,
@@ -1869,6 +1871,13 @@ async function loadCustomCommands() {
   try {
     const query = encodeURIComponent($('custom-command-search')?.value || '');
     const data = await api(`/api/custom-commands?query=${query}`);
+    const actionTypes = data.actionTypes || [];
+    const conditionTypes = data.conditionTypes || [];
+    const typesChanged = JSON.stringify(state.commandActionTypes) !== JSON.stringify(actionTypes)
+      || JSON.stringify(state.commandConditionTypes) !== JSON.stringify(conditionTypes);
+    state.commandActionTypes = actionTypes;
+    state.commandConditionTypes = conditionTypes;
+    if (typesChanged && state.commandDraft) renderCustomCommandEditor();
     const commands = data.commands || [];
     $('custom-command-list').innerHTML = commands.length ? commands.map(command => `<button class="selection-item ${state.selectedCommand === command.name ? 'active' : ''}" data-command-name="${attr(command.name)}"><strong>/${esc(command.name)}</strong><small>${esc(command.description || 'No description')} · ${command.actionCount} actions</small></button>`).join('') : empty('No custom commands found.');
     $('custom-command-list').querySelectorAll('[data-command-name]').forEach(button => button.addEventListener('click', () => selectCustomCommand(button.dataset.commandName)));
@@ -1940,17 +1949,22 @@ function renderActions(actions, path) {
     const type = action.type || 'message';
     let fields = '';
     if (type === 'message') fields = `<label>Message lines<textarea data-action-field="text">${esc((action.text || []).join('\n'))}</textarea></label>`;
+    else if (type === 'actionbar') fields = `<label>Action bar text<input data-action-field="text" value="${attr((action.text || [])[0] || '')}"></label>`;
+    else if (type === 'title') fields = `<label>Title and subtitle (one per line)<textarea data-action-field="text">${esc((action.text || []).join('\n'))}</textarea></label>`;
+    else if (type === 'sound') fields = `<label>Sound ID [volume] [pitch] [category]<input data-action-field="text" value="${attr((action.text || [])[0] || '')}" placeholder="minecraft:block.note_block.pling 1 1 master"></label>`;
     else if (type === 'teleport') fields = `<div class="compact-form"><label>X<input data-action-field="x" type="number" value="${attr(action.x ?? 0)}"></label><label>Y<input data-action-field="y" type="number" value="${attr(action.y ?? 64)}"></label><label>Z<input data-action-field="z" type="number" value="${attr(action.z ?? 0)}"></label></div>`;
     else if (type === 'open_menu') fields = `<label>Menu ID<input data-action-field="menu" value="${attr(action.menu || '')}" placeholder="main"></label>`;
     else if (type === 'conditional') fields = `<h3>Conditions</h3><div data-condition-list>${renderConditions(action.conditions || [])}</div><button data-add-condition>Add Condition</button><h3>On Success</h3><div>${renderActions(action.on_success || [], `${actionPath}.on_success`)}</div><button data-add-action-path="${actionPath}.on_success">Add Success Action</button><h3>On Failure</h3><div>${renderActions(action.on_failure || [], `${actionPath}.on_failure`)}</div><button data-add-action-path="${actionPath}.on_failure">Add Failure Action</button>`;
-    else fields = `<label>Commands, one per line<textarea data-action-field="commands">${esc((action.commands || []).join('\n'))}</textarea></label>`;
-    return `<div class="command-action" data-action-path="${attr(actionPath)}"><div class="detail-header"><label>Action type<select data-action-field="type">${['message','teleport','open_menu','run_command','run_console','conditional'].map(option => `<option ${option === type ? 'selected' : ''}>${option}</option>`).join('')}</select></label><div class="detail-header-actions"><button data-action-move="up" title="Move up" aria-label="Move action up">&#8593;</button><button data-action-move="down" title="Move down" aria-label="Move action down">&#8595;</button><button data-action-duplicate>Duplicate</button><button data-action-remove class="danger">Delete</button></div></div>${fields}</div>`;
+    else if (['run_command','run_console'].includes(type)) fields = `<label>Commands, one per line<textarea data-action-field="commands">${esc((action.commands || []).join('\n'))}</textarea></label>`;
+    else if (!['close_menu','menu_back'].includes(type)) fields = `<label>Text lines<textarea data-action-field="text">${esc((action.text || []).join('\n'))}</textarea></label><label>Commands, one per line<textarea data-action-field="commands">${esc((action.commands || []).join('\n'))}</textarea></label><label>Menu ID<input data-action-field="menu" value="${attr(action.menu || '')}"></label><div class="compact-form"><label>X<input data-action-field="x" type="number" value="${attr(action.x ?? '')}"></label><label>Y<input data-action-field="y" type="number" value="${attr(action.y ?? '')}"></label><label>Z<input data-action-field="z" type="number" value="${attr(action.z ?? '')}"></label></div>`;
+    const options = [...new Set([...state.commandActionTypes, type])];
+    return `<div class="command-action" data-action-path="${attr(actionPath)}"><div class="detail-header"><label>Action type<select data-action-field="type">${options.map(option => `<option value="${attr(option)}" ${option === type ? 'selected' : ''}>${esc(option)}</option>`).join('')}</select></label><div class="detail-header-actions"><button data-action-move="up" title="Move up" aria-label="Move action up">&#8593;</button><button data-action-move="down" title="Move down" aria-label="Move action down">&#8595;</button><button data-action-duplicate>Duplicate</button><button data-action-remove class="danger">Delete</button></div></div>${fields}</div>`;
   }).join('');
   return rows || '<div class="empty-state">No actions configured.</div>';
 }
 
 function renderConditions(conditions) {
-  return conditions.map((condition, index) => `<div class="compact-form" data-condition-index="${index}"><label>Type<select data-condition-field="type">${['has_permission','has_item','health_above','health_below','is_op'].map(type => `<option ${type === condition.type ? 'selected' : ''}>${type}</option>`).join('')}</select></label><label>Value<input data-condition-field="value" value="${attr(condition.value || '')}"></label><label>Item amount<input data-condition-field="item_amount" type="number" min="1" value="${attr(condition.item_amount || 1)}"></label><label>Negate<input data-condition-field="negate" type="checkbox" ${condition.negate ? 'checked' : ''}></label><button data-condition-remove>Delete</button></div>`).join('');
+  return conditions.map((condition, index) => `<div class="compact-form" data-condition-index="${index}"><label>Type<select data-condition-field="type">${[...new Set([...state.commandConditionTypes, condition.type])].map(type => `<option value="${attr(type)}" ${type === condition.type ? 'selected' : ''}>${esc(type)}</option>`).join('')}</select></label><label>Value<input data-condition-field="value" value="${attr(condition.value || '')}"></label><label>Item amount<input data-condition-field="item_amount" type="number" min="1" value="${attr(condition.item_amount || 1)}"></label><label>Negate<input data-condition-field="negate" type="checkbox" ${condition.negate ? 'checked' : ''}></label><button data-condition-remove>Delete</button></div>`).join('');
 }
 
 function renderArea(area) {
@@ -1990,7 +2004,7 @@ function wireActionCard(card) {
   const index = Number(parts.pop());
   const list = arrayAtPath(parts.join('.'));
   bindListButtons(card, list, index, 'action');
-  card.querySelectorAll('[data-condition-index]').forEach(row => {
+  card.querySelectorAll(':scope > [data-condition-list] > [data-condition-index]').forEach(row => {
     const conditionIndex = Number(row.dataset.conditionIndex);
     action.conditions ||= [];
     row.querySelectorAll('[data-condition-field]').forEach(input => input.addEventListener('input', () => { action.conditions[conditionIndex][input.dataset.conditionField] = input.type === 'checkbox' ? input.checked : input.type === 'number' ? Number(input.value) : input.value; state.commandDirty = true; refreshCommandJson(); }));
@@ -2010,6 +2024,8 @@ function normalizeAction(action) {
   const type = action.type;
   Object.keys(action).filter(key => key !== 'type').forEach(key => delete action[key]);
   if (type === 'message') action.text = [''];
+  if (['actionbar','sound'].includes(type)) action.text = [''];
+  if (type === 'title') action.text = ['', ''];
   if (type === 'teleport') Object.assign(action, { x: 0, y: 64, z: 0 });
   if (type === 'open_menu') action.menu = '';
   if (['run_command','run_console'].includes(type)) action.commands = [''];

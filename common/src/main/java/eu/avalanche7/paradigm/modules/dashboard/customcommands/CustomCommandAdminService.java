@@ -26,34 +26,53 @@ import com.google.gson.JsonParser;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.modules.CommandManager;
+import eu.avalanche7.paradigm.modules.actions.ActionDispatcher;
+import eu.avalanche7.paradigm.modules.actions.ActionRegistry;
+import eu.avalanche7.paradigm.modules.actions.ConditionRegistry;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardJson;
 
 public final class CustomCommandAdminService {
     private static final Pattern NAME = Pattern.compile("[a-z0-9][a-z0-9_-]{0,31}");
     private static final Pattern PERMISSION = Pattern.compile("[A-Za-z0-9_*.-]{1,128}");
-    private static final Set<String> ACTIONS = Set.of("message", "teleport", "open_menu", "run_command", "runcmd", "command", "run_console", "conditional");
-    private static final Set<String> CONDITIONS = Set.of("has_permission", "has_item", "health_above", "health_below", "is_op");
     private static final String MANAGED_FILE = "dashboard-commands.json";
 
     private final Services services;
     private final Path directory;
     private final Supplier<Integer> reloader;
+    private final ActionRegistry actionRegistry;
+    private final ConditionRegistry conditionRegistry;
     private final Object mutationLock = new Object();
 
     public CustomCommandAdminService(Services services) {
         this(services,
                 services.getPlatformAdapter().getConfig().getConfigDirectory().resolve("paradigm").resolve("commands"),
-                () -> CommandManager.reloadCustomCommands(services));
+                () -> CommandManager.reloadCustomCommands(services),
+                services.getActionDispatcher().actions(), services.getActionDispatcher().conditions());
     }
 
-    CustomCommandAdminService(Path directory, Supplier<Integer> reloader) {
-        this(null, directory, reloader);
+    CustomCommandAdminService(Path directory, Supplier<Integer> reloader,
+            ActionRegistry actions, ConditionRegistry conditions) {
+        this(null, directory, reloader, actions, conditions);
     }
 
-    private CustomCommandAdminService(Services services, Path directory, Supplier<Integer> reloader) {
+    private CustomCommandAdminService(Services services, Path directory, Supplier<Integer> reloader,
+            ActionRegistry actions, ConditionRegistry conditions) {
         this.services = services;
         this.directory = directory;
         this.reloader = reloader;
+        this.actionRegistry = actions;
+        this.conditionRegistry = conditions;
+    }
+
+    public List<String> actionTypes() {
+        List<String> types = new ArrayList<>(actionRegistry.types());
+        if (!types.contains("conditional")) types.add("conditional");
+        types.sort(String::compareTo);
+        return types;
+    }
+
+    public Set<String> conditionTypes() {
+        return conditionRegistry.types();
     }
 
     public List<CommandView> list(String query) {
@@ -175,16 +194,21 @@ public final class CustomCommandAdminService {
             if (!element.isJsonObject()) throw new IllegalArgumentException("Every action must be an object.");
             JsonObject action = element.getAsJsonObject();
             String type = string(action, "type").toLowerCase(Locale.ROOT);
-            if (!ACTIONS.contains(type)) throw new IllegalArgumentException("Unsupported action type: " + type);
-            if ("message".equals(type) && array(action, "text").isEmpty()) throw new IllegalArgumentException("Message actions require text.");
-            if (("run_command".equals(type) || "runcmd".equals(type) || "command".equals(type) || "run_console".equals(type))
+            String canonical = ActionDispatcher.isConditional(type) ? "conditional" : actionRegistry.canonicalType(type);
+            if (canonical == null) throw new IllegalArgumentException("Unsupported action type: " + type);
+            if (("message".equals(canonical) || "actionbar".equals(canonical) || "title".equals(canonical) || "sound".equals(canonical))
+                    && array(action, "text").isEmpty()) throw new IllegalArgumentException("Action " + type + " requires text.");
+            if ("sound".equals(canonical) && stringAt(array(action, "text"), 0).isBlank())
+                throw new IllegalArgumentException("Sound actions require a sound ID.");
+            if (("run_command".equals(canonical) || "run_console".equals(canonical))
                     && array(action, "commands").isEmpty()) throw new IllegalArgumentException("Command actions require at least one command.");
-            if ("teleport".equals(type) && (!action.has("x") || !action.has("y") || !action.has("z"))) throw new IllegalArgumentException("Teleport actions require x, y, and z.");
-            if ("open_menu".equals(type) && text(string(action, "menu")).isBlank()) throw new IllegalArgumentException("Open menu actions require a menu ID.");
+            if ("teleport".equals(canonical) && (!action.has("x") || !action.has("y") || !action.has("z"))) throw new IllegalArgumentException("Teleport actions require x, y, and z.");
+            if ("open_menu".equals(canonical) && text(string(action, "menu")).isBlank()
+                    && stringAt(array(action, "text"), 0).isBlank()) throw new IllegalArgumentException("Open menu actions require a menu ID.");
             for (JsonElement conditionElement : array(action, "conditions")) {
                 if (!conditionElement.isJsonObject()) throw new IllegalArgumentException("Every condition must be an object.");
                 String condition = string(conditionElement.getAsJsonObject(), "type").toLowerCase(Locale.ROOT);
-                if (!CONDITIONS.contains(condition)) throw new IllegalArgumentException("Unsupported condition type: " + condition);
+                if (!conditionRegistry.isRegistered(condition)) throw new IllegalArgumentException("Unsupported condition type: " + condition);
             }
             validateActions(array(action, "on_success"), depth + 1);
             validateActions(array(action, "on_failure"), depth + 1);
@@ -292,6 +316,12 @@ public final class CustomCommandAdminService {
     private static JsonArray array(JsonObject object, String key) {
         JsonElement element = object != null ? object.get(key) : null;
         return element != null && element.isJsonArray() ? element.getAsJsonArray() : new JsonArray();
+    }
+
+    private static String stringAt(JsonArray array, int index) {
+        if (index >= array.size()) return "";
+        JsonElement element = array.get(index);
+        return element != null && element.isJsonPrimitive() ? text(element.getAsString()) : "";
     }
 
     private static String string(JsonObject object, String key) {
