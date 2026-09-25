@@ -13,6 +13,7 @@ public interface IComponent {
     IComponent withStyle(String formattingCode);
     IComponent withStyle(Object style);
     IComponent withStyle(UnaryOperator<Object> styleUpdater);
+    IComponent withItalic(boolean italic);
     IComponent withColor(int rgb);
     IComponent withColorHex(String hex);
     IComponent withFormatting(String formattingCode);

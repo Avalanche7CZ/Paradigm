@@ -235,4 +235,9 @@ public class MinecraftComponent implements IComponent {
         }
         return rootCopy;
     }
+
+    @Override
+    public IComponent withItalic(boolean italic) {
+        return new MinecraftComponent(component.copy().styled(style -> style.withItalic(italic)));
+    }
 }
