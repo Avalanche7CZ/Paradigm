@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 
 import eu.avalanche7.paradigm.ParadigmAPI;
 import eu.avalanche7.paradigm.configs.*;
@@ -140,7 +141,7 @@ public class Reload implements ParadigmModule {
                 .literal("paradigm")
                 .then(reload)
                 .then(buildStorageBranch(platform, services))
-                .then(buildCommandToggleBranch(platform, services));
+                .then(buildCommandToggleBranch(platform, services, id -> true));
 
         LocalDashboardModule dashboard = LocalDashboardModule.current();
         if (dashboard != null) {
@@ -216,6 +217,7 @@ public class Reload implements ParadigmModule {
 
     public static void refreshModuleStates(Services services, Map<ParadigmModule, Boolean> prevEnabled) {
         boolean commandsChanged = false;
+        boolean moduleStateChanged = false;
         for (var m : ParadigmAPI.getModules()) {
             try {
                 boolean before = prevEnabled.getOrDefault(m, m.isEnabled(services));
@@ -223,9 +225,11 @@ public class Reload implements ParadigmModule {
                 try { after = m.isEnabled(services); } catch (Throwable t) { after = false; }
 
                 if (before && !after) {
+                    moduleStateChanged = true;
                     commandsChanged |= releaseModuleCommands(m, services);
                     m.onDisable(services);
                 } else if (!before && after) {
+                    moduleStateChanged = true;
                     m.onEnable(services);
                     commandsChanged |= registerModuleCommands(m, services);
                 }
@@ -237,11 +241,18 @@ public class Reload implements ParadigmModule {
                 }
             }
         }
+        if (moduleStateChanged) {
+            commandsChanged |= services.getPlatformAdapter().refreshRegisteredCommandContributors();
+        }
         if (commandsChanged) services.getPlatformAdapter().refreshAllPlayerCommandTrees();
     }
 
     public static void refreshCommandStates(Services services, Collection<String> commandIds) {
         if (services == null || commandIds == null || commandIds.isEmpty()) return;
+        if (services.getPlatformAdapter().refreshRegisteredCommandContributors()) {
+            services.getPlatformAdapter().refreshAllPlayerCommandTrees();
+            return;
+        }
         Set<ParadigmModule> modules = new HashSet<>();
         for (String commandId : commandIds) {
             CommandCatalog.Entry entry = CommandCatalog.findById(commandId);
@@ -281,21 +292,22 @@ public class Reload implements ParadigmModule {
         return true;
     }
 
-    private ICommandBuilder buildCommandToggleBranch(IPlatformAdapter platform, Services services) {
+    private ICommandBuilder buildCommandToggleBranch(IPlatformAdapter platform, Services services,
+            Predicate<String> available) {
         CommandToggleStore toggles = services.getCommandToggleStore();
 
         ICommandBuilder root = platform.createCommandBuilder()
                 .literal("command")
                 .requires(src -> hasTogglePermission(src, services))
                 .executes(ctx -> {
-                    sendCommandTogglePanel(ctx.getSource(), services, "");
+                    sendCommandTogglePanel(ctx.getSource(), services, "", available);
                     return 1;
                 });
 
         ICommandBuilder list = platform.createCommandBuilder()
                 .literal("list")
                 .executes(ctx -> {
-                    sendCommandTogglePanel(ctx.getSource(), services, "");
+                    sendCommandTogglePanel(ctx.getSource(), services, "", available);
                     return 1;
                 });
 
@@ -304,7 +316,7 @@ public class Reload implements ParadigmModule {
                 .then(platform.createCommandBuilder()
                         .argument("query", ICommandBuilder.ArgumentType.WORD)
                         .executes(ctx -> {
-                            sendCommandTogglePanel(ctx.getSource(), services, ctx.getStringArgument("query"));
+                            sendCommandTogglePanel(ctx.getSource(), services, ctx.getStringArgument("query"), available);
                             return 1;
                         }));
 
@@ -312,12 +324,17 @@ public class Reload implements ParadigmModule {
                 .literal("status")
                 .then(platform.createCommandBuilder()
                         .argument("name", ICommandBuilder.ArgumentType.WORD)
-                        .suggests((ctx, input) -> toggles.knownCommandIds())
+                        .suggests((ctx, input) -> toggles.knownCommandIds().stream().filter(available).toList())
                         .executes(ctx -> {
                             String query = ctx.getStringArgument("name");
                             String canonical = toggles.resolveCanonical(query);
                             if (canonical == null) {
                                 sendToggleMessage(ctx.getSource(), services, "command_toggle.unknown", "Unknown command key: {command}", "{command}", query);
+                                return 0;
+                            }
+                            if (!available.test(canonical)) {
+                                platform.sendFailure(ctx.getSource(), platform.createLiteralComponent(
+                                        "Command " + canonical + " is unavailable on this platform."));
                                 return 0;
                             }
                             boolean enabled = toggles.isEnabled(canonical);
@@ -331,15 +348,15 @@ public class Reload implements ParadigmModule {
                 .literal("enable")
                 .then(platform.createCommandBuilder()
                         .argument("name", ICommandBuilder.ArgumentType.WORD)
-                        .suggests((ctx, input) -> toggles.knownCommandIds())
-                        .executes(ctx -> setCommandState(ctx.getSource(), services, ctx.getStringArgument("name"), true)));
+                        .suggests((ctx, input) -> toggles.knownCommandIds().stream().filter(available).toList())
+                        .executes(ctx -> setCommandState(ctx.getSource(), services, ctx.getStringArgument("name"), true, available)));
 
         ICommandBuilder disable = platform.createCommandBuilder()
                 .literal("disable")
                 .then(platform.createCommandBuilder()
                         .argument("name", ICommandBuilder.ArgumentType.WORD)
-                        .suggests((ctx, input) -> toggles.knownCommandIds())
-                        .executes(ctx -> setCommandState(ctx.getSource(), services, ctx.getStringArgument("name"), false)));
+                        .suggests((ctx, input) -> toggles.knownCommandIds().stream().filter(available).toList())
+                        .executes(ctx -> setCommandState(ctx.getSource(), services, ctx.getStringArgument("name"), false, available)));
 
         ICommandBuilder reload = platform.createCommandBuilder()
                 .literal("reload")
@@ -347,14 +364,28 @@ public class Reload implements ParadigmModule {
                     toggles.reload();
                     refreshAllCommandStates(services);
                     sendToggleMessage(ctx.getSource(), services, "command_toggle.reloaded", "Command toggles reloaded from commands.json.");
-                    sendCommandTogglePanel(ctx.getSource(), services, "");
+                    sendCommandTogglePanel(ctx.getSource(), services, "", available);
                     return 1;
                 });
 
         return root.then(list).then(search).then(status).then(enable).then(disable).then(reload);
     }
 
-    private int setCommandState(ICommandSource source, Services services, String commandName, boolean enabled) {
+    public void registerCommandToggleCommands(Services services, Predicate<String> available) {
+        IPlatformAdapter platform = services.getPlatformAdapter();
+        platform.registerCommand(platform.createCommandBuilder()
+                .literal("paradigm")
+                .then(buildCommandToggleBranch(platform, services, available)));
+    }
+
+    private int setCommandState(ICommandSource source, Services services, String commandName, boolean enabled,
+            Predicate<String> available) {
+        String canonical = services.getCommandToggleStore().resolveCanonical(commandName);
+        if (canonical != null && !available.test(canonical)) {
+            services.getPlatformAdapter().sendFailure(source, services.getPlatformAdapter().createLiteralComponent(
+                    "Command " + canonical + " is unavailable on this platform."));
+            return 0;
+        }
         CommandToggleStore.ToggleResult result = services.getCommandToggleStore().setEnabled(commandName, enabled);
         if (!result.ok()) {
             if ("protected".equals(result.reason())) {
@@ -370,20 +401,18 @@ public class Reload implements ParadigmModule {
                 enabled ? "Enabled command {command}." : "Disabled command {command}.",
                 "{command}", result.canonicalId());
         refreshCommandStates(services, java.util.List.of(result.canonicalId()));
-        sendCommandTogglePanel(source, services, "");
+        sendCommandTogglePanel(source, services, "", available);
         return 1;
     }
 
-    private void sendToggleList(ICommandSource source, Services services) {
-        sendCommandTogglePanel(source, services, "");
-    }
-
-    private void sendCommandTogglePanel(ICommandSource source, Services services, String query) {
+    private void sendCommandTogglePanel(ICommandSource source, Services services, String query,
+            Predicate<String> available) {
         Map<String, Boolean> states = services.getCommandToggleStore().listStates();
         String normalizedQuery = query != null ? query.trim().toLowerCase(Locale.ROOT) : "";
         int enabled = 0;
         int disabled = 0;
         for (Map.Entry<String, Boolean> entry : states.entrySet()) {
+            if (!available.test(entry.getKey())) continue;
             if (Boolean.TRUE.equals(entry.getValue())) {
                 enabled++;
             } else {
@@ -404,6 +433,7 @@ public class Reload implements ParadigmModule {
         int shown = 0;
         for (Map.Entry<String, Boolean> entry : states.entrySet()) {
             String command = entry.getKey();
+            if (!available.test(command)) continue;
             if (!normalizedQuery.isEmpty() && !command.toLowerCase(Locale.ROOT).contains(normalizedQuery)) {
                 continue;
             }
@@ -435,7 +465,6 @@ public class Reload implements ParadigmModule {
     private boolean hasReloadPermission(ICommandSource src, Services services) {
         if (src == null) return false;
         if (src.isConsole()) return true;
-        if (src.hasPermissionLevel(2)) return true;
         IPlayer player = src.getPlayer();
         return player != null && services.getPermissionsHandler().hasPermission(
                 player,
@@ -446,7 +475,6 @@ public class Reload implements ParadigmModule {
     private boolean hasTogglePermission(ICommandSource src, Services services) {
         if (src == null) return false;
         if (src.isConsole()) return true;
-        if (src.hasPermissionLevel(2)) return true;
         IPlayer player = src.getPlayer();
         return player != null && services.getPermissionsHandler().hasPermission(
                 player,
@@ -457,7 +485,6 @@ public class Reload implements ParadigmModule {
     private boolean hasStoragePermission(ICommandSource src, Services services) {
         if (src == null) return false;
         if (src.isConsole()) return true;
-        if (src.hasPermissionLevel(2)) return true;
         IPlayer player = src.getPlayer();
         return player != null && services.getPermissionsHandler().hasPermission(
                 player,

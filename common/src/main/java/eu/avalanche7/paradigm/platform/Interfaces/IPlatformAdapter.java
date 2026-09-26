@@ -60,8 +60,16 @@ public interface IPlatformAdapter {
         return dispatcher != null && CommandPriority.releaseRootLiteral(dispatcher, rootLiteral);
     }
 
+    default boolean refreshRegisteredCommandContributors() {
+        return false;
+    }
+
     default Object getCommandDispatcher() {
         return null;
+    }
+
+    default boolean ownsRegisteredCommandRoot(String rootLiteral) {
+        return false;
     }
 
     default void rewireCommandTreePermissions() {

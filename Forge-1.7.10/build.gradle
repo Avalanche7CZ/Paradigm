@@ -1,0 +1,105 @@
+plugins {
+    id 'java'
+    id 'com.gtnewhorizons.retrofuturagradle' version '1.4.9'
+    id 'com.gradleup.shadow' version '8.3.6'
+    id 'com.diffplug.spotless' version '6.25.0'
+}
+
+configurations {
+    embeddedLogging
+}
+
+version = rootProject.property('mod_version')
+base { archivesName = 'Paradigm-forge-1.7.10' }
+
+def generatedVersionDir = layout.buildDirectory.dir('generated/sources/version/java')
+tasks.register('generateModVersion') {
+    inputs.property('mod_version', project.version)
+    outputs.dir(generatedVersionDir)
+    doLast {
+        def target = generatedVersionDir.get().file('eu/avalanche7/paradigm/ModVersion.java').asFile
+        target.parentFile.mkdirs()
+        target.text = """package eu.avalanche7.paradigm;
+public final class ModVersion {
+    public static final String VALUE = "${project.version}";
+    private ModVersion() {}
+}
+"""
+    }
+}
+sourceSets.main.java.srcDir(generatedVersionDir)
+tasks.named('compileJava').configure { dependsOn tasks.named('generateModVersion') }
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+tasks.named('compileJava', JavaCompile).configure {
+    options.encoding = 'UTF-8'
+    options.release.set(17)
+}
+
+minecraft {
+    mcVersion.set('1.7.10')
+}
+
+spotless {
+    java {
+        target 'src/main/java/**/*.java', 'src/test/java/**/*.java'
+        toggleOffOn()
+        importOrder 'java', 'javax', '', 'eu.avalanche7'
+        removeUnusedImports()
+        indentWithSpaces(4)
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+}
+
+dependencies {
+    compileOnly project(':common')
+    compileOnly 'org.slf4j:slf4j-api:2.0.9'
+    compileOnly 'org.jetbrains:annotations:24.0.1'
+    embeddedLogging 'org.slf4j:slf4j-api:2.0.9'
+    embeddedLogging('org.slf4j:slf4j-simple:2.0.9') {
+        transitive = false
+    }
+    testImplementation project(':common')
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testImplementation 'org.mockito:mockito-core:5.14.2'
+    testImplementation 'org.slf4j:slf4j-api:2.0.9'
+    testRuntimeOnly 'com.google.code.gson:gson:2.10.1'
+}
+
+tasks.named('test', Test).configure { useJUnitPlatform() }
+
+tasks.named('processResources', ProcessResources).configure {
+    inputs.property('mod_version', project.version)
+    filesMatching('mcmod.info') {
+        expand(mod_version: project.version)
+    }
+}
+
+tasks.named('jar', Jar).configure {
+    dependsOn project(':common').tasks.named('jar')
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from({ zipTree(project(':common').tasks.named('jar').get().archiveFile.get().asFile) }) {
+        exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+    }
+}
+
+tasks.named('shadowJar').configure {
+    archiveClassifier.set('shadow-dev')
+    configurations = [project.configurations.embeddedLogging]
+    dependsOn project(':common').tasks.named('jar')
+    from({ zipTree(project(':common').tasks.named('jar').get().archiveFile.get().asFile) }) {
+        exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
+    }
+    relocate 'org.slf4j', 'eu.avalanche7.paradigm.internal.slf4j'
+    mergeServiceFiles()
+}
+
+tasks.named('reobfJar').configure {
+    inputJar.set(tasks.named('shadowJar').flatMap { it.archiveFile })
+    dependsOn tasks.named('shadowJar')
+}

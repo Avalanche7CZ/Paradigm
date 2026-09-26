@@ -439,7 +439,8 @@ public class PermissionsHandler {
         if (isExternalCommandStrictMode()) {
             List<String> tokens = PermissionNodeRegistry.commandTokens(commandLine);
             if (!tokens.isEmpty() && platform != null
-                    && CommandPriority.ownsRootLiteral(platform.getCommandDispatcher(), tokens.get(0))) {
+                    && (CommandPriority.ownsRootLiteral(platform.getCommandDispatcher(), tokens.get(0))
+                            || platform.ownsRegisteredCommandRoot(tokens.get(0)))) {
                 return CommandGuardResult.allowed(commandLine, firstCandidate(candidates), "paradigm_owned");
             }
             if (hasOperatorBypass(player)) {
@@ -612,10 +613,6 @@ public class PermissionsHandler {
         if (isInternalPermissionsEnabled()) {
             Boolean internalResult = internalPermissionApi.hasPermission(player, permission);
             if (internalResult != null) {
-                if (!internalResult && hasOperatorBypass(player)) {
-                    debugLogger.debugLog("[PermissionsHandler] Internal PermissionAPI denied '" + permission + "', but OP bypass is active for player: " + player.getName());
-                    return true;
-                }
                 debugLogger.debugLog("[PermissionsHandler] Internal PermissionAPI check for '" + permission + "' -> " + internalResult);
                 return internalResult;
             }
