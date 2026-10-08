@@ -63,14 +63,78 @@ public class SqlModerationRepository extends SqlRepositorySupport implements Mod
 
     @Override
     public boolean revokePunishmentRecord(String punishmentId, long revokedAtMs, String actorUuid, String actorName, String reason) {
-        return sql.update("UPDATE moderation_punishment_ledger SET revoked_at_ms = ?, revoked_by_uuid = ?, revoked_by_name = ?, revoke_reason = ?, updated_at_ms = ? WHERE punishment_id = ? AND revoked_at_ms IS NULL", ps -> {
-            ps.setLong(1, revokedAtMs);
-            bindNullableString(ps, 2, actorUuid);
-            bindNullableString(ps, 3, actorName);
-            bindNullableString(ps, 4, reason);
-            ps.setLong(5, revokedAtMs);
-            ps.setString(6, punishmentId);
-        }) > 0;
+        return sql.transaction(() -> {
+            PunishmentRecord record = findPunishmentRecord(punishmentId).orElse(null);
+            if (record == null || !record.activeAt(revokedAtMs)) return false;
+            if (record.type() == PunishmentType.JAIL && record.scope() == ServerScope.SERVER) {
+                lockJailSubject(record.serverId(), record.subjectUuid());
+            }
+            if ("mysql".equals(sql.dialectName())) {
+                sql.query("SELECT punishment_id FROM moderation_punishment_ledger WHERE punishment_id = ? FOR UPDATE",
+                        ps -> ps.setString(1, punishmentId), rs -> rs.next());
+            }
+            long effectiveNow = Math.max(revokedAtMs, System.currentTimeMillis());
+            boolean changed = sql.update("UPDATE moderation_punishment_ledger SET revoked_at_ms = ?, revoked_by_uuid = ?, revoked_by_name = ?, revoke_reason = ?, updated_at_ms = ? WHERE punishment_id = ? AND revoked_at_ms IS NULL AND starts_at_ms <= ? AND (expires_at_ms IS NULL OR expires_at_ms > ?)", ps -> {
+                ps.setLong(1, revokedAtMs);
+                bindNullableString(ps, 2, actorUuid);
+                bindNullableString(ps, 3, actorName);
+                bindNullableString(ps, 4, reason);
+                ps.setLong(5, revokedAtMs);
+                ps.setString(6, punishmentId);
+                ps.setLong(7, effectiveNow);
+                ps.setLong(8, effectiveNow);
+            }) > 0;
+            if (changed && record.type() == PunishmentType.JAIL) {
+                sql.update("DELETE FROM moderation_jails WHERE server_id = ? AND uuid = ? AND punishment_id = ?", ps -> {
+                    ps.setString(1, record.serverId());
+                    ps.setString(2, record.subjectUuid());
+                    ps.setString(3, punishmentId);
+                });
+            }
+            return changed;
+        });
+    }
+
+    private void lockJailSubject(String jailServer, String uuid) {
+        String suffix = "mysql".equals(sql.dialectName())
+                ? " ON DUPLICATE KEY UPDATE uuid = VALUES(uuid)" : " ON CONFLICT(server_id, uuid) DO NOTHING";
+        sql.update("INSERT INTO moderation_jail_subjects(server_id, uuid) VALUES(?, ?)" + suffix, ps -> {
+            ps.setString(1, jailServer);
+            ps.setString(2, uuid);
+        });
+    }
+
+    @Override
+    public List<PunishmentRecord> replaceJail(PunishmentRecord punishment, StoredJailState expected,
+                                              StoredJailState replacement) {
+        if (punishment.type() != PunishmentType.JAIL || punishment.scope() != ServerScope.SERVER
+                || !serverId().equals(punishment.serverId()) || !networkId().equals(punishment.networkId())
+                || !punishment.subjectUuid().equals(replacement.uuid())
+                || !punishment.punishmentId().equals(replacement.punishmentId())) {
+            throw new IllegalArgumentException("Jail state and punishment must identify the same server/player.");
+        }
+        return sql.transaction(() -> {
+            lockJailSubject(serverId(), replacement.uuid());
+            if (!punishment.activeAt(System.currentTimeMillis())) throw new IllegalStateException("Jail duration expired before commit.");
+            if (!java.util.Objects.equals(expected, getJailState(replacement.uuid()).orElse(null))) {
+                throw new IllegalStateException("Jail state changed during replacement. Try again.");
+            }
+            List<PunishmentRecord> superseded = listActivePunishmentRecords(0L).stream()
+                    .filter(record -> record.type() == PunishmentType.JAIL && record.scope() == ServerScope.SERVER
+                            && serverId().equals(record.serverId()) && replacement.uuid().equalsIgnoreCase(record.subjectUuid()))
+                    .toList();
+            addPunishmentRecord(punishment);
+            setJailState(replacement);
+            long now = System.currentTimeMillis();
+            List<PunishmentRecord> revoked = new ArrayList<>();
+            for (PunishmentRecord record : superseded) {
+                if (revokePunishmentRecord(record.punishmentId(), now, punishment.actorUuid(), punishment.actorName(),
+                        "Replaced by " + punishment.punishmentId())) {
+                    revoked.add(record);
+                }
+            }
+            return revoked;
+        });
     }
 
     @Override
@@ -99,6 +163,67 @@ public class SqlModerationRepository extends SqlRepositorySupport implements Mod
             ps.setString(3, networkId());
             ps.setString(4, serverId());
         }, rs -> { List<PunishmentRecord> result = new ArrayList<>(); while (rs.next()) result.add(readPunishmentRecord(rs)); return result; });
+    }
+
+    @Override
+    public Map<String, Long> escalationWatermarks(String uuid) {
+        return sql.query("SELECT rule_key, consumed_at_ms FROM moderation_escalation_claims WHERE network_id = ? AND subject_uuid = ?", ps -> {
+            ps.setString(1, networkId());
+            ps.setString(2, uuid.toLowerCase(Locale.ROOT));
+        }, rs -> {
+            Map<String, Long> result = new java.util.LinkedHashMap<>();
+            while (rs.next()) result.put(rs.getString(1), rs.getLong(2));
+            return result;
+        });
+    }
+
+    @Override
+    public Optional<PunishmentRecord> claimEscalation(PunishmentRecord punishment, Map<String, Long> expected, long consumedAtMs) {
+        if (punishment.type() != PunishmentType.BAN || punishment.scope() != ServerScope.GLOBAL
+                || !networkId().equals(punishment.networkId()) || expected.isEmpty()
+                || expected.values().stream().anyMatch(value -> value < 0L || value >= consumedAtMs)) {
+            throw new IllegalArgumentException("Escalation requires advancing rule watermarks and a global ban.");
+        }
+        return sql.transaction(() -> {
+            for (String rule : expected.keySet().stream().sorted().toList()) {
+                String suffix = "mysql".equals(sql.dialectName())
+                        ? " ON DUPLICATE KEY UPDATE rule_key = VALUES(rule_key)"
+                        : " ON CONFLICT(network_id, subject_uuid, rule_key) DO NOTHING";
+                sql.update("INSERT INTO moderation_escalation_claims(network_id, subject_uuid, rule_key, consumed_at_ms, punishment_id) VALUES(?, ?, ?, 0, NULL)" + suffix, ps -> {
+                    ps.setString(1, networkId());
+                    ps.setString(2, punishment.subjectUuid().toLowerCase(Locale.ROOT));
+                    ps.setString(3, rule);
+                });
+                long current = sql.query("SELECT consumed_at_ms FROM moderation_escalation_claims WHERE network_id = ? AND subject_uuid = ? AND rule_key = ?"
+                        + ("mysql".equals(sql.dialectName()) ? " FOR UPDATE" : ""), ps -> {
+                    ps.setString(1, networkId());
+                    ps.setString(2, punishment.subjectUuid().toLowerCase(Locale.ROOT));
+                    ps.setString(3, rule);
+                }, rs -> { if (!rs.next()) throw new java.sql.SQLException("Escalation claim disappeared."); return rs.getLong(1); });
+                if (current != expected.get(rule)) return Optional.empty();
+            }
+            if (!punishment.activeAt(System.currentTimeMillis())) throw new IllegalStateException("Escalation expired before commit.");
+            addPunishmentRecord(punishment);
+            for (String rule : expected.keySet()) {
+                sql.update("UPDATE moderation_escalation_claims SET consumed_at_ms = ?, punishment_id = ? WHERE network_id = ? AND subject_uuid = ? AND rule_key = ?", ps -> {
+                    ps.setLong(1, consumedAtMs);
+                    ps.setString(2, punishment.punishmentId());
+                    ps.setString(3, networkId());
+                    ps.setString(4, punishment.subjectUuid().toLowerCase(Locale.ROOT));
+                    ps.setString(5, rule);
+                });
+            }
+            return Optional.of(punishment);
+        });
+    }
+
+    @Override
+    public boolean clearJailState(StoredJailState expected) {
+        return sql.transaction(() -> {
+            lockJailSubject(serverId(), expected.uuid());
+            return java.util.Objects.equals(expected, getJailState(expected.uuid()).orElse(null))
+                    && clearJailState(expected.uuid());
+        });
     }
 
     @Override
@@ -263,11 +388,12 @@ public class SqlModerationRepository extends SqlRepositorySupport implements Mod
     public void setJailState(StoredJailState jailState) {
         if (jailState == null || jailState.location() == null) return;
         sql.transaction(() -> {
+            lockJailSubject(serverId(), jailState.uuid());
             sql.update("DELETE FROM moderation_jails WHERE server_id = ? AND uuid = ?", ps -> {
                 ps.setString(1, serverId());
                 ps.setString(2, jailState.uuid());
             });
-            sql.update("INSERT INTO moderation_jails(server_id, uuid, name, reason, actor, world_id, x, y, z, yaw, pitch, created_at_ms, expires_at_ms) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", ps -> {
+            sql.update("INSERT INTO moderation_jails(server_id, uuid, name, reason, actor, world_id, x, y, z, yaw, pitch, created_at_ms, expires_at_ms, punishment_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", ps -> {
                 ps.setString(1, serverId());
                 ps.setString(2, jailState.uuid());
                 ps.setString(3, jailState.name());
@@ -276,6 +402,7 @@ public class SqlModerationRepository extends SqlRepositorySupport implements Mod
                 bindLocation(ps, 6, jailState.location());
                 ps.setLong(12, jailState.createdAtMs() > 0L ? jailState.createdAtMs() : System.currentTimeMillis());
                 if (jailState.expiresAtMs() == null) ps.setNull(13, Types.BIGINT); else ps.setLong(13, jailState.expiresAtMs());
+                bindNullableString(ps, 14, jailState.punishmentId());
             });
         });
     }
@@ -316,10 +443,19 @@ public class SqlModerationRepository extends SqlRepositorySupport implements Mod
                 while (rs.next()) result.add(readJail(rs));
                 return result;
             });
+            List<StoredJailState> removed = new ArrayList<>();
             for (StoredJailState jail : expired) {
-                clearJailState(jail.uuid());
+                int changed = sql.update("DELETE FROM moderation_jails WHERE server_id = ? AND uuid = ? AND expires_at_ms = ? AND created_at_ms = ? AND (punishment_id = ? OR (punishment_id IS NULL AND ? IS NULL))", ps -> {
+                    ps.setString(1, serverId());
+                    ps.setString(2, jail.uuid());
+                    ps.setLong(3, jail.expiresAtMs());
+                    ps.setLong(4, jail.createdAtMs());
+                    bindNullableString(ps, 5, jail.punishmentId());
+                    bindNullableString(ps, 6, jail.punishmentId());
+                });
+                if (changed > 0) removed.add(jail);
             }
-            return expired;
+            return removed;
         });
     }
 
@@ -357,7 +493,7 @@ public class SqlModerationRepository extends SqlRepositorySupport implements Mod
     private StoredJailState readJail(java.sql.ResultSet rs) throws java.sql.SQLException {
         long expires = rs.getLong("expires_at_ms");
         boolean expiresWasNull = rs.wasNull();
-        return new StoredJailState(rs.getString("server_id"), rs.getString("uuid"), rs.getString("name"), rs.getString("reason"), rs.getString("actor"), readLocation(rs), rs.getLong("created_at_ms"), expiresWasNull ? null : expires);
+        return new StoredJailState(rs.getString("server_id"), rs.getString("uuid"), rs.getString("name"), rs.getString("reason"), rs.getString("actor"), readLocation(rs), rs.getLong("created_at_ms"), expiresWasNull ? null : expires, rs.getString("punishment_id"));
     }
 
     private void bindScopeServer(java.sql.PreparedStatement ps, int index, ServerScope scope, String punishmentServerId) throws java.sql.SQLException {

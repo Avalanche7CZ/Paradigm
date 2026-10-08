@@ -17,6 +17,19 @@ public interface ModerationRepository {
     default List<PunishmentRecord> listPunishmentRecords(String subjectUuid, int offset, int limit) { return List.of(); }
     default List<PunishmentRecord> listActivePunishmentRecords(long updatedAfterMs) { return List.of(); }
 
+    // One committed server/player jail state names its current punishment; replacement preserves ledger history.
+    default List<PunishmentRecord> replaceJail(PunishmentRecord punishment, StoredJailState expected,
+                                               StoredJailState replacement) {
+        throw new UnsupportedOperationException("Atomic jail replacement is unavailable.");
+    }
+
+    default java.util.Map<String, Long> escalationWatermarks(String uuid) { return java.util.Map.of(); }
+    default Optional<PunishmentRecord> claimEscalation(PunishmentRecord punishment,
+                                                     java.util.Map<String, Long> expected, long consumedAtMs) {
+        throw new UnsupportedOperationException("Atomic escalation claims are unavailable.");
+    }
+    default boolean clearJailState(StoredJailState expected) { return false; }
+
     long addPunishment(StoredPunishment punishment);
     boolean deactivatePunishment(long id);
     boolean deactivateActivePunishments(String type, String uuid, String name);

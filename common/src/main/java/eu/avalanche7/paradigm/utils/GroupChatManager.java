@@ -165,7 +165,7 @@ public class GroupChatManager {
 
         getPlayerData(target).addInvitation(groupName);
 
-        String inviteSentRaw = translate("invite_sent").getRawText().replace("{player_name}", targetName);
+        String inviteSentRaw = translate("group.invite_sent").getRawText().replace("{player_name}", targetName);
         platform().sendSystemMessage(inviter, parseMessage(inviteSentRaw, inviter));
 
         IComponent base = platform().createComponentFromLiteral("§eYou have been invited to join group §b" + groupName + "§e by §a" + inviter.getName() + " §8[");
@@ -190,8 +190,7 @@ public class GroupChatManager {
         }
         IPlayer target = platform().getPlayerByName(targetName);
         if (target == null) {
-            String inviteSentRaw = translate("invite_sent").getRawText().replace("{player_name}", targetName);
-            platform().sendSystemMessage(inviter, parseMessage(inviteSentRaw, inviter));
+            platform().sendSystemMessage(inviter, translate("group.request_player_offline"));
             return false;
         }
         return invitePlayer(inviter, target);

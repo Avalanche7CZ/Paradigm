@@ -11,6 +11,10 @@ pluginManagement {
             url = 'https://maven.minecraftforge.net/'
         }
         maven {
+            name = 'GTNH'
+            url = 'https://nexus.gtnewhorizons.com/repository/public/'
+        }
+        maven {
             name = 'Sponge'
             url = 'https://repo.spongepowered.org/repository/maven-public/'
         }
@@ -40,4 +44,5 @@ include 'Forge-1.21.11'
 include 'Forge-1.20.1'
 include 'Forge-1.19.2'
 include 'Forge-1.18.2'
+include 'Forge-1.7.10'
 include 'NeoForge-1.21.1'

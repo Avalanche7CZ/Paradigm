@@ -5,6 +5,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.audit.AuditSource;
 import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
@@ -92,7 +93,7 @@ public class TempBanCommand extends AbstractModerationCommand {
         ScopeReason parsed = parseScopeReason(rawReason);
         return StorageCommandSupport.runForSource(services, source, "moderation.tempban", () -> {
             return services.getPunishmentService().create(PunishmentType.BAN, parsed.scope(), target.uuid(), target.name(), null,
-                    parsed.reason(), actorUuid(source), actorName(source), expiresAt);
+                    parsed.reason(), actorUuid(source), actorName(source), expiresAt, AuditSource.COMMAND);
         }, punishment -> {
             if (target.online() != null) services.getPunishmentService().enforcePlayer(target.online());
             send(source, "moderation.punishment.created_temporary", "Banned {player} for {duration}. ID: {id}.",

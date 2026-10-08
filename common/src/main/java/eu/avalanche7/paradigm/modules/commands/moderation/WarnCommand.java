@@ -1,6 +1,7 @@
 package eu.avalanche7.paradigm.modules.commands.moderation;
 
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.audit.AuditSource;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
@@ -47,7 +48,7 @@ public class WarnCommand extends AbstractModerationCommand {
         String actorName = actorName(source);
         return StorageCommandSupport.runForSource(services, source, "moderation.warn", () -> {
             PunishmentRecord warning = services.getPunishmentService().create(PunishmentType.WARN, ServerScope.GLOBAL,
-                    targetUuid, targetName, null, reason, actorUuid, actorName, null);
+                    targetUuid, targetName, null, reason, actorUuid, actorName, null, AuditSource.COMMAND);
             WarnEscalationService.Result escalation = services.getWarnEscalationService()
                     .evaluate(targetUuid, targetName, warning, actorUuid, actorName);
             return new WarnOutcome(warning, escalation);

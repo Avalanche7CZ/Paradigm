@@ -27,7 +27,7 @@ public final class MinecraftCommandSource implements ICommandSource {
 
     @Override
     public boolean hasPermissionLevel(int level) {
-        return sender.canCommandSenderUseCommand(level, "paradigm");
+        return level >= 0 && (level == 0 || sender.canCommandSenderUseCommand(level, "paradigm"));
     }
 
     @Override

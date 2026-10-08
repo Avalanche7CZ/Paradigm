@@ -3,6 +3,7 @@ package eu.avalanche7.paradigm.modules.commands.moderation;
 import java.util.List;
 
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.audit.AuditSource;
 import eu.avalanche7.paradigm.modules.commands.shared.CommandMessages;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
@@ -58,7 +59,7 @@ public final class PunishmentCommands {
         String actorUuid = source.getPlayer() != null ? source.getPlayer().getUUID() : null;
         String actorName = source.getSourceName();
         return StorageCommandSupport.runForSource(services, source, "moderation.punishment.revoke",
-                () -> services.getPunishmentService().revoke(id, actorUuid, actorName, reason),
+                () -> services.getPunishmentService().revoke(id, actorUuid, actorName, reason, AuditSource.COMMAND),
                 changed -> send(services, source,
                         changed ? "moderation.punishment.revoked" : "moderation.punishment.not_found",
                         changed ? "Revoked punishment {id}." : "Punishment was not found or is not active.",

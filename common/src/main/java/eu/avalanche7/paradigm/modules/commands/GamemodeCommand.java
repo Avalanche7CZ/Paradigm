@@ -53,8 +53,10 @@ public class GamemodeCommand implements ParadigmModule {
         registerAlias("survival", "survival");
         registerAlias("gma", "adventure");
         registerAlias("adventure", "adventure");
-        registerAlias("gmsp", "spectator");
-        registerAlias("spectator", "spectator");
+        if (services.getPlatformAdapter().supportsGameMode("spectator")) {
+            registerAlias("gmsp", "spectator");
+            registerAlias("spectator", "spectator");
+        }
     }
 
     @Override
@@ -66,12 +68,12 @@ public class GamemodeCommand implements ParadigmModule {
                 .literal("gamemode")
                 .requires(src -> services.getCommandToggleStore().isEnabled("gamemode")
                         && src.getPlayer() != null
-                        && (src.hasPermissionLevel(2)
-                        || services.getPermissionsHandler().hasPermission(src.getPlayer(), ParadigmPermissions.GAMEMODE)));
+                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), ParadigmPermissions.GAMEMODE));
 
         ICommandBuilder modeArg = services.getPlatformAdapter().createCommandBuilder()
                 .argument("mode", ICommandBuilder.ArgumentType.WORD)
-                .suggests(List.of("survival", "creative", "adventure", "spectator"))
+                .suggests(List.of("survival", "creative", "adventure", "spectator").stream()
+                        .filter(services.getPlatformAdapter()::supportsGameMode).toList())
                 .executes(ctx -> applyGamemode(ctx.getSource().getPlayer(), ctx.getSource().getPlayer(), ctx.getStringArgument("mode")))
                 .then(services.getPlatformAdapter().createCommandBuilder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
@@ -85,8 +87,7 @@ public class GamemodeCommand implements ParadigmModule {
                 .literal(literal)
                 .requires(src -> services.getCommandToggleStore().isEnabled(literal)
                         && src.getPlayer() != null
-                        && (src.hasPermissionLevel(2)
-                        || services.getPermissionsHandler().hasPermission(src.getPlayer(), ParadigmPermissions.GAMEMODE)))
+                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), ParadigmPermissions.GAMEMODE))
                 .executes(ctx -> applyGamemode(ctx.getSource().getPlayer(), ctx.getSource().getPlayer(), mode))
                 .then(services.getPlatformAdapter().createCommandBuilder()
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
@@ -104,7 +105,7 @@ public class GamemodeCommand implements ParadigmModule {
         }
 
         String mode = normalizeMode(modeRaw);
-        if (mode == null) {
+        if (mode == null || !services.getPlatformAdapter().supportsGameMode(mode)) {
             send(actor, "utility.gamemode_invalid", "Invalid gamemode.");
             return 0;
         }
@@ -129,7 +130,7 @@ public class GamemodeCommand implements ParadigmModule {
         if (modeRaw == null || modeRaw.isBlank()) {
             return null;
         }
-        String m = modeRaw.trim().toLowerCase();
+        String m = modeRaw.trim().toLowerCase(java.util.Locale.ROOT);
         return switch (m) {
             case "0", "s", "survival" -> "survival";
             case "1", "c", "creative" -> "creative";

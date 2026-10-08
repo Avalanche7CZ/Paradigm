@@ -2,6 +2,7 @@ package eu.avalanche7.paradigm.modules.commands.moderation;
 
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.audit.AuditSource;
 import eu.avalanche7.paradigm.modules.commands.shared.CommandMessages;
 import eu.avalanche7.paradigm.modules.permissions.PermissionDefinition;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
@@ -92,6 +93,72 @@ public abstract class AbstractModerationCommand implements ParadigmModule {
 
     protected record PlayerIdentity(String uuid, String name, IPlayer online) { }
     protected record ScopeReason(eu.avalanche7.paradigm.storage.identity.ServerScope scope, String reason) { }
+
+    protected int revokeTarget(ICommandSource source, String input, eu.avalanche7.paradigm.modules.moderation.PunishmentType type,
+                               String operation, String successKey, String successFallback, String emptyFallback) {
+        String value = input != null ? input.trim() : "";
+        boolean exactId = eu.avalanche7.paradigm.modules.moderation.PunishmentIds.isValid(value);
+        if (value.isBlank() || (value.toUpperCase(java.util.Locale.ROOT).startsWith("P-") && !exactId)) {
+            send(source, "moderation.punishment.not_found", "Punishment was not found or is not active.");
+            return 0;
+        }
+        IPlayer online = exactId ? null : services.getPlatformAdapter().getPlayerByName(value);
+        if (online == null && !exactId) online = services.getPlatformAdapter().getPlayerByUuid(value);
+        PlayerIdentity captured = online != null ? new PlayerIdentity(online.getUUID(), online.getName(), online) : null;
+        return eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport.runForSource(services, source, operation, () -> {
+            var punishments = services.getPunishmentService();
+            PlayerIdentity identity = captured;
+            if (!exactId && identity == null) {
+                identity = services.getStorageService().players().listProfiles().stream()
+                        .filter(profile -> value.equalsIgnoreCase(profile.uuid()) || value.equalsIgnoreCase(profile.name()))
+                        .findFirst().map(profile -> new PlayerIdentity(profile.uuid(), profile.name(), null)).orElse(null);
+            }
+            java.util.List<eu.avalanche7.paradigm.modules.moderation.PunishmentRecord> matches = exactId
+                    ? punishments.find(value).filter(record -> record.type() == type && record.activeAt(System.currentTimeMillis())
+                            && record.appliesTo(services.getStorageService().context().networkId(), services.getStorageService().context().serverId()))
+                            .stream().toList()
+                    : identity != null ? punishments.activeRecords(identity.uuid(), type) : java.util.List.of();
+            boolean changed = matches.size() == 1 && punishments.revokeOfType(matches.get(0).punishmentId(), type,
+                    actorUuid(source), actorName(source), reason(null), AuditSource.COMMAND);
+            return new RevocationResult(identity, matches, changed);
+        }, result -> {
+            if (result.matches().isEmpty()) {
+                if (exactId) send(source, "moderation.punishment.not_found", "Punishment was not found or is not active.");
+                else if (result.identity() == null) send(source, "moderation.player_not_found", "Player not found.");
+                else send(source, "moderation.punishment.inactive", emptyFallback, "{player}", result.identity().name());
+                return;
+            }
+            if (result.matches().size() > 1) {
+                send(source, "moderation.punishment.ambiguous", "Use an exact punishment ID. Matching IDs: {ids}",
+                        "{ids}", result.matches().stream().map(eu.avalanche7.paradigm.modules.moderation.PunishmentRecord::punishmentId)
+                                .collect(java.util.stream.Collectors.joining(", ")));
+                return;
+            }
+            if (!result.changed()) {
+                send(source, "moderation.punishment.not_found", "Punishment was not found or is not active.");
+                return;
+            }
+            var record = result.matches().get(0);
+            if (exactId) {
+                send(source, "moderation.punishment.revoked", "Revoked punishment {id}.", "{id}", record.punishmentId());
+            } else {
+                send(source, successKey, successFallback, "{player}", record.subjectName() != null ? record.subjectName() : record.subjectUuid(),
+                        "{id}", record.punishmentId());
+            }
+            IPlayer current = services.getPlatformAdapter().getPlayerByUuid(record.subjectUuid());
+            if (current != null && services.getPunishmentService().activeFor(record.subjectUuid(), null).stream()
+                    .noneMatch(active -> active.type() == type)) {
+                send(current, type == eu.avalanche7.paradigm.modules.moderation.PunishmentType.MUTE
+                        ? "moderation.unmuted" : "moderation.unjailed",
+                        type == eu.avalanche7.paradigm.modules.moderation.PunishmentType.MUTE ? "You were unmuted." : "You were unjailed.");
+            }
+        }, "moderation.error_save");
+    }
+
+    private record RevocationResult(PlayerIdentity identity,
+                                    java.util.List<eu.avalanche7.paradigm.modules.moderation.PunishmentRecord> matches,
+                                    boolean changed) {
+    }
 
     protected String reason(String raw) {
         if (raw != null && !raw.isBlank()) {

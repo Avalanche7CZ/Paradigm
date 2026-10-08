@@ -245,16 +245,40 @@ public class ModerationDataStore {
         }
     }
 
+    public <T> T readState(java.util.function.Function<State, T> reader) {
+        synchronized (lock) {
+            return reader.apply(gson.fromJson(gson.toJson(state), State.class));
+        }
+    }
+
+    public <T> T mutateState(java.util.function.Function<State, T> mutation) {
+        synchronized (lock) {
+            State previous = gson.fromJson(gson.toJson(state), State.class);
+            try {
+                T result = mutation.apply(state);
+                Path path = resolvePath();
+                if (path == null) throw new eu.avalanche7.paradigm.storage.StorageException("Moderation storage path is unavailable.");
+                AtomicFileIO.writeUtf8Atomic(path, writer -> gson.toJson(state, writer));
+                return result;
+            } catch (java.io.IOException | RuntimeException failure) {
+                state = previous;
+                throw new eu.avalanche7.paradigm.storage.StorageException("Could not persist moderation state.", failure);
+            } catch (Error failure) {
+                state = previous;
+                throw failure;
+            }
+        }
+    }
+
     public PunishmentRecord addPunishmentRecord(PunishmentRecord record) {
         if (record == null) return null;
-        synchronized (lock) {
-            for (PunishmentRecord existing : state.punishments) {
+        return mutateState(current -> {
+            for (PunishmentRecord existing : current.punishments) {
                 if (existing != null && existing.punishmentId().equals(record.punishmentId())) return existing;
             }
-            state.punishments.add(record);
-            saveLocked();
+            current.punishments.add(record);
             return record;
-        }
+        });
     }
 
     public List<PunishmentRecord> punishmentRecords() {
@@ -450,6 +474,7 @@ public class ModerationDataStore {
         public Map<String, JailEntry> jails = new LinkedHashMap<>();
         public List<WarnEntry> warnings = new ArrayList<>();
         public List<PunishmentRecord> punishments = new ArrayList<>();
+        public Map<String, Map<String, Long>> escalationClaims = new LinkedHashMap<>();
         public PlayerDataStore.StoredLocation jailLocation;
 
         void normalize() {
@@ -459,6 +484,7 @@ public class ModerationDataStore {
             if (jails == null) jails = new LinkedHashMap<>();
             if (warnings == null) warnings = new ArrayList<>();
             if (punishments == null) punishments = new ArrayList<>();
+            if (escalationClaims == null) escalationClaims = new LinkedHashMap<>();
         }
     }
 
@@ -528,9 +554,13 @@ public class ModerationDataStore {
         public String reason;
         public String actor;
         public long createdAtMs;
+        public String punishmentId;
+        public PlayerDataStore.StoredLocation location;
 
         public JailEntry copy() {
             JailEntry copy = new JailEntry();
+            copy.punishmentId = punishmentId;
+            copy.location = location;
             copy.uuid = uuid;
             copy.name = name;
             copy.reason = reason;

@@ -47,7 +47,7 @@ public class StaffChat implements ParadigmModule {
     public void onDisable(Services services) {
         staffChatEnabledMap.keySet().forEach(uuid -> {
             IPlayer player = platform.getPlayerByUuid(uuid);
-            if (player != null) {
+            if (player != null && platform.supportsPersistentBossBar()) {
                 platform.removePersistentBossBar(player);
             }
         });
@@ -96,10 +96,25 @@ public class StaffChat implements ParadigmModule {
             events.onPlayerChat(event -> {
                 IPlayer player = event.getPlayer();
                 if (player == null) return;
-
                 if (ChatRoute.resolve(staffChatEnabledMap.getOrDefault(player.getUUID(), false), false) == ChatRoute.STAFF) {
-                    sendStaffChatMessage(player, event.getMessage());
                     event.setCancelled(true);
+                    if (!services.getPermissionsHandler().hasPermission(player, PermissionsHandler.STAFF_CHAT_PERMISSION)) {
+                        staffChatEnabledMap.remove(player.getUUID());
+                        if (platform.supportsPersistentBossBar()) platform.removePersistentBossBar(player);
+                        platform.sendSystemMessage(player, platform.createLiteralComponent("§cStaff chat disabled: permission is no longer available."));
+                        return;
+                    }
+                    sendStaffChatMessage(player, event.getMessage());
+                }
+            });
+        }
+        IEventSystem lifecycle = lifecycleEvents(services);
+        if (lifecycle != null) {
+            lifecycle.onPlayerLeave(event -> {
+                IPlayer player = event.getPlayer();
+                if (player != null) {
+                    staffChatEnabledMap.remove(player.getUUID());
+                    if (platform.supportsPersistentBossBar()) platform.removePersistentBossBar(player);
                 }
             });
         }
@@ -120,7 +135,7 @@ public class StaffChat implements ParadigmModule {
 
         if (newState) {
             showBossBar(player);
-        } else {
+        } else if (platform.supportsPersistentBossBar()) {
             platform.removePersistentBossBar(player);
         }
     }
@@ -141,7 +156,7 @@ public class StaffChat implements ParadigmModule {
 
     private void showBossBar(IPlayer player) {
         if (player == null) return;
-        if (services.getChatConfig().enableStaffBossBar.value) {
+        if (platform.supportsPersistentBossBar() && services.getChatConfig().enableStaffBossBar.value) {
             IComponent title = services.getMessageParser().parseMessage("§cStaff Chat Mode §aEnabled", player);
             platform.showPersistentBossBar(player, title, IPlatformAdapter.BossBarColor.RED, IPlatformAdapter.BossBarOverlay.PROGRESS);
         }

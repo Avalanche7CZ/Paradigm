@@ -3,6 +3,7 @@ package eu.avalanche7.paradigm.modules.commands.moderation;
 import java.util.List;
 
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.audit.AuditSource;
 import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
@@ -52,7 +53,7 @@ public class TempMuteCommand extends AbstractModerationCommand {
         String targetName = target.getName();
         return StorageCommandSupport.runForSource(services, source, "moderation.tempmute", () -> {
             return services.getPunishmentService().create(PunishmentType.MUTE, ServerScope.SERVER, targetUuid, targetName,
-                    null, reason, actorUuid(source), actorName(source), expiresAt);
+                    null, reason, actorUuid(source), actorName(source), expiresAt, AuditSource.COMMAND);
         }, saved -> {
             send(source, "moderation.tempmute_ok", "Muted {player} for {duration}. ID: {id}.",
                     "{player}", targetName, "{duration}", DurationParser.describeRemaining(expiresAt), "{id}", saved.punishmentId());

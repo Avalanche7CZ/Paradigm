@@ -11,7 +11,9 @@ import cpw.mods.fml.common.event.FMLServerStartingEvent;
 import cpw.mods.fml.common.event.FMLServerStoppedEvent;
 import cpw.mods.fml.common.event.FMLServerStoppingEvent;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
+import cpw.mods.fml.common.gameevent.PlayerEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
+import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraftforge.common.MinecraftForge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,10 +22,9 @@ import eu.avalanche7.paradigm.configs.CooldownConfigHandler;
 import eu.avalanche7.paradigm.core.CommonRuntime;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.StorageLifecycle;
-import eu.avalanche7.paradigm.modules.commands.Help;
 import eu.avalanche7.paradigm.modules.commands.Reload;
 import eu.avalanche7.paradigm.platform.ForgeConfig;
+import eu.avalanche7.paradigm.platform.MinecraftLoginHandler;
 import eu.avalanche7.paradigm.platform.PlatformAdapterImpl;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 import eu.avalanche7.paradigm.utils.Placeholders;
@@ -51,11 +52,12 @@ public final class Paradigm {
                 CommonRuntime.bootstrap(LOGGER, platform.getConfig(), platform);
         services = runtime.services();
         platform.setPermissionsHandler(runtime.permissionsHandler());
+        platform.setCommandToggleStore(services.getCommandToggleStore());
         platform.setPlaceholders(services.getPlaceholders());
         platform.provideMessageParser(services.getMessageParser());
 
         for (ParadigmModule module : runtime.modules()) {
-            if (module instanceof StorageLifecycle || module instanceof Help) {
+            if (SupportedModules.supports(module)) {
                 activeModules.add(module);
             }
         }
@@ -85,6 +87,7 @@ public final class Paradigm {
     public void starting(FMLServerStartingEvent event) {
         platform.setMinecraftServer(event.getServer());
         services.setServer(event.getServer());
+        MinecraftLoginHandler.bind(services);
         services.getTaskScheduler().setMainThreadExecutor(platform::executeOnServerThread);
         LOGGER.info("Paradigm MinecraftServer and scheduler bound");
         for (ParadigmModule module : activeModules) {
@@ -94,25 +97,32 @@ public final class Paradigm {
             }
         }
         for (ParadigmModule module : activeModules) {
-            if (module.isEnabled(services)) {
-                if (module instanceof Help) {
-                    platform.registerCommandContributor(module, () -> {
-                        if (services.getCommandToggleStore().isEnabled("paradigm.help")) {
-                            module.registerCommands(event.getServer().getCommandManager(), null, services);
-                        }
-                    });
-                }
-            }
+            platform.registerCommandContributor(module,
+                    () -> SupportedModules.registerCommands(module, event.getServer().getCommandManager(), services));
         }
+        var availableCommands = SupportedModules.commandIds(activeModules, platform);
         platform.registerCommandContributor(commandManagement,
-                () -> commandManagement.registerCommandToggleCommands(services,
-                        id -> "paradigm.help".equals(id) || "paradigm.command".equals(id)));
+                () -> commandManagement.registerCommandToggleCommands(services, availableCommands::contains));
     }
 
     @SubscribeEvent
     public void tick(TickEvent.ServerTickEvent event) {
         if (event.phase == TickEvent.Phase.END && platform != null) {
             platform.tick();
+        }
+    }
+
+    @SubscribeEvent
+    public void respawn(PlayerEvent.PlayerRespawnEvent event) {
+        if (platform != null && event.player instanceof EntityPlayerMP player) {
+            platform.playerRespawned(player);
+        }
+    }
+
+    @SubscribeEvent
+    public void disconnected(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (platform != null && event.player instanceof EntityPlayerMP player) {
+            platform.playerDisconnected(player);
         }
     }
 
@@ -125,6 +135,7 @@ public final class Paradigm {
                 LOGGER.info("Paradigm module disabled: {}", module.getName());
             }
         }
+        MinecraftLoginHandler.clear();
         services.shutdown();
         CooldownConfigHandler.saveCooldowns();
         LOGGER.info("Paradigm services shut down");

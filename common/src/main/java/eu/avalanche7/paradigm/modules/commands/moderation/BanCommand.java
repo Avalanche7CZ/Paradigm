@@ -1,6 +1,7 @@
 package eu.avalanche7.paradigm.modules.commands.moderation;
 
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.audit.AuditSource;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentIds;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
@@ -61,7 +62,7 @@ public class BanCommand extends AbstractModerationCommand {
         ScopeReason parsed = parseScopeReason(rawReason);
         return StorageCommandSupport.runForSource(services, source, "moderation.ban", () -> {
             return services.getPunishmentService().create(PunishmentType.BAN, parsed.scope(), target.uuid(), target.name(), null,
-                    parsed.reason(), actorUuid(source), actorName(source), null);
+                    parsed.reason(), actorUuid(source), actorName(source), null, AuditSource.COMMAND);
         }, punishment -> {
             if (target.online() != null) services.getPunishmentService().enforcePlayer(target.online());
             send(source, "moderation.punishment.created", "Banned {player}. ID: {id}. Scope: {scope}.",
@@ -83,14 +84,16 @@ public class BanCommand extends AbstractModerationCommand {
             java.util.List<PunishmentRecord> matches = PunishmentIds.isValid(playerName)
                     ? services.getPunishmentService().find(playerName).filter(record -> record.type() == PunishmentType.BAN
                             && record.activeAt(System.currentTimeMillis())).stream().toList()
-                    : services.getPunishmentService().activeFor(target.uuid(), null).stream()
-                            .filter(record -> record.type() == PunishmentType.BAN).toList();
-            if (matches.size() != 1) return matches;
-            services.getPunishmentService().revoke(matches.get(0).punishmentId(), actorUuid(source), actorName(source), reason(revokeReason));
-            return matches;
-        }, ignored -> {
-            if (ignored.size() == 1) send(source, "moderation.punishment.revoked", "Revoked punishment {id}.", "{id}", ignored.get(0).punishmentId());
-            else send(source, "moderation.punishment.ambiguous", "Use an exact punishment ID. Matching IDs: {ids}", "{ids}", ignored.stream().map(PunishmentRecord::punishmentId).collect(java.util.stream.Collectors.joining(", ")));
+                    : services.getPunishmentService().activeRecords(target.uuid(), PunishmentType.BAN);
+            boolean changed = matches.size() == 1 && services.getPunishmentService().revokeOfType(matches.get(0).punishmentId(),
+                    PunishmentType.BAN, actorUuid(source), actorName(source), reason(revokeReason), AuditSource.COMMAND);
+            return new UnbanResult(matches, changed);
+        }, result -> {
+            if (result.changed()) send(source, "moderation.punishment.revoked", "Revoked punishment {id}.", "{id}", result.matches().get(0).punishmentId());
+            else if (result.matches().size() > 1) send(source, "moderation.punishment.ambiguous", "Use an exact punishment ID. Matching IDs: {ids}", "{ids}", result.matches().stream().map(PunishmentRecord::punishmentId).collect(java.util.stream.Collectors.joining(", ")));
+            else send(source, "moderation.punishment.not_found", "Punishment was not found or is not active.");
         }, "moderation.error_save");
+    }
+    private record UnbanResult(java.util.List<PunishmentRecord> matches, boolean changed) {
     }
 }

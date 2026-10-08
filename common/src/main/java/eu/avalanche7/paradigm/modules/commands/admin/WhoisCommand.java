@@ -43,9 +43,10 @@ public class WhoisCommand extends AbstractAdminCommand {
         send(source, "admin.whois_health", "Health: {health}/{max}",
                 "{health}", fmt(target.getHealth()), "{max}", fmt(target.getMaxHealth()));
         send(source, "admin.whois_level", "XP level: {level}", "{level}", target.getLevel() != null ? String.valueOf(target.getLevel()) : "unknown");
-        send(source, "admin.whois_afk", "AFK: {state}", "{state}", String.valueOf(services.getAfkService().isAfk(target)));
+        send(source, "admin.whois_afk", "AFK: {state}", "{state}", services.getAfkService().isRunning() ? String.valueOf(services.getAfkService().isAfk(target)) : "unavailable");
         send(source, "admin.whois_playtime", "Playtime: {playtime}",
-                "{playtime}", DurationFormatter.humanize(services.getPlaytimeService().onlinePlaytimeMs(target)));
+                "{playtime}", services.getPlaytimeService().isRunning() && services.getPlaytimeService().isTracking(target.getUUID())
+                        ? DurationFormatter.humanize(services.getPlaytimeService().onlinePlaytimeMs(target)) : "unavailable");
         String groups = groups(target.getUUID());
         if (groups != null) {
             send(source, "admin.whois_groups", "Groups: {groups}", "{groups}", groups);

@@ -83,10 +83,10 @@ public final class ParadigmModules {
     }
 
     private static void chat(List<ParadigmModule> modules, GroupChatManager groupChatManager) {
+        modules.add(new MuteCommand());
         modules.add(new StaffChat());
         modules.add(new PrivateMessages());
         modules.add(new GroupChat(groupChatManager));
-        modules.add(new MuteCommand());
         modules.add(new Mentions());
         modules.add(new JoinLeaveMessages());
         modules.add(new DiscordModule());

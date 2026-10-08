@@ -3,6 +3,7 @@ package eu.avalanche7.paradigm.modules.commands.moderation;
 import java.util.List;
 
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.audit.AuditSource;
 import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
 import eu.avalanche7.paradigm.modules.moderation.IpAddressUtil;
@@ -82,8 +83,8 @@ public final class IpBanCommand extends AbstractModerationCommand {
                 parsed.reason(),
                 actorUuid(source),
                 actorName(source),
-                finalExpiresAt
-        ), punishment -> {
+                finalExpiresAt,
+                AuditSource.COMMAND), punishment -> {
             if (player != null && player.online() != null) {
                 services.getPunishmentService().enforcePlayer(player.online());
             }
@@ -115,15 +116,13 @@ public final class IpBanCommand extends AbstractModerationCommand {
                             .filter(record -> record.type() == PunishmentType.IP_BAN && record.activeAt(System.currentTimeMillis()))
                             .stream()
                             .toList()
-                    : services.getPunishmentService().activeFor(null, finalAddress).stream()
-                            .filter(record -> record.type() == PunishmentType.IP_BAN)
-                            .toList();
+                    : services.getPunishmentService().activeRecords(null, finalAddress, PunishmentType.IP_BAN);
 
             boolean revoked = matches.size() == 1
-                    && services.getPunishmentService().revoke(matches.get(0).punishmentId(), actorUuid, actorName, revokeReason);
+                    && services.getPunishmentService().revoke(matches.get(0).punishmentId(), actorUuid, actorName, revokeReason, AuditSource.COMMAND);
             return new RevokeResult(matches, revoked);
         }, result -> {
-            if (result.matches().size() != 1) {
+            if (result.matches().size() > 1) {
                 send(source, "moderation.punishment.ambiguous", "Use an exact punishment ID. Matching IDs: {ids}",
                         "{ids}", result.matches().stream()
                                 .map(PunishmentRecord::punishmentId)
@@ -133,6 +132,8 @@ public final class IpBanCommand extends AbstractModerationCommand {
             if (result.revoked()) {
                 send(source, "moderation.punishment.revoked", "Revoked punishment {id}.",
                         "{id}", result.matches().get(0).punishmentId());
+            } else {
+                send(source, "moderation.punishment.not_found", "Punishment was not found or is not active.");
             }
         }, "moderation.error_save");
     }

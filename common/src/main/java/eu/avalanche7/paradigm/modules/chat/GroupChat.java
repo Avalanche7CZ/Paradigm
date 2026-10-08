@@ -264,6 +264,13 @@ public class GroupChat implements ParadigmModule {
                 if (event.isCancelled()) return;
                 IPlayer player = event.getPlayer();
                 if (player == null) return;
+                if (groupChatManager.isGroupChatToggled(player)
+                        && !services.getPermissionsHandler().hasPermission(player, PermissionsHandler.GROUPCHAT_PERMISSION)) {
+                    groupChatManager.setGroupChatToggled(player, false);
+                    event.setCancelled(true);
+                    platform.sendSystemMessage(player, platform.createLiteralComponent("§cGroup chat disabled: permission is no longer available."));
+                    return;
+                }
 
                 boolean allow = handleGroupChatMessage(player, event.getMessage());
                 if (!allow) {
@@ -277,6 +284,7 @@ public class GroupChat implements ParadigmModule {
                 IPlayer player = event != null ? event.getPlayer() : null;
                 if (player != null) {
                     groupChatManager.clearPendingRequestsForPlayer(player.getUUID());
+                    groupChatManager.setGroupChatToggled(player, false);
                 }
             });
         }

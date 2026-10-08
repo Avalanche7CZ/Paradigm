@@ -35,6 +35,8 @@ public interface IPlatformAdapter {
     void broadcastSystemMessage(IComponent message);
     void broadcastChatMessage(IComponent message);
     void broadcastSystemMessage(IComponent message, String header, String footer, @Nullable IPlayer player);
+    default boolean supportsTitles() { return true; }
+    default boolean supportsPersistentBossBar() { return true; }
     void sendTitle(IPlayer player, IComponent title, IComponent subtitle);
     void sendSubtitle(IPlayer player, IComponent subtitle);
     void sendActionBar(IPlayer player, IComponent message);
@@ -83,6 +85,11 @@ public interface IPlatformAdapter {
         return null;
     }
 
+    default boolean supportsGameMode(String mode) {
+        return mode != null && java.util.Set.of("0", "s", "survival", "1", "c", "creative", "2", "a", "adventure", "3", "sp", "spectator")
+                .contains(mode.trim().toLowerCase(java.util.Locale.ROOT));
+    }
+
     boolean setGameMode(IPlayer player, String mode);
     boolean setMovementSpeed(IPlayer player, double baseValue);
     boolean setTimeOfDay(long timeOfDay);
@@ -97,6 +104,9 @@ public interface IPlatformAdapter {
     List<InventoryItem> inspectPlayerInventory(IPlayer player, boolean enderChest);
     int repairPlayerItems(IPlayer player, boolean all);
     boolean enchantMainHand(IPlayer player, String enchantmentId, int level);
+    default List<String> getAvailableEnchantmentIds() {
+        return List.of("minecraft:sharpness", "minecraft:efficiency", "minecraft:unbreaking", "minecraft:mending");
+    }
     Integer getHighestBlockY(IPlayer player);
     boolean jumpPlayerForward(IPlayer player, int distance);
 

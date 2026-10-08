@@ -1,7 +1,5 @@
 package eu.avalanche7.paradigm.modules.commands.admin;
 
-import java.util.List;
-
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
@@ -22,7 +20,7 @@ public class EnchantCommand extends AbstractAdminCommand {
                 .requires(src -> allowed(src, "enchant", ParadigmPermissions.ENCHANT))
                 .then(builder()
                         .argument("enchantment", ICommandBuilder.ArgumentType.WORD)
-                        .suggests(List.of("minecraft:sharpness", "minecraft:efficiency", "minecraft:unbreaking", "minecraft:mending"))
+                        .suggests((context, input) -> services.getPlatformAdapter().getAvailableEnchantmentIds())
                         .executes(ctx -> enchant(ctx.getSource(), ctx.getSource().getPlayer(), ctx.getStringArgument("enchantment"), 1))
                         .then(builder()
                                 .argument("level", ICommandBuilder.ArgumentType.INTEGER)

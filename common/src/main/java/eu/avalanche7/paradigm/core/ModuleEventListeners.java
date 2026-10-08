@@ -38,7 +38,7 @@ public final class ModuleEventListeners {
         @Override
         public void onPlayerChat(ChatEventListener listener) {
             delegate.onPlayerChat(event -> {
-                if (active()) listener.onPlayerChat(event);
+                if (active() && event != null && !event.isCancelled()) listener.onPlayerChat(event);
             });
         }
 

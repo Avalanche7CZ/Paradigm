@@ -39,6 +39,34 @@ public final class MinecraftComponent implements IComponent {
         return component;
     }
 
+    public String toLegacyText() {
+        StringBuilder text = new StringBuilder();
+        for (Object part : component) {
+            IChatComponent segment = (IChatComponent) part;
+            ChatStyle style = segment.getChatStyle();
+            if (style.getColor() != null) {
+                text.append(style.getColor());
+            }
+            if (style.getBold()) {
+                text.append(EnumChatFormatting.BOLD);
+            }
+            if (style.getItalic()) {
+                text.append(EnumChatFormatting.ITALIC);
+            }
+            if (style.getUnderlined()) {
+                text.append(EnumChatFormatting.UNDERLINE);
+            }
+            if (style.getStrikethrough()) {
+                text.append(EnumChatFormatting.STRIKETHROUGH);
+            }
+            if (style.getObfuscated()) {
+                text.append(EnumChatFormatting.OBFUSCATED);
+            }
+            text.append(segment.getUnformattedTextForChat()).append(EnumChatFormatting.RESET);
+        }
+        return text.toString();
+    }
+
     @Override
     public String getRawText() {
         return component.getUnformattedText();

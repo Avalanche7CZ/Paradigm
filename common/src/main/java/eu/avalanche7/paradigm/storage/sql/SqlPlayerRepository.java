@@ -160,18 +160,19 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
     public boolean addIgnoredPlayer(String uuid, String ignoredUuid) {
         String normalizedUuid = normalize(uuid);
         String normalizedIgnoredUuid = normalize(ignoredUuid);
-        return sql.transaction(() -> {
-            sql.update("DELETE FROM player_ignored_players WHERE server_id = ? AND uuid = ? AND ignored_uuid = ?", ps -> {
-                ps.setString(1, serverId());
-                ps.setString(2, normalizedUuid);
-                ps.setString(3, normalizedIgnoredUuid);
-            });
-            return sql.update("INSERT INTO player_ignored_players(server_id, uuid, ignored_uuid) VALUES(?, ?, ?)", ps -> {
+        String suffix = "mysql".equals(sql.dialectName()) ? ""
+                : " ON CONFLICT(server_id, uuid, ignored_uuid) DO NOTHING";
+        try {
+            return sql.update("INSERT INTO player_ignored_players(server_id, uuid, ignored_uuid) VALUES(?, ?, ?)" + suffix, ps -> {
                 ps.setString(1, serverId());
                 ps.setString(2, normalizedUuid);
                 ps.setString(3, normalizedIgnoredUuid);
             }) > 0;
-        });
+        } catch (eu.avalanche7.paradigm.storage.StorageException failure) {
+            if ("mysql".equals(sql.dialectName()) && failure.getCause() instanceof SQLException cause
+                    && cause.getErrorCode() == 1062) return false;
+            throw failure;
+        }
     }
 
     @Override

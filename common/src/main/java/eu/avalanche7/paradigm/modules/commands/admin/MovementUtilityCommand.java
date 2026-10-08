@@ -1,6 +1,7 @@
 package eu.avalanche7.paradigm.modules.commands.admin;
 
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
@@ -51,7 +52,15 @@ public class MovementUtilityCommand extends AbstractAdminCommand {
             send(source, "admin.top_fail", "Could not find top block at your position.");
             return 0;
         }
-        services.getPlatformAdapter().teleportPlayer(player, player.getX(), height + 1.0, player.getZ());
+        boolean moved = services.getPlatformAdapter().getPlayerLocation(player)
+                .map(location -> services.getPlatformAdapter().teleportPlayer(player,
+                        new PlayerDataStore.StoredLocation(location.getWorldId(), location.getX(), height + 1.0,
+                                location.getZ(), location.getYaw(), location.getPitch())))
+                .orElse(false);
+        if (!moved) {
+            send(source, "admin.top_fail", "Could not teleport to top block.");
+            return 0;
+        }
         send(source, "admin.top_ok", "Teleported to top block.");
         return 1;
     }

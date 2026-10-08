@@ -1,8 +1,8 @@
 package eu.avalanche7.paradigm.modules.commands.moderation;
 
-import java.util.List;
 
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.audit.AuditSource;
 import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
@@ -67,8 +67,10 @@ public class MuteCommand extends AbstractModerationCommand {
                 .literal("unmute")
                 .requires(src -> allowed(src, "unmute", ParadigmPermissions.MUTE))
                 .then(builder()
-                        .argument("player", ICommandBuilder.ArgumentType.PLAYER)
-                        .executes(ctx -> unmute(ctx.getSource(), ctx.getPlayerArgument("player"))));
+                        .argument("target", ICommandBuilder.ArgumentType.WORD)
+                        .suggests((ctx, input) -> services.getPlatformAdapter().getOnlinePlayers().stream().map(IPlayer::getName).toList())
+                        .executes(ctx -> revokeTarget(ctx.getSource(), ctx.getStringArgument("target"), PunishmentType.MUTE,
+                                "moderation.unmute", "moderation.unmute_ok", "Unmuted {player}.", "{player} was not muted.")));
         services.getPlatformAdapter().registerCommand(cmd);
     }
 
@@ -82,7 +84,7 @@ public class MuteCommand extends AbstractModerationCommand {
         String targetName = target.getName();
         return StorageCommandSupport.runForSource(services, source, "moderation.mute", () ->
                 services.getPunishmentService().create(PunishmentType.MUTE, ServerScope.SERVER, targetUuid, targetName,
-                        null, reason, actorUuid(source), actorName(source), null), saved -> {
+                        null, reason, actorUuid(source), actorName(source), null, AuditSource.COMMAND), saved -> {
             send(source, "moderation.mute_ok", "Muted {player}. ID: {id}.", "{player}", targetName, "{id}", saved.punishmentId());
             IPlayer currentTarget = services.getPlatformAdapter().getPlayerByUuid(targetUuid);
             if (currentTarget != null) {
@@ -91,42 +93,4 @@ public class MuteCommand extends AbstractModerationCommand {
         }, "moderation.error_save");
     }
 
-    private int unmute(eu.avalanche7.paradigm.platform.Interfaces.ICommandSource source, IPlayer target) {
-        if (target == null) {
-            send(source, "moderation.player_not_found", "Player not found.");
-            return 0;
-        }
-        String targetUuid = target.getUUID();
-        String targetName = target.getName();
-        return StorageCommandSupport.runForSource(services, source, "moderation.unmute", () -> {
-            List<PunishmentRecord> matches = services.getPunishmentService().activeFor(targetUuid, null).stream()
-                    .filter(record -> record.type() == PunishmentType.MUTE)
-                    .toList();
-            boolean revoked = matches.size() == 1
-                    && services.getPunishmentService().revoke(matches.get(0).punishmentId(), actorUuid(source), actorName(source), reason(null));
-            return new UnmuteResult(matches, revoked);
-        }, result -> {
-            if (result.matches().isEmpty()) {
-                send(source, "moderation.unmute_ok", "{player} was not muted.", "{player}", targetName);
-                return;
-            }
-            if (result.matches().size() != 1) {
-                send(source, "moderation.punishment.ambiguous", "Use an exact punishment ID. Matching IDs: {ids}",
-                        "{ids}", result.matches().stream().map(PunishmentRecord::punishmentId).collect(java.util.stream.Collectors.joining(", ")));
-                return;
-            }
-            if (!result.revoked()) {
-                send(source, "moderation.punishment.not_found", "Punishment was not found or is not active.");
-                return;
-            }
-            send(source, "moderation.unmute_ok", "Unmuted {player}.", "{player}", targetName);
-            IPlayer currentTarget = services.getPlatformAdapter().getPlayerByUuid(targetUuid);
-            if (currentTarget != null) {
-                send(currentTarget, "moderation.unmuted", "You were unmuted.");
-            }
-        }, "moderation.error_save");
-    }
-
-    private record UnmuteResult(List<PunishmentRecord> matches, boolean revoked) {
-    }
 }

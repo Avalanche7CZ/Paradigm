@@ -4,15 +4,14 @@ import java.util.List;
 import java.util.Map;
 
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.modules.audit.AuditActionType;
 import eu.avalanche7.paradigm.modules.audit.AuditResult;
 import eu.avalanche7.paradigm.modules.audit.AuditService;
+import eu.avalanche7.paradigm.modules.audit.AuditSource;
 import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.identity.ServerScope;
-import eu.avalanche7.paradigm.storage.model.StoredJailState;
 import eu.avalanche7.paradigm.storage.model.StoredLocation;
 
 public class ModerationService {
@@ -87,7 +86,7 @@ public class ModerationService {
                 case UNIPBAN -> revokeMatching(actor, safe.punishmentId, null, safe.ipAddress,
                         PunishmentType.IP_BAN, reason);
                 case REVOKE -> services.getPunishmentService().revoke(
-                        safe.punishmentId, actorUuid(actor), actorName(actor), reason);
+                        safe.punishmentId, actorUuid(actor), actorName(actor), reason, AuditSource.DASHBOARD);
                 case JAIL -> createJail(actor, targetUuid, targetName, reason, expires, created);
                 case UNJAIL -> unjail(actor, safe.punishmentId, targetUuid, reason);
             };
@@ -98,9 +97,6 @@ public class ModerationService {
 
         if (changed && online != null && isLoginBlockingAction(type)) {
             enforceCurrentPlayer(online.uuid());
-        }
-        if (changed && type == ModerationActionType.JAIL && !targetUuid.isBlank()) {
-            teleportCurrentPlayerToJail(targetUuid);
         }
 
         audit(actor, type, changed ? AuditResult.SUCCESS : AuditResult.FAILED,
@@ -152,8 +148,8 @@ public class ModerationService {
                 reason,
                 actorUuid(actor),
                 actorName(actor),
-                expires
-        );
+                expires,
+                AuditSource.DASHBOARD);
         return true;
     }
 
@@ -171,119 +167,40 @@ public class ModerationService {
                 return false;
             }
             return services.getPunishmentService().revoke(
-                    record.punishmentId(), actorUuid(actor), actorName(actor), reason);
+                    record.punishmentId(), actorUuid(actor), actorName(actor), reason, AuditSource.DASHBOARD);
         }
 
         List<PunishmentRecord> matches = services.getPunishmentService()
-                .activeFor(blankToNull(uuid), blankToNull(ip))
+                .activeRecords(blankToNull(uuid), blankToNull(ip), type)
                 .stream()
-                .filter(record -> record.type() == type)
                 .toList();
         if (matches.size() != 1) {
             return false;
         }
         return services.getPunishmentService().revoke(
-                matches.get(0).punishmentId(), actorUuid(actor), actorName(actor), reason);
+                matches.get(0).punishmentId(), actorUuid(actor), actorName(actor), reason, AuditSource.DASHBOARD);
     }
 
     private boolean unjail(DashboardPrincipal actor, String id, String uuid, String reason) {
-        String targetUuid = text(uuid);
-        if (targetUuid.isBlank()) {
-            return false;
-        }
-
-        PunishmentRecord target;
         if (!text(id).isBlank()) {
-            target = services.getPunishmentService().find(id).orElse(null);
-            if (target == null
-                    || target.type() != PunishmentType.JAIL
-                    || !target.activeAt(System.currentTimeMillis())
-                    || target.subjectUuid() == null
-                    || !targetUuid.equalsIgnoreCase(target.subjectUuid())) {
-                return false;
-            }
-        } else {
-            List<PunishmentRecord> matches = services.getPunishmentService()
-                    .activeFor(targetUuid, null)
-                    .stream()
-                    .filter(record -> record.type() == PunishmentType.JAIL)
-                    .toList();
-            if (matches.size() != 1) {
-                return false;
-            }
-            target = matches.get(0);
+            PunishmentRecord record = services.getPunishmentService().find(id).orElse(null);
+            if (record == null || record.type() != PunishmentType.JAIL
+                    || (!text(uuid).isBlank() && !text(uuid).equalsIgnoreCase(record.subjectUuid()))) return false;
+            return services.getPunishmentService().revokeOfType(id, PunishmentType.JAIL, actorUuid(actor), actorName(actor),
+                    reason, AuditSource.DASHBOARD);
         }
-
-        StoredJailState previousState = services.getStorageService().moderation().getJailState(targetUuid).orElse(null);
-        if (previousState != null && !services.getStorageService().moderation().clearJailState(targetUuid)) {
-            return false;
-        }
-
-        boolean revoked = services.getPunishmentService().revoke(
-                target.punishmentId(), actorUuid(actor), actorName(actor), reason);
-        if (!revoked && previousState != null) {
-            services.getStorageService().moderation().setJailState(previousState);
-        }
-        return revoked;
+        List<PunishmentRecord> matches = services.getPunishmentService().activeRecords(uuid, PunishmentType.JAIL);
+        return matches.size() == 1 && services.getPunishmentService().revokeOfType(matches.get(0).punishmentId(),
+                PunishmentType.JAIL, actorUuid(actor), actorName(actor), reason, AuditSource.DASHBOARD);
     }
 
-    private boolean createJail(
-            DashboardPrincipal actor,
-            String uuid,
-            String name,
-            String reason,
-            Long expiresAtMs,
-            PunishmentRecord[] output
-    ) {
-        String normalizedUuid = text(uuid);
-        if (normalizedUuid.isBlank()) {
-            throw new IllegalArgumentException("Jail requires a player UUID.");
-        }
-
-        StoredLocation jailLocation = services.getStorageService().moderation().getJailLocation().orElse(null);
-        if (jailLocation == null) {
-            return false;
-        }
-
-        PunishmentRecord punishment = services.getPunishmentService().create(
-                PunishmentType.JAIL,
-                ServerScope.SERVER,
-                normalizedUuid,
-                blankToNull(name),
-                null,
-                reason,
-                actorUuid(actor),
-                actorName(actor),
-                expiresAtMs
-        );
-        output[0] = punishment;
-
-        try {
-            services.getStorageService().moderation().setJailState(new StoredJailState(
-                    services.getStorageService().context().serverId(),
-                    normalizedUuid,
-                    name,
-                    reason,
-                    actorName(actor),
-                    jailLocation,
-                    System.currentTimeMillis(),
-                    expiresAtMs
-            ));
-            return true;
-        } catch (RuntimeException | Error failure) {
-            output[0] = null;
-            try {
-                services.getPunishmentService().revoke(
-                        punishment.punishmentId(),
-                        actorUuid(actor),
-                        actorName(actor),
-                        "Jail state persistence failed."
-                );
-            } catch (RuntimeException rollbackFailure) {
-                failure.addSuppressed(rollbackFailure);
-            }
-            throw failure;
-        }
+    private boolean createJail(DashboardPrincipal actor, String uuid, String name, String reason, Long expiresAtMs,
+                               PunishmentRecord[] output) {
+        StoredLocation location = services.getStorageService().moderation().getJailLocation().orElse(null);
+        if (location == null) return false;
+        output[0] = services.getPunishmentService().replaceJail(uuid, name, location, reason,
+                actorUuid(actor), actorName(actor), expiresAtMs, AuditSource.DASHBOARD);
+        return true;
     }
 
     public OnlineTarget snapshotPlayer(String value) {
@@ -343,31 +260,6 @@ public class ModerationService {
             IPlayer current = services.getPlatformAdapter().getPlayerByUuid(normalizedUuid);
             if (current != null) {
                 services.getPunishmentService().enforcePlayer(current);
-            }
-        });
-    }
-
-    private void teleportCurrentPlayerToJail(String uuid) {
-        String normalizedUuid = text(uuid);
-        if (normalizedUuid.isBlank()) {
-            return;
-        }
-        StoredLocation jailLocation = services.getStorageService().moderation().getJailLocation().orElse(null);
-        if (jailLocation == null) {
-            return;
-        }
-        PlayerDataStore.StoredLocation destination = new PlayerDataStore.StoredLocation(
-                jailLocation.worldId(),
-                jailLocation.x(),
-                jailLocation.y(),
-                jailLocation.z(),
-                jailLocation.yaw(),
-                jailLocation.pitch()
-        );
-        runOnServerThread(() -> {
-            IPlayer current = services.getPlatformAdapter().getPlayerByUuid(normalizedUuid);
-            if (current != null) {
-                services.getPlatformAdapter().teleportPlayer(current, destination);
             }
         });
     }

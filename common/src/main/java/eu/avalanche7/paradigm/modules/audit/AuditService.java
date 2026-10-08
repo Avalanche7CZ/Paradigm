@@ -32,6 +32,11 @@ public class AuditService {
         this.repository = active;
     }
 
+    public void record(String actorUuid, String actorName, AuditSource source, AuditActionType type,
+                       AuditResult result, String message, Map<String, String> details) {
+        append(entry(actorUuid, actorName, source != null ? source : AuditSource.SYSTEM, type, result, message, details));
+    }
+
     public void dashboard(DashboardPrincipal actor, AuditActionType type, AuditResult result, String message, Map<String, String> details) {
         append(entry(actor != null ? actor.uuid() : "", actor != null ? actor.name() : "", AuditSource.DASHBOARD, type, result, message, details));
     }

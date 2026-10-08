@@ -19,6 +19,10 @@ public class SqlExecutor {
         this.operationLock = connections.operationLock();
     }
 
+    public String dialectName() {
+        return connections.dialect().name();
+    }
+
     public int update(String sql, Binder binder) {
         return withOperationLock(() -> updateOnConnection(sql, binder));
     }

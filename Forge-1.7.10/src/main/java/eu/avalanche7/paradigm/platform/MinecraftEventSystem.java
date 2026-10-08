@@ -1,6 +1,8 @@
 package eu.avalanche7.paradigm.platform;
 
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -8,8 +10,14 @@ import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.eventhandler.EventPriority;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.PlayerEvent;
+import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.management.ServerConfigurationManager;
+import net.minecraft.stats.StatList;
 import net.minecraft.util.ChatComponentTranslation;
+import net.minecraft.util.IChatComponent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.CommandEvent;
 import net.minecraftforge.event.ServerChatEvent;
@@ -20,6 +28,10 @@ import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
 public final class MinecraftEventSystem implements IEventSystem {
+    private static volatile MinecraftEventSystem active;
+    private static final String JOINED = "paradigmJoined";
+    private final Map<EntityPlayerMP, IChatComponent> pendingJoins = new IdentityHashMap<>();
+    private final Map<EntityPlayerMP, IChatComponent> pendingLeaves = new IdentityHashMap<>();
     private final List<ChatEventListener> chatListeners = new CopyOnWriteArrayList<>();
     private final List<PlayerJoinEventListener> joinListeners = new CopyOnWriteArrayList<>();
     private final List<PlayerLeaveEventListener> leaveListeners = new CopyOnWriteArrayList<>();
@@ -27,11 +39,15 @@ public final class MinecraftEventSystem implements IEventSystem {
     private final List<PlayerCommandEventListener> commandListeners = new CopyOnWriteArrayList<>();
 
     public void register() {
+        active = this;
         MinecraftForge.EVENT_BUS.register(this);
         FMLCommonHandler.instance().bus().register(this);
     }
 
     public void unregister() {
+        if (active == this) active = null;
+        pendingJoins.clear();
+        pendingLeaves.clear();
         MinecraftForge.EVENT_BUS.unregister(this);
         FMLCommonHandler.instance().bus().unregister(this);
         chatListeners.clear();
@@ -110,24 +126,27 @@ public final class MinecraftEventSystem implements IEventSystem {
     @SubscribeEvent
     public void joined(PlayerEvent.PlayerLoggedInEvent forge) {
         if (forge.player instanceof EntityPlayerMP player) {
-            PlayerJoinEvent event = new JoinLeaveEvent(new MinecraftPlayer(player));
+            JoinLeaveEvent event = new JoinLeaveEvent(new MinecraftPlayer(player), pendingJoins.remove(player));
             for (PlayerJoinEventListener listener : joinListeners) {
                 listener.onPlayerJoin(event);
             }
+            markJoined(player);
+            broadcast(event.message);
         }
     }
 
     @SubscribeEvent
     public void left(PlayerEvent.PlayerLoggedOutEvent forge) {
         if (forge.player instanceof EntityPlayerMP player) {
-            PlayerLeaveEvent event = new JoinLeaveEvent(new MinecraftPlayer(player));
+            JoinLeaveEvent event = new JoinLeaveEvent(new MinecraftPlayer(player), pendingLeaves.remove(player));
             for (PlayerLeaveEventListener listener : leaveListeners) {
                 listener.onPlayerLeave(event);
             }
+            broadcast(event.message);
         }
     }
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.LOWEST)
     public void died(LivingDeathEvent forge) {
         if (forge.entityLiving instanceof EntityPlayerMP player) {
             IPlayer wrapped = new MinecraftPlayer(player);
@@ -172,7 +191,46 @@ public final class MinecraftEventSystem implements IEventSystem {
         }
     }
 
-    private record JoinLeaveEvent(IPlayer player) implements PlayerJoinEvent, PlayerLeaveEvent {
+    public static void captureJoin(ServerConfigurationManager manager, EntityPlayerMP player, IChatComponent message) {
+        MinecraftEventSystem system = active;
+        if (system == null) manager.sendChatMsg(message);
+        else system.pendingJoins.put(player, message);
+    }
+
+    public static void captureLeave(ServerConfigurationManager manager, EntityPlayerMP player, IChatComponent message) {
+        MinecraftEventSystem system = active;
+        if (system == null) manager.sendChatMsg(message);
+        else system.pendingLeaves.put(player, message);
+    }
+
+    private static void broadcast(IComponent message) {
+        MinecraftServer server = MinecraftServer.getServer();
+        if (message != null && server != null) {
+            server.getConfigurationManager().sendChatMsg((IChatComponent) message.getOriginalText());
+        }
+    }
+
+    static boolean firstJoin(EntityPlayerMP player) {
+        return !player.getEntityData().getCompoundTag(EntityPlayer.PERSISTED_NBT_TAG).getBoolean(JOINED)
+                && player.func_147099_x().writeStat(StatList.leaveGameStat) == 0;
+    }
+
+    private static void markJoined(EntityPlayerMP player) {
+        NBTTagCompound data = player.getEntityData();
+        NBTTagCompound persisted = data.getCompoundTag(EntityPlayer.PERSISTED_NBT_TAG);
+        persisted.setBoolean(JOINED, true);
+        data.setTag(EntityPlayer.PERSISTED_NBT_TAG, persisted);
+    }
+
+    private static final class JoinLeaveEvent implements PlayerJoinEvent, PlayerLeaveEvent {
+        private final IPlayer player;
+        private IComponent message;
+
+        private JoinLeaveEvent(IPlayer player, IChatComponent message) {
+            this.player = player;
+            this.message = message != null ? new MinecraftComponent(message) : null;
+        }
+
         @Override
         public IPlayer getPlayer() {
             return player;
@@ -180,24 +238,22 @@ public final class MinecraftEventSystem implements IEventSystem {
 
         @Override
         public IComponent getJoinMessage() {
-            return null;
+            return message;
         }
 
         @Override
         public void setJoinMessage(IComponent value) {
-            throw new UnsupportedOperationException(
-                    "Forge 1.7.10 login events cannot replace the vanilla join announcement");
+            message = value;
         }
 
         @Override
         public IComponent getLeaveMessage() {
-            return null;
+            return message;
         }
 
         @Override
         public void setLeaveMessage(IComponent value) {
-            throw new UnsupportedOperationException(
-                    "Forge 1.7.10 logout events cannot replace the vanilla leave announcement");
+            message = value;
         }
     }
 }

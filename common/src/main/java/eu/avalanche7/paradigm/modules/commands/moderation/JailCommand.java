@@ -7,16 +7,15 @@ import java.util.concurrent.TimeUnit;
 
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
+import eu.avalanche7.paradigm.modules.audit.AuditSource;
 import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
-import eu.avalanche7.paradigm.modules.moderation.PunishmentRecord;
 import eu.avalanche7.paradigm.modules.moderation.PunishmentType;
 import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.storage.identity.ServerScope;
 import eu.avalanche7.paradigm.storage.model.StoredJailState;
 import eu.avalanche7.paradigm.storage.model.StoredLocation;
 
@@ -87,25 +86,21 @@ public class JailCommand extends AbstractModerationCommand {
             if (uuid == null || uuid.isBlank()) {
                 return;
             }
-            services.getStorageService().runAsync(
-                    "moderation.jail.join_load",
-                    () -> services.getStorageService().moderation().getJailState(uuid).orElse(null),
-                    services.getTaskScheduler(),
-                    jail -> {
-                        if (jail == null || jail.location() == null) {
-                            return;
-                        }
-                        services.getTaskScheduler().schedule(() -> {
-                            IPlayer current = services.getPlatformAdapter().getPlayerByUuid(uuid);
-                            if (current != null) {
-                                services.getPlatformAdapter().teleportPlayer(current, toDataLocation(jail.location()));
-                            }
-                        }, 1L, TimeUnit.SECONDS);
-                    },
-                    failure -> {
-                    }
-            );
+            services.getTaskScheduler().schedule(() -> restoreJail(uuid), 1L, TimeUnit.SECONDS);
         });
+    }
+
+    private void restoreJail(String uuid) {
+        if (!isEnabled(services)) {
+            return;
+        }
+        services.getStorageService().runAsync(
+                "moderation.jail.join_load",
+                () -> services.getPunishmentService().restoreJail(uuid, () -> isEnabled(services)),
+                services.getTaskScheduler(),
+                ignored -> { },
+                failure -> services.getLogger().warn("[Paradigm] Could not restore jail state on join.", failure)
+        );
     }
 
     private void registerSetJail() {
@@ -139,8 +134,10 @@ public class JailCommand extends AbstractModerationCommand {
                 .literal("unjail")
                 .requires(src -> allowed(src, "unjail", ParadigmPermissions.JAIL))
                 .then(builder()
-                        .argument("player", ICommandBuilder.ArgumentType.PLAYER)
-                        .executes(ctx -> unjail(ctx.getSource(), ctx.getPlayerArgument("player"))));
+                        .argument("target", ICommandBuilder.ArgumentType.WORD)
+                        .suggests((ctx, input) -> services.getPlatformAdapter().getOnlinePlayers().stream().map(IPlayer::getName).toList())
+                        .executes(ctx -> revokeTarget(ctx.getSource(), ctx.getStringArgument("target"), PunishmentType.JAIL,
+                                "moderation.unjail", "moderation.unjail_ok", "Unjailed {player}.", "{player} was not jailed.")));
         services.getPlatformAdapter().registerCommand(cmd);
     }
 
@@ -180,131 +177,20 @@ public class JailCommand extends AbstractModerationCommand {
         String actorName = actorName(source);
         long finalExpiresAt = expiresAt;
 
-        return StorageCommandSupport.runForSource(services, source, "moderation.jail_location_load",
-                () -> services.getStorageService().moderation().getJailLocation().orElse(null),
-                location -> {
-                    if (location == null) {
-                        send(source, "moderation.jail_not_set", "Jail location is not set. Use /setjail first.");
-                        return;
-                    }
-
-                    StoredJailState jailState = new StoredJailState(
-                            null,
-                            targetUuid,
-                            targetName,
-                            reason,
-                            actorName,
-                            location,
-                            System.currentTimeMillis(),
-                            finalExpiresAt > 0L ? finalExpiresAt : null
-                    );
-
-                    StorageCommandSupport.runForSource(services, source, "moderation.jail_save", () -> {
-                        PunishmentRecord punishment = services.getPunishmentService().create(
-                                PunishmentType.JAIL,
-                                ServerScope.SERVER,
-                                targetUuid,
-                                targetName,
-                                null,
-                                reason,
-                                actorUuid,
-                                actorName,
-                                finalExpiresAt > 0L ? finalExpiresAt : null
-                        );
-                        try {
-                            services.getStorageService().moderation().setJailState(jailState);
-                            return punishment;
-                        } catch (RuntimeException | Error failure) {
-                            try {
-                                services.getPunishmentService().revoke(
-                                        punishment.punishmentId(), actorUuid, actorName, "Jail state persistence failed.");
-                            } catch (RuntimeException rollbackFailure) {
-                                failure.addSuppressed(rollbackFailure);
-                            }
-                            throw failure;
-                        }
-                    }, punishment -> {
-                        IPlayer jailedPlayer = services.getPlatformAdapter().getPlayerByUuid(targetUuid);
-                        if (jailedPlayer != null
-                                && !services.getPlatformAdapter().teleportPlayer(jailedPlayer, toDataLocation(location))) {
-                            rollbackFailedJail(source, punishment, targetUuid, targetName, actorUuid, actorName);
-                            return;
-                        }
-
-                        send(source, "moderation.jail_ok", "Jailed {player}. ID: {id}.",
-                                "{player}", targetName, "{id}", punishment.punishmentId());
-                        if (jailedPlayer != null) {
-                            send(jailedPlayer, "moderation.jailed", "You were jailed. Reason: {reason}", "{reason}", reason);
-                        }
-                    }, "moderation.error_save");
-                },
-                "moderation.error_load");
-    }
-
-    private void rollbackFailedJail(
-            ICommandSource source,
-            PunishmentRecord punishment,
-            String targetUuid,
-            String targetName,
-            String actorUuid,
-            String actorName
-    ) {
-        StorageCommandSupport.runForSource(services, source, "moderation.jail_rollback", () -> {
-            boolean changed = services.getStorageService().moderation().clearJailState(targetUuid);
-            changed |= services.getPunishmentService().revoke(
-                    punishment.punishmentId(), actorUuid, actorName, "Jail teleport failed.");
-            return changed;
-        }, ignored -> send(source, "moderation.jail_teleport_fail", "Could not teleport {player} to jail.",
-                "{player}", targetName), "moderation.error_save");
-    }
-
-    private int unjail(ICommandSource source, IPlayer target) {
-        if (target == null) {
-            send(source, "moderation.player_not_found", "Player not found.");
-            return 0;
-        }
-        String targetUuid = target.getUUID();
-        String targetName = target.getName();
-        String actorUuid = actorUuid(source);
-        String actorName = actorName(source);
-        return StorageCommandSupport.runForSource(services, source, "moderation.unjail", () -> {
-            List<PunishmentRecord> matches = services.getPunishmentService().activeFor(targetUuid, null).stream()
-                    .filter(record -> record.type() == PunishmentType.JAIL)
-                    .toList();
-            if (matches.size() != 1) {
-                return new UnjailResult(matches, false);
-            }
-
-            StoredJailState previousState = services.getStorageService().moderation().getJailState(targetUuid).orElse(null);
-            if (previousState != null && !services.getStorageService().moderation().clearJailState(targetUuid)) {
-                return new UnjailResult(matches, false);
-            }
-
-            boolean revoked = services.getPunishmentService().revoke(
-                    matches.get(0).punishmentId(), actorUuid, actorName, reason(null));
-            if (!revoked && previousState != null) {
-                services.getStorageService().moderation().setJailState(previousState);
-            }
-            return new UnjailResult(matches, revoked);
-        }, result -> {
-            if (result.matches().isEmpty()) {
-                send(source, "moderation.unjail_ok", "{player} was not jailed.", "{player}", targetName);
+        return StorageCommandSupport.runForSource(services, source, "moderation.jail_save", () -> {
+            StoredLocation location = services.getStorageService().moderation().getJailLocation().orElse(null);
+            if (location == null) return null;
+            return services.getPunishmentService().replaceJail(targetUuid, targetName, location, reason,
+                    actorUuid, actorName, finalExpiresAt > 0L ? finalExpiresAt : null, AuditSource.COMMAND);
+        }, punishment -> {
+            if (punishment == null) {
+                send(source, "moderation.jail_not_set", "Jail location is not set. Use /setjail first.");
                 return;
             }
-            if (result.matches().size() != 1) {
-                send(source, "moderation.punishment.ambiguous", "Use an exact punishment ID. Matching IDs: {ids}",
-                        "{ids}", result.matches().stream().map(PunishmentRecord::punishmentId).collect(java.util.stream.Collectors.joining(", ")));
-                return;
-            }
-            if (!result.changed()) {
-                send(source, "moderation.error_save", "Could not unjail {player} safely.", "{player}", targetName);
-                return;
-            }
-            send(source, "moderation.unjail_ok", "Unjailed {player}.", "{player}", targetName);
-            IPlayer currentTarget = services.getPlatformAdapter().getPlayerByUuid(targetUuid);
-            if (currentTarget != null) {
-                send(currentTarget, "moderation.unjailed", "You were unjailed.");
-            }
+            send(source, "moderation.jail_ok", "Jailed {player}. ID: {id}.",
+                    "{player}", targetName, "{id}", punishment.punishmentId());
+            IPlayer current = services.getPlatformAdapter().getPlayerByUuid(targetUuid);
+            if (current != null) send(current, "moderation.jailed", "You were jailed. Reason: {reason}", "{reason}", reason);
         }, "moderation.error_save");
     }
 
@@ -324,8 +210,7 @@ public class JailCommand extends AbstractModerationCommand {
                         }
                     }
                 },
-                failure -> {
-                }
+                failure -> services.getLogger().warn("[Paradigm] Could not expire jail states.", failure)
         );
     }
 
@@ -337,6 +222,4 @@ public class JailCommand extends AbstractModerationCommand {
         return new PlayerDataStore.StoredLocation(location.worldId(), location.x(), location.y(), location.z(), location.yaw(), location.pitch());
     }
 
-    private record UnjailResult(List<PunishmentRecord> matches, boolean changed) {
-    }
 }

@@ -49,7 +49,8 @@ public class SqlMigrationRunner implements MigrationRunner {
             operationLock.lock();
         }
         List<Integer> applied = new ArrayList<>();
-        try (Connection connection = connections.getConnection()) {
+        try (Connection connection = connections.getConnection();
+             SchemaLock ignored = acquireSchemaLock(connection)) {
             connection.setAutoCommit(false);
             ensureSchemaVersionTable(connection);
             connection.commit();
@@ -83,6 +84,32 @@ public class SqlMigrationRunner implements MigrationRunner {
         } finally {
             if (operationLock != null) {
                 operationLock.unlock();
+            }
+        }
+    }
+
+    private SchemaLock acquireSchemaLock(Connection connection) throws SQLException {
+        if (!"mysql".equals(connections.dialect().name())) return new SchemaLock(connection, null);
+        String name = "paradigm-schema-" + java.util.UUID.nameUUIDFromBytes(
+                String.valueOf(connection.getCatalog()).getBytes(StandardCharsets.UTF_8));
+        try (var statement = connection.prepareStatement("SELECT GET_LOCK(?, 60)")) {
+            statement.setString(1, name);
+            try (ResultSet result = statement.executeQuery()) {
+                if (!result.next() || result.getInt(1) != 1) throw new SQLException("Could not acquire the database migration lock.");
+            }
+        }
+        return new SchemaLock(connection, name);
+    }
+
+    private record SchemaLock(Connection connection, String name) implements AutoCloseable {
+        @Override
+        public void close() throws SQLException {
+            if (name == null) return;
+            try (var statement = connection.prepareStatement("SELECT RELEASE_LOCK(?)")) {
+                statement.setString(1, name);
+                try (ResultSet result = statement.executeQuery()) {
+                    if (!result.next() || result.getInt(1) != 1) throw new SQLException("Could not release the database migration lock.");
+                }
             }
         }
     }
@@ -270,6 +297,8 @@ public class SqlMigrationRunner implements MigrationRunner {
                 case 11 -> "tickets";
                 case 12 -> "permission_tracks";
                 case 13 -> "integration_views";
+                case 14 -> "jail_association";
+                case 15 -> "escalation_claims";
                 default -> "migration";
             } + ".sql";
             String sql = resourceText(resource);

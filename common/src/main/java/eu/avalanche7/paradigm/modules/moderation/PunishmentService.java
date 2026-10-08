@@ -9,12 +9,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import eu.avalanche7.paradigm.configs.ModerationConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.modules.audit.AuditActionType;
 import eu.avalanche7.paradigm.modules.audit.AuditResult;
 import eu.avalanche7.paradigm.modules.audit.AuditService;
-import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
+import eu.avalanche7.paradigm.modules.audit.AuditSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.identity.ServerScope;
+import eu.avalanche7.paradigm.storage.model.StoredJailState;
+import eu.avalanche7.paradigm.storage.model.StoredLocation;
 import eu.avalanche7.paradigm.utils.TaskScheduler;
 
 public final class PunishmentService {
@@ -23,6 +26,7 @@ public final class PunishmentService {
     private final ActivePunishmentCache cache = new ActivePunishmentCache();
     private final BanScreenFormatter banScreen;
     private final Object mutationLock = new Object();
+    private final java.util.concurrent.ConcurrentHashMap<String, Object> jailLocks = new java.util.concurrent.ConcurrentHashMap<>();
     private volatile long lastRefreshMs;
     private final AtomicBoolean refreshRunning = new AtomicBoolean();
     private final AtomicBoolean started = new AtomicBoolean();
@@ -62,16 +66,22 @@ public final class PunishmentService {
     public PunishmentRecord create(PunishmentType type, ServerScope scope, String subjectUuid, String subjectName,
                                    String ipAddress, String reason, String actorUuid, String actorName, Long expiresAtMs,
                                    Map<String, String> metadata) {
-        long now = System.currentTimeMillis();
-        String canonicalIp = ipAddress != null && !ipAddress.isBlank() ? IpAddressUtil.canonicalize(ipAddress) : null;
-        if (type == PunishmentType.IP_BAN && canonicalIp == null) throw new IllegalArgumentException("IP ban requires a valid address.");
-        if (type == PunishmentType.BAN && !validUuid(subjectUuid)) throw new IllegalArgumentException("Player ban requires a valid UUID.");
-        var context = services.getStorageService().context();
-        PunishmentRecord record = new PunishmentRecord(PunishmentIds.create(), type, scope, context.networkId(),
-                scope == ServerScope.SERVER ? context.serverId() : null, clean(subjectUuid), clean(subjectName),
-                canonicalIp != null ? IpAddressUtil.hash(canonicalIp) : null, canonicalIp, clean(reason), clean(actorUuid),
-                clean(actorName), now, now, expiresAtMs, null, null, null, null, now,
-                metadata != null ? Map.copyOf(metadata) : Map.of());
+        return create(type, scope, subjectUuid, subjectName, ipAddress, reason, actorUuid, actorName, expiresAtMs,
+                metadata, AuditSource.SYSTEM);
+    }
+
+    public PunishmentRecord create(PunishmentType type, ServerScope scope, String subjectUuid, String subjectName,
+                                   String ipAddress, String reason, String actorUuid, String actorName, Long expiresAtMs,
+                                   AuditSource source) {
+        return create(type, scope, subjectUuid, subjectName, ipAddress, reason, actorUuid, actorName, expiresAtMs, Map.of(), source);
+    }
+
+    public PunishmentRecord create(PunishmentType type, ServerScope scope, String subjectUuid, String subjectName,
+                                   String ipAddress, String reason, String actorUuid, String actorName, Long expiresAtMs,
+                                   Map<String, String> metadata, AuditSource source) {
+        if (type == PunishmentType.JAIL) throw new IllegalArgumentException("Jail requires an atomic state replacement.");
+        PunishmentRecord record = newRecord(type, scope, subjectUuid, subjectName, ipAddress, reason,
+                actorUuid, actorName, expiresAtMs, metadata, source);
         PunishmentRecord stored;
         synchronized (mutationLock) {
             stored = services.getStorageService().moderation().addPunishmentRecord(record);
@@ -83,13 +93,212 @@ public final class PunishmentService {
         return stored;
     }
 
+    public Optional<PunishmentRecord> createEscalation(String uuid, String name, String reason, String actorUuid,
+                                                      String actorName, long expiresAtMs, Map<String, String> metadata,
+                                                      AuditSource source, Map<String, Long> expected, long consumedAtMs) {
+        PunishmentRecord candidate = newRecord(PunishmentType.BAN, ServerScope.GLOBAL, uuid, name, null, reason,
+                actorUuid, actorName, expiresAtMs, metadata, source);
+        Optional<PunishmentRecord> stored;
+        synchronized (mutationLock) {
+            stored = services.getStorageService().moderation().claimEscalation(candidate, expected, consumedAtMs);
+            stored.ifPresent(cache::put);
+        }
+        stored.ifPresent(record -> {
+            auditCreate(record);
+            publish(events -> events.punishmentCreated(record));
+        });
+        return stored;
+    }
+
+    private PunishmentRecord newRecord(PunishmentType type, ServerScope scope, String subjectUuid, String subjectName,
+                                       String ipAddress, String reason, String actorUuid, String actorName, Long expiresAtMs,
+                                       Map<String, String> metadata, AuditSource source) {
+        long now = System.currentTimeMillis();
+        String canonicalIp = ipAddress != null && !ipAddress.isBlank() ? IpAddressUtil.canonicalize(ipAddress) : null;
+        if (type == PunishmentType.IP_BAN && canonicalIp == null) throw new IllegalArgumentException("IP ban requires a valid address.");
+        if ((type == PunishmentType.BAN || type == PunishmentType.MUTE || type == PunishmentType.JAIL)
+                && !validUuid(subjectUuid)) throw new IllegalArgumentException("Player punishment requires a valid UUID.");
+        var context = services.getStorageService().context();
+        Map<String, String> details = new java.util.LinkedHashMap<>(metadata != null ? metadata : Map.of());
+        details.put("auditSource", (source != null ? source : AuditSource.SYSTEM).name());
+        return new PunishmentRecord(PunishmentIds.create(), type, scope, context.networkId(),
+                scope == ServerScope.SERVER ? context.serverId() : null, clean(subjectUuid), clean(subjectName),
+                canonicalIp != null ? IpAddressUtil.hash(canonicalIp) : null, canonicalIp, clean(reason), clean(actorUuid),
+                clean(actorName), now, now, expiresAtMs, null, null, null, null, now, details);
+    }
+
+    public PunishmentRecord replaceJail(String subjectUuid, String name, StoredLocation location, String reason,
+                                        String actorUuid, String actorName, Long expiresAtMs, AuditSource source) {
+        if (location == null || !validUuid(subjectUuid)) throw new IllegalArgumentException("Jail requires a UUID and destination.");
+        String uuid = java.util.UUID.fromString(subjectUuid).toString();
+        if (expiresAtMs != null && expiresAtMs <= System.currentTimeMillis()) throw new IllegalArgumentException("Jail duration has already expired.");
+        PunishmentRecord record;
+        List<PunishmentRecord> superseded;
+        synchronized (jailLock(uuid)) {
+            var repository = services.getStorageService().moderation();
+            StoredJailState previous = repository.getJailState(uuid).orElse(null);
+            PlayerDataStore.StoredLocation original = onServer(() -> {
+                IPlayer player = services.getPlatformAdapter().getPlayerByUuid(uuid);
+                return player != null ? services.getPlatformAdapter().getPlayerLocation(player).orElse(null) : null;
+            });
+            boolean teleported = onServer(() -> {
+                IPlayer player = services.getPlatformAdapter().getPlayerByUuid(uuid);
+                return player == null || services.getPlatformAdapter().teleportPlayer(player, destination(location));
+            });
+            if (!teleported) {
+                restorePosition(uuid, previous, original);
+                throw new IllegalArgumentException("Could not teleport player to jail; previous jail was preserved.");
+            }
+            try {
+                record = newRecord(PunishmentType.JAIL, ServerScope.SERVER, uuid, name, null, reason,
+                        actorUuid, actorName, expiresAtMs, Map.of(), source);
+                StoredJailState replacement = new StoredJailState(record.serverId(), uuid, name, reason, actorName,
+                        location, record.createdAtMs(), expiresAtMs, record.punishmentId());
+                synchronized (mutationLock) {
+                    superseded = repository.replaceJail(record, previous, replacement);
+                    for (PunishmentRecord old : superseded) cache.remove(old.punishmentId());
+                    cache.put(record);
+                }
+            } catch (RuntimeException | Error failure) {
+                try {
+                    restorePosition(uuid, repository.getJailState(uuid).orElse(null), original);
+                } catch (RuntimeException rollbackFailure) {
+                    failure.addSuppressed(rollbackFailure);
+                }
+                throw failure;
+            }
+            for (PunishmentRecord old : superseded) {
+                PunishmentRecord revoked = find(old.punishmentId()).orElseThrow();
+                auditRevoke(revoked, actorUuid, actorName, source);
+                publish(events -> events.punishmentRevoked(revoked));
+            }
+            auditCreate(record);
+            publish(events -> events.punishmentCreated(record));
+            return record;
+        }
+    }
+
+    public boolean restoreJail(String subjectUuid) {
+        return restoreJail(subjectUuid, () -> true);
+    }
+
+    public boolean restoreJail(String subjectUuid, java.util.function.BooleanSupplier enabled) {
+        if (!validUuid(subjectUuid)) return false;
+        String uuid = java.util.UUID.fromString(subjectUuid).toString();
+        synchronized (jailLock(uuid)) {
+            StoredJailState state = services.getStorageService().moderation().getJailState(uuid).orElse(null);
+            if (!enabled.getAsBoolean()) return false;
+            if (!validJail(state)) {
+                if (state != null) {
+                    if (services.getStorageService().moderation().clearJailState(state) && services.getLogger() != null) {
+                        services.getLogger().warn("[Paradigm] Cleared invalid jail association for {}.", uuid);
+                    }
+                } else if (activeFor(uuid, null).stream()
+                        .anyMatch(record -> record.type() == PunishmentType.JAIL && record.activeAt(System.currentTimeMillis()))
+                        && services.getLogger() != null) {
+                    services.getLogger().warn("[Paradigm] Active jail punishment for {} has no stored destination; restoration refused.", uuid);
+                }
+                return false;
+            }
+            return onServer(() -> {
+                if (!enabled.getAsBoolean()) return false;
+                IPlayer player = services.getPlatformAdapter().getPlayerByUuid(uuid);
+                return player != null && services.getPlatformAdapter().teleportPlayer(player, destination(state.location()));
+            });
+        }
+    }
+
+    private boolean validJail(StoredJailState state) {
+        if (state == null || state.location() == null || (state.expiresAtMs() != null && state.expiresAtMs() <= System.currentTimeMillis())) return false;
+        return state.punishmentId() == null || find(state.punishmentId()).filter(record -> record.type() == PunishmentType.JAIL
+                && state.uuid().equalsIgnoreCase(record.subjectUuid()) && record.activeAt(System.currentTimeMillis())
+                && record.appliesTo(services.getStorageService().context().networkId(), services.getStorageService().context().serverId())).isPresent();
+    }
+
+    private void restorePosition(String uuid, StoredJailState previous, PlayerDataStore.StoredLocation original) {
+        PlayerDataStore.StoredLocation restore = validJail(previous) ? destination(previous.location()) : original;
+        if (restore == null) return;
+        boolean restored = onServer(() -> {
+            IPlayer player = services.getPlatformAdapter().getPlayerByUuid(uuid);
+            return player == null || services.getPlatformAdapter().teleportPlayer(player, restore);
+        });
+        if (!restored) throw new IllegalStateException("Could not restore player's position after failed jail replacement.");
+    }
+
+    private <T> T onServer(java.util.function.Supplier<T> action) {
+        java.util.concurrent.CompletableFuture<T> result = new java.util.concurrent.CompletableFuture<>();
+        services.getPlatformAdapter().executeOnServerThread(() -> {
+            if (result.isDone()) return;
+            try {
+                result.complete(action.get());
+            } catch (RuntimeException | Error failure) {
+                result.completeExceptionally(failure);
+            }
+        });
+        try {
+            return result.get(15L, TimeUnit.SECONDS);
+        } catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            result.cancel(false);
+            throw new IllegalStateException("Interrupted while waiting for the server thread.", failure);
+        } catch (java.util.concurrent.TimeoutException failure) {
+            result.cancel(false);
+            throw new IllegalStateException("Server thread did not complete the jail operation.", failure);
+        } catch (java.util.concurrent.ExecutionException failure) {
+            if (failure.getCause() instanceof RuntimeException cause) throw cause;
+            if (failure.getCause() instanceof Error cause) throw cause;
+            throw new IllegalStateException("Server-thread jail operation failed.", failure);
+        }
+    }
+
+    private static PlayerDataStore.StoredLocation destination(StoredLocation location) {
+        return new PlayerDataStore.StoredLocation(location.worldId(), location.x(), location.y(), location.z(), location.yaw(), location.pitch());
+    }
+
+    private Object jailLock(String uuid) {
+        return jailLocks.computeIfAbsent(uuid.toLowerCase(java.util.Locale.ROOT), ignored -> new Object());
+    }
+
+    public List<PunishmentRecord> activeRecords(String uuid, PunishmentType type) {
+        return activeRecords(uuid, null, type);
+    }
+
+    public List<PunishmentRecord> activeRecords(String uuid, String address, PunishmentType type) {
+        String hash = address != null && !address.isBlank() ? IpAddressUtil.hash(IpAddressUtil.canonicalize(address)) : null;
+        return services.getStorageService().moderation().listActivePunishmentRecords(0L).stream()
+                .filter(record -> record.type() == type && ((uuid != null && uuid.equalsIgnoreCase(record.subjectUuid()))
+                        || (hash != null && hash.equals(record.subjectIpHash()))))
+                .sorted(java.util.Comparator.comparing(PunishmentRecord::punishmentId)).toList();
+    }
+
+    public boolean revokeOfType(String id, PunishmentType type, String actorUuid, String actorName, String reason, AuditSource source) {
+        PunishmentRecord record = find(id).orElse(null);
+        return record != null && record.type() == type && revoke(id, actorUuid, actorName, reason, source);
+    }
+
     public boolean revoke(String punishmentId, String actorUuid, String actorName, String reason) {
+        return revoke(punishmentId, actorUuid, actorName, reason, AuditSource.SYSTEM);
+    }
+
+    public boolean revoke(String punishmentId, String actorUuid, String actorName, String reason, AuditSource source) {
+        PunishmentRecord record = find(punishmentId).orElse(null);
+        if (record == null) return false;
+        if (record.type() == PunishmentType.JAIL) {
+            synchronized (jailLock(record.subjectUuid())) {
+                return revokeLocked(punishmentId, actorUuid, actorName, reason, source);
+            }
+        }
+        return revokeLocked(punishmentId, actorUuid, actorName, reason, source);
+    }
+
+    private boolean revokeLocked(String punishmentId, String actorUuid, String actorName, String reason, AuditSource source) {
         PunishmentRecord existing;
         boolean changed;
         long now = System.currentTimeMillis();
         synchronized (mutationLock) {
             Optional<PunishmentRecord> current = find(punishmentId);
-            if (current.isEmpty() || !current.get().activeAt(now)) return false;
+            if (current.isEmpty() || !current.get().activeAt(now)
+                    || !current.get().appliesTo(services.getStorageService().context().networkId(), services.getStorageService().context().serverId())) return false;
             existing = current.get();
             changed = services.getStorageService().moderation().revokePunishmentRecord(punishmentId, now, clean(actorUuid), clean(actorName), clean(reason));
             if (changed) {
@@ -97,8 +306,8 @@ public final class PunishmentService {
             }
         }
         if (changed) {
-            auditRevoke(existing, actorName);
-            PunishmentRecord revoked = existing.revoked(now, clean(actorUuid), clean(actorName), clean(reason));
+            auditRevoke(existing, actorUuid, actorName, source);
+            PunishmentRecord revoked = find(punishmentId).orElseThrow();
             publish(events -> events.punishmentRevoked(revoked));
         }
         return changed;
@@ -172,23 +381,36 @@ public final class PunishmentService {
 
     private void auditCreate(PunishmentRecord record) {
         if (audit == null) return;
-        audit.dashboard(new DashboardPrincipal(record.actorUuid(), record.actorName(), false), AuditActionType.MODERATION_ACTION,
-                AuditResult.SUCCESS, "Punishment created.", Map.of("punishmentId", record.punishmentId(), "type", record.type().name(),
-                        "targetUuid", safe(record.subjectUuid()), "targetName", safe(record.subjectName()), "scope", record.scope().name(),
-                        "ipSubject", record.subjectIpHash() != null ? IpAddressUtil.maskHash(record.subjectIpHash()) : ""));
+        audit.record(record.actorUuid(), record.actorName(), auditSource(record), AuditActionType.MODERATION_ACTION,
+                AuditResult.SUCCESS, "Punishment created.", auditDetails(record));
     }
 
-    private void auditRevoke(PunishmentRecord record, String actorName) {
+    private void auditRevoke(PunishmentRecord record, String actorUuid, String actorName, AuditSource source) {
         if (audit == null) return;
-        audit.dashboard(new DashboardPrincipal(null, actorName, false), AuditActionType.MODERATION_ACTION, AuditResult.SUCCESS,
-                "Punishment revoked.", Map.of("punishmentId", record.punishmentId(), "type", record.type().name(), "scope", record.scope().name()));
+        audit.record(actorUuid, actorName, source, AuditActionType.MODERATION_ACTION, AuditResult.SUCCESS,
+                "Punishment revoked.", auditDetails(record));
+    }
+
+    private static Map<String, String> auditDetails(PunishmentRecord record) {
+        return Map.of("punishmentId", record.punishmentId(), "type", record.type().name(),
+                "targetUuid", safe(record.subjectUuid()), "targetName", safe(record.subjectName()), "scope", record.scope().name(),
+                "ipSubject", record.subjectIpHash() != null ? IpAddressUtil.maskHash(record.subjectIpHash()) : "");
+    }
+
+    public static AuditSource auditSource(PunishmentRecord record) {
+        try {
+            return AuditSource.valueOf(record.metadata().getOrDefault("auditSource", "SYSTEM"));
+        } catch (IllegalArgumentException ignored) {
+            return AuditSource.SYSTEM;
+        }
     }
 
     private void publish(java.util.function.Consumer<eu.avalanche7.paradigm.core.ParadigmEvents> action) {
         if (services == null) return;
         try {
             action.accept(services.getParadigmEvents());
-        } catch (RuntimeException | LinkageError ignored) {
+        } catch (RuntimeException | LinkageError failure) {
+            if (services.getLogger() != null) services.getLogger().warn("[Paradigm] Could not publish punishment event.", failure);
         }
     }
 

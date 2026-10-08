@@ -10,7 +10,6 @@ import java.util.UUID;
 import eu.avalanche7.paradigm.configs.ModerationConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
-import eu.avalanche7.paradigm.storage.identity.ServerScope;
 import eu.avalanche7.paradigm.utils.DurationFormatter;
 
 public final class WarnEscalationService {
@@ -30,7 +29,7 @@ public final class WarnEscalationService {
 
     public record Rule(int warnings, long windowMs, long banMs, String window, String reason) {
         public String key() {
-            return warnings + "@" + window;
+            return warnings + "@" + (windowMs / 1000L) + "s";
         }
     }
 
@@ -109,7 +108,8 @@ public final class WarnEscalationService {
         }
 
         long now = System.currentTimeMillis();
-        Decision decision = decide(rules, warnings, escalations, now);
+        Map<String, Long> watermarks = services.getStorageService().moderation().escalationWatermarks(subjectUuid);
+        Decision decision = decide(rules, warnings, escalations, watermarks, now);
         if (decision == null) {
             return null;
         }
@@ -125,18 +125,15 @@ public final class WarnEscalationService {
             metadata.put(METADATA_TRIGGER, trigger.punishmentId());
         }
 
-        PunishmentRecord punishment = services.getPunishmentService().create(
-                PunishmentType.BAN,
-                ServerScope.GLOBAL,
-                subjectUuid,
-                subjectName,
-                null,
-                reason,
-                actorUuid,
-                actorName,
-                now + selected.banMs(),
-                metadata);
-        return new Result(punishment, selected, count);
+        Map<String, Long> expected = new LinkedHashMap<>();
+        decision.ruleKeys().forEach(key -> expected.put(key, watermarks.getOrDefault(key, 0L)));
+        long consumedAtMs = Math.max(now, warnings.stream().mapToLong(PunishmentRecord::createdAtMs).max().orElse(now));
+        var punishment = services.getPunishmentService().createEscalation(
+                UUID.fromString(subjectUuid).toString(), subjectName, reason, actorUuid, actorName,
+                now + selected.banMs(), metadata,
+                trigger != null ? PunishmentService.auditSource(trigger) : eu.avalanche7.paradigm.modules.audit.AuditSource.SYSTEM,
+                expected, consumedAtMs);
+        return punishment.map(record -> new Result(record, selected, count)).orElse(null);
     }
 
     public record Decision(Rule rule, int warningCount, List<String> ruleKeys) {
@@ -144,12 +141,17 @@ public final class WarnEscalationService {
 
     public static Decision decide(List<Rule> rules, List<PunishmentRecord> warnings,
                                   List<PunishmentRecord> escalations, long nowMs) {
+        return decide(rules, warnings, escalations, Map.of(), nowMs);
+    }
+
+    public static Decision decide(List<Rule> rules, List<PunishmentRecord> warnings,
+                                  List<PunishmentRecord> escalations, Map<String, Long> watermarks, long nowMs) {
         if (rules == null || rules.isEmpty() || warnings == null || warnings.isEmpty()) {
             return null;
         }
         Map<Rule, Integer> triggered = new LinkedHashMap<>();
         for (Rule rule : rules) {
-            long since = Math.max(nowMs - rule.windowMs(), lastEscalationMs(escalations, rule.key()));
+            long since = Math.max(nowMs - rule.windowMs(), Math.max(lastEscalationMs(escalations, rule.key()), watermarks.getOrDefault(rule.key(), 0L)));
             int count = 0;
             for (PunishmentRecord warning : warnings) {
                 if (warning != null && warning.createdAtMs() > since) {
@@ -200,13 +202,24 @@ public final class WarnEscalationService {
                 continue;
             }
             for (String entry : rules.split(",")) {
-                if (entry.trim().equalsIgnoreCase(ruleKey)) {
+                if (canonicalRuleKey(entry).equals(ruleKey)) {
                     latest = Math.max(latest, record.createdAtMs());
                     break;
                 }
             }
         }
         return latest;
+    }
+
+    private static String canonicalRuleKey(String value) {
+        String[] parts = value.trim().split("@", 2);
+        if (parts.length != 2) return "";
+        try {
+            long window = DurationParser.parseToMillis(parts[1]);
+            return window > 0L ? Integer.parseInt(parts[0]) + "@" + (window / 1000L) + "s" : "";
+        } catch (NumberFormatException ignored) {
+            return "";
+        }
     }
 
     private static boolean isValidUuid(String value) {

@@ -3,29 +3,51 @@ package eu.avalanche7.paradigm.platform;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
+import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 import cpw.mods.fml.relauncher.ReflectionHelper;
+import net.minecraft.block.Block;
+import net.minecraft.command.CommandBase;
 import net.minecraft.command.CommandHandler;
 import net.minecraft.command.ICommand;
 import net.minecraft.command.ICommandSender;
+import net.minecraft.enchantment.Enchantment;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.SharedMonsterAttributes;
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.inventory.IInventory;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.nbt.NBTTagList;
+import net.minecraft.network.play.server.S29PacketSoundEffect;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.util.AxisAlignedBB;
 import net.minecraft.util.ChatComponentTranslation;
 import net.minecraft.util.ChatStyle;
 import net.minecraft.util.IChatComponent;
+import net.minecraft.util.Vec3;
+import net.minecraft.world.Teleporter;
+import net.minecraft.world.WorldServer;
+import net.minecraft.world.WorldSettings.GameType;
+import net.minecraftforge.common.DimensionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import eu.avalanche7.paradigm.data.CustomCommand;
+import eu.avalanche7.paradigm.data.PlayerDataStore;
+import eu.avalanche7.paradigm.modules.commands.shared.CommandCatalog;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
@@ -34,6 +56,8 @@ import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.utils.CommandPriority;
+import eu.avalanche7.paradigm.utils.CommandToggleStore;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 import eu.avalanche7.paradigm.utils.MessageParser;
 import eu.avalanche7.paradigm.utils.Placeholders;
@@ -48,10 +72,15 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     private Placeholders placeholders;
     private PermissionsHandler permissionsHandler;
     private final ConcurrentLinkedQueue<Runnable> mainTasks = new ConcurrentLinkedQueue<>();
+    private final Set<String> priorityWarnings = new HashSet<>();
     private final Set<String> commandCollisions = new HashSet<>();
     private final Set<ForgeCommand> ownedCommands = new LinkedHashSet<>();
     private final Map<Object, Runnable> commandContributors = new LinkedHashMap<>();
+    private final Map<String, ICommand> displacedCommands = new LinkedHashMap<>();
     private Object registeringContributor;
+    private final Set<EntityPlayerMP> invulnerablePlayers = Collections.newSetFromMap(new WeakHashMap<>());
+    private final Set<UUID> invulnerablePlayerIds = new HashSet<>();
+    private CommandToggleStore commandToggles;
     private MinecraftServer server;
     private MessageParser parser;
 
@@ -68,11 +97,21 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
         this.permissionsHandler = permissionsHandler;
     }
 
+    public void setCommandToggleStore(CommandToggleStore commandToggles) {
+        this.commandToggles = commandToggles;
+    }
+
     public void setPlaceholders(Placeholders placeholders) {
         this.placeholders = placeholders;
     }
 
     public void tick() {
+        for (EntityPlayerMP player : invulnerablePlayers) {
+            if (!player.capabilities.disableDamage) {
+                player.capabilities.disableDamage = true;
+                player.sendPlayerAbilities();
+            }
+        }
         for (int i = 0; i < 100; i++) {
             Runnable task = mainTasks.poll();
             if (task == null)
@@ -87,8 +126,12 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
 
     public void clear() {
         mainTasks.clear();
+        invulnerablePlayers.clear();
+        invulnerablePlayerIds.clear();
         commandContributors.clear();
         ownedCommands.clear();
+        displacedCommands.clear();
+        priorityWarnings.clear();
         registeringContributor = null;
         server = null;
     }
@@ -221,7 +264,9 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public boolean hasVanillaPermissionLevel(IPlayer player, int level) {
-        return level >= 0 && nativePlayer(player).canCommandSenderUseCommand(level, "paradigm");
+        EntityPlayerMP handle = operationPlayer(player);
+        return handle != null && level >= 0
+                && (level == 0 || handle.canCommandSenderUseCommand(level, "paradigm"));
     }
 
     @Override
@@ -305,7 +350,12 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public void playSound(
             IPlayer player, String sound, String category, float volume, float pitch) {
-        throw unsupported("sound playback");
+        EntityPlayerMP handle = operationPlayer(player);
+        String nativeSound = soundName(sound);
+        if (handle == null || nativeSound == null || !Float.isFinite(volume) || volume < 0.0f
+                || !Float.isFinite(pitch) || pitch < 0.0f || pitch > 255.0f / 63.0f) return;
+        handle.playerNetServerHandler.sendPacket(new S29PacketSoundEffect(nativeSound,
+                handle.posX, handle.posY, handle.posZ, volume, pitch));
     }
 
     @Override
@@ -347,54 +397,186 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
         return new MinecraftCommandSource(nativePlayer(player));
     }
 
+    private static EntityPlayerMP operationPlayer(IPlayer player) {
+        return player != null && player.getOriginalPlayer() instanceof EntityPlayerMP handle ? handle : null;
+    }
+
+    private static GameType gameType(String mode) {
+        if (mode == null) {
+            return null;
+        }
+        return switch (mode.trim().toLowerCase(Locale.ROOT)) {
+            case "0", "s", "survival" -> GameType.SURVIVAL;
+            case "1", "c", "creative" -> GameType.CREATIVE;
+            case "2", "a", "adventure" -> GameType.ADVENTURE;
+            default -> null;
+        };
+    }
+
+    @Override
+    public boolean supportsGameMode(String mode) {
+        return gameType(mode) != null;
+    }
+
     @Override
     public boolean setGameMode(IPlayer player, String mode) {
-        throw unsupported("game mode changes");
+        EntityPlayerMP handle = operationPlayer(player);
+        GameType type = gameType(mode);
+        if (handle == null || type == null) {
+            return false;
+        }
+        handle.setGameType(type);
+        if (invulnerablePlayers.contains(handle)) {
+            handle.capabilities.disableDamage = true;
+            handle.sendPlayerAbilities();
+        }
+        return true;
+    }
+
+    private static boolean validSpeed(double speed) {
+        return Double.isFinite(speed) && speed >= 0.0;
     }
 
     @Override
     public boolean setMovementSpeed(IPlayer player, double speed) {
-        throw unsupported("movement speed");
+        EntityPlayerMP handle = operationPlayer(player);
+        if (handle == null || !validSpeed(speed)) {
+            return false;
+        }
+        var attribute = handle.getEntityAttribute(SharedMonsterAttributes.movementSpeed);
+        if (attribute == null) {
+            return false;
+        }
+        attribute.setBaseValue(speed);
+        return true;
     }
 
     @Override
     public boolean setTimeOfDay(long time) {
-        throw unsupported("world time");
+        if (server == null || server.worldServers == null) {
+            return false;
+        }
+        boolean changed = false;
+        for (WorldServer world : server.worldServers) {
+            if (world != null) {
+                world.setWorldTime(time);
+                changed = true;
+            }
+        }
+        return changed;
     }
 
     @Override
     public boolean setWeather(String weather) {
-        throw unsupported("weather");
+        if (server == null || server.worldServers == null || weather == null) {
+            return false;
+        }
+        String mode = weather.trim().toLowerCase(Locale.ROOT);
+        if (!Set.of("clear", "sun", "rain", "thunder").contains(mode)) {
+            return false;
+        }
+        boolean changed = false;
+        for (WorldServer world : server.worldServers) {
+            if (world != null) {
+                var info = world.getWorldInfo();
+                info.setRainTime(6000);
+                info.setThunderTime(6000);
+                info.setRaining(mode.equals("rain") || mode.equals("thunder"));
+                info.setThundering(mode.equals("thunder"));
+                changed = true;
+            }
+        }
+        return changed;
     }
 
     @Override
     public boolean healPlayer(IPlayer player) {
-        throw unsupported("healing");
+        EntityPlayerMP handle = operationPlayer(player);
+        if (handle == null) {
+            return false;
+        }
+        handle.setHealth(handle.getMaxHealth());
+        return true;
     }
 
     @Override
     public boolean feedPlayer(IPlayer player) {
-        throw unsupported("feeding");
+        EntityPlayerMP handle = operationPlayer(player);
+        if (handle == null) {
+            return false;
+        }
+        NBTTagCompound food = new NBTTagCompound();
+        food.setInteger("foodLevel", 20);
+        food.setFloat("foodSaturationLevel", 20.0f);
+        food.setFloat("foodExhaustionLevel", 0.0f);
+        food.setInteger("foodTickTimer", 0);
+        handle.getFoodStats().readNBT(food);
+        return true;
     }
 
     @Override
     public Boolean toggleFlight(IPlayer player) {
-        throw unsupported("flight");
+        EntityPlayerMP handle = operationPlayer(player);
+        if (handle == null) {
+            return null;
+        }
+        boolean enabled = !handle.capabilities.allowFlying;
+        handle.capabilities.allowFlying = enabled;
+        if (!enabled) {
+            handle.capabilities.isFlying = false;
+        }
+        handle.sendPlayerAbilities();
+        return enabled;
     }
 
     @Override
     public boolean setPlayerSpeed(IPlayer player, float walk, float fly, double base) {
-        throw unsupported("player speed");
+        EntityPlayerMP handle = operationPlayer(player);
+        if (handle == null || !validSpeed(walk) || !validSpeed(fly) || !validSpeed(base)
+                || !setMovementSpeed(player, base)) {
+            return false;
+        }
+        NBTTagCompound state = new NBTTagCompound();
+        handle.capabilities.writeCapabilitiesToNBT(state);
+        state.getCompoundTag("abilities").setFloat("walkSpeed", walk);
+        state.getCompoundTag("abilities").setFloat("flySpeed", fly);
+        handle.capabilities.readCapabilitiesFromNBT(state);
+        handle.sendPlayerAbilities();
+        return true;
     }
 
     @Override
     public boolean clearPlayerInventory(IPlayer player) {
-        throw unsupported("inventory clearing");
+        EntityPlayerMP handle = operationPlayer(player);
+        if (handle == null) {
+            return false;
+        }
+        handle.inventory.clearInventory(null, -1);
+        handle.inventory.markDirty();
+        handle.inventoryContainer.detectAndSendChanges();
+        handle.updateHeldItem();
+        if (handle.openContainer != handle.inventoryContainer) {
+            handle.openContainer.detectAndSendChanges();
+        }
+        return true;
     }
 
     @Override
     public boolean setPlayerInvulnerable(IPlayer player, boolean enabled) {
-        throw unsupported("invulnerability");
+        EntityPlayerMP handle = operationPlayer(player);
+        if (handle == null) {
+            return false;
+        }
+        if (enabled) {
+            invulnerablePlayers.add(handle);
+            invulnerablePlayerIds.add(handle.getUniqueID());
+        } else {
+            invulnerablePlayers.remove(handle);
+            invulnerablePlayerIds.remove(handle.getUniqueID());
+        }
+        handle.capabilities.disableDamage = enabled || handle.capabilities.isCreativeMode;
+        handle.sendPlayerAbilities();
+        return true;
     }
 
     @Override
@@ -404,27 +586,212 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public List<InventoryItem> inspectPlayerInventory(IPlayer player, boolean enderChest) {
-        throw unsupported("inventory inspection");
+        EntityPlayerMP handle = operationPlayer(player);
+        if (handle == null) {
+            return List.of();
+        }
+        IInventory inventory = enderChest ? handle.getInventoryEnderChest() : handle.inventory;
+        List<InventoryItem> items = new ArrayList<>();
+        for (int slot = 0; slot < inventory.getSizeInventory(); slot++) {
+            ItemStack stack = inventory.getStackInSlot(slot);
+            if (!occupied(stack)) {
+                continue;
+            }
+            String name;
+            try {
+                name = stack.getDisplayName();
+            } catch (RuntimeException failure) {
+                LOGGER.warn("Cannot read inventory display name for {} slot {}", handle.getCommandSenderName(), slot, failure);
+                name = String.valueOf(Item.itemRegistry.getNameForObject(stack.getItem()));
+            }
+            items.add(new InventoryItem(slot, stack.stackSize, name));
+        }
+        return List.copyOf(items);
     }
 
     @Override
     public int repairPlayerItems(IPlayer player, boolean all) {
-        throw unsupported("item repair");
+        EntityPlayerMP handle = operationPlayer(player);
+        if (handle == null) {
+            return 0;
+        }
+        int changed = 0;
+        if (all) {
+            for (int slot = 0; slot < handle.inventory.getSizeInventory(); slot++) {
+                if (repair(handle.inventory.getStackInSlot(slot))) {
+                    changed++;
+                }
+            }
+        } else if (repair(handle.inventory.getCurrentItem())) {
+            changed = 1;
+        }
+        if (changed > 0) {
+            synchronizeInventory(handle);
+        }
+        return changed;
     }
 
     @Override
     public boolean enchantMainHand(IPlayer player, String enchantment, int level) {
-        throw unsupported("enchantments");
+        EntityPlayerMP handle = operationPlayer(player);
+        if (handle == null || enchantment == null || level < 1 || level > 255) {
+            return false;
+        }
+        String id = enchantment.trim().toLowerCase(Locale.ROOT);
+        if (!id.contains(":")) {
+            id = "minecraft:" + id;
+        }
+        Enchantment effect = enchantments().get(id);
+        ItemStack stack = handle.inventory.getCurrentItem();
+        if (effect == null || effect.effectId < 0 || effect.effectId > Short.MAX_VALUE
+                || !occupied(stack) || !effect.canApply(stack)) {
+            return false;
+        }
+        NBTTagList tags = stack.getEnchantmentTagList();
+        if (tags == null) {
+            tags = new NBTTagList();
+            stack.setTagInfo("ench", tags);
+        }
+        for (int i = 0; i < tags.tagCount(); i++) {
+            NBTTagCompound tag = tags.getCompoundTagAt(i);
+            if (tag.getShort("id") == effect.effectId) {
+                tag.setShort("lvl", (short) level);
+                synchronizeInventory(handle);
+                return true;
+            }
+        }
+        NBTTagCompound tag = new NBTTagCompound();
+        tag.setShort("id", (short) effect.effectId);
+        tag.setShort("lvl", (short) level);
+        tags.appendTag(tag);
+        stack.setTagInfo("ench", tags);
+        synchronizeInventory(handle);
+        return true;
+    }
+
+    @Override
+    public List<String> getAvailableEnchantmentIds() {
+        return List.copyOf(enchantments().keySet());
+    }
+
+    private static Map<String, Enchantment> enchantments() {
+        Map<String, Enchantment> result = new LinkedHashMap<>();
+        Set<String> ambiguous = new HashSet<>();
+        for (Enchantment effect : Enchantment.enchantmentsList) {
+            if (effect == null || effect.effectId < 0 || effect.effectId > Short.MAX_VALUE) {
+                continue;
+            }
+            result.put("enchantment:" + effect.effectId, effect);
+            String name = effect.getName();
+            if (name != null && !name.isBlank()) {
+                String key = "enchantment:" + name.replaceFirst("^enchantment\\.", "").toLowerCase(Locale.ROOT);
+                if (key.matches("enchantment:[a-z_][a-z0-9_.:/-]*")) {
+                    Enchantment existing = result.putIfAbsent(key, effect);
+                    if (existing != null && existing != effect) {
+                        ambiguous.add(key);
+                    }
+                }
+            }
+        }
+        ambiguous.forEach(result::remove);
+        Map<String, Enchantment> vanilla = new LinkedHashMap<>();
+        vanilla.put("minecraft:protection", Enchantment.protection);
+        vanilla.put("minecraft:fire_protection", Enchantment.fireProtection);
+        vanilla.put("minecraft:feather_falling", Enchantment.featherFalling);
+        vanilla.put("minecraft:blast_protection", Enchantment.blastProtection);
+        vanilla.put("minecraft:projectile_protection", Enchantment.projectileProtection);
+        vanilla.put("minecraft:respiration", Enchantment.respiration);
+        vanilla.put("minecraft:aqua_affinity", Enchantment.aquaAffinity);
+        vanilla.put("minecraft:thorns", Enchantment.thorns);
+        vanilla.put("minecraft:sharpness", Enchantment.sharpness);
+        vanilla.put("minecraft:smite", Enchantment.smite);
+        vanilla.put("minecraft:bane_of_arthropods", Enchantment.baneOfArthropods);
+        vanilla.put("minecraft:knockback", Enchantment.knockback);
+        vanilla.put("minecraft:fire_aspect", Enchantment.fireAspect);
+        vanilla.put("minecraft:looting", Enchantment.looting);
+        vanilla.put("minecraft:efficiency", Enchantment.efficiency);
+        vanilla.put("minecraft:silk_touch", Enchantment.silkTouch);
+        vanilla.put("minecraft:unbreaking", Enchantment.unbreaking);
+        vanilla.put("minecraft:fortune", Enchantment.fortune);
+        vanilla.put("minecraft:power", Enchantment.power);
+        vanilla.put("minecraft:punch", Enchantment.punch);
+        vanilla.put("minecraft:flame", Enchantment.flame);
+        vanilla.put("minecraft:infinity", Enchantment.infinity);
+        vanilla.put("minecraft:luck_of_the_sea", Enchantment.field_151370_z);
+        vanilla.put("minecraft:lure", Enchantment.field_151369_A);
+        vanilla.forEach((id, effect) -> {
+            if (effect != null && result.containsValue(effect)) {
+                result.put(id, effect);
+            }
+        });
+        return result;
+    }
+
+    private static boolean occupied(ItemStack stack) {
+        return stack != null && stack.getItem() != null && stack.stackSize > 0;
+    }
+
+    private static boolean repair(ItemStack stack) {
+        if (!occupied(stack) || !stack.isItemStackDamageable() || !stack.isItemDamaged()) {
+            return false;
+        }
+        stack.setItemDamage(0);
+        return !stack.isItemDamaged();
+    }
+
+    private static void synchronizeInventory(EntityPlayerMP player) {
+        player.inventory.markDirty();
+        player.inventoryContainer.detectAndSendChanges();
+        player.updateHeldItem();
+        if (player.openContainer != player.inventoryContainer) {
+            player.openContainer.detectAndSendChanges();
+        }
+    }
+
+    private static AxisAlignedBB playerBounds(double x, double y, double z) {
+        return AxisAlignedBB.getBoundingBox(x - 0.3, y, z - 0.3, x + 0.3, y + 1.8, z + 0.3);
     }
 
     @Override
     public Integer getHighestBlockY(IPlayer player) {
-        throw unsupported("highest block lookup");
+        EntityPlayerMP handle = operationPlayer(player);
+        return handle != null && handle.worldObj instanceof WorldServer world
+                ? safeSurface(world, handle.posX, handle.posZ).map(y -> y.intValue() - 1).orElse(null)
+                : null;
     }
 
     @Override
     public boolean jumpPlayerForward(IPlayer player, int distance) {
-        throw unsupported("jump");
+        EntityPlayerMP handle = operationPlayer(player);
+        if (handle == null || !(handle.worldObj instanceof WorldServer world) || distance < 1 || distance > 128) {
+            return false;
+        }
+        Vec3 look = handle.getLook(1.0f);
+        double x = handle.posX + look.xCoord * distance;
+        double y = handle.posY + look.yCoord * distance;
+        double z = handle.posZ + look.zCoord * distance;
+        if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z)
+                || Math.abs(x) >= 29999872 || Math.abs(z) >= 29999872) {
+            return false;
+        }
+        AxisAlignedBB previous = playerBounds(handle.posX, handle.posY, handle.posZ);
+        for (int step = 1; step <= distance * 2; step++) {
+            double progress = step * 0.5;
+            AxisAlignedBB next = playerBounds(handle.posX + look.xCoord * progress,
+                    handle.posY + look.yCoord * progress, handle.posZ + look.zCoord * progress);
+            AxisAlignedBB swept = AxisAlignedBB.getBoundingBox(
+                    Math.min(previous.minX, next.minX), Math.min(previous.minY, next.minY), Math.min(previous.minZ, next.minZ),
+                    Math.max(previous.maxX, next.maxX), Math.max(previous.maxY, next.maxY), Math.max(previous.maxZ, next.maxZ));
+            if (swept.minY < 0 || swept.maxY > Math.min(world.getHeight(), world.getActualHeight())
+                    || !world.checkChunksExist((int) Math.floor(swept.minX), (int) Math.floor(swept.minY), (int) Math.floor(swept.minZ),
+                            (int) Math.floor(swept.maxX), (int) Math.floor(swept.maxY), (int) Math.floor(swept.maxZ))
+                    || world.isAnyLiquid(swept) || !world.func_147461_a(swept).isEmpty()) {
+                return false;
+            }
+            previous = next;
+        }
+        return teleportPlayer(player, new PlayerDataStore.StoredLocation(player.getWorldId(), x, y, z,
+                handle.rotationYaw, handle.rotationPitch));
     }
 
     @Override
@@ -449,9 +816,9 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public void sendSuccess(ICommandSource source, IComponent message, boolean toOps) {
-        if (toOps)
-            throw unsupported("operator command notification");
-        ((ICommandSender) source.getOriginalSource()).addChatMessage(nativeText(message));
+        ICommandSender sender = (ICommandSender) source.getOriginalSource();
+        sender.addChatMessage(nativeText(message));
+        if (toOps) CommandBase.func_152374_a(sender, COMMAND_FEEDBACK, 1, "%s", nativeText(message).createCopy());
     }
 
     @Override
@@ -461,7 +828,36 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public void teleportPlayer(IPlayer player, double x, double y, double z) {
-        throw unsupported("teleportation");
+        EntityPlayerMP handle = operationPlayer(player);
+        if (handle != null) {
+            teleportPlayer(player, new PlayerDataStore.StoredLocation(String.valueOf(handle.dimension),
+                    x, y, z, handle.rotationYaw, handle.rotationPitch));
+        }
+    }
+
+    @Override
+    public boolean teleportPlayer(IPlayer player, PlayerDataStore.StoredLocation location) {
+        return teleport(server, operationPlayer(player), location);
+    }
+
+    @Override
+    public Optional<Double> findSafeRtpY(IPlayer player, double x, double z) {
+        EntityPlayerMP handle = operationPlayer(player);
+        return handle != null && handle.worldObj instanceof WorldServer world
+                ? safeSurface(world, x, z) : Optional.empty();
+    }
+
+    public void playerRespawned(EntityPlayerMP replacement) {
+        invulnerablePlayers.removeIf(previous ->
+                replacement.getUniqueID().equals(previous.getUniqueID()));
+        if (invulnerablePlayerIds.contains(replacement.getUniqueID())) {
+            setPlayerInvulnerable(new MinecraftPlayer(replacement), true);
+        }
+    }
+
+    public void playerDisconnected(EntityPlayerMP player) {
+        invulnerablePlayers.remove(player);
+        invulnerablePlayerIds.remove(player.getUniqueID());
     }
 
     @Override
@@ -568,7 +964,8 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
             return false;
         }
         nativePlayer.playerNetServerHandler.kickPlayerFromServer(
-                reason != null ? reason.getRawText() : "Disconnected");
+                reason instanceof MinecraftComponent component ? component.toLegacyText()
+                        : reason != null ? reason.getRawText() : "Disconnected");
         return true;
     }
 
@@ -622,6 +1019,10 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
             throw new IllegalArgumentException("Expected a Forge 1.7.10 literal command root");
         }
         String name = root.literalName();
+        CommandCatalog.Entry entry = CommandCatalog.findByRoot(name);
+        if (commandToggles != null && entry != null && !commandToggles.isEnabled(entry.id())) {
+            return;
+        }
         ICommand occupied = (ICommand) manager.getCommands().get(name);
         Object contributor = registeringContributor == null ? this : registeringContributor;
         if (occupied instanceof ForgeCommand own && own.ownedBy(this)) {
@@ -630,11 +1031,20 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
             return;
         }
         if (occupied != null) {
-            if (commandCollisions.add(name)) {
-                LOGGER.warn("Paradigm command /{} was not registered: already owned by {}",
-                        name, occupied.getClass().getName());
+            if (commandToggles != null && CommandPriority.shouldOwnRoot(name)) {
+                displacedCommands.put(name, occupied);
+                nativeCommandSet(manager).remove(occupied);
+                if (priorityWarnings.add(name)) {
+                    LOGGER.warn("Paradigm command /{} takes priority over {} because forceCommandPriorityEnable is enabled",
+                            name, occupied.getClass().getName());
+                }
+            } else {
+                if (commandCollisions.add(name)) {
+                    LOGGER.warn("Paradigm command /{} was not registered: already owned by {}",
+                            name, occupied.getClass().getName());
+                }
+                return;
             }
-            return;
         }
         ForgeCommand command = new ForgeCommand(root, this, contributor);
         manager.registerCommand(command);
@@ -690,11 +1100,20 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
         return true;
     }
 
-    private static void removeNativeCommand(CommandHandler manager, String root, ForgeCommand command) {
-        Set<?> commands = ReflectionHelper.getPrivateValue(CommandHandler.class, manager,
+    @SuppressWarnings("unchecked")
+    private static Set<ICommand> nativeCommandSet(CommandHandler manager) {
+        return ReflectionHelper.getPrivateValue(CommandHandler.class, manager,
                 "commandSet", "field_71561_b", "c");
-        manager.getCommands().remove(root, command);
-        commands.remove(command);
+    }
+
+    private void removeNativeCommand(CommandHandler manager, String root, ForgeCommand command) {
+        boolean removed = manager.getCommands().remove(root, command);
+        nativeCommandSet(manager).remove(command);
+        ICommand displaced = displacedCommands.remove(root);
+        if (removed && displaced != null) {
+            manager.getCommands().put(root, displaced);
+            nativeCommandSet(manager).add(displaced);
+        }
     }
 
     @Override
@@ -711,6 +1130,155 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public boolean isFirstJoin(IPlayer player) {
-        throw unsupported("first-join detection");
+        EntityPlayerMP handle = operationPlayer(player);
+        return handle != null && MinecraftEventSystem.firstJoin(handle);
+    }
+    @Override
+    public boolean supportsTitles() {
+        return false;
+    }
+
+    @Override
+    public boolean supportsPersistentBossBar() {
+        return false;
+    }
+
+    static String soundName(String id) {
+        if (id == null || id.isBlank() || id.length() > 256) return null;
+        String name = id.toLowerCase(Locale.ROOT);
+        if (!name.matches("[a-z0-9_.-]+(:[a-z0-9_./-]+)?")) return null;
+        return switch (name) {
+            case "minecraft:entity.experience_orb.pickup" -> "random.orb";
+            case "minecraft:block.note_block.pling" -> "note.pling";
+            default -> name.startsWith("minecraft:") ? name.substring(10) : name;
+        };
+    }
+
+    private static final ICommand COMMAND_FEEDBACK = new CommandBase() {
+        @Override
+        public String getCommandName() {
+            return "paradigm";
+        }
+
+        @Override
+        public String getCommandUsage(ICommandSender sender) {
+            return "";
+        }
+
+        @Override
+        public int getRequiredPermissionLevel() {
+            return 0;
+        }
+
+        @Override
+        public void processCommand(ICommandSender sender, String[] arguments) {
+            throw new UnsupportedOperationException("Feedback descriptor is not an executable command");
+        }
+    };
+
+    private static WorldServer resolve(MinecraftServer server, String worldId) {
+        if (server == null || server.worldServers == null || worldId == null) {
+            return null;
+        }
+        final int id;
+        try {
+            id = Integer.parseInt(worldId);
+        } catch (NumberFormatException invalid) {
+            return null;
+        }
+        for (WorldServer world : server.worldServers) {
+            if (world != null && world.provider.dimensionId == id) {
+                return world;
+            }
+        }
+        if (!DimensionManager.isDimensionRegistered(id)) {
+            return null;
+        }
+        WorldServer world = server.worldServerForDimension(id);
+        return world != null && world.provider.dimensionId == id ? world : null;
+    }
+
+    private static boolean teleport(MinecraftServer server, EntityPlayerMP player,
+            PlayerDataStore.StoredLocation location) {
+        if (player == null || location == null || player.playerNetServerHandler == null
+                || !player.isEntityAlive() || !validHorizontal(location.getX(), location.getZ())
+                || !Double.isFinite(location.getY()) || !Float.isFinite(location.getYaw())
+                || !Float.isFinite(location.getPitch())) {
+            return false;
+        }
+        WorldServer destination = resolve(server, location.getWorldId());
+        if (destination == null || location.getY() < 0 || location.getY() >= destination.getHeight()) {
+            return false;
+        }
+        destination.getChunkFromChunkCoords((int) Math.floor(location.getX()) >> 4,
+                (int) Math.floor(location.getZ()) >> 4);
+        if (player.ridingEntity != null) {
+            player.mountEntity(null);
+        }
+        if (player.dimension != destination.provider.dimensionId) {
+            int previousDimension = player.dimension;
+            player.setLocationAndAngles(location.getX(), location.getY(), location.getZ(),
+                    location.getYaw(), location.getPitch());
+            server.getConfigurationManager().transferPlayerToDimension(player,
+                    destination.provider.dimensionId, new DestinationTeleporter(destination, location));
+            if (previousDimension == 1) {
+                destination.spawnEntityInWorld(player);
+                destination.updateEntityWithOptionalForce(player, false);
+            }
+        }
+        player.motionX = player.motionY = player.motionZ = 0;
+        player.fallDistance = 0;
+        player.playerNetServerHandler.setPlayerLocation(location.getX(), location.getY(), location.getZ(),
+                location.getYaw(), location.getPitch());
+        return true;
+    }
+
+    private static Optional<Double> safeSurface(WorldServer world, double x, double z) {
+        if (world == null || !validHorizontal(x, z) || world.provider.hasNoSky) {
+            return Optional.empty();
+        }
+        int blockX = (int) Math.floor(x);
+        int blockZ = (int) Math.floor(z);
+        world.getChunkFromChunkCoords(blockX >> 4, blockZ >> 4);
+        int height = Math.min(world.getHeight(), world.getActualHeight());
+        for (int y = height - 1; y >= 0; y--) {
+            Block ground = world.getBlock(blockX, y, blockZ);
+            if (world.isAirBlock(blockX, y, blockZ)) {
+                continue;
+            }
+            if (y + 2 >= height || ground.getMaterial().isLiquid() || !ground.isNormalCube(world, blockX, y, blockZ)
+                    || !world.isAirBlock(blockX, y + 1, blockZ)
+                    || !world.isAirBlock(blockX, y + 2, blockZ)) {
+                return Optional.empty();
+            }
+            AxisAlignedBB clearance = AxisAlignedBB.getBoundingBox(x - 0.3, y + 1, z - 0.3,
+                    x + 0.3, y + 3, z + 0.3);
+            if (world.isAnyLiquid(clearance)
+                    || !world.func_147461_a(clearance).isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.of((double) y + 1);
+        }
+        return Optional.empty();
+    }
+
+    private static boolean validHorizontal(double x, double z) {
+        return Double.isFinite(x) && Double.isFinite(z)
+                && Math.abs(x) < 29999872 && Math.abs(z) < 29999872;
+    }
+
+    private static final class DestinationTeleporter extends Teleporter {
+        private final PlayerDataStore.StoredLocation location;
+
+        private DestinationTeleporter(WorldServer world, PlayerDataStore.StoredLocation location) {
+            super(world);
+            this.location = location;
+        }
+
+        @Override
+        public void placeInPortal(Entity entity, double x, double y, double z, float yaw) {
+            entity.setLocationAndAngles(location.getX(), location.getY(), location.getZ(),
+                    location.getYaw(), location.getPitch());
+        }
     }
 }
