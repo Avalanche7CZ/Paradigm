@@ -3,6 +3,7 @@ package eu.avalanche7.paradigm.platform;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -45,8 +46,11 @@ import net.minecraftforge.common.DimensionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import eu.avalanche7.paradigm.core.ParadigmModule;
+import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
+import eu.avalanche7.paradigm.modules.commands.Help;
 import eu.avalanche7.paradigm.modules.commands.shared.CommandCatalog;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
@@ -157,6 +161,26 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
         } else {
             refreshRegisteredCommandContributors();
         }
+    }
+
+    public Set<String> availableCommandIds(Collection<ParadigmModule> modules) {
+        Set<String> ids = new LinkedHashSet<>();
+        ids.add("paradigm.command");
+        for (ParadigmModule module : modules) {
+            if (module instanceof Help) ids.add("paradigm.help");
+            for (CommandCatalog.Entry entry : CommandCatalog.entriesForModule(module)) {
+                if ((entry.id().equals("gmsp") || entry.id().equals("spectator"))
+                        && !supportsGameMode("spectator")) continue;
+                ids.add(entry.id());
+            }
+        }
+        return Set.copyOf(ids);
+    }
+
+    public void registerModuleCommands(ParadigmModule module, Services services) {
+        if (!module.isEnabled(services)) return;
+        if (module instanceof Help && !services.getCommandToggleStore().isEnabled("paradigm.help")) return;
+        module.registerCommands(getCommandDispatcher(), null, services);
     }
 
     private void registerContributor(Object contributor, Runnable registration) {

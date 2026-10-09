@@ -141,7 +141,8 @@ public class Reload implements ParadigmModule {
                 .literal("paradigm")
                 .then(reload)
                 .then(buildStorageBranch(platform, services))
-                .then(buildCommandToggleBranch(platform, services, id -> true));
+                .then(buildCommandToggleBranch(platform, services, id ->
+                        !(id.equals("gmsp") || id.equals("spectator")) || platform.supportsGameMode("spectator")));
 
         LocalDashboardModule dashboard = LocalDashboardModule.current();
         if (dashboard != null) {
