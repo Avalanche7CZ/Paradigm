@@ -389,7 +389,7 @@ public class Restart implements ParadigmModule {
             if (config.timerUseChat.value) {
                 platform.sendSystemMessage(player, services.getMessageParser().parseMessage(chatMessage, player));
             }
-            if (config.titleEnabled.value && (platform.supportsTitles() || !config.timerUseChat.value)) {
+            if (config.titleEnabled.value && (platform.supportsTitles(player) || !config.timerUseChat.value)) {
                 platform.sendTitle(player, services.getMessageParser().parseMessage(titleMessage, player), platform.createEmptyComponent());
             }
 

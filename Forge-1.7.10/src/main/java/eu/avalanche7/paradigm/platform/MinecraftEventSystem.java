@@ -21,11 +21,14 @@ import net.minecraft.util.IChatComponent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.CommandEvent;
 import net.minecraftforge.event.ServerChatEvent;
+import net.minecraftforge.event.entity.EntityJoinWorldEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
+import net.minecraftforge.event.world.WorldEvent;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.platform.visual.LegacyVisualController;
 
 public final class MinecraftEventSystem implements IEventSystem {
     private static volatile MinecraftEventSystem active;
@@ -55,6 +58,18 @@ public final class MinecraftEventSystem implements IEventSystem {
         leaveListeners.clear();
         deathListeners.clear();
         commandListeners.clear();
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public void entityJoined(EntityJoinWorldEvent event) {
+        LegacyVisualController visuals = LegacyVisualController.current();
+        if (visuals != null && !event.world.isRemote) visuals.bossbars().entityJoined(event.entity);
+    }
+
+    @SubscribeEvent
+    public void worldUnloaded(WorldEvent.Unload event) {
+        LegacyVisualController visuals = LegacyVisualController.current();
+        if (visuals != null && !event.world.isRemote) visuals.bossbars().worldUnloaded(event.world);
     }
 
     @Override

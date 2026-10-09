@@ -36,6 +36,7 @@ public interface IPlatformAdapter {
     void broadcastChatMessage(IComponent message);
     void broadcastSystemMessage(IComponent message, String header, String footer, @Nullable IPlayer player);
     default boolean supportsTitles() { return true; }
+    default boolean supportsTitles(IPlayer player) { return supportsTitles(); }
     default boolean supportsPersistentBossBar() { return true; }
     void sendTitle(IPlayer player, IComponent title, IComponent subtitle);
     void sendSubtitle(IPlayer player, IComponent subtitle);

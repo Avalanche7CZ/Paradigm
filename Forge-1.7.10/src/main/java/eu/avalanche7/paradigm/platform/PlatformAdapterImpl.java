@@ -343,12 +343,12 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public void sendTitle(IPlayer player, IComponent title, IComponent subtitle) {
-        executeOnServerThread(() -> { if (visuals != null) visuals.title(operationPlayer(player), nativeText(title), nativeText(subtitle)); });
+        executeOnServerThread(() -> { if (visuals != null) visuals.title(operationPlayer(player), title != null ? nativeText(title) : null, subtitle != null ? nativeText(subtitle) : null); });
     }
 
     @Override
     public void sendSubtitle(IPlayer player, IComponent subtitle) {
-        executeOnServerThread(() -> { if (visuals != null) visuals.feedback(operationPlayer(player), nativeText(subtitle)); });
+        executeOnServerThread(() -> { if (visuals != null) visuals.subtitle(operationPlayer(player), subtitle != null ? nativeText(subtitle) : null); });
     }
 
     @Override
@@ -360,7 +360,7 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     public void sendBossBar(List<IPlayer> players, IComponent message, int duration,
             BossBarColor color, float progress) {
         executeOnServerThread(() -> {
-            if (visuals != null) for (IPlayer player : players) visuals.feedback(operationPlayer(player), nativeText(message));
+            if (visuals != null) for (IPlayer player : players) visuals.timedBossbar(operationPlayer(player), nativeText(message), progress, duration);
         });
     }
 
@@ -378,7 +378,7 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public void createOrUpdateRestartBossBar(
             IComponent message, BossBarColor color, float progress) {
-        executeOnServerThread(() -> { if (visuals != null) visuals.restart(nativeText(message)); });
+        executeOnServerThread(() -> { if (visuals != null) visuals.restart(nativeText(message), progress); });
     }
 
     @Override
@@ -1283,8 +1283,13 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public boolean supportsTitles(IPlayer player) {
+        return visuals != null && visuals.supportsTitles(operationPlayer(player));
+    }
+
+    @Override
     public boolean supportsPersistentBossBar() {
-        return false;
+        return true;
     }
 
     static String soundName(String id) {

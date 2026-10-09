@@ -313,7 +313,7 @@ public class Mentions implements ParadigmModule {
             platform.sendSystemMessage(targetPlayer, finalChatMessage);
         }
 
-        if (config.enableTitleNotification.value && platform.supportsTitles()) {
+        if (config.enableTitleNotification.value && platform.supportsTitles(targetPlayer)) {
             IComponent parsedTitleMessage = services.getMessageParser().parseMessage(titleMessage, targetPlayer);
             IComponent parsedSubtitleMessage = platform.createEmptyComponent();
             boolean willShowSubtitle = config.enableSubtitleNotification.value && contentMessage != null && !contentMessage.isEmpty();
