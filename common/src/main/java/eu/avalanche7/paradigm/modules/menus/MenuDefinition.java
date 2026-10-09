@@ -104,15 +104,18 @@ public final class MenuDefinition {
         if (openConditions == null) {
             openConditions = new ArrayList<>();
         }
+        openConditions = new ArrayList<>(openConditions);
         openConditions.removeIf(java.util.Objects::isNull);
         if (onClose == null) {
             onClose = new ArrayList<>();
         }
+        onClose = new ArrayList<>(onClose);
         onClose.removeIf(java.util.Objects::isNull);
         PlayerInputService.validateActions(onClose, "onClose", 0);
         if (slots == null) {
             slots = new ArrayList<>();
         }
+        slots = new ArrayList<>(slots);
         slots.removeIf(java.util.Objects::isNull);
         if (filler != null) {
             filler.normalize();

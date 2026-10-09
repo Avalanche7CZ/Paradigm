@@ -70,6 +70,22 @@ public interface IPlatformAdapter {
         return null;
     }
 
+    default boolean hasRegisteredCommandRoot(String rootLiteral) {
+        return CommandPriority.hasRootLiteral(getCommandDispatcher(), rootLiteral);
+    }
+
+    default long getLogEventTime(Object event) {
+        return ((org.apache.logging.log4j.core.LogEvent) event).getTimeMillis();
+    }
+
+    default void registerCommandsForContributor(Object contributor, Runnable registration) {
+        registration.run();
+    }
+
+    default boolean unregisterCommandRoot(String rootLiteral, Object contributor) {
+        return unregisterCommandRoot(rootLiteral);
+    }
+
     default boolean ownsRegisteredCommandRoot(String rootLiteral) {
         return false;
     }

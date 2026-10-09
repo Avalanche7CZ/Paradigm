@@ -82,7 +82,11 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     private final Set<UUID> invulnerablePlayerIds = new HashSet<>();
     private CommandToggleStore commandToggles;
     private MinecraftServer server;
+    private volatile Thread serverThread;
     private MessageParser parser;
+    private final MinecraftMenuPlatform menuPlatform = new MinecraftMenuPlatform(this);
+    private final MinecraftHologramPlatform hologramPlatform = new MinecraftHologramPlatform(this);
+    private eu.avalanche7.paradigm.platform.visual.LegacyVisualController visuals;
 
     public PlatformAdapterImpl(PermissionsHandler permissionsHandler, Placeholders placeholders,
             TaskScheduler scheduler, DebugLogger debugLogger, ForgeConfig config) {
@@ -106,6 +110,8 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     public void tick() {
+        if (visuals != null) visuals.tick();
+        hologramPlatform.tick();
         for (EntityPlayerMP player : invulnerablePlayers) {
             if (!player.capabilities.disableDamage) {
                 player.capabilities.disableDamage = true;
@@ -125,6 +131,10 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     public void clear() {
+        menuPlatform.stopped();
+        hologramPlatform.clear();
+        if (visuals != null) visuals.clear();
+        visuals = null;
         mainTasks.clear();
         invulnerablePlayers.clear();
         invulnerablePlayerIds.clear();
@@ -134,6 +144,7 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
         priorityWarnings.clear();
         registeringContributor = null;
         server = null;
+        serverThread = null;
     }
 
     public void registerCommandContributor(Object contributor, Runnable registration) {
@@ -191,7 +202,14 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public void setMinecraftServer(Object value) {
+        if (server == value && visuals != null) return;
         server = (MinecraftServer) value;
+        serverThread = value != null ? Thread.currentThread() : null;
+        if (server != null) {
+            visuals = new eu.avalanche7.paradigm.platform.visual.LegacyVisualController(server);
+            visuals.bind();
+            hologramPlatform.bind();
+        }
     }
 
     @Override
@@ -301,50 +319,52 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public void sendTitle(IPlayer player, IComponent title, IComponent subtitle) {
-        throw unsupported("titles");
+        executeOnServerThread(() -> { if (visuals != null) visuals.title(operationPlayer(player), nativeText(title), nativeText(subtitle)); });
     }
 
     @Override
     public void sendSubtitle(IPlayer player, IComponent subtitle) {
-        throw unsupported("subtitles");
+        executeOnServerThread(() -> { if (visuals != null) visuals.feedback(operationPlayer(player), nativeText(subtitle)); });
     }
 
     @Override
     public void sendActionBar(IPlayer player, IComponent message) {
-        throw unsupported("action bars");
+        executeOnServerThread(() -> { if (visuals != null) visuals.actionbar(operationPlayer(player), nativeText(message)); });
     }
 
     @Override
     public void sendBossBar(List<IPlayer> players, IComponent message, int duration,
             BossBarColor color, float progress) {
-        throw unsupported("boss bars");
+        executeOnServerThread(() -> {
+            if (visuals != null) for (IPlayer player : players) visuals.feedback(operationPlayer(player), nativeText(message));
+        });
     }
 
     @Override
     public void showPersistentBossBar(
             IPlayer player, IComponent message, BossBarColor color, BossBarOverlay overlay) {
-        throw unsupported("boss bars");
+        executeOnServerThread(() -> { if (visuals != null) visuals.persistent(operationPlayer(player), nativeText(message)); });
     }
 
     @Override
     public void removePersistentBossBar(IPlayer player) {
-        throw unsupported("boss bars");
+        executeOnServerThread(() -> { if (visuals != null) visuals.removePersistent(operationPlayer(player)); });
     }
 
     @Override
     public void createOrUpdateRestartBossBar(
             IComponent message, BossBarColor color, float progress) {
-        throw unsupported("boss bars");
+        executeOnServerThread(() -> { if (visuals != null) visuals.restart(nativeText(message)); });
     }
 
     @Override
     public void removeRestartBossBar() {
-        throw unsupported("boss bars");
+        executeOnServerThread(() -> { if (visuals != null) visuals.removeRestart(); });
     }
 
     @Override
     public void clearTitles(IPlayer player) {
-        throw unsupported("titles");
+        executeOnServerThread(() -> { if (visuals != null) visuals.clearTitles(operationPlayer(player)); });
     }
 
     @Override
@@ -383,9 +403,18 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public void executeOnServerThread(Runnable task) {
-        if (task != null)
+        if (task == null)
+            return;
+        if (Thread.currentThread() == serverThread)
+            task.run();
+        else
             mainTasks.add(task);
     }
+
+    public boolean isServerThread() { return server != null && Thread.currentThread() == serverThread; }
+
+    @Override public eu.avalanche7.paradigm.platform.Interfaces.IMenuPlatform getMenuPlatform() { return menuPlatform; }
+    @Override public eu.avalanche7.paradigm.platform.Interfaces.IHologramPlatform getHologramPlatform() { return hologramPlatform; }
 
     @Override
     public Object getConsoleCommandSource() {
@@ -581,7 +610,10 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public boolean setPlayerVanished(IPlayer player, boolean enabled) {
-        throw unsupported("vanish");
+        EntityPlayerMP handle = operationPlayer(player);
+        if (handle == null || visuals == null) return false;
+        executeOnServerThread(() -> visuals.setVanished(handle, enabled));
+        return true;
     }
 
     @Override
@@ -811,7 +843,11 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public void shutdownServer(IComponent message) {
-        throw unsupported("server shutdown command");
+        executeOnServerThread(() -> {
+            if (server == null) return;
+            if (visuals != null) visuals.shutdown(((MinecraftComponent) message).toLegacyText());
+            server.initiateShutdown();
+        });
     }
 
     @Override
@@ -847,7 +883,31 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
                 ? safeSurface(world, x, z) : Optional.empty();
     }
 
+    public void playerTransferred(EntityPlayerMP player) {
+        if (player.openContainer instanceof eu.avalanche7.paradigm.platform.menu.ParadigmMenuContainer) player.closeScreen();
+        hologramPlatform.transferred(player);
+        if (visuals != null) visuals.transferred(player);
+    }
+
+    @Override
+    public boolean setPlayerListDisplayName(IPlayer player, IComponent displayName) {
+        EntityPlayerMP handle = operationPlayer(player);
+        if (handle == null || visuals == null || Thread.currentThread() != serverThread) return false;
+        return visuals.tablist().display(handle, displayName == null ? null : ((MinecraftComponent) displayName).toLegacyText());
+    }
+
+    @Override
+    public void resetPlayerListState(IPlayer player) {
+        executeOnServerThread(() -> { if (visuals != null && operationPlayer(player) != null) visuals.tablist().reset(operationPlayer(player)); });
+    }
+
     public void playerRespawned(EntityPlayerMP replacement) {
+        menuPlatform.respawned(replacement);
+        hologramPlatform.transferred(replacement);
+        if (visuals != null) {
+            if (!visuals.vanish().visible(replacement, null)) visuals.setVanished(replacement, true);
+            visuals.transferred(replacement);
+        }
         invulnerablePlayers.removeIf(previous ->
                 replacement.getUniqueID().equals(previous.getUniqueID()));
         if (invulnerablePlayerIds.contains(replacement.getUniqueID())) {
@@ -856,19 +916,44 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     public void playerDisconnected(EntityPlayerMP player) {
+        menuPlatform.disconnected(player);
+        hologramPlatform.disconnected(player);
+        if (visuals != null) visuals.disconnected(player);
         invulnerablePlayers.remove(player);
         invulnerablePlayerIds.remove(player.getUniqueID());
     }
 
     @Override
     public boolean playerHasItem(IPlayer player, String itemId, int amount) {
-        throw unsupported("inventory matching");
+        if (player == null || !(player.getOriginalPlayer() instanceof EntityPlayerMP handle)) return false;
+        if (handle == null || handle.inventory == null || itemId == null || itemId.isBlank()) return false;
+        Item item = (Item) Item.itemRegistry.getObject(itemId);
+        if (item == null) return false;
+        long count = 0;
+        for (ItemStack stack : handle.inventory.mainInventory) {
+            if (stack != null && stack.getItem() == item) count += Math.max(0, stack.stackSize);
+            if (count >= amount) return true;
+        }
+        return count >= amount;
     }
 
     @Override
     public boolean isPlayerInArea(
             IPlayer player, String worldId, List<Integer> a, List<Integer> b) {
-        throw unsupported("area matching");
+        if (player == null || !(player.getOriginalPlayer() instanceof EntityPlayerMP handle)) return false;
+        if (handle == null || worldId == null || a == null || b == null
+                || a.size() != 3 || b.size() != 3
+                || a.stream().anyMatch(java.util.Objects::isNull) || b.stream().anyMatch(java.util.Objects::isNull)) return false;
+        int dimension;
+        try {
+            dimension = Integer.parseInt(worldId);
+        } catch (NumberFormatException invalid) {
+            return false;
+        }
+        return handle.dimension == dimension
+                && handle.posX >= Math.min(a.get(0), b.get(0)) && handle.posX <= Math.max(a.get(0), b.get(0))
+                && handle.posY >= Math.min(a.get(1), b.get(1)) && handle.posY <= Math.max(a.get(1), b.get(1))
+                && handle.posZ >= Math.min(a.get(2), b.get(2)) && handle.posZ <= Math.max(a.get(2), b.get(2));
     }
 
     @Override
@@ -976,6 +1061,7 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
         IComponent updated = switch (action.toLowerCase(java.util.Locale.ROOT)) {
             case "run_command" -> component.onClickRunCommand(value);
             case "suggest_command" -> component.onClickSuggestCommand(value);
+            case "copy_to_clipboard" -> component.onClickSuggestCommand(value);
             case "open_url" -> component.onClickOpenUrl(value);
             default -> throw unsupported("click action " + action);
         };
@@ -1050,6 +1136,40 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
         manager.registerCommand(command);
         commandCollisions.remove(name);
         ownedCommands.add(command);
+    }
+
+    @Override
+    public boolean hasRegisteredCommandRoot(String rootLiteral) {
+        return server != null && server.getCommandManager() instanceof CommandHandler manager
+                && manager.getCommands().containsKey(rootLiteral);
+    }
+
+    @Override
+    public Object getCommandDispatcher() {
+        return server == null ? null : server.getCommandManager();
+    }
+
+    @Override
+    public long getLogEventTime(Object event) {
+        return ((org.apache.logging.log4j.core.LogEvent) event).getMillis();
+    }
+
+    @Override
+    public void registerCommandsForContributor(Object contributor, Runnable registration) {
+        registerContributor(contributor, registration);
+    }
+
+    @Override
+    public boolean unregisterCommandRoot(String rootLiteral, Object contributor) {
+        if (server == null || !(server.getCommandManager() instanceof CommandHandler manager)) return false;
+        ICommand occupied = (ICommand) manager.getCommands().get(rootLiteral);
+        if (!(occupied instanceof ForgeCommand command) || !command.ownedBy(this)
+                || !command.hasContributor(contributor)) return false;
+        if (command.removeContributor(contributor)) {
+            removeNativeCommand(manager, rootLiteral, command);
+            ownedCommands.remove(command);
+        }
+        return true;
     }
 
     @Override

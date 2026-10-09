@@ -177,7 +177,7 @@ public final class CustomCommandAdminService {
         if (input == null) throw new IllegalArgumentException("Command data is required.");
         JsonObject command = input.deepCopy();
         String name = text(string(command, "name")).toLowerCase(Locale.ROOT);
-        if (!NAME.matcher(name).matches()) throw new IllegalArgumentException("Command name must use 1-32 lowercase letters, numbers, underscores, or dashes.");
+        if (!name.matches("[a-z0-9_-]{1,32}( [a-z0-9_-]{1,32}){0,7}")) throw new IllegalArgumentException("Command paths must use up to eight literals of 1-32 lowercase letters, numbers, underscores, or dashes.");
         command.addProperty("name", name);
         String permission = text(string(command, "permission"));
         if (!permission.isBlank() && !PERMISSION.matcher(permission).matches()) throw new IllegalArgumentException("Permission node is invalid.");

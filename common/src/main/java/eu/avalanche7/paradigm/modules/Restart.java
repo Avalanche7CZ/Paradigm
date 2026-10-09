@@ -133,7 +133,7 @@ public class Restart implements ParadigmModule {
         ICommandBuilder cmd = platform.createCommandBuilder()
                 .literal("restart")
                 .requires(source -> services.getCommandToggleStore().isEnabled("restart")
-                        && (source.hasPermissionLevel(2) || (source.getPlayer() != null && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.RESTART_MANAGE_PERMISSION))))
+                        && (source.isConsole() || (source.getPlayer() != null && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.RESTART_MANAGE_PERMISSION))))
                 .then(platform.createCommandBuilder()
                         .literal("now")
                         .executes(context -> {
@@ -389,7 +389,7 @@ public class Restart implements ParadigmModule {
             if (config.timerUseChat.value) {
                 platform.sendSystemMessage(player, services.getMessageParser().parseMessage(chatMessage, player));
             }
-            if (config.titleEnabled.value) {
+            if (config.titleEnabled.value && (platform.supportsTitles() || !config.timerUseChat.value)) {
                 platform.sendTitle(player, services.getMessageParser().parseMessage(titleMessage, player), platform.createEmptyComponent());
             }
 
@@ -402,7 +402,8 @@ public class Restart implements ParadigmModule {
     }
 
     private void updateRestartBossBar(long timeLeftSeconds, Services services, RestartConfigHandler.Config config, double originalTotalIntervalSeconds) {
-        if (!config.bossbarEnabled.value || !restartInProgress.get()) {
+        if (!config.bossbarEnabled.value || !restartInProgress.get()
+                || (!platform.supportsPersistentBossBar() && (config.timerUseChat.value || config.titleEnabled.value))) {
             return;
         }
         float progress = Math.max(0.0f, Math.min(1.0f, (float) timeLeftSeconds / (float) Math.max(1.0, originalTotalIntervalSeconds)));

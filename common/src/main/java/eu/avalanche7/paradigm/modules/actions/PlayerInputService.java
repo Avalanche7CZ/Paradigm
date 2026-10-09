@@ -140,7 +140,8 @@ public final class PlayerInputService {
         }
         services.getPlatformAdapter().executeOnServerThread(() -> {
             IPlayer live = services.getPlatformAdapter().getPlayerByUuid(playerId.toString());
-            if (!active || live == null || !sameConnection(session, live)) return;
+            if (!active || live == null || !sameConnection(session, live)
+                    || !session.context.isAuthorized(live)) return;
             ActionContext resumed = session.context.toBuilder()
                     .source(services.getPlatformAdapter().createCommandSourceForPlayer(live))
                     .player(live)
@@ -209,7 +210,8 @@ public final class PlayerInputService {
     private void finishFailure(InputSession session, String message) {
         if (!active) return;
         IPlayer player = services.getPlatformAdapter().getPlayerByUuid(session.playerId.toString());
-        if (player == null || !sameConnection(session, player)) return;
+        if (player == null || !sameConnection(session, player)
+                || !session.context.isAuthorized(player)) return;
         ActionContext context = session.context.toBuilder()
                 .source(services.getPlatformAdapter().createCommandSourceForPlayer(player))
                 .player(player).build();

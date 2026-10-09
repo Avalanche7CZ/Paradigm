@@ -41,6 +41,23 @@ public final class MinecraftLoginHandler {
         return screen.toLegacyText();
     }
 
+    public static boolean vanishEnabled() {
+        Services runtime = services;
+        return runtime != null && new eu.avalanche7.paradigm.modules.commands.admin.VanishCommand().isEnabled(runtime);
+    }
+
+    public static java.util.concurrent.CompletableFuture<Boolean> loadVanish(GameProfile profile) {
+        Services runtime = services;
+        if (!vanishEnabled()) {
+            return java.util.concurrent.CompletableFuture.completedFuture(false);
+        }
+        var result = new java.util.concurrent.CompletableFuture<Boolean>();
+        runtime.getStorageService().runAsync("admin.vanish.admission",
+                () -> runtime.getStorageService().adminState().isVanished(profile.getId().toString()),
+                runtime.getTaskScheduler(), result::complete, result::completeExceptionally);
+        return result;
+    }
+
     public static String remoteAddress(SocketAddress address) {
         if (address instanceof InetSocketAddress inet && inet.getAddress() != null) {
             return inet.getAddress().getHostAddress();

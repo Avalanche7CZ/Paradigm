@@ -6,6 +6,7 @@ import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -29,6 +30,7 @@ public final class ActionContext {
     private final Map<String, String> values;
     private final Set<String> literalKeys;
     private final String origin;
+    private final Predicate<IPlayer> authorization;
 
     private ActionContext(Builder builder) {
         this.services = builder.services;
@@ -39,6 +41,7 @@ public final class ActionContext {
         this.values = Collections.unmodifiableMap(new LinkedHashMap<>(builder.values));
         this.literalKeys = Collections.unmodifiableSet(new LinkedHashSet<>(builder.literalKeys));
         this.origin = builder.origin != null ? builder.origin : "unknown";
+        this.authorization = builder.authorization;
     }
 
     public static Builder builder(Services services) {
@@ -69,6 +72,10 @@ public final class ActionContext {
 
     public String origin() {
         return origin;
+    }
+
+    public boolean isAuthorized(IPlayer live) {
+        return authorization.test(live);
     }
 
     public Map<String, String> values() {
@@ -119,7 +126,8 @@ public final class ActionContext {
                 .player(player)
                 .args(argsTokens)
                 .rawArgs(rawArgs)
-                .origin(origin);
+                .origin(origin)
+                .authorization(authorization);
         builder.values.putAll(values);
         builder.literalKeys.addAll(literalKeys);
         return builder;
@@ -164,6 +172,7 @@ public final class ActionContext {
     }
 
     public static final class Builder {
+        private Predicate<IPlayer> authorization = player -> true;
         private final Services services;
         private final Map<String, String> values = new LinkedHashMap<>();
         private final Set<String> literalKeys = new LinkedHashSet<>();
@@ -221,6 +230,11 @@ public final class ActionContext {
 
         public ActionContext build() {
             return new ActionContext(this);
+        }
+
+        public Builder authorization(Predicate<IPlayer> authorization) {
+            this.authorization = java.util.Objects.requireNonNull(authorization);
+            return this;
         }
     }
 }

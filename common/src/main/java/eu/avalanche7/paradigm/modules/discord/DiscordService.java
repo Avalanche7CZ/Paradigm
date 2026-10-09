@@ -211,10 +211,10 @@ public final class DiscordService implements DiscordOutbox {
         Level minimumLevel = Level.toLevel(config.consoleLogMinimumLevel.get(), Level.INFO);
         ConsoleRelayAppender appender = new ConsoleRelayAppender(
                 "ParadigmConsoleRelay", minimumLevel, config.consoleLogIgnoredPatterns.get(),
-                this::onCriticalConsoleEvent);
+                this::onCriticalConsoleEvent, services.getPlatformAdapter()::getLogEventTime);
         appender.start();
         LoggerContext context = (LoggerContext) LogManager.getContext(false);
-        context.getRootLogger().addAppender(appender);
+        context.getLogger("").addAppender(appender);
         consoleAppender = appender;
 
         Integer configured = config.consoleLogFlushSeconds.get();
@@ -456,7 +456,7 @@ public final class DiscordService implements DiscordOutbox {
         consoleAppender = null;
         if (appender != null) {
             LoggerContext context = (LoggerContext) LogManager.getContext(false);
-            context.getRootLogger().removeAppender(appender);
+            context.getLogger("").removeAppender(appender);
             flushConsoleRelay(appender);
             appender.stop();
         }

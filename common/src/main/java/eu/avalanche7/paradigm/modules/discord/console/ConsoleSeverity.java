@@ -20,7 +20,7 @@ enum ConsoleSeverity {
         if (!isMuted(level) && CRASH_PATTERN.matcher(matchable).find()) {
             return CRITICAL;
         }
-        if (level != null && level.isMoreSpecificThan(Level.ERROR)) {
+        if (level != null && level.intLevel() <= Level.ERROR.intLevel()) {
             return SEVERE;
         }
         if (level == Level.WARN) {

@@ -3,7 +3,6 @@ package eu.avalanche7.paradigm.platform;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import net.minecraft.event.ClickEvent;
@@ -83,14 +82,16 @@ class MinecraftComponentTest {
     }
 
     @Test
-    void rgbDegradesToNearestLegacyColorAndClipboardFailsExplicitly() {
+    void rgbDegradesToNearestLegacyColorAndClipboardUsesCopyableChatText() {
         MinecraftComponent original = new MinecraftComponent("Color");
         IComponent colored = original.withColorHex("#FF5554");
 
         assertEquals(EnumChatFormatting.RED, style(colored).getColor());
         assertEquals(null, style(original).getColor());
-        assertThrows(
-                UnsupportedOperationException.class, () -> original.onClickCopyToClipboard("test"));
+        var click = style(original.onClickCopyToClipboard("test")).getChatClickEvent();
+        assertEquals(net.minecraft.event.ClickEvent.Action.SUGGEST_COMMAND, click.getAction());
+        assertEquals("test", click.getValue());
+        assertEquals(null, style(original).getChatClickEvent());
     }
 
     private static ChatStyle style(IComponent component) {

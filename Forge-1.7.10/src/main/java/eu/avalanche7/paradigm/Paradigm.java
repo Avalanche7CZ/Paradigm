@@ -7,6 +7,7 @@ import cpw.mods.fml.common.FMLCommonHandler;
 import cpw.mods.fml.common.Mod;
 import cpw.mods.fml.common.event.FMLInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
+import cpw.mods.fml.common.event.FMLServerStartedEvent;
 import cpw.mods.fml.common.event.FMLServerStartingEvent;
 import cpw.mods.fml.common.event.FMLServerStoppedEvent;
 import cpw.mods.fml.common.event.FMLServerStoppingEvent;
@@ -22,7 +23,6 @@ import eu.avalanche7.paradigm.configs.CooldownConfigHandler;
 import eu.avalanche7.paradigm.core.CommonRuntime;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.commands.Reload;
 import eu.avalanche7.paradigm.platform.ForgeConfig;
 import eu.avalanche7.paradigm.platform.MinecraftLoginHandler;
 import eu.avalanche7.paradigm.platform.PlatformAdapterImpl;
@@ -37,7 +37,6 @@ public final class Paradigm {
     private static final Logger LOGGER = LoggerFactory.getLogger(Paradigm.class);
 
     private final List<ParadigmModule> activeModules = new ArrayList<>();
-    private final Reload commandManagement = new Reload();
     private PlatformAdapterImpl platform;
     private Services services;
 
@@ -100,9 +99,12 @@ public final class Paradigm {
             platform.registerCommandContributor(module,
                     () -> SupportedModules.registerCommands(module, event.getServer().getCommandManager(), services));
         }
-        var availableCommands = SupportedModules.commandIds(activeModules, platform);
-        platform.registerCommandContributor(commandManagement,
-                () -> commandManagement.registerCommandToggleCommands(services, availableCommands::contains));
+
+    }
+
+    @Mod.EventHandler
+    public void started(FMLServerStartedEvent event) {
+        platform.refreshRegisteredCommandContributors();
     }
 
     @SubscribeEvent
@@ -117,6 +119,11 @@ public final class Paradigm {
         if (platform != null && event.player instanceof EntityPlayerMP player) {
             platform.playerRespawned(player);
         }
+    }
+
+    @SubscribeEvent
+    public void dimensionChanged(PlayerEvent.PlayerChangedDimensionEvent event) {
+        if (platform != null && event.player instanceof EntityPlayerMP player) platform.playerTransferred(player);
     }
 
     @SubscribeEvent

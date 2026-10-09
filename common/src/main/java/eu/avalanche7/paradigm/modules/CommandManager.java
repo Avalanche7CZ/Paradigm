@@ -1,8 +1,10 @@
 package eu.avalanche7.paradigm.modules;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import eu.avalanche7.paradigm.ParadigmAPI;
@@ -50,8 +52,8 @@ public class CommandManager implements ParadigmModule {
         ICommandBuilder reload = platform.createCommandBuilder()
                 .literal("customcommandsreload")
                 .requires(src -> services.getCommandToggleStore().isEnabled("customcommands")
-                        && (src.hasPermissionLevel(2)
-                        || (src.getPlayer() != null && services.getPermissionsHandler().hasPermission(src.getPlayer(), eu.avalanche7.paradigm.modules.permissions.PermissionsHandler.RELOAD_PERMISSION))))
+                        && (src.isConsole() || (src.getPlayer() != null
+                        && services.getPermissionsHandler().hasPermission(src.getPlayer(), eu.avalanche7.paradigm.modules.permissions.PermissionsHandler.RELOAD_PERMISSION))))
                 .executes(ctx -> {
                     int count = reloadCustomCommands(services);
                     String raw = services.getLang().getTranslation("reload.customcommands_success");
@@ -100,42 +102,56 @@ public class CommandManager implements ParadigmModule {
     }
 
     private int registerLoadedCustomCommands() {
-        if (services == null || platform == null || !services.getCommandToggleStore().isEnabled("customcommands")) {
+        if (services == null || platform == null || !isEnabled(services) || !services.getCommandToggleStore().isEnabled("customcommands")) {
             return 0;
         }
 
         int count = 0;
         Object dispatcher = platform.getCommandDispatcher();
+        Map<String, List<CustomCommand>> groups = new LinkedHashMap<>();
+        Set<String> paths = new LinkedHashSet<>();
         for (CustomCommand command : services.getCmConfig().getLoadedCommands()) {
-            if (command == null || command.getName() == null || command.getName().trim().isEmpty()) {
+            if (command == null || command.getName() == null) continue;
+            String path = command.getName().trim().toLowerCase(java.util.Locale.ROOT).replaceAll("\\s+", " ");
+            if (!path.matches("[a-z0-9_-]{1,32}( [a-z0-9_-]{1,32}){0,7}") || !paths.add(path)) continue;
+            String rootName = path.split(" ")[0];
+            groups.computeIfAbsent(rootName, ignored -> new ArrayList<>()).add(command);
+        }
+        for (var group : groups.entrySet()) {
+            String rootName = group.getKey();
+            if (eu.avalanche7.paradigm.modules.commands.shared.CommandCatalog.findByRoot(rootName) != null
+                    || platform.hasRegisteredCommandRoot(rootName)) {
+                services.getLogger().warn("Paradigm custom command root '{}' was skipped because it is already owned by another command provider.", rootName);
                 continue;
             }
-            String rootName = CommandPriority.normalizeRoot(command.getName());
-            if (rootName == null) {
-                continue;
+            ICommandBuilder cmd = platform.createCommandBuilder().literal(rootName)
+                    .requires(source -> services.getCommandToggleStore().isEnabled("customcommands")
+                            && group.getValue().stream().anyMatch(command -> platform.hasPermissionForCustomCommand(source, command)));
+            for (CustomCommand command : group.getValue()) {
+                String[] path = command.getName().trim().toLowerCase(java.util.Locale.ROOT).split("\\s+");
+                if (path.length == 1) {
+                    addCommandActions(cmd, command);
+                } else {
+                    ICommandBuilder branch = buildCustomCommand(command, path[path.length - 1]);
+                    for (int i = path.length - 2; i > 0; i--) branch = platform.createCommandBuilder().literal(path[i]).then(branch);
+                    cmd.then(branch);
+                }
             }
-            if (registeredCustomRoots.contains(rootName)) {
-                continue;
-            }
-            if (CommandPriority.hasRootLiteral(dispatcher, rootName)) {
-                services.getLogger().warn("Paradigm custom command '{}' was skipped because command root '{}' is already owned by another command provider.", command.getName(), rootName);
-                continue;
-            }
-            ICommandBuilder cmd = buildCustomCommand(command);
+            ICommandBuilder registration = cmd;
             CommandPriority.manageRootLiteral(dispatcher, rootName);
             try {
-                platform.registerCommand(cmd);
+                platform.registerCommandsForContributor(this, () -> platform.registerCommand(registration));
             } catch (RuntimeException failure) {
                 CommandPriority.unmanageRootLiteral(dispatcher, rootName);
                 throw failure;
             }
-            if (!CommandPriority.ownsRootLiteral(dispatcher, rootName)) {
+            if (!platform.ownsRegisteredCommandRoot(rootName) && !CommandPriority.ownsRootLiteral(dispatcher, rootName)) {
                 CommandPriority.unmanageRootLiteral(dispatcher, rootName);
-                services.getLogger().warn("Paradigm custom command '{}' could not claim command root '{}'.", command.getName(), rootName);
+                services.getLogger().warn("Paradigm custom command root '{}' could not be claimed.", rootName);
                 continue;
             }
             registeredCustomRoots.add(rootName);
-            count++;
+            count += group.getValue().size();
         }
         return count;
     }
@@ -145,17 +161,22 @@ public class CommandManager implements ParadigmModule {
             return;
         }
         for (String root : new ArrayList<>(registeredCustomRoots)) {
-            platform.unregisterCommandRoot(root);
+            platform.unregisterCommandRoot(root, this);
+            CommandPriority.unmanageRootLiteral(platform.getCommandDispatcher(), root);
         }
         registeredCustomRoots.clear();
     }
 
-    private ICommandBuilder buildCustomCommand(CustomCommand command) {
+    private ICommandBuilder buildCustomCommand(CustomCommand command, String literal) {
         ICommandBuilder root = platform.createCommandBuilder()
-                .literal(command.getName())
+                .literal(literal)
                 .requires(source -> services.getCommandToggleStore().isEnabled("customcommands")
                         && platform.hasPermissionForCustomCommand(source, command));
 
+        return addCommandActions(root, command);
+    }
+
+    private ICommandBuilder addCommandActions(ICommandBuilder root, CustomCommand command) {
         List<CustomCommand.ArgumentDefinition> args = command.getArguments();
         if (args == null) args = List.of();
 
@@ -167,6 +188,7 @@ public class CommandManager implements ParadigmModule {
                     })
                     .then(platform.createCommandBuilder()
                             .argument("args", ICommandBuilder.ArgumentType.GREEDY_STRING)
+                            .requires(source -> platform.hasPermissionForCustomCommand(source, command))
                             .executes(ctx -> {
                                 String raw = ctx.getStringArgument("args");
                                 String[] tokens = tokenizeArgs(raw);
@@ -197,10 +219,15 @@ public class CommandManager implements ParadigmModule {
         CustomCommand.ArgumentDefinition def = defs.get(argIndex);
 
         ICommandBuilder.ArgumentType platformType = mapType(def.getType());
-        ICommandBuilder argNode = platform.createCommandBuilder().argument(def.getName(), platformType);
+        ICommandBuilder argNode = platform.createCommandBuilder().argument(def.getName(), platformType)
+                .requires(source -> platform.hasPermissionForCustomCommand(source, command));
 
         List<String> sugg = suggestionsFor(def);
-        if (!sugg.isEmpty()) {
+        if ("player".equals(def.getType())) {
+            argNode = argNode.suggests((context, input) -> platform.getOnlinePlayerNames());
+        } else if ("world".equals(def.getType())) {
+            argNode = argNode.suggests((context, input) -> platform.getWorldNames());
+        } else if (!sugg.isEmpty()) {
             argNode = argNode.suggests(sugg);
         }
 
@@ -241,6 +268,18 @@ public class CommandManager implements ParadigmModule {
             }
         }
 
+        for (int i = 0; i < defs.size(); i++) {
+            var def = defs.get(i);
+            if (!"integer".equals(def.getType()) || validated[i].isEmpty()) continue;
+            int value = Integer.parseInt(validated[i]);
+            if ((def.getMinValue() != null && value < def.getMinValue())
+                    || (def.getMaxValue() != null && value > def.getMaxValue())) {
+                platform.sendFailure(ctx.getSource(), services.getMessageParser().parseMessage(
+                        def.getErrorMessage(), ctx.getSource().getPlayer()));
+                return 0;
+            }
+        }
+
         executeCustomCommand(ctx.getSource(), command, validated);
         return 1;
     }
@@ -276,7 +315,8 @@ public class CommandManager implements ParadigmModule {
         return switch (type) {
             case "player" -> platform.getOnlinePlayerNames();
             case "world" -> platform.getWorldNames();
-            case "gamemode" -> List.of("survival", "creative", "adventure", "spectator");
+            case "gamemode" -> List.of("survival", "creative", "adventure", "spectator").stream()
+                    .filter(platform::supportsGameMode).toList();
             case "custom" -> {
                 List<String> c = def.getCustomCompletions();
                 yield c != null ? c : List.of();
@@ -345,22 +385,30 @@ public class CommandManager implements ParadigmModule {
         }
 
         String rawArgs = String.join(" ", argsTokens);
-        executeActions(source, command.getActions(), player, argsTokens, rawArgs);
+        executeActions(source, command, player, argsTokens, rawArgs);
     }
 
     private eu.avalanche7.paradigm.modules.actions.ActionContext actionContext(
-            ICommandSource source, IPlayer player, String[] argsTokens, String rawArgs) {
+            ICommandSource source, CustomCommand command, IPlayer player, String[] argsTokens, String rawArgs) {
         return eu.avalanche7.paradigm.modules.actions.ActionContext.builder(services)
                 .source(source)
                 .player(player)
                 .args(argsTokens)
                 .rawArgs(rawArgs)
                 .origin("custom_command")
+                .authorization(live -> isEnabled(services)
+                        && services.getCommandToggleStore().isEnabled("customcommands")
+                        && services.getCmConfig().getLoadedCommands().contains(command)
+                        && (command.getAreaRestriction() == null || platform.isPlayerInArea(live,
+                            command.getAreaRestriction().getWorld(), command.getAreaRestriction().getCorner1(),
+                            command.getAreaRestriction().getCorner2()))
+                        && (!command.isRequirePermission()
+                            || services.getPermissionsHandler().hasPermission(live, command.getPermission())))
                 .build();
     }
 
-    private void executeActions(ICommandSource source, List<CustomCommand.Action> actions, IPlayer player, String[] argsTokens, String rawArgs) {
-        services.getActionDispatcher().execute(actions, actionContext(source, player, argsTokens, rawArgs));
+    private void executeActions(ICommandSource source, CustomCommand command, IPlayer player, String[] argsTokens, String rawArgs) {
+        services.getActionDispatcher().execute(command.getActions(), actionContext(source, command, player, argsTokens, rawArgs));
     }
 
     @Override

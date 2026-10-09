@@ -173,6 +173,8 @@ public final class Tablist implements ParadigmModule {
 
     private void stop(boolean resetPlayers) {
         active = false;
+        if (pendingImmediateRefresh != null) pendingImmediateRefresh.cancel(false);
+        pendingImmediateRefresh = null;
         if (refreshTask != null) refreshTask.cancel(false);
         refreshTask = null;
         if (worldWatchTask != null) worldWatchTask.cancel(false);
@@ -250,7 +252,6 @@ public final class Tablist implements ParadigmModule {
     private boolean hasPermission(ICommandSource source, Services services) {
         if (source == null) return false;
         if (source.isConsole()) return true;
-        if (source.hasPermissionLevel(2)) return true;
         IPlayer player = source.getPlayer();
         return player != null && services.getPermissionsHandler().hasPermission(
                 player, ParadigmPermissions.TABLIST_MANAGE);

@@ -407,7 +407,7 @@ public final class HologramService {
         if (!active || ownershipKey == null || player == null) return;
         String sourceId = index.sourceForInteraction(ownershipKey);
         HologramSourceIndex.Source source = sourceId != null ? index.source(sourceId) : null;
-        if (source == null || !source.definition().interaction.enabled) return;
+        if (source == null || !store.globallyEnabled() || !source.definition().enabled || !source.definition().interaction.enabled) return;
         if (!conditions.test(source.definition().visibility, source.definition(), player)
                 || !conditions.test(source.definition().interaction.conditions, source.definition(), player)) return;
         long now = System.currentTimeMillis();

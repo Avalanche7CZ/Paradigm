@@ -50,7 +50,13 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 
 final class SupportedModules {
     private static final Set<Class<? extends ParadigmModule>> TYPES = Set.of(
-            StorageLifecycle.class, Help.class, HealCommand.class, FeedCommand.class,
+            eu.avalanche7.paradigm.modules.actions.PlayerInputModule.class,
+            eu.avalanche7.paradigm.modules.CommandManager.class,
+            eu.avalanche7.paradigm.modules.commands.Reload.class,
+            eu.avalanche7.paradigm.modules.tickets.TicketsModule.class,
+            eu.avalanche7.paradigm.modules.dashboard.LocalDashboardModule.class,
+            eu.avalanche7.paradigm.modules.discord.DiscordModule.class,
+            eu.avalanche7.paradigm.modules.menus.Menus.class, eu.avalanche7.paradigm.modules.holograms.Holograms.class, eu.avalanche7.paradigm.modules.commands.admin.VanishCommand.class, eu.avalanche7.paradigm.modules.tab.Tablist.class, eu.avalanche7.paradigm.modules.chat.MOTD.class, eu.avalanche7.paradigm.modules.Announcements.class, eu.avalanche7.paradigm.modules.Restart.class, StorageLifecycle.class, Help.class, HealCommand.class, FeedCommand.class,
             FlyCommand.class, SpeedCommand.class, TimeWeatherCommand.class,
             ClearInventoryCommand.class, GamemodeCommand.class, GodCommand.class, HomeCommand.class, TpaCommand.class,
             WarpCommand.class, SpawnCommand.class, RtpCommand.class,

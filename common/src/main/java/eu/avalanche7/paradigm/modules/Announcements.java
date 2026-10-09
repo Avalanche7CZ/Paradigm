@@ -350,7 +350,7 @@ public class Announcements implements ParadigmModule {
         ICommandSource source = context.getSource();
         services.getDebugLogger().debugLog(NAME + ": /paradigm title command executed with message: " + titleAndSubtitle);
 
-        String[] parts = titleAndSubtitle.split(" \\\\|\\\\| ", 2);
+        String[] parts = titleAndSubtitle.split(" \\|\\| ", 2);
         platform.getOnlinePlayers().forEach(target -> {
             IComponent titleComp = services.getMessageParser().parseMessage(parts.length > 0 ? parts[0] : "", target);
             IComponent subtitleComp = parts.length > 1 ? services.getMessageParser().parseMessage(parts[1], target) : services.getMessageParser().parseMessage("", target);

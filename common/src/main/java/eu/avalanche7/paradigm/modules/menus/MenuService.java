@@ -340,7 +340,7 @@ public final class MenuService {
     }
 
     public void refresh(MenuSession session) {
-        if (session == null || session.isClosed() || !active) {
+        if (session == null || session.isClosed() || !active || sessions.get(session.viewer()) != session) {
             return;
         }
         MenuDefinition definition = registry.get(session.menuId());
@@ -348,6 +348,10 @@ public final class MenuService {
         IMenuPlatform.Handle handle = session.handle();
         if (definition == null || player == null || handle == null || !handle.isOpen()) {
             closeSession(session);
+            return;
+        }
+        if (accessResult(player, definition, session.contextValues()) != OpenResult.OPENED) {
+            terminateSession(session, player, true, false);
             return;
         }
         ActionContext context = buildContext(player, definition, session.contextValues());
@@ -422,6 +426,11 @@ public final class MenuService {
         if (!dispatcher.testAll(menuSlot.visibleIf, context)) {
             return;
         }
+        ActionContext probe = context;
+        context = context.toBuilder().authorization(live -> active
+                && registry.get(definition.id) == definition
+                && accessResult(live, definition, session.contextValues()) == OpenResult.OPENED
+                && dispatcher.testAll(menuSlot.visibleIf, probe.toBuilder().player(live).build())).build();
         List<CustomCommand.Action> actions = menuSlot.actionsFor(kind);
         if (actions.isEmpty()) {
             return;

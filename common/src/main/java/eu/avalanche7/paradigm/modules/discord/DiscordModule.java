@@ -184,9 +184,6 @@ public class DiscordModule implements ParadigmModule {
         if (source.isConsole()) {
             return true;
         }
-        if (source.hasPermissionLevel(2)) {
-            return true;
-        }
         IPlayer player = source.getPlayer();
         return player != null
                 && services.getPermissionsHandler().hasPermission(player, ParadigmPermissions.DISCORD_MANAGE);

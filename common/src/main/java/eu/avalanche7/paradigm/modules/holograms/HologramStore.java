@@ -287,6 +287,10 @@ public final class HologramStore {
 
     static String requireDimension(String dimension) {
         String value = dimension != null ? dimension.trim().toLowerCase(Locale.ROOT) : "";
+        if (value.matches("-?[0-9]+")) {
+            try { return Integer.toString(Integer.parseInt(value)); }
+            catch (NumberFormatException failure) { throw new IllegalArgumentException("Invalid dimension id.", failure); }
+        }
         if (!value.matches("[a-z0-9_.-]+:[a-z0-9_./-]+")) {
             throw new IllegalArgumentException("Invalid dimension id.");
         }

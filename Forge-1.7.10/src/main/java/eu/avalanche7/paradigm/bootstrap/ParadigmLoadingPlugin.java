@@ -17,7 +17,7 @@ public final class ParadigmLoadingPlugin implements IFMLLoadingPlugin, IEarlyMix
 
     @Override
     public List<String> getMixins(Set<String> loadedCoreMods) {
-        return List.of("NetHandlerLoginServerMixin", "ServerConfigurationManagerMixin", "NetHandlerPlayServerMixin");
+        return List.of("NetHandlerLoginServerMixin", "ServerConfigurationManagerMixin", "NetHandlerPlayServerMixin", "EntityTrackerAccess", "PlayerListPacketAccess", "EntityTrackerEntryMixin", "ServerStatusMixin", "ClientCapabilitiesMixin", "MenuNetworkMixin", "CloseWindowPacketAccess", "UseEntityPacketAccess", "HologramInteractionMixin");
     }
 
     @Override

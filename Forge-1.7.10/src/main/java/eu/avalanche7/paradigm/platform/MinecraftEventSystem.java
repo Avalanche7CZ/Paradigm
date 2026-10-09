@@ -126,23 +126,25 @@ public final class MinecraftEventSystem implements IEventSystem {
     @SubscribeEvent
     public void joined(PlayerEvent.PlayerLoggedInEvent forge) {
         if (forge.player instanceof EntityPlayerMP player) {
+            boolean announce = visible(player);
             JoinLeaveEvent event = new JoinLeaveEvent(new MinecraftPlayer(player), pendingJoins.remove(player));
             for (PlayerJoinEventListener listener : joinListeners) {
                 listener.onPlayerJoin(event);
             }
             markJoined(player);
-            broadcast(event.message);
+            if (announce) broadcast(event.message);
         }
     }
 
     @SubscribeEvent
     public void left(PlayerEvent.PlayerLoggedOutEvent forge) {
         if (forge.player instanceof EntityPlayerMP player) {
+            boolean announce = visible(player);
             JoinLeaveEvent event = new JoinLeaveEvent(new MinecraftPlayer(player), pendingLeaves.remove(player));
             for (PlayerLeaveEventListener listener : leaveListeners) {
                 listener.onPlayerLeave(event);
             }
-            broadcast(event.message);
+            if (announce) broadcast(event.message);
         }
     }
 
@@ -201,6 +203,11 @@ public final class MinecraftEventSystem implements IEventSystem {
         MinecraftEventSystem system = active;
         if (system == null) manager.sendChatMsg(message);
         else system.pendingLeaves.put(player, message);
+    }
+
+    private static boolean visible(EntityPlayerMP player) {
+        var visuals = eu.avalanche7.paradigm.platform.visual.LegacyVisualController.current();
+        return visuals == null || visuals.vanish().visible(player, null);
     }
 
     private static void broadcast(IComponent message) {

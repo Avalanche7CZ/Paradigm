@@ -1,6 +1,5 @@
 package eu.avalanche7.paradigm.modules.commands.admin;
 
-import java.util.concurrent.TimeUnit;
 
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
@@ -46,22 +45,37 @@ public class VanishCommand extends AbstractAdminCommand {
                         () -> services.getStorageService().adminState().isVanished(uuid),
                         services.getTaskScheduler(),
                         enabled -> {
-                            if (!enabled) {
-                                return;
-                            }
-                            services.getTaskScheduler().schedule(() -> {
-                                IPlayer current = services.getPlatformAdapter().getPlayerByUuid(uuid);
-                                if (current != null) {
-                                    applyVanish(current, true);
-                                }
-                            }, 1L, TimeUnit.SECONDS);
+                            if (!isEnabled(services)) return;
+                            IPlayer current = services.getPlatformAdapter().getPlayerByUuid(uuid);
+                            if (current != null) applyVanish(current, enabled);
                         },
-                        failure -> {
-                        }
+                        failure -> services.getLogger().warn("Unable to restore vanish for {}", uuid, failure)
                 );
             }
         });
     }
+
+    @Override
+    public void onEnable(Services services) {
+        this.services = services;
+        for (IPlayer player : services.getPlatformAdapter().getOnlinePlayers()) {
+            String uuid = player.getUUID();
+            services.getStorageService().runAsync("admin.vanish.enable",
+                    () -> services.getStorageService().adminState().isVanished(uuid), services.getTaskScheduler(),
+                    enabled -> {
+                        IPlayer current = services.getPlatformAdapter().getPlayerByUuid(uuid);
+                        if (isEnabled(services) && current != null) applyVanish(current, enabled);
+                    }, failure -> services.getLogger().warn("Unable to restore vanish for {}", uuid, failure));
+        }
+    }
+
+    @Override
+    public void onDisable(Services services) {
+        for (IPlayer player : services.getPlatformAdapter().getOnlinePlayers()) services.getPlatformAdapter().setPlayerVanished(player, false);
+    }
+
+    @Override
+    public void onServerStopping(Object event, Services services) { onDisable(services); }
 
     private int toggle(ICommandSource source, IPlayer target) {
         if (target == null) {
@@ -80,7 +94,7 @@ public class VanishCommand extends AbstractAdminCommand {
             return enabled;
         }, enabled -> {
             IPlayer currentTarget = services.getPlatformAdapter().getPlayerByUuid(targetUuid);
-            if (currentTarget != null) {
+            if (isEnabled(services) && currentTarget != null) {
                 applyVanish(currentTarget, enabled);
             }
             send(source, "admin.vanish_ok", "Vanish for {player}: {state}.",

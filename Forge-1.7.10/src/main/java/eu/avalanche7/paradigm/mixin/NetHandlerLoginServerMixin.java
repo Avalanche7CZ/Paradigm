@@ -1,19 +1,26 @@
 package eu.avalanche7.paradigm.mixin;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+
 import com.mojang.authlib.GameProfile;
 import net.minecraft.network.NetworkManager;
 import net.minecraft.server.network.NetHandlerLoginServer;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import eu.avalanche7.paradigm.platform.MinecraftLoginHandler;
+import eu.avalanche7.paradigm.platform.visual.LegacyVisualController;
 
 @Mixin(NetHandlerLoginServer.class)
 public abstract class NetHandlerLoginServerMixin {
+    @Unique private CompletableFuture<Boolean> paradigm$vanish;
+
     @Shadow
     private GameProfile field_147337_i;
 
@@ -35,6 +42,19 @@ public abstract class NetHandlerLoginServerMixin {
         String rejection = MinecraftLoginHandler.rejection(field_147333_a.getSocketAddress(), field_147337_i);
         if (rejection != null) {
             func_147322_a(rejection);
+            callback.cancel();
+            return;
+        }
+        if (paradigm$vanish == null) paradigm$vanish = MinecraftLoginHandler.loadVanish(field_147337_i);
+        if (!paradigm$vanish.isDone()) {
+            callback.cancel();
+            return;
+        }
+        try {
+            LegacyVisualController visuals = LegacyVisualController.current();
+            if (visuals != null) visuals.vanish().prepare(field_147337_i.getId(), paradigm$vanish.join() && MinecraftLoginHandler.vanishEnabled());
+        } catch (CompletionException failure) {
+            func_147322_a("Unable to restore player state. Please retry.");
             callback.cancel();
         }
     }

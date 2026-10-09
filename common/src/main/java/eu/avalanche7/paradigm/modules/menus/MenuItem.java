@@ -59,6 +59,7 @@ public final class MenuItem {
         if (lore.size() > MAX_LORE_LINES) {
             throw new IllegalArgumentException("A menu item may have at most " + MAX_LORE_LINES + " lore lines.");
         }
+        lore = new ArrayList<>(lore);
         lore.replaceAll(line -> line != null ? line : "");
     }
 

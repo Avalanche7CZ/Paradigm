@@ -9,13 +9,13 @@ import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.ToLongFunction;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.core.LogEvent;
 import org.apache.logging.log4j.core.appender.AbstractAppender;
-import org.apache.logging.log4j.core.config.Property;
 
 import eu.avalanche7.paradigm.modules.discord.DiscordSanitizer;
 
@@ -48,6 +48,7 @@ public final class ConsoleRelayAppender extends AbstractAppender {
     private final Level minimumLevel;
     private final List<Pattern> ignoredPatterns;
     private final Runnable onCriticalEvent;
+    private final ToLongFunction<LogEvent> eventTime;
 
     public ConsoleRelayAppender(String name, Level minimumLevel, List<String> ignoredPatterns) {
         this(name, minimumLevel, ignoredPatterns, null);
@@ -55,7 +56,13 @@ public final class ConsoleRelayAppender extends AbstractAppender {
 
     public ConsoleRelayAppender(String name, Level minimumLevel, List<String> ignoredPatterns,
                                 Runnable onCriticalEvent) {
-        super(name, null, null, true, Property.EMPTY_ARRAY);
+        this(name, minimumLevel, ignoredPatterns, onCriticalEvent, LogEvent::getTimeMillis);
+    }
+
+    public ConsoleRelayAppender(String name, Level minimumLevel, List<String> ignoredPatterns,
+                                Runnable onCriticalEvent, ToLongFunction<LogEvent> eventTime) {
+        super(name, null, null, true);
+        this.eventTime = Objects.requireNonNull(eventTime);
         this.minimumLevel = minimumLevel != null ? minimumLevel : Level.INFO;
         this.ignoredPatterns = compile(ignoredPatterns);
         this.onCriticalEvent = onCriticalEvent;
@@ -89,7 +96,7 @@ public final class ConsoleRelayAppender extends AbstractAppender {
             return;
         }
         Level level = event.getLevel();
-        if (level == null || !level.isMoreSpecificThan(minimumLevel)) {
+        if (level == null || level.intLevel() > minimumLevel.intLevel()) {
             return;
         }
         Throwable thrown = event.getThrown();
@@ -107,7 +114,7 @@ public final class ConsoleRelayAppender extends AbstractAppender {
         }
 
         ConsoleSeverity severity = ConsoleSeverity.classify(level, matchable, thrown);
-        String rendered = render(level, severity, event.getTimeMillis(), truncate(message));
+        String rendered = render(level, severity, eventTime.applyAsLong(event), truncate(message));
 
         synchronized (bufferLock) {
             flushPendingStreakMarkerLocked();

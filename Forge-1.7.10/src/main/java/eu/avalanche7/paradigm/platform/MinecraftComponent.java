@@ -273,8 +273,7 @@ public final class MinecraftComponent implements IComponent {
 
     @Override
     public IComponent onClickCopyToClipboard(String text) {
-        throw new UnsupportedOperationException(
-                "Minecraft 1.7.10 has no copy-to-clipboard click action");
+        return onClickSuggestCommand(text);
     }
 
     @Override

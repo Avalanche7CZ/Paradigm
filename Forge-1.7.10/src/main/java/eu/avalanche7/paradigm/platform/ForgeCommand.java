@@ -49,6 +49,10 @@ final class ForgeCommand extends CommandBase {
         roots.add(new Contribution(contributor, root));
     }
 
+    boolean hasContributor(Object contributor) {
+        return roots.stream().anyMatch(root -> root.owner == contributor);
+    }
+
     boolean removeContributor(Object contributor) {
         roots.removeIf(root -> root.owner == contributor);
         return roots.isEmpty();
