@@ -90,7 +90,7 @@ public final class Paradigm {
         if (services == null) return;
         for (ParadigmModule module : modules) {
             if (module.isEnabled(services)) {
-                module.onEnable(services);
+                services.enableModule(module);
             }
         }
 
@@ -187,7 +187,7 @@ public final class Paradigm {
         for (ParadigmModule module : modules) {
             if (module.isEnabled(services)) {
                 module.onServerStopping(event, services);
-                module.onDisable(services);
+                services.disableModule(module);
             }
         }
         if (telemetryReporter != null) telemetryReporter.stop();

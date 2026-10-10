@@ -32,6 +32,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.stats.Stats;
 
 public class PlatformAdapterImpl implements IPlatformAdapter {
 
@@ -1036,4 +1037,11 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     @Override public boolean setPlayerListOrder(IPlayer player, int order) { return false; }
     @Override public int getPlayerPing(IPlayer player) { return player instanceof MinecraftPlayer mp ? Math.max(0, mp.getHandle().connection.latency()) : 0; }
     @Override public int getMaxPlayers() { return server != null ? server.getMaxPlayers() : 0; }
+
+    @Override
+    public boolean isFirstJoin(IPlayer player) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        ServerPlayer handle = mp.getHandle();
+        return handle != null && handle.getStats().getValue(Stats.CUSTOM.get(Stats.LEAVE_GAME)) == 0;
+    }
 }

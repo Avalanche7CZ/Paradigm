@@ -26,6 +26,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
+import net.minecraft.stats.Stats;
 import net.minecraft.world.BossEvent;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.Item;
@@ -910,5 +911,17 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override public boolean setPlayerListOrder(IPlayer player, int order) { return false; }
     @Override public int getPlayerPing(IPlayer player) { return player instanceof MinecraftPlayer mp ? Math.max(0, mp.getHandle().latency) : 0; }
+
+    @Override
+    public boolean isFirstJoin(IPlayer player) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        ServerPlayer handle = mp.getHandle();
+        return handle != null && handle.getStats().getValue(Stats.CUSTOM.get(Stats.LEAVE_GAME)) == 0;
+    }
+
+    @Override
+    public int getMaxPlayers() {
+        return server != null && server.getPlayerList() != null ? server.getMaxPlayers() : 0;
+    }
 
 }

@@ -228,10 +228,10 @@ public class Reload implements ParadigmModule {
                 if (before && !after) {
                     moduleStateChanged = true;
                     commandsChanged |= releaseModuleCommands(m, services);
-                    m.onDisable(services);
+                    services.disableModule(m);
                 } else if (!before && after) {
                     moduleStateChanged = true;
-                    m.onEnable(services);
+                    services.enableModule(m);
                     commandsChanged |= registerModuleCommands(m, services);
                 }
                 prevEnabled.put(m, after);

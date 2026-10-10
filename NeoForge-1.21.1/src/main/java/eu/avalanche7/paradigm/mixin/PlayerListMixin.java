@@ -13,10 +13,21 @@ import net.minecraft.server.players.PlayerList;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(PlayerList.class)
 public abstract class PlayerListMixin {
+
+    @Redirect(method = "placeNewPlayer", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/players/PlayerList;broadcastSystemMessage(Lnet/minecraft/network/chat/Component;Z)V"))
+    private void paradigm$broadcastJoin(PlayerList players, Component message, boolean overlay,
+                                        net.minecraft.network.Connection connection, ServerPlayer player,
+                                        net.minecraft.server.network.CommonListenerCookie cookie) {
+        Services services = Paradigm.getServices();
+        if (services != null && services.getChatConfig().enableFirstJoinMessage.get()
+                && services.getPlatformAdapter().isFirstJoin(new MinecraftPlayer(player))) return;
+        players.broadcastSystemMessage(message, overlay);
+    }
 
     @Inject(method = {"placeNewPlayer", "m_11261_"}, at = @At("HEAD"), cancellable = true, remap = false)
     private void paradigm$rejectPunishedConnection(net.minecraft.network.Connection connection, ServerPlayer player,
@@ -42,7 +53,7 @@ public abstract class PlayerListMixin {
         ChatConfigHandler.Config cfg = services.getChatConfig();
         if (cfg == null) return;
 
-        boolean suppressJoin = Boolean.TRUE.equals(cfg.enableJoinLeaveMessages.get()) || Boolean.TRUE.equals(cfg.enableFirstJoinMessage.get());
+        boolean suppressJoin = Boolean.TRUE.equals(cfg.enableJoinLeaveMessages.get());
         boolean suppressLeave = Boolean.TRUE.equals(cfg.enableJoinLeaveMessages.get());
 
         if ((type == 1 && suppressJoin) || (type == 2 && suppressLeave)) {

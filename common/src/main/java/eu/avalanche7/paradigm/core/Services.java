@@ -1,5 +1,8 @@
 package eu.avalanche7.paradigm.core;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 import java.util.concurrent.ForkJoinPool;
 
 import org.slf4j.Logger;
@@ -34,6 +37,8 @@ public class Services {
 
     private Object server;
     private final Logger logger;
+    private final Object moduleActivationLock = new Object();
+    private final Set<ParadigmModule> enabledModules = Collections.newSetFromMap(new IdentityHashMap<>());
 
     private final MainConfigHandler.Config mainConfig;
     private final AnnouncementsConfigHandler.Config announcementsConfig;
@@ -122,6 +127,25 @@ public class Services {
         this.storageServiceInstance = storageService;
         this.commandToggleStoreInstance = commandToggleStore;
         this.platformAdapter = platformAdapter;
+    }
+
+    public void enableModule(ParadigmModule module) {
+        synchronized (moduleActivationLock) {
+            if (!module.isEnabled(this) || !enabledModules.add(module)) return;
+            try {
+                module.onEnable(this);
+            } catch (RuntimeException | Error failure) {
+                enabledModules.remove(module);
+                throw failure;
+            }
+        }
+    }
+
+    public void disableModule(ParadigmModule module) {
+        synchronized (moduleActivationLock) {
+            enabledModules.remove(module);
+            module.onDisable(this);
+        }
     }
 
     public void setServer(Object server) {

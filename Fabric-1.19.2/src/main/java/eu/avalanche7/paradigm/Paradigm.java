@@ -125,7 +125,7 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
 
         modules.forEach(module -> {
             if (module.isEnabled(services)) {
-                module.onEnable(services);
+                services.enableModule(module);
                 module.onServerStarting(null, services);
             }
         });
@@ -150,7 +150,7 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
         modules.forEach(module -> {
             if (module.isEnabled(services)) {
                 module.onServerStopping(null, services);
-                module.onDisable(services);
+                services.disableModule(module);
             }
         });
 

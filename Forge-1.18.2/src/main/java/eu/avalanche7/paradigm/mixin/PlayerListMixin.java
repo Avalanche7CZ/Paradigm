@@ -15,11 +15,21 @@ import net.minecraft.network.chat.TranslatableComponent;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.UUID;
 
 @Mixin(PlayerList.class)
 public abstract class PlayerListMixin {
+
+    @Redirect(method = "placeNewPlayer", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/players/PlayerList;broadcastMessage(Lnet/minecraft/network/chat/Component;Lnet/minecraft/network/chat/ChatType;Ljava/util/UUID;)V"))
+    private void paradigm$broadcastJoin(PlayerList players, Component message, ChatType chatType, UUID sender,
+                                        net.minecraft.network.Connection connection, ServerPlayer player) {
+        Services services = Paradigm.getServices();
+        if (services != null && services.getChatConfig().enableFirstJoinMessage.get()
+                && services.getPlatformAdapter().isFirstJoin(new MinecraftPlayer(player))) return;
+        players.broadcastMessage(message, chatType, sender);
+    }
 
     @Inject(method = {"placeNewPlayer", "m_11261_"}, at = @At("HEAD"), cancellable = true, remap = false)
     private void paradigm$rejectPunishedConnection(net.minecraft.network.Connection connection, ServerPlayer player, CallbackInfo ci) {

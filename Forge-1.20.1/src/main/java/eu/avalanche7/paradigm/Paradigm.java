@@ -105,7 +105,7 @@ public class Paradigm {
     private void commonSetup(final FMLCommonSetupEvent event) {
         event.enqueueWork(() -> modules.forEach(module -> {
             if (module.isEnabled(services)) {
-                module.onEnable(services);
+                services.enableModule(module);
             }
         }));
 
@@ -209,7 +209,7 @@ public class Paradigm {
         modules.forEach(module -> {
             if (module.isEnabled(services)) {
                 module.onServerStopping(event, services);
-                module.onDisable(services);
+                services.disableModule(module);
             }
         });
         if (telemetryReporter != null) telemetryReporter.stop();

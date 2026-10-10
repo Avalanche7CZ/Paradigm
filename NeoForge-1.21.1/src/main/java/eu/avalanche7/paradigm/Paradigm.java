@@ -150,6 +150,7 @@ public class Paradigm {
 
         modules.forEach(module -> {
             if (module.isEnabled(services)) {
+                services.enableModule(module);
                 module.onServerStarting(event, services);
             }
         });
@@ -185,7 +186,7 @@ public class Paradigm {
         modules.forEach(module -> {
             if (module.isEnabled(services)) {
                 module.onServerStopping(event, services);
-                module.onDisable(services);
+                services.disableModule(module);
             }
         });
         if (telemetryReporter != null) telemetryReporter.stop();
