@@ -174,7 +174,7 @@ class ForgeCommandTest {
 
     @Test
     void literalsPlayersBooleansAndProvidersSuggestValidValues() {
-        when(platform.getOnlinePlayerNames()).thenReturn(List.of("Alice", "Bob"));
+        when(platform.getVisiblePlayerNames(any())).thenReturn(List.of("Alice", "Bob"));
         ForgeCommand command = new ForgeCommand(builder().literal("sample")
                 .then(builder().literal("status"))
                 .then(builder().literal("target").then(builder().argument("player", ArgumentType.PLAYER)))
