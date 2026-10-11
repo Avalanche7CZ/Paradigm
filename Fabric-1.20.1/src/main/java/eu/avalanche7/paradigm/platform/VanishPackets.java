@@ -14,7 +14,9 @@ public final class VanishPackets {
         var services = ParadigmAPI.getServices();
         if (services == null) return packet;
         if (packet instanceof PlayerRemoveS2CPacket removal) {
-            var entries = removal.profileIds().stream().filter(listed::remove).toList();
+            var wrapped = services.getPlatformAdapter().wrapPlayer(viewer);
+            var entries = removal.profileIds().stream()
+                    .filter(uuid -> listed.remove(uuid) || services.getVanishService().canSeeUuid(wrapped, uuid.toString())).toList();
             return entries.size() == removal.profileIds().size() ? packet : new PlayerRemoveS2CPacket(entries);
         }
         if (!(packet instanceof PlayerListS2CPacket info)) return packet;

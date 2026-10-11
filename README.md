@@ -3,7 +3,7 @@
 
 **Paradigm Essentials** is a modular **server administration suite** for Minecraft.
 
-**Version:** `2.5.1`
+**Version:** `2.5.2`
 **Author:** Avalanche7CZ  
 **License:** CC-BY-NC-ND-4.0
 

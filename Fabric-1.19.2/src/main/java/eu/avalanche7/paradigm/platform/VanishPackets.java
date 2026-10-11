@@ -14,7 +14,8 @@ public final class VanishPackets {
         if (services == null || !(packet instanceof PlayerListS2CPacket info)) return packet;
         var wrapped = services.getPlatformAdapter().wrapPlayer(viewer);
         List<PlayerListS2CPacket.Entry> entries = info.getEntries().stream()
-                .filter(entry -> info.getAction() == PlayerListS2CPacket.Action.REMOVE_PLAYER ? listed.remove(entry.getProfile().getId()) : services.getVanishService().canSeeUuid(wrapped, entry.getProfile().getId().toString())).toList();
+                .filter(entry -> (info.getAction() == PlayerListS2CPacket.Action.REMOVE_PLAYER && listed.remove(entry.getProfile().getId()))
+                        || services.getVanishService().canSeeUuid(wrapped, entry.getProfile().getId().toString())).toList();
         if (info.getAction() == PlayerListS2CPacket.Action.ADD_PLAYER) entries.forEach(entry -> listed.add(entry.getProfile().getId()));
         if (entries.size() == info.getEntries().size()) return packet;
         PlayerListS2CPacket filtered = new PlayerListS2CPacket(info.getAction(), List.of());
