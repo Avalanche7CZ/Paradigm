@@ -17,7 +17,7 @@ public final class VanishPackets {
                 .filter(entry -> info.getAction() == ClientboundPlayerInfoPacket.Action.REMOVE_PLAYER ? listed.remove(entry.getProfile().getId()) : services.getVanishService().canSeeUuid(wrapped, entry.getProfile().getId().toString())).toList();
         if (info.getAction() == ClientboundPlayerInfoPacket.Action.ADD_PLAYER) entries.forEach(entry -> listed.add(entry.getProfile().getId()));
         if (entries.size() == info.getEntries().size()) return packet;
-        ClientboundPlayerInfoPacket filtered = new ClientboundPlayerInfoPacket(info.getAction(), java.util.List.of());
+        ClientboundPlayerInfoPacket filtered = new ClientboundPlayerInfoPacket(info.getAction(), List.of());
         ((IVanishPlayerInfoPacket) filtered).paradigm$entries(entries);
         return filtered;
     }

@@ -176,13 +176,15 @@ public final class VanishService {
             services.getStorageService().adminState().setVanished(uuid, enabled);
             return enabled;
         }, services.getTaskScheduler(), saved -> {
-            if (valid(player, expected, token)) pending.remove(uuid);
-            result.complete(saved);
+            boolean current = valid(player, expected, token);
+            if (java.util.Objects.equals(tokens.get(uuid), token)) pending.remove(uuid);
+            if (current) result.complete(saved);
+            else result.completeExceptionally(new IllegalStateException("Vanish preference saved, but the active player state changed."));
         }, failure -> {
             if (valid(player, expected, token)) {
                 apply(player, previous);
-                pending.remove(uuid);
             }
+            if (java.util.Objects.equals(tokens.get(uuid), token)) pending.remove(uuid);
             result.completeExceptionally(failure);
         });
         return result;

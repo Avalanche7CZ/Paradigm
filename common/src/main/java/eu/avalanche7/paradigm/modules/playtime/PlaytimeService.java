@@ -94,7 +94,7 @@ public final class PlaytimeService {
             counter.lastSeenMs = Math.max(counter.lastSeenMs, now);
         }
         sessions.put(uuid, new Session(counter, now));
-        flush(uuid, counter);
+        requestFlush();
     }
 
     public synchronized void endSession(IPlayer player) {
@@ -102,7 +102,7 @@ public final class PlaytimeService {
         Session session = uuid != null ? sessions.remove(uuid) : null;
         if (session == null) return;
         session.finish(clock.getAsLong());
-        flush(uuid, session.counter);
+        requestFlush();
     }
 
     public long onlinePlaytimeMs(IPlayer player) {
@@ -142,13 +142,13 @@ public final class PlaytimeService {
             Counter counter = entry.getValue();
             try {
                 for (;;) {
-                    CompletableFuture<StoredPlayerProfileState> future = flush(entry.getKey(), counter);
+                    CompletableFuture<StoredPlayerProfileState> future = requestFlush();
                     future.get(Math.max(1L, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
                     synchronized (counter) {
                         if (counter.loaded && counter.acknowledgedMs >= counter.target() && counter.recoveryPendingMs() == 0L) break;
                     }
                     if (System.nanoTime() >= deadline) throw new java.util.concurrent.TimeoutException();
-                    flush(entry.getKey(), counter);
+                    requestFlush();
                 }
             } catch (Exception failure) {
                 if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
@@ -158,10 +158,6 @@ public final class PlaytimeService {
                 }
             }
         }
-    }
-
-    private CompletableFuture<StoredPlayerProfileState> flush(String uuid, Counter counter) {
-        return requestFlush();
     }
 
     private synchronized CompletableFuture<StoredPlayerProfileState> requestFlush() {

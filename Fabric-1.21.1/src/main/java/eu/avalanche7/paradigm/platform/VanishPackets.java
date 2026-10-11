@@ -23,7 +23,7 @@ public final class VanishPackets {
                 .filter(entry -> services.getVanishService().canSeeUuid(wrapped, entry.profileId().toString())).toList();
         if (info.getActions().contains(PlayerListS2CPacket.Action.ADD_PLAYER)) entries.forEach(entry -> listed.add(entry.profileId()));
         if (entries.size() == info.getEntries().size()) return packet;
-        PlayerListS2CPacket filtered = new PlayerListS2CPacket(info.getActions(), java.util.List.of());
+        PlayerListS2CPacket filtered = new PlayerListS2CPacket(info.getActions(), List.of());
         ((IVanishPlayerInfoPacket) filtered).paradigm$entries(entries);
         return filtered;
     }

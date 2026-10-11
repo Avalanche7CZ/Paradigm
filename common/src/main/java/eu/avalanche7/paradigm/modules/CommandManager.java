@@ -222,13 +222,13 @@ public class CommandManager implements ParadigmModule {
         ICommandBuilder argNode = platform.createCommandBuilder().argument(def.getName(), platformType)
                 .requires(source -> platform.hasPermissionForCustomCommand(source, command));
 
-        List<String> sugg = suggestionsFor(def);
         if ("player".equals(def.getType())) {
             argNode = argNode.suggests((context, input) -> platform.getVisiblePlayerNames(context.getSource().getPlayer()));
         } else if ("world".equals(def.getType())) {
             argNode = argNode.suggests((context, input) -> platform.getWorldNames());
-        } else if (!sugg.isEmpty()) {
-            argNode = argNode.suggests(sugg);
+        } else {
+            List<String> suggestions = suggestionsFor(def);
+            if (!suggestions.isEmpty()) argNode = argNode.suggests(suggestions);
         }
 
         if (argIndex == defs.size() - 1) {
@@ -313,8 +313,6 @@ public class CommandManager implements ParadigmModule {
     private List<String> suggestionsFor(CustomCommand.ArgumentDefinition def) {
         String type = def.getType() != null ? def.getType() : "string";
         return switch (type) {
-            case "player" -> platform.getOnlinePlayerNames();
-            case "world" -> platform.getWorldNames();
             case "gamemode" -> List.of("survival", "creative", "adventure", "spectator").stream()
                     .filter(platform::supportsGameMode).toList();
             case "custom" -> {
