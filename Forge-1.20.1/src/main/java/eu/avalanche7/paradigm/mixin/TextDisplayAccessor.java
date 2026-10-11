@@ -6,12 +6,12 @@ import org.spongepowered.asm.mixin.gen.Invoker;
 
 @Mixin(Display.TextDisplay.class)
 public interface TextDisplayAccessor {
-    @Invoker(value = "setLineWidth", remap = false)
+    @Invoker(value = "setLineWidth")
     void paradigm$setLineWidth(int value);
 
-    @Invoker(value = "setTextOpacity", remap = false)
+    @Invoker(value = "setTextOpacity")
     void paradigm$setTextOpacity(byte value);
 
-    @Invoker(value = "setFlags", remap = false)
+    @Invoker(value = "setFlags")
     void paradigm$setFlags(byte value);
 }

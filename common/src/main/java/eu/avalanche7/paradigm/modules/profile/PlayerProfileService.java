@@ -8,7 +8,6 @@ import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
 
 public final class PlayerProfileService {
     private final Services services;
-    private final Object mutationLock = new Object();
 
     public PlayerProfileService(Services services) {
         this.services = services;
@@ -61,12 +60,8 @@ public final class PlayerProfileService {
         if (key == null || services == null || services.getStorageService() == null) {
             return null;
         }
-        synchronized (mutationLock) {
-            StoredPlayerProfile existing = services.getStorageService().players().getProfile(key).orElse(null);
-            StoredPlayerProfile updated = merged(existing, key, name, touchSeen, playtimeDeltaMs, System.currentTimeMillis());
-            services.getStorageService().players().upsertProfile(updated);
-            return updated;
-        }
+        long now = System.currentTimeMillis();
+        return services.getStorageService().players().mergeProfile(new StoredPlayerProfile(key, name, now, touchSeen ? now : 0L, Math.max(0L, playtimeDeltaMs)));
     }
 
     public static StoredPlayerProfile merged(StoredPlayerProfile existing, String uuid, String name,
@@ -90,7 +85,9 @@ public final class PlayerProfileService {
         if (normalize(uuid) == null || services == null || services.getStorageService() == null) {
             return;
         }
-        services.getStorageService().runStorageAsync(operation, () -> merge(uuid, name, touchSeen, playtimeDeltaMs));
+        long now = System.currentTimeMillis();
+        services.getStorageService().runStorageAsync(operation, () -> services.getStorageService().players().mergeProfile(
+                new StoredPlayerProfile(normalize(uuid), name, now, touchSeen ? now : 0L, Math.max(0L, playtimeDeltaMs))));
     }
 
     private static String normalize(String uuid) {

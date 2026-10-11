@@ -43,7 +43,7 @@ public class PlayerManagerMixin {
         boolean enableRegular = chatConfig.enableJoinLeaveMessages.value;
         boolean enableFirst = chatConfig.enableFirstJoinMessage.value;
         boolean isFirstJoin = player.getStatHandler().getStat(Stats.CUSTOM.getOrCreateStat(Stats.LEAVE_GAME)) == 0;
-        boolean shouldSuppress = enableRegular || (enableFirst && isFirstJoin);
+        boolean shouldSuppress = services.getVanishService().isHidden(player.getUuid().toString()) || enableRegular || (enableFirst && isFirstJoin);
         SUPPRESS_JOIN_BROADCAST.set(shouldSuppress);
     }
 
@@ -59,7 +59,7 @@ public class PlayerManagerMixin {
         }
         TranslatableTextContent content = (TranslatableTextContent) message.getContent();
         String key = content.getKey();
-        if ("multiplayer.player.joined".equals(key)) {
+        if ("multiplayer.player.joined".equals(key) || "multiplayer.player.joined.renamed".equals(key)) {
             Boolean suppress = SUPPRESS_JOIN_BROADCAST.get();
             if (Boolean.TRUE.equals(suppress)) {
                 ci.cancel();
@@ -80,6 +80,7 @@ public class PlayerManagerMixin {
     private void sendCustomJoinMessage(ClientConnection connection, ServerPlayerEntity player, ConnectedClientData clientData, CallbackInfo ci) {
         Services services = ParadigmAPI.getServices();
         if (services == null) return;
+        if (services.getVanishService().isHidden(player.getUuid().toString())) return;
 
         ChatConfigHandler.Config chatConfig = services.getChatConfig();
         if (!chatConfig.enableJoinLeaveMessages.value && !chatConfig.enableFirstJoinMessage.value) {
@@ -109,6 +110,7 @@ public class PlayerManagerMixin {
     private void onPlayerRemoveMixin(ServerPlayerEntity player, CallbackInfo ci) {
         Services services = ParadigmAPI.getServices();
         if (services == null) return;
+        if (services.getVanishService().isHidden(player.getUuid().toString())) return;
 
         ChatConfigHandler.Config chatConfig = services.getChatConfig();
         if (!chatConfig.enableJoinLeaveMessages.value) {

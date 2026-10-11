@@ -65,13 +65,13 @@ public final class HologramRenderer {
     }
 
     private IComponent parse(String template, String dimension, IPlayer viewer) {
-        String expanded = globalPlaceholders(template, dimension);
+        String expanded = globalPlaceholders(template, dimension, viewer);
         return services.getMessageParser().parseMessage(expanded, viewer);
     }
 
-    private String globalPlaceholders(String input, String dimension) {
+    private String globalPlaceholders(String input, String dimension, IPlayer viewer) {
         String value = input != null ? input : "";
-        int online = services.getPlatformAdapter().getOnlinePlayers().size();
+        int online = (int) services.getPlatformAdapter().getOnlinePlayers().stream().filter(target -> viewer == null ? !services.getVanishService().isHidden(target.getUUID()) : services.getVanishService().canSee(viewer, target)).count();
         int max = Math.max(online, services.getPlatformAdapter().getMaxPlayers());
         ServerIdentity identity = services.getStorageService() != null && services.getStorageService().context() != null
                 ? services.getStorageService().context().serverIdentity() : null;

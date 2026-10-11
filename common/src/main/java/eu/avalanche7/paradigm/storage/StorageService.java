@@ -58,6 +58,8 @@ public class StorageService implements AutoCloseable {
     private final RuntimeLibraryManager runtimeLibraryManager;
     private final RuntimeJdbcDriverProvider runtimeJdbcDriverProvider;
     private final Object lifecycleLock = new Object();
+    private final java.util.List<AutoCloseable> storageResources = new java.util.ArrayList<>();
+    private final java.util.Set<CompletableFuture<?>> acknowledgedTasks = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     private StorageProvider activeProvider;
     private StorageProviderType selectedProviderType;
@@ -119,7 +121,8 @@ public class StorageService implements AutoCloseable {
             if (logger != null) {
                 logger.warn("Paradigm storage: {} provider failed: {}", selectedProviderType.configValue(), fallbackReason, t);
             }
-            if (Boolean.TRUE.equals(config.fallbackToJsonOnSqlFailure)) {
+            boolean incompatible = structuralSqlFailure(t);
+            if (!incompatible && Boolean.TRUE.equals(config.fallbackToJsonOnSqlFailure)) {
                 fallbackActive = true;
                 activeProvider = jsonProvider;
                 activeProvider.initialize();
@@ -131,10 +134,23 @@ public class StorageService implements AutoCloseable {
             } else {
                 activeProvider = null;
                 if (logger != null) {
-                    logger.warn("Paradigm storage: SQL fallback disabled; StorageService repositories are unavailable.");
+                    logger.error("Paradigm storage: SQL repositories unavailable: {}. {}", fallbackReason,
+                            incompatible ? "Structural incompatibility cannot use JSON fallback; administrator intervention required." : "Configured JSON fallback is disabled.");
                 }
             }
         }
+    }
+
+    private boolean structuralSqlFailure(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof StorageCompatibilityException) return true;
+            if (cause instanceof java.sql.SQLException sqlFailure) {
+                String state = sqlFailure.getSQLState();
+                if (state != null && (state.startsWith("42") || state.startsWith("0A"))) return true;
+                if (selectedProviderType == StorageProviderType.SQLITE && sqlFailure.getErrorCode() == 1) return true;
+            }
+        }
+        return false;
     }
 
     public StorageStatus status() {
@@ -273,6 +289,46 @@ public class StorageService implements AutoCloseable {
                 callback.run();
             }
         });
+    }
+
+    public void registerStorageResource(AutoCloseable resource) {
+        synchronized (lifecycleLock) {
+            if (closing || closed) throw new StorageException("Storage is closing.");
+            storageResources.add(resource);
+        }
+    }
+
+    public Path playtimeJournalPath() {
+        return platformConfig.resolveConfigPath("paradigm/data/playtime-journal.json");
+    }
+
+    public String playtimeStorageIdentity() {
+        return switch (requireProvider().type()) {
+            case JSON -> "json:" + platformConfig.getConfigDirectory().toAbsolutePath().normalize();
+            case SQLITE -> "sqlite:" + Path.of(config.sqlite.path).toAbsolutePath().normalize();
+            case MYSQL -> "mysql:" + config.sql.host + ":" + config.sql.port + "/" + config.sql.database;
+        };
+    }
+
+    public <T> CompletableFuture<T> submitAcknowledged(Supplier<T> work) {
+        CompletableFuture<T> result = new CompletableFuture<>();
+        synchronized (lifecycleLock) {
+            if (closing || closed) return CompletableFuture.failedFuture(new StorageException("Storage is closing."));
+            acknowledgedTasks.add(result);
+            result.whenComplete((value, failure) -> acknowledgedTasks.remove(result));
+            try {
+                executor.execute(() -> {
+                    try {
+                        result.complete(work.get());
+                    } catch (Throwable failure) {
+                        result.completeExceptionally(failure);
+                    }
+                });
+            } catch (RejectedExecutionException failure) {
+                result.completeExceptionally(failure);
+            }
+        }
+        return result;
     }
 
     public void runStorageAsync(String operation, Runnable work) {
@@ -555,6 +611,7 @@ public class StorageService implements AutoCloseable {
             }
         }
 
+        acknowledgedTasks.forEach(task -> task.completeExceptionally(new StorageException("Storage closed before acknowledgement; commit outcome may be uncertain.")));
         synchronized (lifecycleLock) {
             try {
                 if (activeProvider != null) {
@@ -578,6 +635,16 @@ public class StorageService implements AutoCloseable {
                 if (debugLogger != null) {
                     debugLogger.debugLog("Runtime JDBC close failed: " + failure);
                 }
+            }
+            if (executor.isTerminated()) {
+                for (AutoCloseable resource : storageResources) {
+                    try {
+                        resource.close();
+                    } catch (Exception failure) {
+                        if (logger != null) logger.warn("Paradigm storage: resource close failed.", failure);
+                    }
+                }
+                storageResources.clear();
             }
             closed = true;
             closing = false;

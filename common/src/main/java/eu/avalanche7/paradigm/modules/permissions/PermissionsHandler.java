@@ -946,6 +946,10 @@ public class PermissionsHandler {
             IPlayer online = platform.getPlayerByUuid(playerUuid.toString());
             if (online != null) {
                 platform.refreshPlayerCommandTree(online);
+                platform.executeOnServerThread(() -> {
+                    var services = eu.avalanche7.paradigm.ParadigmAPI.getServices();
+                    if (services != null) services.getVanishService().refreshViewer(online);
+                });
             }
         } catch (RuntimeException t) {
             debugLogger.debugLog("[PermissionsHandler] Failed to refresh command tree for " + playerUuid + ": " + t);

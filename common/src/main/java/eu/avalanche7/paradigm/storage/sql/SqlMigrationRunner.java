@@ -299,6 +299,7 @@ public class SqlMigrationRunner implements MigrationRunner {
                 case 13 -> "integration_views";
                 case 14 -> "jail_association";
                 case 15 -> "escalation_claims";
+                case 16 -> "player_playtime_streams";
                 default -> "migration";
             } + ".sql";
             String sql = resourceText(resource);

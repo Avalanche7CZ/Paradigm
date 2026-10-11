@@ -224,7 +224,7 @@ public class CommandManager implements ParadigmModule {
 
         List<String> sugg = suggestionsFor(def);
         if ("player".equals(def.getType())) {
-            argNode = argNode.suggests((context, input) -> platform.getOnlinePlayerNames());
+            argNode = argNode.suggests((context, input) -> platform.getVisiblePlayerNames(context.getSource().getPlayer()));
         } else if ("world".equals(def.getType())) {
             argNode = argNode.suggests((context, input) -> platform.getWorldNames());
         } else if (!sugg.isEmpty()) {

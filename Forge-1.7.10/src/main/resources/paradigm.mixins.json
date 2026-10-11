@@ -5,5 +5,7 @@
   "compatibilityLevel": "JAVA_17",
   "refmap": "paradigm.refmap.json",
   "mixins": [],
-  "injectors": {"defaultRequire": 1}
+  "injectors": {
+    "defaultRequire": 1
+  }
 }

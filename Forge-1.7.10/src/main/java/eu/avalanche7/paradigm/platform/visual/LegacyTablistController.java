@@ -65,6 +65,11 @@ public final class LegacyTablistController {
         if (team != null) for (EntityPlayerMP viewer : players()) send(viewer, team);
     }
 
+    public void visibilityChanged(EntityPlayerMP viewer, EntityPlayerMP player) {
+        ScorePlayerTeam team = teams.get(player.getUniqueID());
+        if (team != null) send(viewer, team);
+    }
+
     public void reset(EntityPlayerMP player) {
         ScorePlayerTeam team = teams.remove(player.getUniqueID());
         if (team == null) return;

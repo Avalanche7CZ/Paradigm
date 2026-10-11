@@ -22,6 +22,30 @@ import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 
 public class Restart implements ParadigmModule {
+    private long scheduleGeneration;
+    private String scheduleSettings;
+
+    private String schedulingSettings(Services services) {
+        return new com.google.gson.Gson().toJson(services.getRestartConfig());
+    }
+
+    private Runnable guardSchedule(Runnable task) {
+        long expectedGeneration = scheduleGeneration;
+        return () -> {
+            synchronized (this) {
+                if (expectedGeneration == scheduleGeneration && services.canDispatchModuleEvents(this) && isEnabled(services)) task.run();
+            }
+        };
+    }
+
+    private ScheduledFuture<?> schedule(Runnable task, long delay, TimeUnit unit) {
+        return services.getTaskScheduler().schedule(guardSchedule(task), delay, unit);
+    }
+
+    private ScheduledFuture<?> scheduleAtFixedRate(Runnable task, long delay, long period, TimeUnit unit) {
+        return services.getTaskScheduler().scheduleAtFixedRate(guardSchedule(task), delay, period, unit);
+    }
+
 
     private static final String NAME = "Restart";
     private static final DecimalFormat TIME_FORMATTER = new DecimalFormat("00");
@@ -82,7 +106,9 @@ public class Restart implements ParadigmModule {
         cancelAndCleanup(false);
     }
 
-    private void cancelAndCleanup(boolean announceCancellation) {
+    private synchronized void cancelAndCleanup(boolean announceCancellation) {
+        scheduleGeneration++;
+        scheduleSettings = null;
         services.getDebugLogger().debugLog(NAME + ": Initiating cleanup process.");
         boolean wasInProgress = restartInProgress.get();
         if (mainTaskFuture != null && !mainTaskFuture.isDone()) {
@@ -167,8 +193,9 @@ public class Restart implements ParadigmModule {
     public void registerEventListeners(Object eventBus, Services services) {
     }
 
-    private void scheduleNextRestart(Services services) {
+    private synchronized void scheduleNextRestart(Services services) {
         cancelAndCleanup();
+        scheduleSettings = schedulingSettings(services);
         RestartConfigHandler.Config config = services.getRestartConfig();
         String restartType = config.restartType.value;
         long delayMillis = -1;
@@ -274,7 +301,7 @@ public class Restart implements ParadigmModule {
         for (final int broadcastTimeSec : broadcastTimes) {
             long delayUntilWarning = totalIntervalMillis - (broadcastTimeSec * 1000L);
             if (delayUntilWarning >= 0) {
-                ScheduledFuture<?> future = services.getTaskScheduler().schedule(() -> {
+                ScheduledFuture<?> future = schedule(() -> {
                     if (!restartInProgress.get()) return;
                     if (!sentWarningMoments.add(broadcastTimeSec)) {
                         services.getDebugLogger().debugLog(NAME + ": Duplicate warning suppressed. Time left: " + broadcastTimeSec + "s.");
@@ -298,7 +325,7 @@ public class Restart implements ParadigmModule {
                     continue;
                 }
                 String commandText = pre.command == null ? "" : pre.command;
-                ScheduledFuture<?> f = services.getTaskScheduler().schedule(() -> {
+                ScheduledFuture<?> f = schedule(() -> {
                     if (!restartInProgress.get()) return;
                     if (isAsEachPlayerDirective(commandText)) {
                         String raw = stripAsEachPlayerDirective(commandText);
@@ -329,7 +356,7 @@ public class Restart implements ParadigmModule {
             }
         }
 
-        shutdownFuture = services.getTaskScheduler().schedule(() -> {
+        shutdownFuture = schedule(() -> {
             if (!restartInProgress.get()) return;
             performShutdown(services, config);
         }, totalIntervalMillis, TimeUnit.MILLISECONDS);
@@ -361,9 +388,9 @@ public class Restart implements ParadigmModule {
         }
 
         long delayUntilBossBar = bossBarStartSeconds >= 0L ? totalIntervalMillis - (bossBarStartSeconds * 1000L) : 0L;
-        bossBarFuture = services.getTaskScheduler().schedule(() -> {
+        bossBarFuture = schedule(() -> {
             if (!restartInProgress.get()) return;
-            bossBarFuture = services.getTaskScheduler().scheduleAtFixedRate(() -> {
+            bossBarFuture = scheduleAtFixedRate(() -> {
                 if (!restartInProgress.get()) return;
                 long remainingMillis = Math.max(0L, restartAtMillis - System.currentTimeMillis());
                 long secondsLeft = (long) Math.ceil(remainingMillis / 1000.0);
@@ -440,11 +467,12 @@ public class Restart implements ParadigmModule {
         return result;
     }
 
-    public void rescheduleNextRestart(Services services) {
+    public synchronized void rescheduleNextRestart(Services services) {
         if (services == null) return;
+        if (services.canDispatchModuleEvents(this) && isEnabled(services) && schedulingSettings(services).equals(scheduleSettings)) return;
         this.services = services;
         cancelAndCleanup();
-        if (!isEnabled(services)) {
+        if (!services.canDispatchModuleEvents(this) || !isEnabled(services)) {
             services.getDebugLogger().debugLog(NAME + ": Module is disabled after reload; restart will stay unscheduled.");
             return;
         }

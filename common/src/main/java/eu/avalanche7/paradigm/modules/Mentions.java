@@ -150,7 +150,7 @@ public class Mentions implements ParadigmModule {
 
     private void handleIndividualMentions(IPlayer sender, String rawMessage, MentionConfigHandler.Config mentionConfig, Services services) {
         String mentionSymbol = mentionConfig.MENTION_SYMBOL.value;
-        List<IPlayer> players = platform.getOnlinePlayers();
+        List<IPlayer> players = platform.getVisiblePlayers(sender);
 
         Pattern allPlayersPattern = buildAllPlayersMentionPattern(players, mentionSymbol);
         Matcher mentionMatcher = allPlayersPattern.matcher(rawMessage);
@@ -198,7 +198,7 @@ public class Mentions implements ParadigmModule {
         message = message.trim();
 
         MentionConfigHandler.Config mentionConfig = MentionConfigHandler.getConfig();
-        List<IPlayer> players = platform.getOnlinePlayers();
+        List<IPlayer> players = platform.getVisiblePlayers(sender);
         boolean isConsole = sender == null;
 
         String everyoneMentionPlaceholder = mentionConfig.MENTION_SYMBOL.value + "everyone";

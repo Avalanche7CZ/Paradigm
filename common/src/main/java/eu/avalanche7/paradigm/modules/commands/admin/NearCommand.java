@@ -40,7 +40,7 @@ public class NearCommand extends AbstractAdminCommand {
         int clamped = Math.max(1, Math.min(radius, 10000));
         double maxDistanceSq = (double) clamped * clamped;
         List<Entry> nearby = new ArrayList<>();
-        for (IPlayer player : services.getPlatformAdapter().getOnlinePlayers()) {
+        for (IPlayer player : services.getPlatformAdapter().getVisiblePlayers(actor)) {
             if (player == null || player.getUUID() == null || player.getUUID().equals(actor.getUUID())) {
                 continue;
             }

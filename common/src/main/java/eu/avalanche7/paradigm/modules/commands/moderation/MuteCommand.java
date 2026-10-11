@@ -68,7 +68,7 @@ public class MuteCommand extends AbstractModerationCommand {
                 .requires(src -> allowed(src, "unmute", ParadigmPermissions.MUTE))
                 .then(builder()
                         .argument("target", ICommandBuilder.ArgumentType.WORD)
-                        .suggests((ctx, input) -> services.getPlatformAdapter().getOnlinePlayers().stream().map(IPlayer::getName).toList())
+                        .suggests((ctx, input) -> services.getPlatformAdapter().getVisiblePlayerNames(ctx.getSource().getPlayer()))
                         .executes(ctx -> revokeTarget(ctx.getSource(), ctx.getStringArgument("target"), PunishmentType.MUTE,
                                 "moderation.unmute", "moderation.unmute_ok", "Unmuted {player}.", "{player} was not muted.")));
         services.getPlatformAdapter().registerCommand(cmd);

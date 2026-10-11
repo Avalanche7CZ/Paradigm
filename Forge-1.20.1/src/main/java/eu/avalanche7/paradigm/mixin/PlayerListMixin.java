@@ -46,6 +46,16 @@ public abstract class PlayerListMixin {
     private void paradigm$filterJoinLeaveMessages(Component message, boolean overlay, CallbackInfo ci) {
         if (message == null) return;
 
+        if (paradigm$isVanillaJoinLeave(message)
+                && message.getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents content
+                && content.getArgs().length > 0) {
+            Object argument = content.getArgs()[0];
+            String display = argument instanceof Component text ? text.getString() : String.valueOf(argument);
+            for (ServerPlayer subject : ((PlayerList) (Object) this).getPlayers()) {
+                if (eu.avalanche7.paradigm.platform.VanishTracking.hidden(subject.getUUID().toString())
+                        && subject.getDisplayName().getString().equals(display)) { ci.cancel(); return; }
+            }
+        }
         Services services = Paradigm.getServices();
         if (services == null) return;
         ChatConfigHandler.Config cfg = services.getChatConfig();

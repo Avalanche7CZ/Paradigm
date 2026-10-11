@@ -7,6 +7,6 @@ import org.spongepowered.asm.mixin.gen.Invoker;
 
 @Mixin(Display.class)
 public interface DisplayAccessor {
-    @Invoker(value = "setTransformation", remap = false)
+    @Invoker(value = "setTransformation")
     void paradigm$setTransformation(Transformation transformation);
 }

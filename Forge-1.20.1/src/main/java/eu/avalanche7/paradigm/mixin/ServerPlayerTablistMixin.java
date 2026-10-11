@@ -12,6 +12,6 @@ public abstract class ServerPlayerTablistMixin implements ITablistPlayerAccess {
     @Unique private Component paradigm$tablistName;
     @Override public void paradigm$setTablistDisplayName(Object value) { paradigm$tablistName = value instanceof Component component ? component : null; }
     @Override public void paradigm$setTablistOrder(int order) { }
-    @Inject(method="getTabListDisplayName", at=@At("HEAD"), cancellable=true, remap=false)
+    @Inject(method="getTabListDisplayName", at=@At("HEAD"), cancellable=true)
     private void paradigm$name(CallbackInfoReturnable<Component> cir) { if (paradigm$tablistName != null) cir.setReturnValue(paradigm$tablistName); }
 }

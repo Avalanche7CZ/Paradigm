@@ -136,7 +136,8 @@ public final class DiscordRelay implements ParadigmEvents.Listener {
 
     void relayAdvancement(IPlayer player, String advancementName, String advancementDescription) {
         DiscordConfigHandler.Config config = service.config();
-        if (config == null || !service.isEnabled() || player == null) {
+        if (config == null || !service.isEnabled() || player == null
+                || eu.avalanche7.paradigm.platform.VanishTracking.hidden(player.getUUID())) {
             return;
         }
         if (!Boolean.TRUE.equals(config.notifyAdvancement.get())) {
@@ -163,7 +164,8 @@ public final class DiscordRelay implements ParadigmEvents.Listener {
 
     void relayPlayerDeath(IPlayer player, String deathMessage) {
         DiscordConfigHandler.Config config = service.config();
-        if (config == null || !service.isEnabled() || player == null) {
+        if (config == null || !service.isEnabled() || player == null
+                || eu.avalanche7.paradigm.platform.VanishTracking.hidden(player.getUUID())) {
             return;
         }
         if (!Boolean.TRUE.equals(config.notifyPlayerDeath.get())) {
@@ -301,7 +303,8 @@ public final class DiscordRelay implements ParadigmEvents.Listener {
 
     private void relayPlayerPresence(IPlayer player, boolean joined) {
         DiscordConfigHandler.Config config = service.config();
-        if (config == null || !service.isEnabled() || player == null) {
+        if (config == null || !service.isEnabled() || player == null
+                || eu.avalanche7.paradigm.platform.VanishTracking.hidden(player.getUUID())) {
             return;
         }
         boolean toggled = joined
@@ -330,7 +333,7 @@ public final class DiscordRelay implements ParadigmEvents.Listener {
 
     private int onlineCount(IPlatformAdapter platform) {
         try {
-            return platform != null && platform.getOnlinePlayers() != null ? platform.getOnlinePlayers().size() : 0;
+            return platform != null && platform.getOnlinePlayers() != null ? (int) platform.getOnlinePlayers().stream().filter(player -> player == null || !eu.avalanche7.paradigm.platform.VanishTracking.hidden(player.getUUID())).count() : 0;
         } catch (RuntimeException unavailable) {
             return 0;
         }

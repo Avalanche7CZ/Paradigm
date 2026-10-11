@@ -10,6 +10,7 @@ import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.storage.model.StoredHome;
 import eu.avalanche7.paradigm.storage.model.StoredLocation;
 import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
+import eu.avalanche7.paradigm.storage.model.StoredPlayerProfileState;
 import eu.avalanche7.paradigm.storage.repository.PlayerRepository;
 
 public class JsonPlayerRepository implements PlayerRepository {
@@ -47,6 +48,26 @@ public class JsonPlayerRepository implements PlayerRepository {
         if (store != null && profile != null) {
             store.upsertProfile(profile.uuid(), profile.name(), profile.firstSeenMs(), profile.lastSeenMs(), profile.playtimeMs());
         }
+    }
+
+    @Override
+    public StoredPlayerProfile mergeProfile(StoredPlayerProfile update) {
+        return store.mergeProfile(update);
+    }
+
+    @Override
+    public StoredPlayerProfileState getProfileState(String uuid) {
+        return store.getProfileState(uuid);
+    }
+
+    @Override
+    public void importProfileState(StoredPlayerProfileState state) {
+        store.importProfileState(state);
+    }
+
+    @Override
+    public StoredPlayerProfileState recordPlaytime(StoredPlayerProfile update, String writerId, long cumulativeMs) {
+        return store.recordPlaytime(update, writerId, cumulativeMs);
     }
 
     @Override

@@ -129,26 +129,95 @@ public class Services {
         this.platformAdapter = platformAdapter;
     }
 
+    private volatile eu.avalanche7.paradigm.modules.vanish.VanishService vanishService;
+
+    public synchronized eu.avalanche7.paradigm.modules.vanish.VanishService getVanishService() {
+        if (vanishService == null) vanishService = new eu.avalanche7.paradigm.modules.vanish.VanishService(this);
+        return vanishService;
+    }
+
+    private final Set<ParadigmModule> activatingModules = Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
+    private volatile boolean stopping;
+    private final Set<ParadigmModule> inactiveModules = Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
+
+    public boolean isModuleActive(ParadigmModule module) {
+        synchronized (moduleActivationLock) {
+            return enabledModules.contains(module);
+        }
+    }
+
+    public boolean canDispatchModuleEvents(ParadigmModule module) {
+        return !stopping && !inactiveModules.contains(module) && !activatingModules.contains(module);
+    }
+
+    public void beginStopping() {
+        synchronized (moduleActivationLock) {
+            stopping = true;
+        }
+    }
+
     public void enableModule(ParadigmModule module) {
         synchronized (moduleActivationLock) {
-            if (!module.isEnabled(this) || !enabledModules.add(module)) return;
+            if (stopping || !module.isEnabled(this) || enabledModules.contains(module) || !activatingModules.add(module)) return;
+            boolean cleanupAttempted = false;
             try {
                 module.onEnable(this);
+                if (stopping || !module.isEnabled(this)) {
+                    inactiveModules.add(module);
+                    cleanupAttempted = true;
+                    module.onDisable(this);
+                } else {
+                    enabledModules.add(module);
+                    inactiveModules.remove(module);
+                }
             } catch (RuntimeException | Error failure) {
                 enabledModules.remove(module);
+                inactiveModules.add(module);
+                if (!cleanupAttempted) {
+                    try {
+                        module.onDisable(this);
+                    } catch (RuntimeException | Error cleanupFailure) {
+                        if (cleanupFailure != failure) failure.addSuppressed(cleanupFailure);
+                    }
+                }
                 throw failure;
+            } finally {
+                activatingModules.remove(module);
             }
         }
     }
 
     public void disableModule(ParadigmModule module) {
         synchronized (moduleActivationLock) {
-            enabledModules.remove(module);
-            module.onDisable(this);
+            inactiveModules.add(module);
+            if (enabledModules.remove(module)) module.onDisable(this);
+        }
+    }
+
+    public void stopModule(ParadigmModule module, Object event) {
+        synchronized (moduleActivationLock) {
+            if (!enabledModules.remove(module)) return;
+            inactiveModules.add(module);
+            try {
+                module.onServerStopping(event, this);
+            } catch (RuntimeException | Error failure) {
+                if (logger != null) logger.warn("Failed to stop module {}; disable cleanup will continue.", module.getName(), failure);
+            } finally {
+                try {
+                    module.onDisable(this);
+                } catch (RuntimeException | Error failure) {
+                    if (logger != null) logger.warn("Failed to disable module {} during shutdown.", module.getName(), failure);
+                }
+            }
         }
     }
 
     public void setServer(Object server) {
+        if (server != null) {
+            synchronized (moduleActivationLock) {
+                stopping = false;
+            }
+        }
         this.server = server;
         if (this.server != null && this.taskSchedulerInstance != null) {
             this.taskSchedulerInstance.initialize(this.server);
@@ -168,6 +237,7 @@ public class Services {
     }
 
     public void shutdown() {
+        beginStopping();
         PlayerInputService input = this.playerInputService;
         if (input != null) {
             input.shutdown();

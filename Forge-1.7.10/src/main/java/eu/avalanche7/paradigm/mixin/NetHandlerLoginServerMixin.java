@@ -19,7 +19,7 @@ import eu.avalanche7.paradigm.platform.visual.LegacyVisualController;
 
 @Mixin(NetHandlerLoginServer.class)
 public abstract class NetHandlerLoginServerMixin {
-    @Unique private CompletableFuture<Boolean> paradigm$vanish;
+    @Unique private CompletableFuture<eu.avalanche7.paradigm.modules.vanish.VanishService.Admission> paradigm$vanish;
 
     @Shadow
     private GameProfile field_147337_i;
@@ -52,7 +52,17 @@ public abstract class NetHandlerLoginServerMixin {
         }
         try {
             LegacyVisualController visuals = LegacyVisualController.current();
-            if (visuals != null) visuals.vanish().prepare(field_147337_i.getId(), paradigm$vanish.join() && MinecraftLoginHandler.vanishEnabled());
+            var state = paradigm$vanish.join();
+            var services = eu.avalanche7.paradigm.ParadigmAPI.getServices();
+            if (services != null) {
+                if (!services.getVanishService().isCurrent(state)) {
+                    paradigm$vanish = null;
+                    callback.cancel();
+                    return;
+                }
+                services.getVanishService().prepare(field_147337_i.getId().toString(), state);
+            }
+            if (visuals != null) visuals.vanish().prepare(field_147337_i.getId(), services != null && services.getVanishService().isHidden(field_147337_i.getId().toString()));
         } catch (CompletionException failure) {
             func_147322_a("Unable to restore player state. Please retry.");
             callback.cancel();

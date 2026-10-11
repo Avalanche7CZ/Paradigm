@@ -170,10 +170,14 @@ public class ConfigPatchService {
         if (afkChanged) {
             AfkConfigHandler.persistConfig();
         }
-        if (mainChanged || afkChanged) {
+        if (mainChanged || afkChanged || announcementsChanged || restartChanged) {
             boolean restartAfk = afkChanged;
+            boolean rescheduleAnnouncements = mainChanged || announcementsChanged;
+            boolean rescheduleRestart = mainChanged || restartChanged;
             scheduleServerThread(() -> {
                 Reload.refreshModuleStates(services, moduleStatesBefore);
+                if (rescheduleAnnouncements) Reload.rescheduleAnnouncements();
+                if (rescheduleRestart) Reload.rescheduleRestart(services);
                 if (restartAfk) {
                     services.getAfkService().restart();
                 }

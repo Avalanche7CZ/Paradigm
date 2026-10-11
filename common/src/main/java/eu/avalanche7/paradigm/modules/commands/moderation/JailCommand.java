@@ -135,7 +135,7 @@ public class JailCommand extends AbstractModerationCommand {
                 .requires(src -> allowed(src, "unjail", ParadigmPermissions.JAIL))
                 .then(builder()
                         .argument("target", ICommandBuilder.ArgumentType.WORD)
-                        .suggests((ctx, input) -> services.getPlatformAdapter().getOnlinePlayers().stream().map(IPlayer::getName).toList())
+                        .suggests((ctx, input) -> services.getPlatformAdapter().getVisiblePlayerNames(ctx.getSource().getPlayer()))
                         .executes(ctx -> revokeTarget(ctx.getSource(), ctx.getStringArgument("target"), PunishmentType.JAIL,
                                 "moderation.unjail", "moderation.unjail_ok", "Unjailed {player}.", "{player} was not jailed.")));
         services.getPlatformAdapter().registerCommand(cmd);

@@ -15,25 +15,25 @@ import eu.avalanche7.paradigm.platform.menu.ParadigmMenuContainer;
 
 @Mixin(NetHandlerPlayServer.class)
 public abstract class MenuNetworkMixin {
-    @Shadow(aliases = {"playerEntity"}) public EntityPlayerMP field_147369_b;
+    @Shadow public EntityPlayerMP playerEntity;
 
     @Inject(method = "processClickWindow", at = @At("HEAD"), cancellable = true)
     private void paradigm$transaction(C0EPacketClickWindow packet, CallbackInfo callback) {
-        if (field_147369_b.openContainer instanceof ParadigmMenuContainer menu
-                && menu.windowId == packet.func_149548_c() && menu.isPlayerNotUsingContainer(field_147369_b)
+        if (playerEntity.openContainer instanceof ParadigmMenuContainer menu
+                && menu.windowId == packet.func_149548_c() && menu.isPlayerNotUsingContainer(playerEntity)
                 && !menu.acceptTransaction(packet.func_149547_f())) {
-            field_147369_b.playerNetServerHandler.sendPacket(new S32PacketConfirmTransaction(menu.windowId, packet.func_149547_f(), false));
+            playerEntity.playerNetServerHandler.sendPacket(new S32PacketConfirmTransaction(menu.windowId, packet.func_149547_f(), false));
             callback.cancel();
         }
     }
 
     @Inject(method = "processClickWindow", at = @At("RETURN"))
     private void paradigm$action(C0EPacketClickWindow packet, CallbackInfo callback) {
-        if (field_147369_b.openContainer instanceof ParadigmMenuContainer menu && menu.windowId == packet.func_149548_c()) menu.flushClick();
+        if (playerEntity.openContainer instanceof ParadigmMenuContainer menu && menu.windowId == packet.func_149548_c()) menu.flushClick();
     }
 
     @Inject(method = "processCloseWindow", at = @At("HEAD"), cancellable = true)
     private void paradigm$close(C0DPacketCloseWindow packet, CallbackInfo callback) {
-        if (field_147369_b.openContainer instanceof ParadigmMenuContainer menu && menu.windowId != ((CloseWindowPacketAccess) packet).paradigm$windowId()) callback.cancel();
+        if (playerEntity.openContainer instanceof ParadigmMenuContainer menu && menu.windowId != ((CloseWindowPacketAccess) packet).paradigm$windowId()) callback.cancel();
     }
 }

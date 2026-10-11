@@ -716,7 +716,7 @@ public final class DiscordService implements DiscordOutbox {
 
         ServerThreadCalls.supply(services, () -> {
             IPlatformAdapter platform = services.getPlatformAdapter();
-            int online = platform != null && platform.getOnlinePlayers() != null ? platform.getOnlinePlayers().size() : 0;
+            int online = platform != null && platform.getOnlinePlayers() != null ? (int) platform.getOnlinePlayers().stream().filter(player -> player == null || !eu.avalanche7.paradigm.platform.VanishTracking.hidden(player.getUUID())).count() : 0;
             int max = platform != null ? platform.getMaxPlayers() : 0;
             return new PresenceSnapshot(online, max);
         }).whenComplete((snapshot, failure) -> {

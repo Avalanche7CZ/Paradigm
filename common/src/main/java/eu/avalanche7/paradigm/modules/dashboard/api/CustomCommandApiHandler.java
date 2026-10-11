@@ -39,7 +39,7 @@ public final class CustomCommandApiHandler {
         Request request = DashboardJson.fromJson(ctx.bodyReader(), Request.class);
         if (request == null) request = new Request();
         try {
-            Object result = dashboard.customCommandMutationAsync(action, request.originalName, request.name, request.command).get();
+            Object result = dashboard.customCommandMutationAsync(ctx.principal(), action, request.originalName, request.name, request.command).get();
             dashboard.audit().dashboard(ctx.principal(), AuditActionType.CUSTOM_COMMAND_CHANGE, AuditResult.SUCCESS,
                     "Custom command " + action + " completed.", Map.of("action", action, "name", safe(request.name), "originalName", safe(request.originalName)));
             notifyMutation(ctx, request, result);
@@ -48,6 +48,7 @@ public final class CustomCommandApiHandler {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             dashboard.audit().dashboard(ctx.principal(), AuditActionType.CUSTOM_COMMAND_CHANGE, AuditResult.FAILED,
                     "Custom command " + action + " failed.", Map.of("action", action, "reason", cause.getClass().getSimpleName()));
+            if (cause instanceof SecurityException) return DashboardResponse.apiError(403, "permission_denied", "Permission denied.");
             if (cause instanceof IllegalArgumentException) {
                 return DashboardResponse.apiError(400, "validation_failed", cause.getMessage());
             }

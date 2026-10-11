@@ -200,10 +200,10 @@ public class Paradigm {
     }
 
     public void onServerStopping(ServerStoppingEvent event) {
+        services.beginStopping();
         modules.forEach(module -> {
-            if (module.isEnabled(services)) {
-                module.onServerStopping(event, services);
-                services.disableModule(module);
+            if (services.isModuleActive(module)) {
+                services.stopModule(module, event);
             }
         });
         if (telemetryReporter != null) telemetryReporter.stop();

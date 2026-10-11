@@ -43,6 +43,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 
 public class PlatformAdapterImpl implements IPlatformAdapter {
+    private final java.util.Set<String> godOwnedPlayerIds = new java.util.HashSet<>();
 
     private MinecraftServer server;
     private MessageParser messageParser;
@@ -186,10 +187,11 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public boolean hasPermission(IPlayer player, String permissionNode, int vanillaLevel) {
-        if (player instanceof MinecraftPlayer mp) {
-            return this.hasPermission(player, permissionNode) || this.hasVanillaPermissionLevel(player, vanillaLevel);
+        if (!(player instanceof MinecraftPlayer)) return false;
+        if (permissionsHandler != null) {
+            return permissionsHandler.hasPermission(player, permissionNode, vanillaLevel);
         }
-        return false;
+        return hasVanillaPermissionLevel(player, vanillaLevel);
     }
 
     @Override
@@ -915,19 +917,44 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         return true;
     }
 
+    public void restoreGodAfterRespawn(IPlayer player) {
+        if (player != null && godOwnedPlayerIds.contains(player.getUUID())) {
+            setPlayerInvulnerable(player, true);
+        }
+    }
+
     @Override
     public boolean setPlayerInvulnerable(IPlayer player, boolean enabled) {
         if (!(player instanceof MinecraftPlayer mp)) return false;
-        mp.getHandle().setInvulnerable(enabled);
+        var handle = mp.getHandle();
+        if (enabled) {
+            if (handle.isInvulnerable() && !godOwnedPlayerIds.contains(player.getUUID())) return true;
+            godOwnedPlayerIds.add(player.getUUID());
+            handle.setInvulnerable(true);
+        } else if (godOwnedPlayerIds.remove(player.getUUID())) {
+            handle.setInvulnerable(false);
+        }
         return true;
     }
 
     @Override
     public boolean setPlayerVanished(IPlayer player, boolean enabled) {
-        if (!(player instanceof MinecraftPlayer mp)) return false;
-        mp.getHandle().setInvisible(enabled);
-        mp.getHandle().setSilent(enabled);
+        if (!(player instanceof MinecraftPlayer) || server == null || !server.isSameThread()) return false;
+        for (IPlayer viewer : getOnlinePlayers()) refreshVanishVisibility(viewer, player);
         return true;
+    }
+
+    @Override
+    public void refreshVanishVisibility(IPlayer viewer, IPlayer target) {
+        if (!(viewer instanceof MinecraftPlayer vp) || !(target instanceof MinecraftPlayer tp) || server == null) return;
+        if (!server.isSameThread()) throw new IllegalStateException("Vanish requires the server thread.");
+        var observer = vp.getHandle();
+        var subject = tp.getHandle();
+        if (observer == subject) return;
+        boolean visible = canSeePlayer(viewer, target);
+        if (visible) observer.connection.send(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(java.util.List.of(subject)));
+        eu.avalanche7.paradigm.platform.VanishTracking.refresh(observer, subject);
+        if (!visible) observer.connection.send(new net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket(java.util.List.of(subject.getUUID())));
     }
 
     @Override
@@ -986,20 +1013,123 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
                 (int) Math.floor(handle.getX()), (int) Math.floor(handle.getZ()));
     }
 
+    private static final net.minecraft.server.level.TicketType RTP_CHUNK_TICKET = new net.minecraft.server.level.TicketType(200, net.minecraft.server.level.TicketType.FLAG_LOADING | net.minecraft.server.level.TicketType.FLAG_CAN_EXPIRE_IF_UNLOADED);
+    private final java.util.Map<Object, java.util.Map<Long, Integer>> rtpChunkHolds = new java.util.IdentityHashMap<>();
+
+    private void releaseRtpChunks(ServerLevel level, java.util.List<net.minecraft.world.level.ChunkPos> held) {
+        var counts = rtpChunkHolds.get(level);
+        if (counts == null) return;
+        for (var position : held) {
+            long key = position.toLong();
+            int remaining = counts.getOrDefault(key, 0) - 1;
+            if (remaining > 0) counts.put(key, remaining);
+            else {
+                counts.remove(key);
+                level.getChunkSource().removeTicketWithRadius(RTP_CHUNK_TICKET, position, 0);
+            }
+        }
+        if (counts.isEmpty()) rtpChunkHolds.remove(level);
+    }
+
+    @Override
+    public java.util.concurrent.CompletableFuture<java.util.Optional<Double>> findSafeRtpYAsync(IPlayer player, double x, double z) {
+        if (!(player instanceof MinecraftPlayer mp) || !Double.isFinite(x) || !Double.isFinite(z)) return java.util.concurrent.CompletableFuture.completedFuture(java.util.Optional.empty());
+        ServerLevel level = (ServerLevel) mp.getHandle().level();
+        var dimensions = mp.getHandle().getDimensions(net.minecraft.world.entity.Pose.STANDING);
+        double halfWidth = Math.max(0.6, dimensions.width()) / 2.0;
+        double bodyHeight = Math.max(1.8, dimensions.height());
+        var border = level.getWorldBorder();
+        if (!Double.isFinite(halfWidth) || !Double.isFinite(bodyHeight)
+                || x - halfWidth < border.getMinX() || x + halfWidth > border.getMaxX()
+                || z - halfWidth < border.getMinZ() || z + halfWidth > border.getMaxZ()) return java.util.concurrent.CompletableFuture.completedFuture(java.util.Optional.empty());
+        int minChunkX = ((int) Math.floor(x - halfWidth) - 2) >> 4;
+        int maxChunkX = ((int) Math.floor(x + halfWidth) + 2) >> 4;
+        int minChunkZ = ((int) Math.floor(z - halfWidth) - 2) >> 4;
+        int maxChunkZ = ((int) Math.floor(z + halfWidth) + 2) >> 4;
+        if ((long) maxChunkX - minChunkX > 3 || (long) maxChunkZ - minChunkZ > 3) {
+            return java.util.concurrent.CompletableFuture.completedFuture(java.util.Optional.empty());
+        }
+        var chunkSource = level.getChunkSource();
+        java.util.List<net.minecraft.world.level.ChunkPos> held = new java.util.ArrayList<>();
+        var counts = rtpChunkHolds.computeIfAbsent(level, ignored -> new java.util.HashMap<>());
+        java.util.List<java.util.concurrent.CompletableFuture<?>> chunks = new java.util.ArrayList<>();
+        try {
+        for (int cx = minChunkX; cx <= maxChunkX; cx++) {
+            for (int cz = minChunkZ; cz <= maxChunkZ; cz++) {
+                var position = new net.minecraft.world.level.ChunkPos(cx, cz);
+                long key = position.toLong();
+                if (!counts.containsKey(key)) { chunkSource.addTicketWithRadius(RTP_CHUNK_TICKET, position, 0); }
+                counts.merge(key, 1, Integer::sum);
+                held.add(position);
+                int chunkX = cx;
+                int chunkZ = cz;
+                chunks.add(java.util.concurrent.CompletableFuture.supplyAsync(() -> chunkSource.getChunkFuture(chunkX, chunkZ, net.minecraft.world.level.chunk.status.ChunkStatus.FULL, true)).thenCompose(future -> future));
+            }
+        }
+        } catch (RuntimeException preparationFailure) {
+            releaseRtpChunks(level, held);
+            throw preparationFailure;
+        }
+        java.util.concurrent.CompletableFuture<java.util.Optional<Double>> result = new java.util.concurrent.CompletableFuture<>();
+        result.whenComplete((ignored, failure) -> executeOnServerThread(() -> releaseRtpChunks(level, held)));
+        java.util.concurrent.CompletableFuture.allOf(chunks.toArray(java.util.concurrent.CompletableFuture[]::new)).whenComplete((ignored, failure) -> {
+            if (result.isDone()) return;
+            if (failure != null) {
+                result.completeExceptionally(failure);
+                return;
+            }
+            executeOnServerThread(() -> {
+                if (result.isDone()) return;
+                try {
+                    result.complete(mp.getHandle().level() == level ? findSafeRtpY(player, x, z) : java.util.Optional.empty());
+                } catch (RuntimeException failureDuringValidation) {
+                    result.completeExceptionally(failureDuringValidation);
+                }
+            });
+        });
+        return result;
+    }
+
     @Override
     public java.util.Optional<Double> findSafeRtpY(IPlayer player, double x, double z) {
-        if (!(player instanceof MinecraftPlayer mp)) return java.util.Optional.empty();
+        if (!(player instanceof MinecraftPlayer mp) || !Double.isFinite(x) || !Double.isFinite(z)) return java.util.Optional.empty();
         ServerLevel level = (ServerLevel) mp.getHandle().level();
+        var dimensions = mp.getHandle().getDimensions(net.minecraft.world.entity.Pose.STANDING);
+        double halfWidth = Math.max(0.6, dimensions.width()) / 2.0;
+        double bodyHeight = Math.max(1.8, dimensions.height());
+        var border = level.getWorldBorder();
+        if (!Double.isFinite(halfWidth) || !Double.isFinite(bodyHeight)
+                || x - halfWidth < border.getMinX() || x + halfWidth > border.getMaxX()
+                || z - halfWidth < border.getMinZ() || z + halfWidth > border.getMaxZ()) return java.util.Optional.empty();
         int blockX = (int) Math.floor(x);
         int blockZ = (int) Math.floor(z);
-        level.getChunk(blockX >> 4, blockZ >> 4);
+        for (int cx = ((int) Math.floor(x - halfWidth) - 2) >> 4; cx <= ((int) Math.floor(x + halfWidth) + 2) >> 4; cx++) {
+            for (int cz = ((int) Math.floor(z - halfWidth) - 2) >> 4; cz <= ((int) Math.floor(z + halfWidth) + 2) >> 4; cz++) {
+                if (!level.hasChunk(cx, cz) || level.getChunkSource().getChunkNow(cx, cz) == null) return java.util.Optional.empty();
+            }
+        }
         int topY = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, blockX, blockZ);
+        if (topY <= level.getMinY() || topY + bodyHeight > level.getMaxY()) return java.util.Optional.empty();
         net.minecraft.core.BlockPos ground = new net.minecraft.core.BlockPos(blockX, topY - 1, blockZ);
-        net.minecraft.core.BlockPos feet = new net.minecraft.core.BlockPos(blockX, topY, blockZ);
-        net.minecraft.core.BlockPos head = new net.minecraft.core.BlockPos(blockX, topY + 1, blockZ);
-        net.minecraft.world.level.block.state.BlockState groundState = level.getBlockState(ground);
-        if (groundState.isAir() || !groundState.getFluidState().isEmpty()) return java.util.Optional.empty();
-        if (!level.getBlockState(feet).getFluidState().isEmpty() || !level.getBlockState(head).getFluidState().isEmpty()) return java.util.Optional.empty();
+        var groundState = level.getBlockState(ground);
+        if (!groundState.isFaceSturdy(level, ground, net.minecraft.core.Direction.UP)) return java.util.Optional.empty();
+        net.minecraft.world.phys.AABB body = new net.minecraft.world.phys.AABB(x - halfWidth, topY, z - halfWidth, x + halfWidth, topY + bodyHeight, z + halfWidth);
+        if (!level.noCollision(mp.getHandle(), body.inflate(0.5, 0.0, 0.5))) return java.util.Optional.empty();
+        for (int bx = (int) Math.floor(body.minX) - 1; bx <= (int) Math.floor(body.maxX) + 1; bx++) {
+            for (int bz = (int) Math.floor(body.minZ) - 1; bz <= (int) Math.floor(body.maxZ) + 1; bz++) {
+                for (int by = topY - 1; by <= (int) Math.floor(body.maxY); by++) {
+                    var position = new net.minecraft.core.BlockPos(bx, by, bz);
+                    var state = level.getBlockState(position);
+                    if (!state.getFluidState().isEmpty() || state.getBlock() instanceof net.minecraft.world.level.block.BaseFireBlock
+                            || state.getBlock() instanceof net.minecraft.world.level.block.CactusBlock
+                            || state.getBlock() instanceof net.minecraft.world.level.block.MagmaBlock
+                            || state.getBlock() instanceof net.minecraft.world.level.block.CampfireBlock
+                            || state.getBlock() instanceof net.minecraft.world.level.block.SweetBerryBushBlock
+                            || state.getBlock() instanceof net.minecraft.world.level.block.WitherRoseBlock
+                            || state.getBlock() instanceof net.minecraft.world.level.block.PowderSnowBlock) return java.util.Optional.empty();
+                }
+            }
+        }
         return java.util.Optional.of((double) topY);
     }
 

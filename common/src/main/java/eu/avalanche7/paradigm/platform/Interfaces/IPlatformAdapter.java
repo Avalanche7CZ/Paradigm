@@ -118,6 +118,25 @@ public interface IPlatformAdapter {
     boolean clearPlayerInventory(IPlayer player);
     boolean setPlayerInvulnerable(IPlayer player, boolean enabled);
     boolean setPlayerVanished(IPlayer player, boolean enabled);
+
+    default void refreshVanishVisibility(IPlayer viewer, IPlayer target) {}
+
+    default boolean canSeePlayer(IPlayer viewer, IPlayer target) {
+        var services = eu.avalanche7.paradigm.ParadigmAPI.getServices();
+        return services == null || services.getVanishService().canSee(viewer, target);
+    }
+
+    default List<IPlayer> getPublicPlayers() {
+        return getOnlinePlayers().stream().filter(target -> !eu.avalanche7.paradigm.platform.VanishTracking.hidden(target.getUUID())).toList();
+    }
+
+    default List<IPlayer> getVisiblePlayers(IPlayer viewer) {
+        return getOnlinePlayers().stream().filter(target -> canSeePlayer(viewer, target)).toList();
+    }
+
+    default List<String> getVisiblePlayerNames(IPlayer viewer) {
+        return getVisiblePlayers(viewer).stream().map(IPlayer::getName).toList();
+    }
     List<InventoryItem> inspectPlayerInventory(IPlayer player, boolean enderChest);
     int repairPlayerItems(IPlayer player, boolean all);
     boolean enchantMainHand(IPlayer player, String enchantmentId, int level);
@@ -247,6 +266,10 @@ public interface IPlatformAdapter {
 
     default Optional<Double> findSafeRtpY(IPlayer player, double x, double z) {
         return Optional.empty();
+    }
+
+    default java.util.concurrent.CompletableFuture<Optional<Double>> findSafeRtpYAsync(IPlayer player, double x, double z) {
+        return java.util.concurrent.CompletableFuture.completedFuture(findSafeRtpY(player, x, z));
     }
 
     default boolean isFirstJoin(IPlayer player) {

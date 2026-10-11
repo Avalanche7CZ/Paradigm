@@ -37,6 +37,13 @@ public class MinecraftEventSystem implements IEventSystem {
     private final CopyOnWriteArrayList<PlayerAdvancementEventListener> advancementListeners = new CopyOnWriteArrayList<>();
 
     public void register() {
+        PlayerEvent.PlayerRespawnEvent.BUS.addListener((PlayerEvent.PlayerRespawnEvent event) -> {
+        var services = eu.avalanche7.paradigm.ParadigmAPI.getServices();
+        if (services != null && services.getPlatformAdapter() instanceof PlatformAdapterImpl adapter
+                && event.getEntity() instanceof ServerPlayer player) {
+            adapter.restoreGodAfterRespawn(new MinecraftPlayer(player));
+        }
+        });
 
         ServerChatEvent.BUS.addListener(Priority.HIGHEST, (ServerChatEvent event) -> {
             MinecraftChatEvent chatEvent = new MinecraftChatEvent(event);

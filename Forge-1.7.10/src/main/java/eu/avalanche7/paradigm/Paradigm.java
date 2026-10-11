@@ -138,6 +138,7 @@ public final class Paradigm {
 
         for (ParadigmModule module : modules) {
             if (module.isEnabled(services)) {
+                services.enableModule(module);
                 module.onServerStarting(event, services);
             }
         }
@@ -184,10 +185,10 @@ public final class Paradigm {
     @Mod.EventHandler
     public void stopping(FMLServerStoppingEvent event) {
         if (services == null) return;
+        services.beginStopping();
         for (ParadigmModule module : modules) {
-            if (module.isEnabled(services)) {
-                module.onServerStopping(event, services);
-                services.disableModule(module);
+            if (services.isModuleActive(module)) {
+                services.stopModule(module, event);
             }
         }
         if (telemetryReporter != null) telemetryReporter.stop();

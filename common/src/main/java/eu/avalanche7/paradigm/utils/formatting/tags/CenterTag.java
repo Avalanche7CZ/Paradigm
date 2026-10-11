@@ -37,6 +37,7 @@ public class CenterTag implements Tag {
 
     @Override
     public void close(FormattingContext context) {
+        IComponent centeredContent = context.getCurrentComponent();
         if (centeredContent != null) {
             String text = extractPlainText(centeredContent);
             text = text.trim();

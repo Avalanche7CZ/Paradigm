@@ -345,7 +345,7 @@ public class TpaCommand implements ParadigmModule {
         List<String> names = new ArrayList<>();
         for (String requesterUuid : teleportRequests.getPendingRequesterUuids(target.getUUID())) {
             IPlayer requester = platform.getPlayerByUuid(requesterUuid);
-            if (requester != null && requester.getName() != null && !requester.getName().isBlank()) {
+            if (requester != null && platform.canSeePlayer(target, requester) && requester.getName() != null && !requester.getName().isBlank()) {
                 names.add(requester.getName());
             }
         }
@@ -358,7 +358,7 @@ public class TpaCommand implements ParadigmModule {
         List<String> names = new ArrayList<>();
         for (String targetUuid : teleportRequests.getOutgoingTargetUuids(requester.getUUID())) {
             IPlayer target = platform.getPlayerByUuid(targetUuid);
-            if (target != null && target.getName() != null && !target.getName().isBlank()) {
+            if (target != null && platform.canSeePlayer(requester, target) && target.getName() != null && !target.getName().isBlank()) {
                 names.add(target.getName());
             }
         }
@@ -366,7 +366,7 @@ public class TpaCommand implements ParadigmModule {
     }
 
     private List<String> onlinePlayerNameSuggestions(IPlayer sourcePlayer, String input, boolean excludeSelf) {
-        List<String> names = new ArrayList<>(platform.getOnlinePlayerNames());
+        List<String> names = new ArrayList<>(platform.getVisiblePlayerNames(sourcePlayer));
         if (excludeSelf && sourcePlayer != null && sourcePlayer.getName() != null) {
             names.removeIf(name -> name.equalsIgnoreCase(sourcePlayer.getName()));
         }

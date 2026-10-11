@@ -42,6 +42,21 @@ public final class CommandCooldowns {
         return runInternal(services, player, commandName, false, action);
     }
 
+    public static int runAsync(Services services, IPlayer player, String commandName,
+            java.util.function.Function<IPlayer, java.util.concurrent.CompletableFuture<Integer>> action) {
+        return runInternal(services, player, commandName, true, current -> {
+            var result = action.apply(current);
+            result.thenAccept(value -> {
+                UUID uuid = parseUuid(current.getUUID());
+                String key = normalize(commandName);
+                if (value > 0 && uuid != null && key != null) {
+                    CooldownConfigHandler.setLastUsage(uuid, key, System.currentTimeMillis());
+                }
+            });
+            return result.getNow(1);
+        }, false);
+    }
+
     private static int runInternal(
             Services services,
             IPlayer player,
@@ -49,6 +64,11 @@ public final class CommandCooldowns {
             boolean allowWarmup,
             PlayerCommandAction action
     ) {
+        return runInternal(services, player, commandName, allowWarmup, action, true);
+    }
+
+    private static int runInternal(Services services, IPlayer player, String commandName,
+            boolean allowWarmup, PlayerCommandAction action, boolean recordUsage) {
         if (action == null) {
             return 0;
         }
@@ -76,7 +96,7 @@ public final class CommandCooldowns {
         int warmupSeconds = allowWarmup ? CooldownConfigHandler.getCommandWarmupSeconds(key) : 0;
         if (warmupSeconds <= 0) {
             int result = action.run(player);
-            if (result > 0) {
+            if (recordUsage && result > 0) {
                 CooldownConfigHandler.setLastUsage(uuid, key, System.currentTimeMillis());
             }
             return result;
@@ -100,7 +120,7 @@ public final class CommandCooldowns {
                     return;
                 }
                 int result = action.run(online);
-                if (result > 0) {
+                if (recordUsage && result > 0) {
                     CooldownConfigHandler.setLastUsage(uuid, key, System.currentTimeMillis());
                 }
             } finally {

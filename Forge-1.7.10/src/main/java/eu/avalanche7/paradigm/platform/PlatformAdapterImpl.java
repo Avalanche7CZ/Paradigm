@@ -313,13 +313,19 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public void sendSystemMessage(IPlayer player, IComponent message) {
-        nativePlayer(player).addChatMessage(nativeText(message));
+        EntityPlayerMP recipient = nativePlayer(player);
+        for (IChatComponent line : MinecraftComponent.chatLines(nativeText(message))) {
+            recipient.addChatMessage(line);
+        }
     }
 
     @Override
     public void broadcastSystemMessage(IComponent message) {
-        if (server != null)
-            server.getConfigurationManager().sendChatMsg(nativeText(message));
+        if (server != null) {
+            for (IChatComponent line : MinecraftComponent.chatLines(nativeText(message))) {
+                server.getConfigurationManager().sendChatMsg(line);
+            }
+        }
     }
 
     @Override
@@ -621,11 +627,12 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
             return false;
         }
         if (enabled) {
+            if (handle.capabilities.disableDamage && !handle.capabilities.isCreativeMode && !invulnerablePlayerIds.contains(handle.getUniqueID())) return true;
             invulnerablePlayers.add(handle);
             invulnerablePlayerIds.add(handle.getUniqueID());
         } else {
+            if (!invulnerablePlayerIds.remove(handle.getUniqueID())) return true;
             invulnerablePlayers.remove(handle);
-            invulnerablePlayerIds.remove(handle.getUniqueID());
         }
         handle.capabilities.disableDamage = enabled || handle.capabilities.isCreativeMode;
         handle.sendPlayerAbilities();
@@ -635,9 +642,18 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public boolean setPlayerVanished(IPlayer player, boolean enabled) {
         EntityPlayerMP handle = operationPlayer(player);
-        if (handle == null || visuals == null) return false;
-        executeOnServerThread(() -> visuals.setVanished(handle, enabled));
-        return true;
+        if (handle == null || visuals == null || Thread.currentThread() != serverThread) return false;
+        return visuals.setVanished(handle, enabled);
+    }
+
+    @Override
+    public void refreshVanishVisibility(IPlayer viewer, IPlayer target) {
+        EntityPlayerMP observer = operationPlayer(viewer);
+        EntityPlayerMP subject = operationPlayer(target);
+        if (observer != null && subject != null && visuals != null) {
+            visuals.vanish().refresh(observer, subject);
+            visuals.tablist().visibilityChanged(observer, subject);
+        }
     }
 
     @Override
@@ -877,8 +893,10 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public void sendSuccess(ICommandSource source, IComponent message, boolean toOps) {
         ICommandSender sender = (ICommandSender) source.getOriginalSource();
-        sender.addChatMessage(nativeText(message));
-        if (toOps) CommandBase.func_152374_a(sender, COMMAND_FEEDBACK, 1, "%s", nativeText(message).createCopy());
+        for (IChatComponent line : MinecraftComponent.chatLines(nativeText(message))) {
+            sender.addChatMessage(line);
+            if (toOps) CommandBase.func_152374_a(sender, COMMAND_FEEDBACK, 1, "%s", line.createCopy());
+        }
     }
 
     @Override

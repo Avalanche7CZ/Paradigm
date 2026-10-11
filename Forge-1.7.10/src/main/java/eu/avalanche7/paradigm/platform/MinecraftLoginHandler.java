@@ -43,19 +43,12 @@ public final class MinecraftLoginHandler {
 
     public static boolean vanishEnabled() {
         Services runtime = services;
-        return runtime != null && new eu.avalanche7.paradigm.modules.commands.admin.VanishCommand().isEnabled(runtime);
+        return runtime != null && runtime.getVanishService().isActive() && new eu.avalanche7.paradigm.modules.commands.admin.VanishCommand().isEnabled(runtime);
     }
 
-    public static java.util.concurrent.CompletableFuture<Boolean> loadVanish(GameProfile profile) {
-        Services runtime = services;
-        if (!vanishEnabled()) {
-            return java.util.concurrent.CompletableFuture.completedFuture(false);
-        }
-        var result = new java.util.concurrent.CompletableFuture<Boolean>();
-        runtime.getStorageService().runAsync("admin.vanish.admission",
-                () -> runtime.getStorageService().adminState().isVanished(profile.getId().toString()),
-                runtime.getTaskScheduler(), result::complete, result::completeExceptionally);
-        return result;
+    public static java.util.concurrent.CompletableFuture<eu.avalanche7.paradigm.modules.vanish.VanishService.Admission> loadVanish(GameProfile profile) {
+        if (!vanishEnabled()) return java.util.concurrent.CompletableFuture.completedFuture(new eu.avalanche7.paradigm.modules.vanish.VanishService.Admission(-1L, false));
+        return services.getVanishService().loadAdmission(profile.getId().toString());
     }
 
     public static String remoteAddress(SocketAddress address) {

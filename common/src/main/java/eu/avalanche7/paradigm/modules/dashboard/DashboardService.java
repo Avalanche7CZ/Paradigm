@@ -164,14 +164,16 @@ public class DashboardService implements AutoCloseable {
         return new ConfigPatchService(services, schemaRegistry());
     }
 
-    public CompletableFuture<Object> applyConfigAsync(String rawPage) {
+    public CompletableFuture<Object> applyConfigAsync(DashboardPrincipal actor, String rawPage) {
         String page = safeText(rawPage).toLowerCase(java.util.Locale.ROOT);
         CompletableFuture<Object> result = new CompletableFuture<>();
         Runnable apply = () -> {
             try {
+                requireConfigurationMutation(actor, DashboardAuthorization.categoriesForPage(page), false);
                 if ("dashboard".equals(page)) {
                     result.complete(Map.of("page", page, "message", "Dashboard reload scheduled. Reconnect using /paradigm dashboard open if the bind address changed."));
                     CompletableFuture.delayedExecutor(750L, java.util.concurrent.TimeUnit.MILLISECONDS).execute(() -> {
+                        if (!hasDashboardPermission(actor) || !canEditConfigCategories(actor, DashboardAuthorization.categoriesForPage(page))) return;
                         DashboardConfig reloaded = DashboardConfig.load(services.getPlatformAdapter().getConfig(), services.getLogger());
                         reload(reloaded);
                     });
@@ -524,6 +526,8 @@ public class DashboardService implements AutoCloseable {
     }
 
     private RemoteConfigPatchOutcome applyRemotePatch(DashboardPrincipal actor, RemoteConfigPatchRequest request) {
+        if (request == null) throw new IllegalArgumentException("Request body is required.");
+        requireConfigurationMutation(actor, Set.of(safeText(request.section)), requiresNetworkManage(request.scope, request.serverId));
         StorageService storage = services.getStorageService();
         if (storage == null || !storage.isMysqlActive()) {
             throw new IllegalStateException("Remote server management requires shared MySQL storage.");
@@ -598,6 +602,8 @@ public class DashboardService implements AutoCloseable {
     }
 
     private Object copyRemoteSection(DashboardPrincipal actor, RemoteConfigCopyRequest request) {
+        if (request == null) throw new IllegalArgumentException("Request body is required.");
+        requireConfigurationMutation(actor, Set.of(safeText(request.section)), requiresNetworkManage("SERVER", request.fromServerId) || requiresNetworkManage("SERVER", request.toServerId));
         StorageService storage = services.getStorageService();
         if (storage == null || !storage.isMysqlActive()) {
             throw new IllegalStateException("Remote server management requires shared MySQL storage.");
@@ -653,6 +659,8 @@ public class DashboardService implements AutoCloseable {
     }
 
     private Object adoptSection(DashboardPrincipal actor, RemoteConfigAdoptRequest request) {
+        if (request == null) throw new IllegalArgumentException("Request body is required.");
+        requireConfigurationMutation(actor, Set.of(safeText(request.section)), requiresNetworkManage(request.scope, request.serverId));
         StorageService storage = services.getStorageService();
         if (storage == null || !storage.isMysqlActive()) {
             throw new IllegalStateException("Remote server management requires shared MySQL storage.");
@@ -713,6 +721,15 @@ public class DashboardService implements AutoCloseable {
         return out.isEmpty() ? null : out;
     }
 
+    private void requireConfigurationMutation(DashboardPrincipal actor, Set<String> categories, boolean network) {
+        if (!hasDashboardPermission(actor) || !canEditConfigCategories(actor, categories)
+                || network && !hasPermission(actor, ParadigmPermissions.NETWORK_MANAGE)) throw new SecurityException("Permission denied.");
+    }
+
+    public void requireMutationPermission(DashboardPrincipal actor, PermissionDefinition permission) {
+        if (!hasDashboardPermission(actor) || !hasPermission(actor, permission)) throw new SecurityException("Permission denied.");
+    }
+
     public CompletableFuture<Object> storageStatusAsync() {
         return CompletableFuture.supplyAsync(() -> {
             StorageService.StorageStatus status = services.getStorageService().status();
@@ -751,8 +768,9 @@ public class DashboardService implements AutoCloseable {
         return CompletableFuture.supplyAsync(() -> storageConfigurationView(services.getStorageService().config()), executor);
     }
 
-    public CompletableFuture<Object> saveStorageConfigurationAsync(StorageConfigurationRequest request) {
+    public CompletableFuture<Object> saveStorageConfigurationAsync(DashboardPrincipal actor, StorageConfigurationRequest request) {
         return CompletableFuture.supplyAsync(() -> {
+            if (!hasDashboardPermission(actor) || !canEditConfigCategory(actor, "storage")) throw new SecurityException("Permission denied.");
             StorageConfig config = storageConfiguration(request);
             config.persist(services.getPlatformAdapter().getConfig(), services.getLogger());
             return Map.of("configuration", storageConfigurationView(config), "restartRequired", true,
@@ -1135,14 +1153,17 @@ public class DashboardService implements AutoCloseable {
     }
 
     public CompletableFuture<CustomCommandAdminService.MutationResult> customCommandMutationAsync(
-            String action, String originalName, String name, JsonObject command) {
-        return CompletableFuture.supplyAsync(() -> switch (safeText(action)) {
+            DashboardPrincipal actor, String action, String originalName, String name, JsonObject command) {
+        return CompletableFuture.supplyAsync(() -> {
+            requireMutationPermission(actor, ParadigmPermissions.CONFIG_EDIT);
+            return switch (safeText(action)) {
             case "create" -> services.getCustomCommandAdminService().create(command);
             case "update" -> services.getCustomCommandAdminService().update(originalName, command);
             case "duplicate" -> services.getCustomCommandAdminService().duplicate(originalName, name);
             case "delete" -> services.getCustomCommandAdminService().delete(originalName);
             case "reload" -> services.getCustomCommandAdminService().reload();
             default -> throw new IllegalArgumentException("Unknown custom command operation.");
+            };
         }, executor);
     }
 

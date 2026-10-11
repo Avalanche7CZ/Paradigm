@@ -213,6 +213,15 @@ public class MinecraftEventSystem implements IEventSystem {
     }
 
     @SubscribeEvent
+    public void onGodRespawn(PlayerEvent.PlayerRespawnEvent event) {
+        var services = eu.avalanche7.paradigm.ParadigmAPI.getServices();
+        if (services != null && services.getPlatformAdapter() instanceof PlatformAdapterImpl adapter
+                && event.getEntity() instanceof ServerPlayer player) {
+            adapter.restoreGodAfterRespawn(new MinecraftPlayer(player));
+        }
+    }
+
+    @SubscribeEvent
     public void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         dispatchJoin(event);
     }

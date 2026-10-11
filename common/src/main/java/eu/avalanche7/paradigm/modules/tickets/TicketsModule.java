@@ -226,7 +226,7 @@ public class TicketsModule implements ParadigmModule {
                 .then(builder().argument("id", ICommandBuilder.ArgumentType.WORD)
                         .suggests((context, input) -> ticketSuggestions(context))
                         .then(builder().argument("staff", ICommandBuilder.ArgumentType.WORD)
-                                .suggests((context, input) -> services.getPlatformAdapter().getOnlinePlayerNames())
+                                .suggests((context, input) -> services.getPlatformAdapter().getVisiblePlayerNames(context.getSource().getPlayer()))
                                 .executes(context -> executeAsync(this::assign, context)))));
 
         root.then(builder().literal("priority")

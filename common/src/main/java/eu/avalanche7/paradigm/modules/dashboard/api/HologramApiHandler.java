@@ -69,6 +69,7 @@ public final class HologramApiHandler {
 
         try {
             HologramMutation mutation = onServerThread(() -> {
+                dashboard.requireMutationPermission(context.principal(), eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions.HOLOGRAM_MANAGE);
                 HologramService.Config before = service().snapshot();
                 apply(action, mutationRequest);
                 return new HologramMutation(before, service().snapshot());
@@ -77,6 +78,8 @@ public final class HologramApiHandler {
                     "Hologram " + action + " completed.", auditDetails(action, mutationRequest));
             notifyMutation(context, action, mutationRequest, mutation.before());
             return DashboardResponse.apiOk(Map.of("config", mutation.after()));
+        } catch (SecurityException exception) {
+            return DashboardResponse.apiError(403, "permission_denied", "Permission denied.");
         } catch (ServerThreadUnavailableException exception) {
             return DashboardResponse.apiError(503, "server_busy", exception.getMessage());
         } catch (IllegalArgumentException | IllegalStateException exception) {

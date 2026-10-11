@@ -25,6 +25,8 @@ import net.minecraftforge.event.entity.EntityJoinWorldEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.world.WorldEvent;
 
+import eu.avalanche7.paradigm.Paradigm;
+import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
@@ -135,6 +137,14 @@ public final class MinecraftEventSystem implements IEventSystem {
             if (event.isCancelled()) {
                 break;
             }
+        }
+        if (event.isCancelled()) return;
+
+        Services services = Paradigm.getServices();
+        if (services == null) return;
+        IComponent formatted = services.getChatFormatter().format(event.getPlayer(), event.getMessage());
+        if (formatted != null) {
+            forge.component = new ChatComponentTranslation("%s", formatted.getOriginalText());
         }
     }
 

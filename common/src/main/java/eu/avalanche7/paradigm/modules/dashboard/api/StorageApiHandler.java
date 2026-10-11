@@ -74,7 +74,7 @@ public class StorageApiHandler {
             before = Map.of();
         }
         try {
-            Object result = dashboard.saveStorageConfigurationAsync(request).get();
+            Object result = dashboard.saveStorageConfigurationAsync(ctx.principal(), request).get();
             dashboard.audit().dashboard(ctx.principal(), AuditActionType.CONFIG_PATCH,
                     AuditResult.SUCCESS, "Storage configuration saved.",
                     Map.of("passwordReplaced", String.valueOf(request != null && request.sqlPassword != null && !request.sqlPassword.isBlank())));
@@ -90,6 +90,7 @@ public class StorageApiHandler {
             return DashboardResponse.apiOk(result);
         } catch (Exception e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
+            if (cause instanceof SecurityException) return DashboardResponse.apiError(403, "permission_denied", "Permission denied.");
             if (cause instanceof IllegalArgumentException) return DashboardResponse.apiError(400, "validation_failed", cause.getMessage());
             throw e;
         }

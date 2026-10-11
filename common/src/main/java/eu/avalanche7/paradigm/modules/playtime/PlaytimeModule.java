@@ -73,7 +73,7 @@ public final class PlaytimeModule implements ParadigmModule {
                 .then(services.getPlatformAdapter().createCommandBuilder()
                         .argument("player", ICommandBuilder.ArgumentType.WORD)
                         .requires(src -> allowed(src, ParadigmPermissions.PLAYTIME_OTHERS))
-                        .suggests((ctx, input) -> services.getPlatformAdapter().getOnlinePlayerNames())
+                        .suggests((ctx, input) -> services.getPlatformAdapter().getVisiblePlayerNames(ctx.getSource().getPlayer()))
                         .executes(ctx -> other(ctx.getSource(), ctx.getStringArgument("player"))));
         services.getPlatformAdapter().registerCommand(cmd);
     }

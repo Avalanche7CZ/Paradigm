@@ -32,6 +32,12 @@ java {
     toolchain.languageVersion = JavaLanguageVersion.of(21)
 }
 
+sourceSets {
+    devClient
+}
+
+configurations.devClientRuntimeClasspath.extendsFrom(configurations.runtimeClasspath)
+
 neoForge {
     version = project.neo_version
 
@@ -44,6 +50,7 @@ neoForge {
         client {
             client()
             loadedMods = []
+            sourceSet = sourceSets.devClient
         }
 
         server {

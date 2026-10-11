@@ -63,6 +63,75 @@ public final class AtomicFileIO {
         }
     }
 
+    @FunctionalInterface
+    interface DirectoryForce { void force(Path directory) throws IOException; }
+
+    public static final class DurableWriteException extends IOException {
+        private final boolean replaced;
+        private final boolean unsupported;
+
+        DurableWriteException(Path path, boolean replaced, boolean unsupported, Throwable cause) {
+            super((unsupported ? "Unsupported durability capability" : "Durable write failed") + " for " + path
+                    + (replaced ? "; replacement completed, durability outcome uncertain" : "; replacement not completed"), cause);
+            this.replaced = replaced;
+            this.unsupported = unsupported;
+        }
+
+        public boolean replacementCompleted() { return replaced; }
+        public boolean unsupportedCapability() { return unsupported; }
+    }
+
+    public static void writeUtf8Durable(Path path, WriterAction action) throws IOException {
+        writeUtf8Durable(path, action, directory -> {
+            try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ)) { channel.force(true); }
+        });
+    }
+
+    static void writeUtf8Durable(Path path, WriterAction action, DirectoryForce directoryForce) throws IOException {
+        Path parent = path.toAbsolutePath().getParent();
+        Path temporary = null;
+        boolean replaced = false;
+        DurableWriteException reported = null;
+        try {
+            createDirectoriesDurable(parent, directoryForce);
+            directoryForce.force(parent);
+            temporary = Files.createTempFile(parent, "." + path.getFileName(), ".tmp");
+            try (Writer writer = Files.newBufferedWriter(temporary, StandardCharsets.UTF_8)) { action.write(writer); }
+            try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.WRITE)) { channel.force(true); }
+            Files.move(temporary, path, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            replaced = true;
+            directoryForce.force(parent);
+        } catch (IOException | UnsupportedOperationException failure) {
+            reported = new DurableWriteException(path, replaced,
+                    failure instanceof AtomicMoveNotSupportedException || failure instanceof UnsupportedOperationException, failure);
+            throw reported;
+        } finally {
+            if (temporary != null) {
+                try { Files.deleteIfExists(temporary); }
+                catch (IOException cleanupFailure) {
+                    if (reported != null) reported.addSuppressed(cleanupFailure);
+                    else throw new DurableWriteException(path, replaced, false, cleanupFailure);
+                }
+            }
+        }
+    }
+
+    public static void createDirectoriesDurable(Path directory) throws IOException {
+        createDirectoriesDurable(directory.toAbsolutePath(), parent -> {
+            try (FileChannel channel = FileChannel.open(parent, StandardOpenOption.READ)) { channel.force(true); }
+        });
+    }
+
+    private static void createDirectoriesDurable(Path directory, DirectoryForce directoryForce) throws IOException {
+        java.util.List<Path> missing = new java.util.ArrayList<>();
+        for (Path path = directory; path != null && !Files.exists(path); path = path.getParent()) missing.add(path);
+        java.util.Collections.reverse(missing);
+        for (Path path : missing) {
+            Files.createDirectories(path);
+            directoryForce.force(path.getParent());
+        }
+    }
+
     public static Path quarantine(Path path, String label) {
         return archive(path, label == null || label.isBlank() ? "corrupt" : label.trim());
     }

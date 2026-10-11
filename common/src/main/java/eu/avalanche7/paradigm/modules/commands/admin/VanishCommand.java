@@ -2,7 +2,6 @@ package eu.avalanche7.paradigm.modules.commands.admin;
 
 
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
 import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
@@ -33,78 +32,46 @@ public class VanishCommand extends AbstractAdminCommand {
     public void registerEventListeners(Object eventBus, Services services) {
         this.services = services;
         IEventSystem events = moduleEvents(services);
-        if (events == null) {
-            return;
-        }
-        events.onPlayerJoin(event -> {
-            IPlayer player = event != null ? event.getPlayer() : null;
-            if (player != null && player.getUUID() != null) {
-                String uuid = player.getUUID();
-                services.getStorageService().runAsync(
-                        "admin.vanish.join_load",
-                        () -> services.getStorageService().adminState().isVanished(uuid),
-                        services.getTaskScheduler(),
-                        enabled -> {
-                            if (!isEnabled(services)) return;
-                            IPlayer current = services.getPlatformAdapter().getPlayerByUuid(uuid);
-                            if (current != null) applyVanish(current, enabled);
-                        },
-                        failure -> services.getLogger().warn("Unable to restore vanish for {}", uuid, failure)
-                );
-            }
-        });
+        if (events != null) events.onPlayerJoin(event -> services.getVanishService().joined(event.getPlayer()));
     }
 
     @Override
     public void onEnable(Services services) {
         this.services = services;
-        for (IPlayer player : services.getPlatformAdapter().getOnlinePlayers()) {
-            String uuid = player.getUUID();
-            services.getStorageService().runAsync("admin.vanish.enable",
-                    () -> services.getStorageService().adminState().isVanished(uuid), services.getTaskScheduler(),
-                    enabled -> {
-                        IPlayer current = services.getPlatformAdapter().getPlayerByUuid(uuid);
-                        if (isEnabled(services) && current != null) applyVanish(current, enabled);
-                    }, failure -> services.getLogger().warn("Unable to restore vanish for {}", uuid, failure));
-        }
+        services.getVanishService().enable();
     }
 
     @Override
-    public void onDisable(Services services) {
-        for (IPlayer player : services.getPlatformAdapter().getOnlinePlayers()) services.getPlatformAdapter().setPlayerVanished(player, false);
-    }
-
-    @Override
-    public void onServerStopping(Object event, Services services) { onDisable(services); }
+    public void onDisable(Services services) { services.getVanishService().disable(); }
 
     private int toggle(ICommandSource source, IPlayer target) {
         if (target == null) {
             send(source, "admin.player_not_found", "Player not found.");
             return 0;
         }
-        if (!canTargetOther(source.getPlayer(), target, ParadigmPermissions.VANISH_OTHERS)) {
+        if (!authorized(source, target)) {
             send(source, "admin.no_permission_others", "You do not have permission to affect other players.");
             return 0;
         }
-        String targetUuid = target.getUUID();
-        String targetName = target.getName();
-        return StorageCommandSupport.runForSource(services, source, "admin.vanish.toggle", () -> {
-            boolean enabled = !services.getStorageService().adminState().isVanished(targetUuid);
-            services.getStorageService().adminState().setVanished(targetUuid, enabled);
-            return enabled;
-        }, enabled -> {
-            IPlayer currentTarget = services.getPlatformAdapter().getPlayerByUuid(targetUuid);
-            if (isEnabled(services) && currentTarget != null) {
-                applyVanish(currentTarget, enabled);
+        services.getVanishService().toggle(target, () -> authorized(source, target)).whenComplete((enabled, failure) -> {
+            if (failure != null) {
+                send(source, "admin.error_state", "Unable to update player state.");
+            } else {
+                send(source, "admin.vanish_ok", "Vanish for {player}: {state}.",
+                        "{player}", target.getName(), "{state}", stateText(enabled));
             }
-            send(source, "admin.vanish_ok", "Vanish for {player}: {state}.",
-                    "{player}", targetName,
-                    "{state}", stateText(enabled));
-        }, "admin.error_state");
+        });
+        return 1;
     }
 
-    private void applyVanish(IPlayer target, boolean enabled) {
-        services.getPlatformAdapter().setPlayerVanished(target, enabled);
+    private boolean authorized(ICommandSource source, IPlayer target) {
+        if (!isEnabled(services) || !allowed(source, "vanish", ParadigmPermissions.VANISH)) return false;
+        IPlayer actor = source.getPlayer();
+        if (!source.isConsole() && (actor == null || services.getPlatformAdapter().getPlayerByUuid(actor.getUUID()) == null
+                || services.getPlatformAdapter().getPlayerByUuid(actor.getUUID()).getOriginalPlayer() != actor.getOriginalPlayer())) return false;
+        IPlayer current = services.getPlatformAdapter().getPlayerByUuid(target.getUUID());
+        return current != null && current.getOriginalPlayer() == target.getOriginalPlayer()
+                && canTargetOther(actor, target, ParadigmPermissions.VANISH_OTHERS);
     }
 
     private String stateText(boolean enabled) {

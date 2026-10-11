@@ -32,6 +32,15 @@ public abstract class PlayerListMixin {
 
         int type = paradigm$getVanillaJoinLeaveType(message);
         if (type == 0) return;
+        if (message.getContent() instanceof net.minecraft.text.TranslatableTextContent content && content.getArgs().length > 0) {
+            Object argument = content.getArgs()[0];
+            String display = argument instanceof net.minecraft.text.Text text ? text.getString() : String.valueOf(argument);
+            for (ServerPlayerEntity subject : ((PlayerManager) (Object) this).getPlayerList()) {
+                if (eu.avalanche7.paradigm.platform.VanishTracking.hidden(subject.getUuid().toString())
+                        && subject.getDisplayName().getString().equals(display)) { ci.cancel(); return; }
+            }
+        }
+
 
         Services services = ParadigmAPI.getServices();
         if (services == null) return;
@@ -91,14 +100,7 @@ public abstract class PlayerListMixin {
                 if ("multiplayer.player.joined".equals(key) || "multiplayer.player.joined.renamed".equals(key)) return 1;
                 if ("multiplayer.player.left".equals(key)) return 2;
             }
-            String text = message.getString();
-            if (text != null) {
-                String lower = text.toLowerCase();
-                if (!lower.contains("&") && !lower.contains("§")) {
-                    if (lower.endsWith(" joined the game")) return 1;
-                    if (lower.endsWith(" left the game")) return 2;
-                }
-            }
+
         } catch (Throwable ignored) {}
         return 0;
     }

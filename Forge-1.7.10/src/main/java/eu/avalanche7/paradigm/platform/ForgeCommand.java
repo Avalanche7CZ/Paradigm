@@ -228,7 +228,7 @@ final class ForgeCommand extends CommandBase {
                     candidates = child.suggestions().getSuggestions(
                             new ForgeCommandContext(source, values, input), partial);
                 } else if (child.argumentType() == ArgumentType.PLAYER) {
-                    candidates = platform.getOnlinePlayerNames();
+                    candidates = platform.getVisiblePlayerNames(source.getPlayer());
                 } else if (child.argumentType() == ArgumentType.BOOLEAN) {
                     candidates = List.of("true", "false");
                 } else {

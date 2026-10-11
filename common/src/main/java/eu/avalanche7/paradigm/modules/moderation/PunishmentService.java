@@ -281,25 +281,37 @@ public final class PunishmentService {
     }
 
     public boolean revoke(String punishmentId, String actorUuid, String actorName, String reason, AuditSource source) {
-        PunishmentRecord record = find(punishmentId).orElse(null);
-        if (record == null) return false;
-        if (record.type() == PunishmentType.JAIL) {
-            synchronized (jailLock(record.subjectUuid())) {
-                return revokeLocked(punishmentId, actorUuid, actorName, reason, source);
-            }
-        }
-        return revokeLocked(punishmentId, actorUuid, actorName, reason, source);
+        return revokeAuthorized(punishmentId, actorUuid, actorName, reason, source, record -> true) == RevocationResult.APPLIED;
     }
 
-    private boolean revokeLocked(String punishmentId, String actorUuid, String actorName, String reason, AuditSource source) {
+    enum RevocationResult {
+        APPLIED, INACTIVE, UNAVAILABLE
+    }
+
+    RevocationResult revokeAuthorized(String punishmentId, String actorUuid, String actorName, String reason, AuditSource source,
+                             java.util.function.Predicate<PunishmentRecord> authorization) {
+        PunishmentRecord record = find(punishmentId).orElse(null);
+        if (record == null) return RevocationResult.UNAVAILABLE;
+        if (record.type() == PunishmentType.JAIL) {
+            synchronized (jailLock(record.subjectUuid())) {
+                return revokeLocked(punishmentId, actorUuid, actorName, reason, source, authorization);
+            }
+        }
+        return revokeLocked(punishmentId, actorUuid, actorName, reason, source, authorization);
+    }
+
+    private RevocationResult revokeLocked(String punishmentId, String actorUuid, String actorName, String reason, AuditSource source,
+                                 java.util.function.Predicate<PunishmentRecord> authorization) {
         PunishmentRecord existing;
         boolean changed;
-        long now = System.currentTimeMillis();
         synchronized (mutationLock) {
+            long now = System.currentTimeMillis();
             Optional<PunishmentRecord> current = find(punishmentId);
-            if (current.isEmpty() || !current.get().activeAt(now)
-                    || !current.get().appliesTo(services.getStorageService().context().networkId(), services.getStorageService().context().serverId())) return false;
+            if (current.isEmpty()
+                    || !current.get().appliesTo(services.getStorageService().context().networkId(), services.getStorageService().context().serverId())) return RevocationResult.UNAVAILABLE;
             existing = current.get();
+            if (!authorization.test(existing)) throw new SecurityException("Permission denied.");
+            if (!existing.activeAt(now)) return RevocationResult.INACTIVE;
             changed = services.getStorageService().moderation().revokePunishmentRecord(punishmentId, now, clean(actorUuid), clean(actorName), clean(reason));
             if (changed) {
                 cache.remove(punishmentId);
@@ -310,7 +322,7 @@ public final class PunishmentService {
             PunishmentRecord revoked = find(punishmentId).orElseThrow();
             publish(events -> events.punishmentRevoked(revoked));
         }
-        return changed;
+        return changed ? RevocationResult.APPLIED : RevocationResult.INACTIVE;
     }
 
     public Optional<PunishmentRecord> find(String punishmentId) {

@@ -147,7 +147,13 @@ public class ConfigApiHandler {
         if (!dashboard.canEditConfigCategories(ctx.principal(), categories)) {
             return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to reload this configuration section.");
         }
-        Object result = dashboard.applyConfigAsync(page).get();
+        Object result;
+        try {
+            result = dashboard.applyConfigAsync(ctx.principal(), page).get();
+        } catch (java.util.concurrent.ExecutionException failure) {
+            if (failure.getCause() instanceof SecurityException) return DashboardResponse.apiError(403, "permission_denied", "Permission denied.");
+            throw failure;
+        }
         dashboard.audit().dashboard(ctx.principal(), AuditActionType.CONFIG_PATCH, AuditResult.SUCCESS,
                 "Dashboard config reload applied.", java.util.Map.of("page", page != null ? page : ""));
         return DashboardResponse.apiOk(result);

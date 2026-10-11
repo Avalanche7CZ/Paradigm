@@ -108,6 +108,11 @@ public final class DashboardAuthorization {
         return false;
     }
 
+    public static boolean canAccessModerationPage(PermissionCheck check) {
+        return canAccessPage(check, ParadigmPermissions.DASHBOARD_MODERATION,
+                ParadigmPermissions.KICK, ParadigmPermissions.BAN, ParadigmPermissions.WARN, ParadigmPermissions.JAIL);
+    }
+
     public static boolean canViewConfigCategory(PermissionCheck check, String realCategory) {
         SectionPermissions section = CATEGORY_PERMISSIONS.get(realCategory);
         if (section == null) {

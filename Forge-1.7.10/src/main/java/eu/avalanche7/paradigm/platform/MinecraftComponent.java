@@ -39,6 +39,41 @@ public final class MinecraftComponent implements IComponent {
         return component;
     }
 
+    static List<IChatComponent> chatLines(IChatComponent original) {
+        String visibleText = original.getUnformattedText();
+        if (visibleText.indexOf('\n') < 0 && visibleText.indexOf('\r') < 0) return List.of(original);
+        List<IChatComponent> lines = new ArrayList<>();
+        lines.add(new ChatComponentText(""));
+        appendChatLines(original, lines, new boolean[1]);
+        return lines;
+    }
+
+    private static void appendChatLines(IChatComponent original, List<IChatComponent> lines, boolean[] previousCarriageReturn) {
+        if (original instanceof ChatComponentText) {
+            String text = original.getUnformattedTextForChat();
+            if (!text.isEmpty()) {
+                boolean followsCarriageReturn = previousCarriageReturn[0];
+                previousCarriageReturn[0] = text.endsWith("\r");
+                if (followsCarriageReturn && text.startsWith("\n")) text = text.substring(1);
+            }
+            String[] parts = text.split("\\r\\n|\\r|\\n", -1);
+            for (int i = 0; i < parts.length; i++) {
+                if (i > 0) lines.add(new ChatComponentText(""));
+                IChatComponent part = new ChatComponentText(parts[i]);
+                part.setChatStyle(deepCopyStyle(original.getChatStyle()));
+                lines.get(lines.size() - 1).appendSibling(part);
+            }
+        } else {
+            if (!original.getUnformattedTextForChat().isEmpty()) previousCarriageReturn[0] = false;
+            IChatComponent part = deepCopy(original);
+            part.getSiblings().clear();
+            lines.get(lines.size() - 1).appendSibling(part);
+        }
+        for (Object sibling : original.getSiblings()) {
+            appendChatLines((IChatComponent) sibling, lines, previousCarriageReturn);
+        }
+    }
+
     public String toLegacyText() {
         StringBuilder text = new StringBuilder();
         for (Object part : component) {

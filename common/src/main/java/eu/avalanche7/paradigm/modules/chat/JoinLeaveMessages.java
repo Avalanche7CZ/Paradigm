@@ -68,7 +68,7 @@ public class JoinLeaveMessages implements ParadigmModule {
     private void onPlayerJoin(IEventSystem.PlayerJoinEvent event) {
         if (this.services == null || event == null) return;
         IPlayer player = event.getPlayer();
-        if (player == null || !isEnabled(this.services)) return;
+        if (player == null || !isEnabled(this.services) || services.getVanishService().isHidden(player.getUUID())) return;
 
         ChatConfigHandler.Config chatConfig = services.getChatConfig();
 
@@ -123,7 +123,7 @@ public class JoinLeaveMessages implements ParadigmModule {
     private void onPlayerLeave(IEventSystem.PlayerLeaveEvent event) {
         if (this.services == null || event == null) return;
         IPlayer player = event.getPlayer();
-        if (player == null || !isEnabled(this.services)) return;
+        if (player == null || !isEnabled(this.services) || services.getVanishService().isHidden(player.getUUID())) return;
 
         ChatConfigHandler.Config chatConfig = services.getChatConfig();
 

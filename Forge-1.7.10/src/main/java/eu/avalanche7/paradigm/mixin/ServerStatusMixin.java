@@ -15,6 +15,6 @@ public abstract class ServerStatusMixin {
     @Redirect(method = "processServerQuery", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/server/MinecraftServer;func_147134_at()Lnet/minecraft/network/ServerStatusResponse;"))
     private ServerStatusResponse paradigm$status(MinecraftServer server) {
-        return LegacyServerStatus.customize(server.func_147134_at(), ParadigmAPI.getServices());
+        return LegacyServerStatus.publicStatus(LegacyServerStatus.customize(server.func_147134_at(), ParadigmAPI.getServices()), ParadigmAPI.getServices());
     }
 }

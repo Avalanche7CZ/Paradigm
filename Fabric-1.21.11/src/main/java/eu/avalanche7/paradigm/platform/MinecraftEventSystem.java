@@ -1,5 +1,7 @@
 package eu.avalanche7.paradigm.platform;
 
+import net.minecraft.server.network.ServerPlayerEntity;
+
 import com.mojang.logging.LogUtils;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
@@ -39,18 +41,6 @@ public class MinecraftEventSystem implements IEventSystem {
                 }
             }
         });
-        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
-            var player = handler.getPlayer();
-            if (leaveListeners.isEmpty()) return;
-            MinecraftPlayerLeaveEvent leaveEvent = new MinecraftPlayerLeaveEvent(player);
-            for (PlayerLeaveEventListener listener : leaveListeners) {
-                try {
-                    listener.onPlayerLeave(leaveEvent);
-                } catch (Exception failure) {
-                    LOGGER.error("Error in player leave event listener.", failure);
-                }
-            }
-        });
         ServerLivingEntityEvents.AFTER_DEATH.register((entity, damageSource) -> {
             if (!(entity instanceof net.minecraft.server.network.ServerPlayerEntity player) || deathListeners.isEmpty()) return;
             String deathMessage = null;
@@ -68,6 +58,18 @@ public class MinecraftEventSystem implements IEventSystem {
                 }
             }
         });
+    }
+
+    public void dispatchLeave(ServerPlayerEntity player) {
+            if (leaveListeners.isEmpty()) return;
+            MinecraftPlayerLeaveEvent leaveEvent = new MinecraftPlayerLeaveEvent(player);
+            for (PlayerLeaveEventListener listener : leaveListeners) {
+                try {
+                    listener.onPlayerLeave(leaveEvent);
+                } catch (Exception failure) {
+                    LOGGER.error("Error in player leave event listener.", failure);
+                }
+            }
     }
 
     public void registerJoinListener(PlayerJoinEventListener listener) {

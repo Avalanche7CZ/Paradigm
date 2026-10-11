@@ -6,9 +6,9 @@ import org.spongepowered.asm.mixin.gen.Invoker;
 
 @Mixin(Interaction.class)
 public interface InteractionAccessor {
-    @Invoker(value = "setWidth", remap = false)
+    @Invoker(value = "setWidth")
     void paradigm$setWidth(float value);
 
-    @Invoker(value = "setHeight", remap = false)
+    @Invoker(value = "setHeight")
     void paradigm$setHeight(float value);
 }

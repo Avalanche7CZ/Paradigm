@@ -1,5 +1,6 @@
 package eu.avalanche7.paradigm.data;
 
+import java.io.IOException;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -20,6 +21,10 @@ import org.slf4j.Logger;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.storage.StorageException;
+import eu.avalanche7.paradigm.storage.model.PlayerProfileMutation;
+import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
+import eu.avalanche7.paradigm.storage.model.StoredPlayerProfileState;
 import eu.avalanche7.paradigm.utils.AtomicFileIO;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 
@@ -337,25 +342,91 @@ public class PlayerDataStore {
     }
 
     public void upsertProfile(String playerUuid, String playerName, long firstSeenMs, long lastSeenMs, long playtimeMs) {
-        String uuid = normalizePlayerKey(playerUuid);
-        if (uuid == null) {
-            return;
-        }
         synchronized (lock) {
-            PlayerEntry entry = getOrCreateEntryByUuidLocked(uuid, playerName != null ? playerName : "");
-            if (playerName != null && !playerName.isBlank()) {
-                entry.setName(playerName);
-            }
-            if (firstSeenMs > 0L && entry.getFirstSeenMs() <= 0L) {
-                entry.setFirstSeenMs(firstSeenMs);
-            }
-            if (lastSeenMs > 0L) {
-                entry.setLastSeenMs(lastSeenMs);
-            }
-            if (playtimeMs >= 0L) {
-                entry.setPlaytimeMs(playtimeMs);
-            }
-            saveEntryLocked(entry);
+            PlayerEntry entry = readProfileEntry(normalizePlayerKey(playerUuid));
+            applyProfile(entry, PlayerProfileMutation.merge(profileOf(entry), new StoredPlayerProfile(playerUuid, playerName,
+                    firstSeenMs, lastSeenMs, Math.max(0L, playtimeMs)), false));
+            persistProfileEntry(entry);
+        }
+    }
+
+    private PlayerEntry readProfileEntry(String uuid) {
+        migrateLegacyIfNeededLocked();
+        Path path = resolvePlayerPath(uuid);
+        if (path == null) throw new StorageException("Player data path is unavailable.");
+        if (!Files.exists(path)) {
+            PlayerEntry entry = new PlayerEntry();
+            entry.normalize(uuid);
+            return entry;
+        }
+        try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+            PlayerEntry entry = gson.fromJson(reader, PlayerEntry.class);
+            if (entry == null) throw new StorageException("Empty player profile: " + uuid);
+            entry.normalize(uuid);
+            return entry;
+        } catch (IOException | com.google.gson.JsonParseException failure) {
+            throw new StorageException("Cannot read player profile: " + uuid, failure);
+        }
+    }
+
+    private static StoredPlayerProfile profileOf(PlayerEntry entry) {
+        return new StoredPlayerProfile(entry.uuid, entry.name, entry.firstSeenMs, entry.lastSeenMs, entry.playtimeMs);
+    }
+
+    private static void applyProfile(PlayerEntry entry, StoredPlayerProfile profile) {
+        entry.name = profile.name();
+        entry.firstSeenMs = profile.firstSeenMs();
+        entry.lastSeenMs = profile.lastSeenMs();
+        entry.playtimeMs = profile.playtimeMs();
+    }
+
+    private void persistProfileEntry(PlayerEntry entry) {
+        try {
+            AtomicFileIO.writeUtf8Durable(resolvePlayerPath(entry.uuid), writer -> gson.toJson(entry, writer));
+            cache.put(entry.uuid, entry);
+        } catch (IOException failure) {
+            cache.remove(entry.uuid);
+            throw new StorageException("Cannot persist player profile: " + entry.uuid, failure);
+        }
+    }
+
+    public StoredPlayerProfileState getProfileState(String uuid) {
+        synchronized (lock) {
+            PlayerEntry entry = readProfileEntry(normalizePlayerKey(uuid));
+            return new StoredPlayerProfileState(profileOf(entry), entry.playtimeStreams);
+        }
+    }
+
+    public StoredPlayerProfile mergeProfile(StoredPlayerProfile update) {
+        synchronized (lock) {
+            PlayerEntry entry = readProfileEntry(normalizePlayerKey(update.uuid()));
+            applyProfile(entry, PlayerProfileMutation.merge(profileOf(entry), update, true));
+            persistProfileEntry(entry);
+            return profileOf(entry);
+        }
+    }
+
+    public void importProfileState(StoredPlayerProfileState state) {
+        synchronized (lock) {
+            PlayerEntry entry = readProfileEntry(normalizePlayerKey(state.profile().uuid()));
+            PlayerProfileMutation.requireCompatibleImport(new StoredPlayerProfileState(profileOf(entry), entry.playtimeStreams), state);
+            applyProfile(entry, PlayerProfileMutation.merge(profileOf(entry), state.profile(), false));
+            state.playtimeStreams().forEach((writer, value) -> entry.playtimeStreams.merge(writer, value, Math::max));
+            persistProfileEntry(entry);
+        }
+    }
+
+    public StoredPlayerProfileState recordPlaytime(StoredPlayerProfile update, String writerId, long cumulativeMs) {
+        if (cumulativeMs < 0L || writerId == null || writerId.isBlank()) throw new IllegalArgumentException("Invalid playtime counter.");
+        synchronized (lock) {
+            PlayerEntry entry = readProfileEntry(normalizePlayerKey(update.uuid()));
+            long recorded = entry.playtimeStreams.getOrDefault(writerId, 0L);
+            long delta = Math.max(0L, cumulativeMs - recorded);
+            applyProfile(entry, PlayerProfileMutation.merge(profileOf(entry), new StoredPlayerProfile(entry.uuid,
+                    update.name(), update.firstSeenMs(), update.lastSeenMs(), delta), true));
+            entry.playtimeStreams.put(writerId, Math.max(recorded, cumulativeMs));
+            persistProfileEntry(entry);
+            return new StoredPlayerProfileState(profileOf(entry), entry.playtimeStreams);
         }
     }
 
@@ -476,12 +547,8 @@ public class PlayerDataStore {
             }
             loaded.normalize(uuid);
             return loaded;
-        } catch (Exception e) {
-            Path quarantined = AtomicFileIO.quarantine(path, "corrupt");
-            logger.warn("Paradigm: Failed to load playerdata for {}: {}{}", uuid, e.getMessage(),
-                    quarantined != null ? " (preserved as " + quarantined.getFileName() + ")" : "");
-            debugLogger.debugLog("PlayerDataStore: load failed for " + uuid, e);
-            return fallback;
+        } catch (Exception failure) {
+            throw new StorageException("Cannot read player data; original file was preserved: " + uuid, failure);
         }
     }
 
@@ -497,12 +564,16 @@ public class PlayerDataStore {
         }
 
         try {
-            AtomicFileIO.writeUtf8Atomic(path, writer -> gson.toJson(entry, writer));
+            PlayerEntry durable = readProfileEntry(entry.uuid);
+            applyProfile(entry, PlayerProfileMutation.merge(profileOf(durable), profileOf(entry), false));
+            durable.playtimeStreams.forEach((writerId, value) -> entry.playtimeStreams.merge(writerId, value, Math::max));
+            AtomicFileIO.writeUtf8Durable(path, writer -> gson.toJson(entry, writer));
             return true;
         } catch (Exception e) {
+            cache.remove(entry.uuid);
             logger.warn("Paradigm: Failed to save playerdata for {}: {}", entry.getUuid(), e.getMessage());
             debugLogger.debugLog("PlayerDataStore: save failed for " + entry.getUuid(), e);
-            return false;
+            throw new StorageException("Player data save was not acknowledged; reload durable state before retry: " + entry.uuid, e);
         }
     }
 
@@ -595,6 +666,7 @@ public class PlayerDataStore {
         private long firstSeenMs;
         private long lastSeenMs;
         private long playtimeMs;
+        private Map<String, Long> playtimeStreams = new LinkedHashMap<>();
         private Set<String> ignoredPlayers = new LinkedHashSet<>();
         private List<TemporaryGroupEntry> tempGroups = new ArrayList<>();
 
@@ -673,6 +745,7 @@ public class PlayerDataStore {
             } else {
                 name = name.trim();
             }
+            if (playtimeStreams == null) playtimeStreams = new LinkedHashMap<>();
             if (homes == null) {
                 homes = new LinkedHashMap<>();
             }

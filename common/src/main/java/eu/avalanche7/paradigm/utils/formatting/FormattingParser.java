@@ -93,15 +93,25 @@ public class FormattingParser {
                     Tag tag = tagRegistry.getTag(tagName);
                     if (tag != null && tag.canOpen()) {
                         tag.process(context, arguments);
-                        tagStack.push(new TagState(tag, arguments));
+                        if (tag.canClose()) {
+                            tagStack.push(new TagState(tag, arguments));
+                        }
                     } else {
                         appendText(context.getCurrentComponent(), "<" + tagContent + ">", context);
                     }
                 }
                 case TAG_CLOSE -> {
-                    if (!tagStack.isEmpty()) {
-                        TagState state = tagStack.pop();
-                        state.tag.close(context);
+                    String closingName = token.getValue().substring(2, token.getValue().length() - 1);
+                    int matchingIndex = tagStack.size() - 1;
+                    if (!closingName.isEmpty()) {
+                        while (matchingIndex >= 0 && !tagStack.get(matchingIndex).tag.matchesTagName(closingName)) {
+                            matchingIndex--;
+                        }
+                    }
+                    if (matchingIndex >= 0) {
+                        while (tagStack.size() > matchingIndex) {
+                            tagStack.pop().tag.close(context);
+                        }
                     }
                 }
                 case TAG_SELF_CLOSE -> {
@@ -120,6 +130,9 @@ public class FormattingParser {
             }
         }
 
+        while (!tagStack.isEmpty()) {
+            tagStack.pop().tag.close(context);
+        }
         return rootComponent;
     }
 

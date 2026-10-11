@@ -42,6 +42,9 @@ public class ModerationApiHandler {
         }
         body.action = action;
         Object result = dashboard.moderationActionAsync(ctx.principal(), body).get();
+        if (result instanceof ModerationActionResult denied && "permission_denied".equals(denied.code())) {
+            return DashboardResponse.apiError(403, denied.code(), denied.message());
+        }
         if (result instanceof ModerationActionResult actionResult
                 && !actionResult.applied()
                 && !actionResult.confirmationRequired()) {

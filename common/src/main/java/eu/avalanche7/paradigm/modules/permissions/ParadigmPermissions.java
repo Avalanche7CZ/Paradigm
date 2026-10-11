@@ -236,6 +236,8 @@ public final class ParadigmPermissions {
 
     public static final PermissionDefinition VANISH =
             def("paradigm.vanish", OP, "Allows toggling vanish mode.");
+    public static final PermissionDefinition VANISH_SEE =
+            def("paradigm.vanish.see", OP, "Allows seeing vanished players.");
     public static final PermissionDefinition VANISH_OTHERS =
             def("paradigm.vanish.others", OP, "Allows toggling vanish mode for other players.");
     public static final PermissionDefinition GOD =

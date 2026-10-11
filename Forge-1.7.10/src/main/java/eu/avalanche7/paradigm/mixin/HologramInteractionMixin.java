@@ -13,11 +13,11 @@ import eu.avalanche7.paradigm.platform.MinecraftHologramPlatform;
 
 @Mixin(NetHandlerPlayServer.class)
 public abstract class HologramInteractionMixin {
-    @Shadow(aliases = {"playerEntity"}) public EntityPlayerMP field_147369_b;
+    @Shadow public EntityPlayerMP playerEntity;
 
     @Inject(method = "processUseEntity", at = @At("HEAD"), cancellable = true)
     private void paradigm$virtualInteraction(C02PacketUseEntity packet, CallbackInfo callback) {
         MinecraftHologramPlatform platform = MinecraftHologramPlatform.current();
-        if (platform != null && platform.interact(field_147369_b, ((UseEntityPacketAccess) packet).paradigm$entityId(), packet.func_149565_c() == C02PacketUseEntity.Action.ATTACK)) callback.cancel();
+        if (platform != null && platform.interact(playerEntity, ((UseEntityPacketAccess) packet).paradigm$entityId(), packet.func_149565_c() == C02PacketUseEntity.Action.ATTACK)) callback.cancel();
     }
 }

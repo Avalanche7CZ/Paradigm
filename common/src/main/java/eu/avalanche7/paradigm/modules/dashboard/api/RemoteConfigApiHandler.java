@@ -160,6 +160,7 @@ public class RemoteConfigApiHandler {
 
     private static DashboardResponse handleFailure(Exception e) {
         Throwable cause = e.getCause() != null ? e.getCause() : e;
+        if (cause instanceof SecurityException) return DashboardResponse.apiError(403, "permission_denied", "Permission denied.");
         if (cause instanceof IllegalArgumentException) {
             return DashboardResponse.apiError(400, "validation_failed", cause.getMessage());
         }

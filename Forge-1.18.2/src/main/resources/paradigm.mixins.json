@@ -4,13 +4,22 @@
   "package": "eu.avalanche7.paradigm.mixin",
   "compatibilityLevel": "JAVA_17",
   "refmap": "paradigm.refmap.json",
-  "mixins": [],
+  "mixins": [
+    "VanishMixin$OnlineList"
+  ],
   "client": [],
   "server": [
     "PlayerListMixin",
     "ServerStatusMixin",
     "ServerPlayerTablistMixin",
-    "CommandSourcePermissionMixin"
+    "CommandSourcePermissionMixin",
+    "VanishMixin$Tracker",
+    "VanishMixin$PlayerInfo",
+    "VanishMixin$Connection",
+    "VanishMixin$Login",
+    "VanishMixin$Lifecycle",
+    "VanishMixin$Suggestions",
+    "VanishMixin$Status"
   ],
   "injectors": {
     "defaultRequire": 1

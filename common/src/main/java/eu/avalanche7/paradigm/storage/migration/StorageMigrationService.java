@@ -74,7 +74,7 @@ public class StorageMigrationService {
             }
             if (transfer(counter, "player " + profile.uuid(),
                     () -> target.players().getProfile(profile.uuid()).isPresent(),
-                    () -> target.players().upsertProfile(profile))) {
+                    () -> target.players().importProfileState(source.players().getProfileState(profile.uuid())))) {
                 counter.players++;
             }
 

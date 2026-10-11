@@ -80,7 +80,12 @@ public class AdminUtilityDataStore {
                 set.add(key);
                 enabled = true;
             }
-            saveLocked();
+            try {
+                saveLocked();
+            } catch (RuntimeException failure) {
+                if (enabled) set.remove(key); else set.add(key);
+                throw failure;
+            }
             return enabled;
         }
     }
@@ -99,7 +104,12 @@ public class AdminUtilityDataStore {
         synchronized (lock) {
             boolean changed = enabled ? set.add(key) : set.remove(key);
             if (changed) {
-                saveLocked();
+                try {
+                    saveLocked();
+                } catch (RuntimeException failure) {
+                    if (enabled) set.remove(key); else set.add(key);
+                    throw failure;
+                }
             }
         }
     }
@@ -151,8 +161,8 @@ public class AdminUtilityDataStore {
         if (path == null) return;
         try {
             AtomicFileIO.writeUtf8Atomic(path, writer -> gson.toJson(state, writer));
-        } catch (Throwable t) {
-            if (logger != null) logger.warn("Paradigm: Failed to save admin_utils.json: {}", t.getMessage());
+        } catch (java.io.IOException failure) {
+            throw new eu.avalanche7.paradigm.storage.StorageException("Failed to persist admin_utils.json", failure);
         }
     }
 

@@ -135,7 +135,7 @@ public final class Tablist implements ParadigmModule {
         Set<String> online = new HashSet<>();
         for (TablistEntry entry : entries) {
             online.add(entry.uuid());
-            apply(entry, config.resolve(entry.worldId()), orders.getOrDefault(entry.uuid(), 0), entries.size());
+            apply(entry, config.resolve(entry.worldId()), orders.getOrDefault(entry.uuid(), 0), (int) players.stream().filter(target -> services.getVanishService().canSee(entry.player(), target)).count());
         }
         snapshots.keySet().removeIf(uuid -> !online.contains(uuid));
     }

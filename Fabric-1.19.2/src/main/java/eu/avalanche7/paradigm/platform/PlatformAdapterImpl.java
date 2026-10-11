@@ -49,6 +49,7 @@ import java.util.concurrent.TimeUnit;
 import com.mojang.brigadier.CommandDispatcher;
 
 public class PlatformAdapterImpl implements IPlatformAdapter {
+    private final java.util.Set<String> godOwnedPlayerIds = new java.util.HashSet<>();
 
     private MinecraftServer server;
     private MessageParser messageParser;
@@ -74,6 +75,8 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         this.debugLogger = debugLogger;
         this.config = new FabricConfig();
         this.eventSystem = new MinecraftEventSystem();
+        net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents.AFTER_RESPAWN.register((oldPlayer, newPlayer, alive) ->
+                restoreGodAfterRespawn(new MinecraftPlayer(newPlayer)));
     }
 
     public void setPermissionsHandler(PermissionsHandler permissionsHandler) {
@@ -187,18 +190,11 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public boolean hasPermission(IPlayer player, String permissionNode, int vanillaLevel) {
-        if (!(player instanceof MinecraftPlayer mp)) {
-            return false;
-        }
+        if (!(player instanceof MinecraftPlayer)) return false;
         if (permissionsHandler != null) {
-            try {
-                if (permissionsHandler.hasPermission(player, permissionNode)) {
-                    return true;
-                }
-            } catch (Throwable ignored) {
-            }
+            return permissionsHandler.hasPermission(player, permissionNode, vanillaLevel);
         }
-        return this.hasVanillaPermissionLevel(player, vanillaLevel);
+        return hasVanillaPermissionLevel(player, vanillaLevel);
     }
 
     @Override
@@ -506,19 +502,44 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         return true;
     }
 
+    public void restoreGodAfterRespawn(IPlayer player) {
+        if (player != null && godOwnedPlayerIds.contains(player.getUUID())) {
+            setPlayerInvulnerable(player, true);
+        }
+    }
+
     @Override
     public boolean setPlayerInvulnerable(IPlayer player, boolean enabled) {
         if (!(player instanceof MinecraftPlayer mp)) return false;
-        mp.getHandle().setInvulnerable(enabled);
+        var handle = mp.getHandle();
+        if (enabled) {
+            if (handle.isInvulnerable() && !godOwnedPlayerIds.contains(player.getUUID())) return true;
+            godOwnedPlayerIds.add(player.getUUID());
+            handle.setInvulnerable(true);
+        } else if (godOwnedPlayerIds.remove(player.getUUID())) {
+            handle.setInvulnerable(false);
+        }
         return true;
     }
 
     @Override
     public boolean setPlayerVanished(IPlayer player, boolean enabled) {
-        if (!(player instanceof MinecraftPlayer mp)) return false;
-        mp.getHandle().setInvisible(enabled);
-        mp.getHandle().setSilent(enabled);
+        if (!(player instanceof MinecraftPlayer) || server == null || !server.isOnThread()) return false;
+        for (IPlayer viewer : getOnlinePlayers()) refreshVanishVisibility(viewer, player);
         return true;
+    }
+
+    @Override
+    public void refreshVanishVisibility(IPlayer viewer, IPlayer target) {
+        if (!(viewer instanceof MinecraftPlayer vp) || !(target instanceof MinecraftPlayer tp) || server == null) return;
+        if (!server.isOnThread()) throw new IllegalStateException("Vanish requires the server thread.");
+        var observer = vp.getHandle();
+        var subject = tp.getHandle();
+        if (observer == subject) return;
+        boolean visible = canSeePlayer(viewer, target);
+        if (visible) observer.networkHandler.sendPacket(new PlayerListS2CPacket(PlayerListS2CPacket.Action.ADD_PLAYER, java.util.List.of(subject)));
+        eu.avalanche7.paradigm.platform.VanishTracking.refresh(observer, subject);
+        if (!visible) observer.networkHandler.sendPacket(new PlayerListS2CPacket(PlayerListS2CPacket.Action.REMOVE_PLAYER, java.util.List.of(subject)));
     }
 
     @Override
@@ -575,20 +596,123 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
                 (int) Math.floor(handle.getX()), (int) Math.floor(handle.getZ()));
     }
 
+    private static final net.minecraft.server.world.ChunkTicketType<Long> RTP_CHUNK_TICKET = net.minecraft.server.world.ChunkTicketType.create("paradigm_rtp", Long::compare, 200);
+    private final java.util.Map<Object, java.util.Map<Long, Integer>> rtpChunkHolds = new java.util.IdentityHashMap<>();
+
+    private void releaseRtpChunks(ServerWorld world, java.util.List<net.minecraft.util.math.ChunkPos> held) {
+        var counts = rtpChunkHolds.get(world);
+        if (counts == null) return;
+        for (var position : held) {
+            long key = position.toLong();
+            int remaining = counts.getOrDefault(key, 0) - 1;
+            if (remaining > 0) counts.put(key, remaining);
+            else {
+                counts.remove(key);
+                world.getChunkManager().removeTicket(RTP_CHUNK_TICKET, position, 0, key);
+            }
+        }
+        if (counts.isEmpty()) rtpChunkHolds.remove(world);
+    }
+
+    @Override
+    public java.util.concurrent.CompletableFuture<java.util.Optional<Double>> findSafeRtpYAsync(IPlayer player, double x, double z) {
+        if (!(player instanceof MinecraftPlayer mp) || !Double.isFinite(x) || !Double.isFinite(z)) return java.util.concurrent.CompletableFuture.completedFuture(java.util.Optional.empty());
+        ServerWorld world = (ServerWorld) mp.getHandle().getWorld();
+        var dimensions = mp.getHandle().getDimensions(net.minecraft.entity.EntityPose.STANDING);
+        double halfWidth = Math.max(0.6, dimensions.width) / 2.0;
+        double bodyHeight = Math.max(1.8, dimensions.height);
+        var border = world.getWorldBorder();
+        if (!Double.isFinite(halfWidth) || !Double.isFinite(bodyHeight)
+                || x - halfWidth < border.getBoundWest() || x + halfWidth > border.getBoundEast()
+                || z - halfWidth < border.getBoundNorth() || z + halfWidth > border.getBoundSouth()) return java.util.concurrent.CompletableFuture.completedFuture(java.util.Optional.empty());
+        int minChunkX = ((int) Math.floor(x - halfWidth) - 2) >> 4;
+        int maxChunkX = ((int) Math.floor(x + halfWidth) + 2) >> 4;
+        int minChunkZ = ((int) Math.floor(z - halfWidth) - 2) >> 4;
+        int maxChunkZ = ((int) Math.floor(z + halfWidth) + 2) >> 4;
+        if ((long) maxChunkX - minChunkX > 3 || (long) maxChunkZ - minChunkZ > 3) {
+            return java.util.concurrent.CompletableFuture.completedFuture(java.util.Optional.empty());
+        }
+        var chunkSource = world.getChunkManager();
+        java.util.List<net.minecraft.util.math.ChunkPos> held = new java.util.ArrayList<>();
+        var counts = rtpChunkHolds.computeIfAbsent(world, ignored -> new java.util.HashMap<>());
+        java.util.List<java.util.concurrent.CompletableFuture<?>> chunks = new java.util.ArrayList<>();
+        try {
+        for (int cx = minChunkX; cx <= maxChunkX; cx++) {
+            for (int cz = minChunkZ; cz <= maxChunkZ; cz++) {
+                var position = new net.minecraft.util.math.ChunkPos(cx, cz);
+                long key = position.toLong();
+                if (!counts.containsKey(key)) { chunkSource.addTicket(RTP_CHUNK_TICKET, position, 0, key); }
+                counts.merge(key, 1, Integer::sum);
+                held.add(position);
+                int chunkX = cx;
+                int chunkZ = cz;
+                chunks.add(java.util.concurrent.CompletableFuture.supplyAsync(() -> chunkSource.getChunkFutureSyncOnMainThread(chunkX, chunkZ, net.minecraft.world.chunk.ChunkStatus.FULL, true)).thenCompose(future -> future));
+            }
+        }
+        } catch (RuntimeException preparationFailure) {
+            releaseRtpChunks(world, held);
+            throw preparationFailure;
+        }
+        java.util.concurrent.CompletableFuture<java.util.Optional<Double>> result = new java.util.concurrent.CompletableFuture<>();
+        result.whenComplete((ignored, failure) -> executeOnServerThread(() -> releaseRtpChunks(world, held)));
+        java.util.concurrent.CompletableFuture.allOf(chunks.toArray(java.util.concurrent.CompletableFuture[]::new)).whenComplete((ignored, failure) -> {
+            if (result.isDone()) return;
+            if (failure != null) {
+                result.completeExceptionally(failure);
+                return;
+            }
+            executeOnServerThread(() -> {
+                if (result.isDone()) return;
+                try {
+                    result.complete(mp.getHandle().getWorld() == world ? findSafeRtpY(player, x, z) : java.util.Optional.empty());
+                } catch (RuntimeException failureDuringValidation) {
+                    result.completeExceptionally(failureDuringValidation);
+                }
+            });
+        });
+        return result;
+    }
+
     @Override
     public java.util.Optional<Double> findSafeRtpY(IPlayer player, double x, double z) {
-        if (!(player instanceof MinecraftPlayer mp)) return java.util.Optional.empty();
+        if (!(player instanceof MinecraftPlayer mp) || !Double.isFinite(x) || !Double.isFinite(z)) return java.util.Optional.empty();
         ServerWorld world = (ServerWorld) mp.getHandle().getWorld();
+        var dimensions = mp.getHandle().getDimensions(net.minecraft.entity.EntityPose.STANDING);
+        double halfWidth = Math.max(0.6, dimensions.width) / 2.0;
+        double bodyHeight = Math.max(1.8, dimensions.height);
+        var border = world.getWorldBorder();
+        if (!Double.isFinite(halfWidth) || !Double.isFinite(bodyHeight)
+                || x - halfWidth < border.getBoundWest() || x + halfWidth > border.getBoundEast()
+                || z - halfWidth < border.getBoundNorth() || z + halfWidth > border.getBoundSouth()) return java.util.Optional.empty();
         int blockX = (int) Math.floor(x);
         int blockZ = (int) Math.floor(z);
-        world.getChunk(blockX >> 4, blockZ >> 4);
+        for (int cx = ((int) Math.floor(x - halfWidth) - 2) >> 4; cx <= ((int) Math.floor(x + halfWidth) + 2) >> 4; cx++) {
+            for (int cz = ((int) Math.floor(z - halfWidth) - 2) >> 4; cz <= ((int) Math.floor(z + halfWidth) + 2) >> 4; cz++) {
+                if (!world.isChunkLoaded(cx, cz) || world.getChunkManager().getWorldChunk(cx, cz) == null) return java.util.Optional.empty();
+            }
+        }
         int topY = world.getTopY(Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, blockX, blockZ);
+        if (topY <= world.getBottomY() || topY + bodyHeight > world.getTopY()) return java.util.Optional.empty();
         net.minecraft.util.math.BlockPos ground = new net.minecraft.util.math.BlockPos(blockX, topY - 1, blockZ);
-        net.minecraft.util.math.BlockPos feet = new net.minecraft.util.math.BlockPos(blockX, topY, blockZ);
-        net.minecraft.util.math.BlockPos head = new net.minecraft.util.math.BlockPos(blockX, topY + 1, blockZ);
-        net.minecraft.block.BlockState groundState = world.getBlockState(ground);
-        if (groundState.isAir() || !groundState.getFluidState().isEmpty()) return java.util.Optional.empty();
-        if (!world.getBlockState(feet).getFluidState().isEmpty() || !world.getBlockState(head).getFluidState().isEmpty()) return java.util.Optional.empty();
+        var groundState = world.getBlockState(ground);
+        if (!groundState.isSideSolidFullSquare(world, ground, net.minecraft.util.math.Direction.UP)) return java.util.Optional.empty();
+        net.minecraft.util.math.Box body = new net.minecraft.util.math.Box(x - halfWidth, topY, z - halfWidth, x + halfWidth, topY + bodyHeight, z + halfWidth);
+        if (!world.isSpaceEmpty(mp.getHandle(), body.expand(0.5, 0.0, 0.5))) return java.util.Optional.empty();
+        for (int bx = (int) Math.floor(body.minX) - 1; bx <= (int) Math.floor(body.maxX) + 1; bx++) {
+            for (int bz = (int) Math.floor(body.minZ) - 1; bz <= (int) Math.floor(body.maxZ) + 1; bz++) {
+                for (int by = topY - 1; by <= (int) Math.floor(body.maxY); by++) {
+                    var position = new net.minecraft.util.math.BlockPos(bx, by, bz);
+                    var state = world.getBlockState(position);
+                    if (!state.getFluidState().isEmpty() || state.getBlock() instanceof net.minecraft.block.AbstractFireBlock
+                            || state.getBlock() instanceof net.minecraft.block.CactusBlock
+                            || state.getBlock() instanceof net.minecraft.block.MagmaBlock
+                            || state.getBlock() instanceof net.minecraft.block.CampfireBlock
+                            || state.getBlock() instanceof net.minecraft.block.SweetBerryBushBlock
+                            || state.getBlock() instanceof net.minecraft.block.WitherRoseBlock
+                            || state.getBlock() instanceof net.minecraft.block.PowderSnowBlock) return java.util.Optional.empty();
+                }
+            }
+        }
         return java.util.Optional.of((double) topY);
     }
 
@@ -742,7 +866,10 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         if (!(player instanceof MinecraftPlayer mp)) {
             return false;
         }
-        Item item = Registry.ITEM.get(new Identifier("minecraft", itemId));
+        if (itemId.isBlank()) return false;
+        Identifier id = Identifier.tryParse(itemId);
+        if (id == null || !Registry.ITEM.containsId(id)) return false;
+        Item item = Registry.ITEM.get(id);
         if (item == Items.AIR) {
             debugLogger.debugLog("PlatformAdapter: Could not find item with ID: " + itemId);
             return false;

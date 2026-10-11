@@ -9,7 +9,10 @@ import eu.avalanche7.paradigm.modules.audit.AuditResult;
 import eu.avalanche7.paradigm.modules.audit.AuditService;
 import eu.avalanche7.paradigm.modules.audit.AuditSource;
 import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
+import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardAuthorization;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
+import eu.avalanche7.paradigm.modules.permissions.PermissionDefinition;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.identity.ServerScope;
 import eu.avalanche7.paradigm.storage.model.StoredLocation;
@@ -33,6 +36,8 @@ public class ModerationService {
         if (type == null) {
             return result(false, "validation_failed", "Unknown moderation action.", false, null);
         }
+
+        if (type != ModerationActionType.REVOKE && !canApply(actor, type)) return denied();
 
         boolean confirmRequired = switch (type) {
             case BAN, TEMPBAN, UNBAN, IPBAN, TEMPIPBAN, UNIPBAN, REVOKE, JAIL -> true;
@@ -85,11 +90,13 @@ public class ModerationService {
                         resolveIp(safe, online), reason, expires, created);
                 case UNIPBAN -> revokeMatching(actor, safe.punishmentId, null, safe.ipAddress,
                         PunishmentType.IP_BAN, reason);
-                case REVOKE -> services.getPunishmentService().revoke(
-                        safe.punishmentId, actorUuid(actor), actorName(actor), reason, AuditSource.DASHBOARD);
+                case REVOKE -> revokeAuthorized(actor, safe.punishmentId, null, reason);
                 case JAIL -> createJail(actor, targetUuid, targetName, reason, expires, created);
                 case UNJAIL -> unjail(actor, safe.punishmentId, targetUuid, reason);
             };
+        } catch (SecurityException denied) {
+            audit(actor, type, AuditResult.FAILED, "", "", "", "", "");
+            return denied();
         } catch (IllegalArgumentException error) {
             audit(actor, type, AuditResult.FAILED, targetUuid, targetName, reason, safe.duration, safe.punishmentId);
             return result(false, "validation_failed", error.getMessage(), false, safe.punishmentId);
@@ -105,10 +112,53 @@ public class ModerationService {
         return result(
                 changed,
                 changed ? "ok" : "ambiguous_or_inactive",
-                changed ? "Moderation action applied." : "Use an exact active punishment ID.",
-                confirmRequired,
+                changed ? "Moderation action applied." : type == ModerationActionType.REVOKE
+                        ? "Punishment is no longer active." : "Use an exact active punishment ID.",
+                type == ModerationActionType.REVOKE && !changed ? false : confirmRequired,
                 created[0] != null ? created[0].punishmentId() : safe.punishmentId
         );
+    }
+
+    private boolean hasPermission(DashboardPrincipal actor, PermissionDefinition permission) {
+        return actor != null && (actor.console() || services.getPermissionsHandler()
+                .hasPermission(actor.uuid(), permission.node(), permission.fallbackLevel()));
+    }
+
+    private boolean canRevoke(DashboardPrincipal actor, PunishmentType type) {
+        return switch (type) {
+            case WARN -> hasPermission(actor, ParadigmPermissions.WARN);
+            case MUTE -> hasPermission(actor, ParadigmPermissions.MUTE) || hasPermission(actor, ParadigmPermissions.TEMP_MUTE);
+            case BAN -> hasPermission(actor, ParadigmPermissions.BAN) || hasPermission(actor, ParadigmPermissions.TEMP_BAN);
+            case IP_BAN -> hasPermission(actor, ParadigmPermissions.IP_BAN);
+            case JAIL -> hasPermission(actor, ParadigmPermissions.JAIL);
+        };
+    }
+
+    private boolean canApply(DashboardPrincipal actor, ModerationActionType type) {
+        return switch (type) {
+            case WARN -> canRevoke(actor, PunishmentType.WARN);
+            case MUTE, TEMPMUTE, UNMUTE -> canRevoke(actor, PunishmentType.MUTE);
+            case BAN, TEMPBAN, UNBAN -> canRevoke(actor, PunishmentType.BAN);
+            case IPBAN, TEMPIPBAN, UNIPBAN -> canRevoke(actor, PunishmentType.IP_BAN);
+            case JAIL, UNJAIL -> canRevoke(actor, PunishmentType.JAIL);
+            case REVOKE -> false;
+        };
+    }
+
+    private boolean revokeAuthorized(DashboardPrincipal actor, String id, PunishmentType expected, String reason) {
+        return switch (services.getPunishmentService().revokeAuthorized(id, actorUuid(actor), actorName(actor), reason,
+                AuditSource.DASHBOARD, record -> (expected == null || record.type() == expected)
+                        && DashboardAuthorization.canAccessDashboard(permission -> hasPermission(actor, permission))
+                        && DashboardAuthorization.canAccessModerationPage(permission -> hasPermission(actor, permission))
+                        && canRevoke(actor, record.type()))) {
+            case APPLIED -> true;
+            case INACTIVE -> false;
+            case UNAVAILABLE -> throw new SecurityException("Permission denied.");
+        };
+    }
+
+    private static ModerationActionResult denied() {
+        return result(false, "permission_denied", "You do not have permission for this moderation action.", false, null);
     }
 
     private boolean warn(
@@ -166,8 +216,7 @@ public class ModerationService {
             if (record == null || record.type() != type || !record.activeAt(System.currentTimeMillis())) {
                 return false;
             }
-            return services.getPunishmentService().revoke(
-                    record.punishmentId(), actorUuid(actor), actorName(actor), reason, AuditSource.DASHBOARD);
+            return revokeAuthorized(actor, record.punishmentId(), type, reason);
         }
 
         List<PunishmentRecord> matches = services.getPunishmentService()
@@ -177,8 +226,7 @@ public class ModerationService {
         if (matches.size() != 1) {
             return false;
         }
-        return services.getPunishmentService().revoke(
-                matches.get(0).punishmentId(), actorUuid(actor), actorName(actor), reason, AuditSource.DASHBOARD);
+        return revokeAuthorized(actor, matches.get(0).punishmentId(), type, reason);
     }
 
     private boolean unjail(DashboardPrincipal actor, String id, String uuid, String reason) {
@@ -186,12 +234,10 @@ public class ModerationService {
             PunishmentRecord record = services.getPunishmentService().find(id).orElse(null);
             if (record == null || record.type() != PunishmentType.JAIL
                     || (!text(uuid).isBlank() && !text(uuid).equalsIgnoreCase(record.subjectUuid()))) return false;
-            return services.getPunishmentService().revokeOfType(id, PunishmentType.JAIL, actorUuid(actor), actorName(actor),
-                    reason, AuditSource.DASHBOARD);
+            return revokeAuthorized(actor, id, PunishmentType.JAIL, reason);
         }
         List<PunishmentRecord> matches = services.getPunishmentService().activeRecords(uuid, PunishmentType.JAIL);
-        return matches.size() == 1 && services.getPunishmentService().revokeOfType(matches.get(0).punishmentId(),
-                PunishmentType.JAIL, actorUuid(actor), actorName(actor), reason, AuditSource.DASHBOARD);
+        return matches.size() == 1 && revokeAuthorized(actor, matches.get(0).punishmentId(), PunishmentType.JAIL, reason);
     }
 
     private boolean createJail(DashboardPrincipal actor, String uuid, String name, String reason, Long expiresAtMs,

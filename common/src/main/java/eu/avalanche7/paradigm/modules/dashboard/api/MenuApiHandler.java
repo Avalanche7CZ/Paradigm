@@ -106,7 +106,10 @@ public final class MenuApiHandler {
         Request mutationRequest = request;
 
         try {
-            List<String> problems = onServerThread(() -> apply(action, mutationRequest));
+            List<String> problems = onServerThread(() -> {
+                dashboard.requireMutationPermission(context.principal(), eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions.MENU_MANAGE);
+                return apply(action, mutationRequest);
+            });
             dashboard.audit().dashboard(context.principal(), AuditActionType.MENU_CHANGE, AuditResult.SUCCESS,
                     "Menu " + action + " completed.",
                     Map.of("action", action, "menu", mutationRequest.id != null ? mutationRequest.id : ""));
@@ -117,6 +120,8 @@ public final class MenuApiHandler {
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("problems", problems);
             return DashboardResponse.apiOk(payload);
+        } catch (SecurityException exception) {
+            return DashboardResponse.apiError(403, "permission_denied", "Permission denied.");
         } catch (ServerThreadUnavailableException exception) {
             return DashboardResponse.apiError(503, "server_busy", exception.getMessage());
         } catch (IllegalArgumentException | IllegalStateException exception) {

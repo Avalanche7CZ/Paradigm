@@ -179,7 +179,7 @@ public class Reload implements ParadigmModule {
         platform.registerCommand(paradigm);
     }
 
-    private void rescheduleAnnouncements() {
+    public static void rescheduleAnnouncements() {
         for (var m : ParadigmAPI.getModules()) {
             if (m instanceof Announcements) {
                 ((Announcements) m).rescheduleAnnouncements();
@@ -187,7 +187,7 @@ public class Reload implements ParadigmModule {
         }
     }
 
-    private void rescheduleRestart(Services services) {
+    public static void rescheduleRestart(Services services) {
         for (var m : ParadigmAPI.getModules()) {
             if (m instanceof Restart) {
                 ((Restart) m).rescheduleNextRestart(services);
@@ -225,13 +225,14 @@ public class Reload implements ParadigmModule {
                 boolean after;
                 try { after = m.isEnabled(services); } catch (Throwable t) { after = false; }
 
-                if (before && !after) {
+                if (!after && (before || services.isModuleActive(m))) {
                     moduleStateChanged = true;
                     commandsChanged |= releaseModuleCommands(m, services);
                     services.disableModule(m);
-                } else if (!before && after) {
+                } else if (after && !services.isModuleActive(m)) {
                     moduleStateChanged = true;
                     services.enableModule(m);
+                    if (!services.isModuleActive(m)) continue;
                     commandsChanged |= registerModuleCommands(m, services);
                 }
                 prevEnabled.put(m, after);

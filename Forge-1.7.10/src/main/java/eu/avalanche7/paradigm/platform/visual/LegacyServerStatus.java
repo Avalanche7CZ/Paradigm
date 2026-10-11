@@ -15,6 +15,22 @@ import eu.avalanche7.paradigm.utils.ServerStatusIconCache;
 public final class LegacyServerStatus {
     private LegacyServerStatus() {}
 
+    public static ServerStatusResponse publicStatus(ServerStatusResponse original, Services services) {
+        if (original == null || services == null || services.getVanishService().hiddenCount() == 0) return original;
+        var filtered = new ServerStatusResponse();
+        filtered.func_151315_a(original.func_151317_a());
+        filtered.func_151321_a(original.func_151322_c());
+        filtered.func_151320_a(original.func_151316_d());
+        var players = original.func_151318_b();
+        if (players != null) {
+            var replacement = new ServerStatusResponse.PlayerCountData(players.func_151332_a(), Math.max(0, players.func_151333_b() - services.getVanishService().hiddenCount()));
+            if (players.func_151331_c() != null) replacement.func_151330_a(java.util.Arrays.stream(players.func_151331_c())
+                    .filter(profile -> !services.getVanishService().isHidden(profile.getId().toString())).toArray(GameProfile[]::new));
+            filtered.func_151319_a(replacement);
+        }
+        return filtered;
+    }
+
     public static ServerStatusResponse customize(ServerStatusResponse original, Services services) {
         if (original == null || services == null) return original;
         var config = services.getMotdConfig();

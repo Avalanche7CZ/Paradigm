@@ -10,14 +10,22 @@ import java.util.Optional;
 import java.util.Set;
 
 import eu.avalanche7.paradigm.storage.identity.StorageContext;
+import eu.avalanche7.paradigm.storage.model.PlayerProfileMutation;
 import eu.avalanche7.paradigm.storage.model.StoredHome;
 import eu.avalanche7.paradigm.storage.model.StoredLocation;
 import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
+import eu.avalanche7.paradigm.storage.model.StoredPlayerProfileState;
 import eu.avalanche7.paradigm.storage.repository.PlayerRepository;
 
 public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerRepository {
     public SqlPlayerRepository(SqlExecutor sql, StorageContext context) {
         super(sql, context);
+        sql.query("SELECT uuid, name, first_seen_ms, last_seen_ms, playtime_ms FROM players WHERE 1 = 0", null, rs -> null);
+        sql.query("SELECT uuid, writer_id, cumulative_ms FROM player_playtime_streams WHERE 1 = 0", null, rs -> null);
+        if ("mysql".equals(sql.dialectName())) {
+            boolean transactional = sql.query("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('players', 'player_playtime_streams') AND ENGINE = 'InnoDB'", null, rs -> rs.next() && rs.getInt(1) == 2);
+            if (!transactional) throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException("Player profile persistence requires InnoDB players and player_playtime_streams tables. Stop writers, back up the database, and convert both tables to InnoDB before starting Paradigm.");
+        }
     }
 
     @Override
@@ -42,17 +50,96 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
 
     @Override
     public void upsertProfile(StoredPlayerProfile profile) {
-        if (profile == null) return;
-        String normalizedUuid = normalize(profile.uuid());
+        if (profile != null) sql.transaction(() -> {
+            String uuid = normalize(profile.uuid());
+            lockPlayer(uuid);
+            writeProfile(PlayerProfileMutation.merge(getProfile(uuid).orElse(null), profile, false));
+        });
+    }
+
+    private void lockPlayer(String uuid) {
+        String suffix = "mysql".equals(sql.dialectName()) ? " ON DUPLICATE KEY UPDATE uuid = VALUES(uuid)"
+                : " ON CONFLICT(uuid) DO UPDATE SET uuid = excluded.uuid";
+        sql.update("INSERT INTO players(uuid, first_seen_ms, last_seen_ms, playtime_ms) VALUES(?, 0, 0, 0)" + suffix,
+                ps -> ps.setString(1, uuid));
+    }
+
+    private StoredPlayerProfileState readState(String uuid) {
+        var profile = getProfile(uuid).orElse(new StoredPlayerProfile(uuid, null, 0L, 0L, 0L));
+        var streams = sql.query("SELECT writer_id, cumulative_ms FROM player_playtime_streams WHERE uuid = ?",
+                ps -> ps.setString(1, uuid), rs -> {
+                    java.util.Map<String, Long> values = new java.util.HashMap<>();
+                    while (rs.next()) values.put(rs.getString(1), rs.getLong(2));
+                    return values;
+                });
+        return new StoredPlayerProfileState(profile, streams);
+    }
+
+    @Override
+    public StoredPlayerProfileState getProfileState(String uuid) {
+        return sql.transaction(() -> {
+            String key = normalize(uuid);
+            if ("mysql".equals(sql.dialectName())) lockPlayer(key);
+            return readState(key);
+        });
+    }
+
+    private void writeProfile(StoredPlayerProfile profile) {
+        sql.update("UPDATE players SET name = ?, first_seen_ms = ?, last_seen_ms = ?, playtime_ms = ? WHERE uuid = ?", ps -> {
+            ps.setString(1, profile.name());
+            ps.setLong(2, profile.firstSeenMs());
+            ps.setLong(3, profile.lastSeenMs());
+            ps.setLong(4, profile.playtimeMs());
+            ps.setString(5, normalize(profile.uuid()));
+        });
+    }
+
+    private void writeStream(String uuid, String writer, long cumulative) {
+        String suffix = "mysql".equals(sql.dialectName()) ? " ON DUPLICATE KEY UPDATE cumulative_ms = GREATEST(cumulative_ms, VALUES(cumulative_ms))"
+                : " ON CONFLICT(uuid, writer_id) DO UPDATE SET cumulative_ms = MAX(cumulative_ms, excluded.cumulative_ms)";
+        sql.update("INSERT INTO player_playtime_streams(uuid, writer_id, cumulative_ms) VALUES(?, ?, ?)" + suffix, ps -> {
+            ps.setString(1, uuid);
+            ps.setString(2, writer);
+            ps.setLong(3, cumulative);
+        });
+    }
+
+    @Override
+    public StoredPlayerProfile mergeProfile(StoredPlayerProfile update) {
+        return sql.transaction(() -> {
+            String uuid = normalize(update.uuid());
+            lockPlayer(uuid);
+            var merged = PlayerProfileMutation.merge(getProfile(uuid).orElse(null), update, true);
+            writeProfile(merged);
+            return merged;
+        });
+    }
+
+    @Override
+    public void importProfileState(StoredPlayerProfileState state) {
         sql.transaction(() -> {
-            sql.update("DELETE FROM players WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid));
-            sql.update("INSERT INTO players(uuid, name, first_seen_ms, last_seen_ms, playtime_ms) VALUES(?, ?, ?, ?, ?)", ps -> {
-                ps.setString(1, normalizedUuid);
-                ps.setString(2, profile.name());
-                ps.setLong(3, profile.firstSeenMs());
-                ps.setLong(4, profile.lastSeenMs());
-                ps.setLong(5, profile.playtimeMs());
-            });
+            String uuid = normalize(state.profile().uuid());
+            lockPlayer(uuid);
+            var existing = readState(uuid);
+            PlayerProfileMutation.requireCompatibleImport(existing, state);
+            writeProfile(PlayerProfileMutation.merge(existing.profile(), state.profile(), false));
+            state.playtimeStreams().forEach((writer, value) -> writeStream(uuid, writer, value));
+        });
+    }
+
+    @Override
+    public StoredPlayerProfileState recordPlaytime(StoredPlayerProfile update, String writerId, long cumulativeMs) {
+        if (cumulativeMs < 0L || writerId == null || writerId.isBlank()) throw new IllegalArgumentException("Invalid playtime counter.");
+        return sql.transaction(() -> {
+            String uuid = normalize(update.uuid());
+            lockPlayer(uuid);
+            var existing = readState(uuid);
+            long recorded = existing.playtimeStreams().getOrDefault(writerId, 0L);
+            long delta = Math.max(0L, cumulativeMs - recorded);
+            writeProfile(PlayerProfileMutation.merge(existing.profile(), new StoredPlayerProfile(uuid, update.name(),
+                    update.firstSeenMs(), update.lastSeenMs(), delta), true));
+            writeStream(uuid, writerId, cumulativeMs);
+            return readState(uuid);
         });
     }
 

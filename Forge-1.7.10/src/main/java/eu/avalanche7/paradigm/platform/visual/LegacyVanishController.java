@@ -30,12 +30,12 @@ public final class LegacyVanishController {
     }
 
     public boolean visible(Entity entity, EntityPlayerMP viewer) {
-        return entity == viewer || !(entity instanceof EntityPlayerMP player) || player.getUniqueID() == null || !hidden.containsKey(player.getUniqueID());
+        return entity == viewer || !(entity instanceof EntityPlayerMP player) || player.getUniqueID() == null || (!hidden.containsKey(player.getUniqueID()) || viewer != null && eu.avalanche7.paradigm.platform.VanishTracking.seesHidden(viewer));
     }
 
     public boolean listed(String name, EntityPlayerMP viewer) {
         for (EntityPlayerMP subject : hidden.values()) {
-            if (subject != viewer && subject.getCommandSenderName().equals(name)) return false;
+            if (subject != viewer && subject.getCommandSenderName().equals(name)) return visible(subject, viewer);
         }
         return true;
     }
@@ -54,24 +54,28 @@ public final class LegacyVanishController {
             hidden.remove(uuid);
             transferred(player);
         }
-        EntityTrackerEntry entry = entry(player);
-        for (EntityPlayerMP viewer : players()) {
-            if (viewer == player) continue;
-            viewer.playerNetServerHandler.sendPacket(new S38PacketPlayerListItem(player.getCommandSenderName(), !enabled, player.ping));
-            if (entry != null && viewer.worldObj == player.worldObj) {
-                if (enabled && entry.trackingPlayers.contains(viewer)) {
-                    entry.removeFromWatchingList(viewer);
-                    net.minecraftforge.event.ForgeEventFactory.onStopEntityTracking(player, viewer);
-                } else if (!enabled) entry.tryStartWachingThis(viewer);
-            }
-        }
+        for (EntityPlayerMP viewer : players()) refresh(viewer, player);
         return true;
+    }
+
+    public void refresh(EntityPlayerMP viewer, EntityPlayerMP player) {
+        if (viewer == player) return;
+        boolean visible = visible(player, viewer);
+        viewer.playerNetServerHandler.sendPacket(new S38PacketPlayerListItem(player.getCommandSenderName(), visible, player.ping));
+        EntityTrackerEntry entry = entry(player);
+        if (entry == null) return;
+        if (!visible && entry.trackingPlayers.contains(viewer)) {
+            entry.removeFromWatchingList(viewer);
+            net.minecraftforge.event.ForgeEventFactory.onStopEntityTracking(player, viewer);
+        } else if (visible && viewer.worldObj == player.worldObj) entry.tryStartWachingThis(viewer);
     }
 
     public void disconnected(EntityPlayerMP player) {
         hidden.remove(player.getUniqueID(), player);
         admission.remove(player.getUniqueID());
         reveals.remove(player.getUniqueID());
+        var services = eu.avalanche7.paradigm.ParadigmAPI.getServices();
+        if (services != null) services.getVanishService().left(new eu.avalanche7.paradigm.platform.MinecraftPlayer(player));
     }
 
     public void clear() {

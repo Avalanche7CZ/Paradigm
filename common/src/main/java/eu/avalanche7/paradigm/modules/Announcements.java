@@ -29,6 +29,8 @@ public class Announcements implements ParadigmModule {
     private int lastActionbarRandomIndex = -1;
     private int lastTitleRandomIndex = -1;
     private int lastBossbarRandomIndex = -1;
+    private long scheduleGeneration;
+    private String scheduleSettings;
     private boolean announcementsScheduled = false;
     private ScheduledFuture<?> globalTask = null;
     private ScheduledFuture<?> actionbarTask = null;
@@ -146,7 +148,7 @@ public class Announcements implements ParadigmModule {
     @Override
     public void registerEventListeners(Object eventBus, Services services) {}
 
-    private void scheduleConfiguredAnnouncements() {
+    private synchronized void scheduleConfiguredAnnouncements() {
         services.getDebugLogger().debugLog(NAME + ": scheduleConfiguredAnnouncements() called.");
         if (announcementsScheduled) {
             services.getDebugLogger().debugLog(NAME + ": Announcements already scheduled, skipping.");
@@ -175,6 +177,23 @@ public class Announcements implements ParadigmModule {
             bossbarTask = scheduleAnnouncementTask("bossbar", this::broadcastBossbarMessages, interval);
         }
         announcementsScheduled = true;
+        scheduleSettings = schedulingSettings();
+    }
+
+    private Runnable guardSchedule(Runnable task) {
+        long expectedGeneration = scheduleGeneration;
+        return () -> {
+            synchronized (this) {
+                if (expectedGeneration == scheduleGeneration && announcementsScheduled && services.canDispatchModuleEvents(this) && isEnabled(services)) task.run();
+            }
+        };
+    }
+
+    private String schedulingSettings() {
+        var c = services.getAnnouncementsConfig();
+        return java.util.Arrays.asList(c.globalEnable.value, c.globalInterval.value, c.actionbarEnable.value,
+                c.actionbarInterval.value, c.titleEnable.value, c.titleInterval.value,
+                c.bossbarEnable.value, c.bossbarInterval.value).toString();
     }
 
     private ScheduledFuture<?> scheduleAnnouncementTask(String type, Runnable task, long intervalSeconds) {
@@ -182,12 +201,14 @@ public class Announcements implements ParadigmModule {
             services.getDebugLogger().debugLog(NAME + ": Skipping " + type + " messages, interval must be greater than 0 seconds but was " + intervalSeconds + ".");
             return null;
         }
-        ScheduledFuture<?> taskHandle = services.getTaskScheduler().scheduleAtFixedRate(task, intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
+        ScheduledFuture<?> taskHandle = services.getTaskScheduler().scheduleAtFixedRate(guardSchedule(task), intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
         services.getDebugLogger().debugLog(NAME + ": Scheduled " + type + " messages with interval: " + intervalSeconds + " seconds");
         return taskHandle;
     }
 
-    private void cancelAllTasks() {
+    private synchronized void cancelAllTasks() {
+        scheduleGeneration++;
+        scheduleSettings = null;
         globalTask = cancelTask(globalTask, "global");
         actionbarTask = cancelTask(actionbarTask, "actionbar");
         titleTask = cancelTask(titleTask, "title");
@@ -406,12 +427,13 @@ public class Announcements implements ParadigmModule {
         return 1;
     }
 
-    public void rescheduleAnnouncements() {
+    public synchronized void rescheduleAnnouncements() {
         if (services == null) return;
+        if (services.canDispatchModuleEvents(this) && isEnabled(services) && announcementsScheduled && schedulingSettings().equals(scheduleSettings)) return;
         services.getDebugLogger().debugLog(NAME + ": Rescheduling announcements on config reload.");
         cancelAllTasks();
         announcementsScheduled = false;
-        if (!isEnabled(services)) {
+        if (!services.canDispatchModuleEvents(this) || !isEnabled(services)) {
             services.getDebugLogger().debugLog(NAME + ": Module is disabled after reload; announcements will stay unscheduled.");
             return;
         }

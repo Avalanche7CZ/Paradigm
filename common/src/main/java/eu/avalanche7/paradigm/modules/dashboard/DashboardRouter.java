@@ -260,9 +260,10 @@ public class DashboardRouter {
                 }
 
                 if (path.startsWith("/api/moderation/")) {
-                    DashboardResponse denied = denyPage(ctx, ParadigmPermissions.DASHBOARD_MODERATION, "You do not have permission to view moderation.",
-                            ParadigmPermissions.KICK, ParadigmPermissions.BAN, ParadigmPermissions.WARN, ParadigmPermissions.JAIL);
-                    if (denied != null) return denied;
+                    if (!eu.avalanche7.paradigm.modules.dashboard.auth.DashboardAuthorization.canAccessModerationPage(
+                            permission -> dashboard.hasPermission(ctx.principal(), permission))) {
+                        return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to view moderation.");
+                    }
                 }
                 if ("GET".equals(method) && "/api/moderation/recent".equals(path)) return moderation.recent(ctx);
                 if ("GET".equals(method) && "/api/moderation/active".equals(path)) return moderation.active(ctx);
@@ -272,9 +273,6 @@ public class DashboardRouter {
                     String action = path.substring("/api/moderation/".length()).replace('/', '_');
                     if (ModerationActionType.parse(action) == null) {
                         return DashboardResponse.apiError(400, "invalid_request", "Unknown moderation action.");
-                    }
-                    if (!canRunModerationAction(ctx.principal(), action)) {
-                        return DashboardResponse.apiError(403, "permission_denied", "You do not have permission for this moderation action.");
                     }
                     return moderation.action(ctx, action);
                 }
@@ -340,16 +338,4 @@ public class DashboardRouter {
         return dashboard.auth().validateCsrf(ctx.session(), ctx.header("X-Paradigm-CSRF"));
     }
 
-    private boolean canRunModerationAction(DashboardPrincipal principal, String action) {
-        return switch (action) {
-            case "warn" -> dashboard.hasPermission(principal, ParadigmPermissions.WARN);
-            case "mute", "tempmute", "unmute" -> dashboard.hasPermission(principal, ParadigmPermissions.MUTE)
-                    || dashboard.hasPermission(principal, ParadigmPermissions.TEMP_MUTE);
-            case "ban", "tempban", "unban", "revoke" -> dashboard.hasPermission(principal, ParadigmPermissions.BAN)
-                    || dashboard.hasPermission(principal, ParadigmPermissions.TEMP_BAN);
-            case "ipban", "tempipban", "unipban" -> dashboard.hasPermission(principal, ParadigmPermissions.IP_BAN);
-            case "jail", "unjail" -> dashboard.hasPermission(principal, ParadigmPermissions.JAIL);
-            default -> false;
-        };
-    }
 }

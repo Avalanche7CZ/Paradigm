@@ -10,7 +10,15 @@
     "PlayerListMixin",
     "ServerPlayerTablistMixin",
     "ArmorStandEntityAccessor",
-    "CommandSourcePermissionMixin"
+    "CommandSourcePermissionMixin",
+    "VanishMixin$Tracker",
+    "VanishMixin$PlayerInfo",
+    "VanishMixin$Connection",
+    "VanishMixin$Login",
+    "VanishMixin$Lifecycle",
+    "VanishMixin$Suggestions",
+    "VanishMixin$Status",
+    "VanishMixin$OnlineList"
   ],
   "injectors": {
     "defaultRequire": 1

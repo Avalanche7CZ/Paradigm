@@ -19,7 +19,6 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.model.StoredHome;
 import eu.avalanche7.paradigm.storage.model.StoredLocation;
-import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
 import eu.avalanche7.paradigm.utils.CommandCooldowns;
 
 public class HomeCommand implements ParadigmModule {
@@ -266,7 +265,6 @@ public class HomeCommand implements ParadigmModule {
 
         int homeLimit = resolveHomeLimit(player);
         String playerUuid = player.getUUID();
-        String playerName = player.getName();
         return StorageCommandSupport.runForPlayer(services, player, "home.sethome", () -> {
             boolean alreadyExists = services.getStorageService().players().getHome(playerUuid, homeKey).isPresent();
             List<StoredHome> homes = services.getStorageService().players().listHomes(playerUuid);
@@ -275,7 +273,6 @@ public class HomeCommand implements ParadigmModule {
                 return new SetHomeResult(false, homeCount, List.copyOf(homes), null);
             }
             long now = System.currentTimeMillis();
-            services.getStorageService().players().upsertProfile(new StoredPlayerProfile(playerUuid, playerName, now, now));
             services.getStorageService().players().saveHome(new StoredHome(playerUuid, homeKey, fromDataLocation(location), now, now));
             List<StoredHome> updatedHomes = services.getStorageService().players().listHomes(playerUuid);
             return new SetHomeResult(true, updatedHomes.size(), List.copyOf(updatedHomes), null);

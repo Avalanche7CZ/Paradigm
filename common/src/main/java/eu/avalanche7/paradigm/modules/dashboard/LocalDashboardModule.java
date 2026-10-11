@@ -196,15 +196,22 @@ public class LocalDashboardModule implements ParadigmModule {
     }
 
     private int open(ICommandSource source) {
+        if (!hasPermission(source, services)) return 0;
         if (dashboard == null) {
             send(source, "dashboard.error.unavailable", "Dashboard is unavailable.");
             return 0;
         }
-        if (!dashboard.running() && !dashboard.start()) {
-            dashboard.audit().command(source, AuditActionType.DASHBOARD_STATUS, AuditResult.FAILED,
-                    "Dashboard open failed.", java.util.Map.of("action", "open"));
-            send(source, "dashboard.token.failed", "Dashboard could not be started.");
-            return 0;
+        if (!dashboard.running()) {
+            if (!hasManagePermission(source, services)) {
+                send(source, "dashboard.error.permission_denied", "You do not have permission to start the Dashboard.");
+                return 0;
+            }
+            if (!dashboard.start()) {
+                dashboard.audit().command(source, AuditActionType.DASHBOARD_STATUS, AuditResult.FAILED,
+                        "Dashboard open failed.", java.util.Map.of("action", "open"));
+                send(source, "dashboard.token.failed", "Dashboard could not be started.");
+                return 0;
+            }
         }
         DashboardPrincipal principal = principal(source);
         if (principal == null) {

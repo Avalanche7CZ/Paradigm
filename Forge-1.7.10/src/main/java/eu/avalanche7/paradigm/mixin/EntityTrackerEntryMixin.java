@@ -13,11 +13,11 @@ import eu.avalanche7.paradigm.platform.visual.LegacyVisualController;
 
 @Mixin(EntityTrackerEntry.class)
 public abstract class EntityTrackerEntryMixin {
-    @Shadow(aliases = {"myEntity"}, remap = false) public Entity field_73132_a;
+    @Shadow public Entity myEntity;
 
     @Inject(method = "tryStartWachingThis", at = @At("HEAD"), cancellable = true)
     private void paradigm$visibility(EntityPlayerMP viewer, CallbackInfo callback) {
         LegacyVisualController visuals = LegacyVisualController.current();
-        if (visuals != null && !visuals.vanish().visible(field_73132_a, viewer)) callback.cancel();
+        if (visuals != null && !visuals.vanish().visible(myEntity, viewer)) callback.cancel();
     }
 }

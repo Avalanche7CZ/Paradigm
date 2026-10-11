@@ -26,7 +26,7 @@ public final class ModuleEventListeners {
             return false;
         }
         try {
-            return module.isEnabled(services);
+            return services != null && services.canDispatchModuleEvents(module) && module.isEnabled(services);
         } catch (RuntimeException | LinkageError unavailable) {
             return false;
         }

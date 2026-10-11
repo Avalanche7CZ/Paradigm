@@ -20,26 +20,30 @@ import eu.avalanche7.paradigm.platform.visual.LegacyVisualController;
 
 @Mixin(NetHandlerPlayServer.class)
 public abstract class NetHandlerPlayServerMixin {
-    @Shadow(aliases = {"playerEntity"})
-    public EntityPlayerMP field_147369_b;
+    @Shadow
+    public EntityPlayerMP playerEntity;
+    @org.spongepowered.asm.mixin.Unique private final java.util.Set<String> paradigm$listed = new java.util.HashSet<>();
 
     @Inject(method = "sendPacket", at = @At("HEAD"), cancellable = true)
     private void paradigm$playerList(Packet packet, CallbackInfo callback) {
         LegacyVisualController visuals = LegacyVisualController.current();
         if (visuals != null && packet instanceof S38PacketPlayerListItem) {
             PlayerListPacketAccess item = (PlayerListPacketAccess) packet;
-            if (item.paradigm$online() && !visuals.vanish().listed(item.paradigm$name(), field_147369_b)) callback.cancel();
+            if (item.paradigm$online()) {
+                if (!visuals.vanish().listed(item.paradigm$name(), playerEntity)) callback.cancel();
+                else paradigm$listed.add(item.paradigm$name());
+            } else if (!paradigm$listed.remove(item.paradigm$name())) callback.cancel();
         }
     }
 
     @Inject(method = "processClientSettings", at = @At("RETURN"))
     private void paradigm$viewDistance(C15PacketClientSettings packet, CallbackInfo callback) {
-        LegacyClientCapabilities.viewDistance(field_147369_b.playerNetServerHandler.netManager, packet.func_149521_d());
+        LegacyClientCapabilities.viewDistance(playerEntity.playerNetServerHandler.netManager, packet.func_149521_d());
     }
 
     @Redirect(method = "onDisconnect", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/server/management/ServerConfigurationManager;sendChatMsg(Lnet/minecraft/util/IChatComponent;)V"))
     private void paradigm$leaveAnnouncement(ServerConfigurationManager manager, IChatComponent message) {
-        MinecraftEventSystem.captureLeave(manager, field_147369_b, message);
+        MinecraftEventSystem.captureLeave(manager, playerEntity, message);
     }
 }

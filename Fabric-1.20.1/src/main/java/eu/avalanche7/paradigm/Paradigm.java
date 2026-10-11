@@ -147,10 +147,10 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
     }
 
     private void onServerStopping(MinecraftServer server) {
+        services.beginStopping();
         modules.forEach(module -> {
-            if (module.isEnabled(services)) {
-                module.onServerStopping(null, services);
-                services.disableModule(module);
+            if (services.isModuleActive(module)) {
+                services.stopModule(module, null);
             }
         });
 
