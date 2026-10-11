@@ -146,7 +146,8 @@ public final class VanishMixin {
     public static abstract class OnlineList {
      @Redirect(method = "format", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/players/PlayerList;getPlayers()Ljava/util/List;"))
      private static List<ServerPlayer> paradigm$visible(PlayerList manager, CommandSourceStack source, Function<ServerPlayer, ?> formatter) {
-      return manager.getPlayers().stream().filter(target -> VanishTracking.canSee(source.getEntity(), target)).toList();
+      ServerPlayer viewer = source.getEntity() instanceof ServerPlayer player ? player : null;
+      return manager.getPlayers().stream().filter(target -> VanishTracking.canSee(viewer, target)).toList();
      }
     }
 }

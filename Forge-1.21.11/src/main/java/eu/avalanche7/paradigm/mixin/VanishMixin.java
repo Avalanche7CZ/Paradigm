@@ -147,12 +147,14 @@ public final class VanishMixin {
      @org.spongepowered.asm.mixin.injection.Group(name = "vanishList", min = 1)
      @Redirect(method = {"format", "m_137826_"}, at = @At(value = "INVOKE", target = "Lnet/minecraft/server/players/PlayerList;getPlayers()Ljava/util/List;", remap = false), remap = false, require = 0)
      private static List<ServerPlayer> paradigm$visible(PlayerList manager, CommandSourceStack source, Function<ServerPlayer, ?> formatter) {
-      return manager.getPlayers().stream().filter(target -> VanishTracking.canSee(source.getEntity(), target)).toList();
+      ServerPlayer viewer = source.getEntity() instanceof ServerPlayer player ? player : null;
+      return manager.getPlayers().stream().filter(target -> VanishTracking.canSee(viewer, target)).toList();
      }
      @org.spongepowered.asm.mixin.injection.Group(name = "vanishList", min = 1)
      @Redirect(method = {"format", "m_137826_"}, at = @At(value = "INVOKE", target = "Lnet/minecraft/server/players/PlayerList;m_11314_()Ljava/util/List;", remap = false), remap = false, require = 0)
      private static List<ServerPlayer> paradigm$visibleSrg(PlayerList manager, CommandSourceStack source, Function<ServerPlayer, ?> formatter) {
-      return manager.getPlayers().stream().filter(target -> VanishTracking.canSee(source.getEntity(), target)).toList();
+      ServerPlayer viewer = source.getEntity() instanceof ServerPlayer player ? player : null;
+      return manager.getPlayers().stream().filter(target -> VanishTracking.canSee(viewer, target)).toList();
      }
     }
 }

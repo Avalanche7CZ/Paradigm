@@ -28,7 +28,8 @@ public final class VanishTracking {
     }
     public static boolean canSee(Object viewer, Object target) {
         Services services = ParadigmAPI.getServices();
-        return services == null || services.getVanishService().canSee(services.getPlatformAdapter().wrapPlayer(viewer), services.getPlatformAdapter().wrapPlayer(target));
+        return services == null || viewer == null || target == null
+                || services.getVanishService().canSee(services.getPlatformAdapter().wrapPlayer(viewer), services.getPlatformAdapter().wrapPlayer(target));
     }
     public static boolean seesHidden(Object viewer) {
         Services services = ParadigmAPI.getServices();
