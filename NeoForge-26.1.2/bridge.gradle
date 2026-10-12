@@ -1,0 +1,19 @@
+version = rootProject.property('mod_version')
+
+['clean', 'compileJava', 'test', 'build', 'runServer', 'runClient', 'spotlessCheck'].each { targetTask ->
+    tasks.register(targetTask, Exec) {
+        group = targetTask.startsWith('run') ? 'run' : 'build'
+        description = "Runs ${targetTask} with the isolated NeoForge 26.1.2 Gradle wrapper."
+        workingDir projectDir
+        def windows = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows')
+        commandLine(windows ? ['cmd', '/c', 'gradlew.bat'] : ['./gradlew'])
+        args targetTask, '--no-daemon', '--console=plain'
+        if (gradle.startParameter.offline) args '--offline'
+        def javaHome = providers.gradleProperty('neoForge26JavaHome').orElse(providers.environmentVariable('JAVA25_HOME')).orElse(providers.environmentVariable('JAVA_HOME_25_X64'))
+        if (javaHome.isPresent()) {
+            environment 'JAVA_HOME', javaHome.get()
+            args "-Dorg.gradle.java.home=${javaHome.get()}"
+        }
+        if (project.hasProperty('devRunDir')) args "-PdevRunDir=${project.property('devRunDir')}"
+    }
+}

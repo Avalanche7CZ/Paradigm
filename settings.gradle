@@ -46,3 +46,6 @@ include 'Forge-1.19.2'
 include 'Forge-1.18.2'
 include 'Forge-1.7.10'
 include 'NeoForge-1.21.1'
+
+include 'NeoForge-26.1.2'
+project(':NeoForge-26.1.2').buildFileName = 'bridge.gradle'

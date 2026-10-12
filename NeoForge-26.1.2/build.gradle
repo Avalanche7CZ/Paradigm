@@ -1,0 +1,250 @@
+plugins {
+    id 'java-library'
+    id 'idea'
+    id 'net.neoforged.moddev' version '2.0.148'
+}
+
+evaluationDependsOn(':common')
+
+// Use global version if present
+version = (rootProject.findProperty('mod_version') ?: project.mod_version)
+
+group = project.maven_group
+
+def archivesBaseName = project.hasProperty('archives_base_name') ? project.archives_base_name : (project.hasProperty('mod_id') ? project.mod_id : project.name)
+def modId = project.hasProperty('mod_id') ? project.mod_id : archivesBaseName
+
+def modName = project.hasProperty('mod_name') ? project.mod_name : archivesBaseName
+def devPlayerName = (project.findProperty('devPlayerName') ?: 'Developer').toString()
+
+base {
+    archivesName = archivesBaseName
+}
+
+repositories {
+    mavenLocal()
+    maven { url "https://maven.neoforged.net/releases/" }
+    maven { url "https://maven.neoforged.net/" }
+    maven { url "https://maven.shedaniel.me/" }
+    maven { url "https://maven.terraformersmc.com/releases/" }
+    mavenCentral()
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
+}
+
+sourceSets {
+    devClient
+}
+
+configurations.devClientRuntimeClasspath.extendsFrom(configurations.runtimeClasspath)
+
+neoForge {
+    version = project.neo_version
+    addModdingDependenciesTo(sourceSets.devClient)
+
+
+    runs {
+        client {
+            client()
+            loadedMods = []
+            sourceSet = sourceSets.devClient
+        }
+
+        server {
+            server()
+            gameDirectory = project.file(project.findProperty('devRunDir') ?: 'run')
+            programArgument '--nogui'
+            systemProperty 'neoforge.enabledGameTestNamespaces', archivesBaseName
+        }
+
+        gameTestServer {
+            type = "gameTestServer"
+            systemProperty 'neoforge.enabledGameTestNamespaces', archivesBaseName
+        }
+
+        data {
+            clientData()
+            programArguments.addAll '--mod', archivesBaseName, '--all', '--output', file('src/generated/resources/').getAbsolutePath(), '--existing', file('src/main/resources/').getAbsolutePath()
+        }
+
+        configureEach {
+            systemProperty 'forge.logging.markers', 'REGISTRIES'
+            logLevel = org.slf4j.event.Level.DEBUG
+        }
+    }
+
+    mods {
+        "${modId}" {
+            // include platform sources
+            sourceSet(sourceSets.main)
+            // IMPORTANT: include common sources in dev runs so runtime classpath contains them
+            sourceSet(project(":common").sourceSets.main)
+        }
+    }
+    unitTest {
+        enable()
+        testedMod = mods.getByName(modId)
+    }
+
+}
+
+sourceSets {
+    main {
+        resources {
+            srcDir 'src/generated/resources'
+            // Do NOT add build/generated/sources/modMetadata here, it's wired via generateModMetadata task below
+            exclude 'fabric.mod.json'
+        }
+    }
+}
+
+tasks.withType(ProcessResources).configureEach {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+dependencies {
+    implementation project(":common")
+    compileOnly 'net.luckperms:api:5.4'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.2'
+}
+
+jar {
+    // Include common classes/resources directly into platform jar (fat-jar style)
+    from(project(":common").sourceSets.main.output) {
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    }
+
+    // Also protect the jar task itself from accidental duplicates
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    manifest {
+        attributes([
+            "Specification-Title": "Paradigm",
+            "Specification-Vendor": "Avalanche7CZ",
+            "Specification-Version": project.version,
+            "Implementation-Title": project.name,
+            "Implementation-Version": "${project.mod_version}",
+            "Implementation-Vendor": "Avalanche7CZ",
+            "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+        ])
+    }
+}
+
+var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {
+    var replaceProperties = [
+            minecraft_version      : project.minecraft_version,
+            minecraft_version_range: project.hasProperty('minecraft_version_range') ? project.minecraft_version_range : project.minecraft_version,
+            neo_version            : project.hasProperty('neo_version') ? project.neo_version : project.minecraft_version,
+            neo_version_range      : project.hasProperty('neo_version_range') ? project.neo_version_range : project.minecraft_version,
+            loader_version_range   : project.hasProperty('loader_version_range') ? project.loader_version_range : "",
+            mod_id                 : modId,
+            mod_name               : modName,
+            mod_license            : project.hasProperty('mod_license') ? project.mod_license : "MIT",
+            mod_version            : project.mod_version,
+            mod_authors            : project.hasProperty('mod_authors') ? project.mod_authors : "",
+            mod_description        : project.hasProperty('mod_description') ? project.mod_description : ""
+    ]
+    inputs.properties replaceProperties
+    expand replaceProperties
+    from "src/main/templates"
+    into "build/generated/sources/modMetadata"
+}
+
+// Keep this wiring (it adds the generated directory as a resource source)
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata
+
+def devServerDir = project.file(project.findProperty('devRunDir') ?: 'run')
+def devClientDir = project.file('run')
+
+def updateClientOption = { List<String> lines, String key, String value ->
+    def optionLine = key + ':' + value
+    def index = lines.findIndexOf { it.startsWith(key + ':') }
+    if (index >= 0) {
+        lines[index] = optionLine
+    } else {
+        lines.add(optionLine)
+    }
+}
+
+tasks.register('prepareDevClient') {
+    group = 'run'
+    description = 'Prepares local dev client options with preferred defaults.'
+
+    doLast {
+        devClientDir.mkdirs()
+
+        // Ensure client dev run stays mod-free for this server-side module.
+        def modsDir = new File(devClientDir, 'mods')
+        if (modsDir.exists()) {
+            modsDir.listFiles()?.findAll { it.name.startsWith('Paradigm') && it.name.endsWith('.jar') }?.each { it.delete() }
+        }
+
+        def optionsFile = new File(devClientDir, 'options.txt')
+        def lines = optionsFile.exists() ? optionsFile.readLines('UTF-8') : []
+        updateClientOption(lines, 'guiScale', '2')
+        updateClientOption(lines, 'soundCategory_music', '0.0')
+        optionsFile.setText(lines.join('\n') + '\n', 'UTF-8')
+    }
+}
+
+tasks.register('prepareOfflineDevServer') {
+    group = 'run'
+    description = 'Prepares local dev server files with eula=true and offline mode enabled.'
+
+    doLast {
+        devServerDir.mkdirs()
+
+        def eulaFile = new File(devServerDir, 'eula.txt')
+        eulaFile.text = '# Generated by Gradle for local development\n' +
+                'eula=true\n'
+
+        def serverPropertiesFile = new File(devServerDir, 'server.properties')
+        def properties = new Properties()
+        if (serverPropertiesFile.exists()) {
+            serverPropertiesFile.withInputStream { properties.load(it) }
+        }
+        properties.setProperty('online-mode', 'false')
+        properties.setProperty('enforce-secure-profile', 'false')
+        properties.setProperty('motd', 'Paradigm Dev Server')
+        serverPropertiesFile.withOutputStream { properties.store(it, 'Generated by Gradle for local development') }
+
+        def offlineUuid = java.util.UUID.nameUUIDFromBytes(("OfflinePlayer:" + devPlayerName).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString()
+        def opsFile = new File(devServerDir, 'ops.json')
+        def ops = []
+        if (opsFile.exists() && opsFile.text.trim()) {
+            def parsed = new groovy.json.JsonSlurper().parseText(opsFile.text)
+            if (parsed instanceof Collection) {
+                ops.addAll(parsed)
+            }
+        }
+        ops.removeAll { it instanceof Map && ((it.name == devPlayerName) || (it.uuid == offlineUuid)) }
+        ops.add([uuid: offlineUuid, name: devPlayerName, level: 4, bypassesPlayerLimit: true])
+        opsFile.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(ops))
+    }
+}
+
+tasks.matching { it.name == 'runServer' }.configureEach {
+    dependsOn tasks.named('prepareOfflineDevServer')
+}
+
+tasks.matching { it.name == 'runClient' }.configureEach {
+    dependsOn tasks.named('prepareDevClient')
+    doFirst {
+        args '--username', devPlayerName
+    }
+}
+
+idea {
+    module {
+        downloadSources = true
+        downloadJavadoc = true
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}

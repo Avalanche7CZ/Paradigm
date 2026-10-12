@@ -9,5 +9,6 @@
   { "artifact": "Paradigm-forge-1.20.1-__VERSION__.jar", "loader": "forge", "minecraft": "1.20.1", "curseforge_tags": ["Server", "Java 17"] },
   { "artifact": "Paradigm-forge-1.21.1-__VERSION__.jar", "loader": "forge", "minecraft": "1.21.1", "curseforge_tags": ["Server", "Java 21"] },
   { "artifact": "Paradigm-forge-1.21.11-__VERSION__.jar", "loader": "forge", "minecraft": "1.21.11", "curseforge_tags": ["Server", "Java 21", "Java 25"] },
-  { "artifact": "Paradigm-neoforge-1.21.1-__VERSION__.jar", "loader": "neoforge", "minecraft": "1.21.1", "curseforge_tags": ["Server", "Java 21"] }
+  { "artifact": "Paradigm-neoforge-1.21.1-__VERSION__.jar", "loader": "neoforge", "minecraft": "1.21.1", "curseforge_tags": ["Server", "Java 21"] },
+  { "artifact": "Paradigm-neoforge-26.1.2-__VERSION__.jar", "loader": "neoforge", "minecraft": "26.1.2", "curseforge_tags": ["Server", "Java 25"] }
 ]

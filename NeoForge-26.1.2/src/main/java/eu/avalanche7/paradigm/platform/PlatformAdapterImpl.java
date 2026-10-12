@@ -1,0 +1,1204 @@
+package eu.avalanche7.paradigm.platform;
+
+import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
+
+import eu.avalanche7.paradigm.data.CustomCommand;
+import eu.avalanche7.paradigm.data.PlayerDataStore;
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
+import eu.avalanche7.paradigm.platform.Interfaces.*;
+import eu.avalanche7.paradigm.utils.*;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundClearTitlesPacket;
+import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.Identifier;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerBossEvent;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.BossEvent;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.core.registries.BuiltInRegistries;
+import javax.annotation.Nullable;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.stats.Stats;
+
+public class PlatformAdapterImpl implements IPlatformAdapter {
+    private final java.util.Set<String> godOwnedPlayerIds = new java.util.HashSet<>();
+
+    private MinecraftServer server;
+    private MessageParser messageParser;
+    private PermissionsHandler permissionsHandler;
+    private final Placeholders placeholders;
+    private final TaskScheduler taskScheduler;
+    private final DebugLogger debugLogger;
+    private final Map<UUID, ServerBossEvent> persistentBossBars = new HashMap<>();
+    private ServerBossEvent restartBossBar;
+    private final MinecraftEventSystem eventSystem;
+    private eu.avalanche7.paradigm.platform.Interfaces.IConfig config;
+
+    private com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> commandDispatcher;
+
+    public PlatformAdapterImpl(
+            eu.avalanche7.paradigm.modules.permissions.PermissionsHandler permissionsHandler,
+            eu.avalanche7.paradigm.utils.Placeholders placeholders,
+            eu.avalanche7.paradigm.utils.TaskScheduler taskScheduler,
+            eu.avalanche7.paradigm.utils.DebugLogger debugLogger
+    ) {
+        this.permissionsHandler = permissionsHandler;
+        this.placeholders = placeholders;
+        this.taskScheduler = taskScheduler;
+        this.debugLogger = debugLogger;
+        this.eventSystem = new MinecraftEventSystem();
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.register(this.eventSystem);
+        this.config = new NeoForgeConfig();
+    }
+
+    public void setPermissionsHandler(eu.avalanche7.paradigm.modules.permissions.PermissionsHandler permissionsHandler) {
+        this.permissionsHandler = permissionsHandler;
+    }
+
+    public void setCommandDispatcher(com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher) {
+        this.commandDispatcher = dispatcher;
+        try {
+            if (debugLogger != null) debugLogger.debugLog("[NeoForge] CommandDispatcher set: " + (dispatcher != null));
+        } catch (Throwable ignored) {}
+    }
+
+    @Override
+    public eu.avalanche7.paradigm.platform.Interfaces.IConfig getConfig() {
+        return config;
+    }
+
+    @Override
+    public Object getCommandDispatcher() {
+        return commandDispatcher;
+    }
+
+    @Override
+    public void rewireCommandTreePermissions() {
+        com.mojang.brigadier.CommandDispatcher<net.minecraft.commands.CommandSourceStack> dispatcher = commandDispatcher;
+        if (dispatcher == null) {
+            return;
+        }
+        for (com.mojang.brigadier.tree.CommandNode<net.minecraft.commands.CommandSourceStack> child : dispatcher.getRoot().getChildren()) {
+            paradigm$rewireCommandNode(child, "", 0);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void paradigm$rewireCommandNode(com.mojang.brigadier.tree.CommandNode<net.minecraft.commands.CommandSourceStack> node, String prefix, int depth) {
+        if (node == null || depth > 12) {
+            return;
+        }
+        if (depth > 0 && node instanceof com.mojang.brigadier.tree.ArgumentCommandNode) {
+            return;
+        }
+        String segment = node.getName();
+        if (segment == null || segment.isBlank()) {
+            return;
+        }
+        String path = prefix.isEmpty() ? segment : prefix + "." + segment;
+
+        java.util.function.Predicate<net.minecraft.commands.CommandSourceStack> original =
+                (java.util.function.Predicate<net.minecraft.commands.CommandSourceStack>) eu.avalanche7.paradigm.modules.permissions.CommandNodeAccessGate.getRequirement(node);
+        if (original != null) {
+            java.util.function.Predicate<net.minecraft.commands.CommandSourceStack> wrapped = source -> {
+                java.util.UUID uuid = paradigm$rewireSourceUuid(source);
+                if (uuid == null) {
+                    return original.test(source);
+                }
+                Boolean decision = eu.avalanche7.paradigm.modules.permissions.CommandNodeAccessGate.decide(path, uuid);
+                if (decision == null) {
+                    return original.test(source);
+                }
+                if (!decision) {
+                    return false;
+                }
+                eu.avalanche7.paradigm.modules.permissions.CommandPermissionElevation.begin(source, true);
+                try {
+                    return original.test(source);
+                } finally {
+                    eu.avalanche7.paradigm.modules.permissions.CommandPermissionElevation.clear();
+                }
+            };
+            eu.avalanche7.paradigm.modules.permissions.CommandNodeAccessGate.setRequirement(node, wrapped);
+        }
+
+        for (com.mojang.brigadier.tree.CommandNode<net.minecraft.commands.CommandSourceStack> child : node.getChildren()) {
+            paradigm$rewireCommandNode(child, path, depth + 1);
+        }
+    }
+
+    private static java.util.UUID paradigm$rewireSourceUuid(net.minecraft.commands.CommandSourceStack source) {
+        net.minecraft.world.entity.Entity entity = source.getEntity();
+        return entity instanceof ServerPlayer player ? player.getUUID() : null;
+    }
+
+    @Override
+    public eu.avalanche7.paradigm.platform.Interfaces.IHologramPlatform getHologramPlatform() {
+        return new MinecraftHologramPlatform(this);
+    }
+
+    private final MinecraftMenuPlatform menuPlatform = new MinecraftMenuPlatform();
+
+    @Override
+    public eu.avalanche7.paradigm.platform.Interfaces.IMenuPlatform getMenuPlatform() {
+        return menuPlatform;
+    }
+
+    @Override
+    public ICommandBuilder createCommandBuilder() {
+        return new NeoForgeCommandBuilder();
+    }
+
+    @Override
+    public void registerCommand(ICommandBuilder builder) {
+        Object built = builder != null ? builder.build() : null;
+        if (!(built instanceof com.mojang.brigadier.builder.LiteralArgumentBuilder<?> lit)) return;
+
+        @SuppressWarnings("unchecked")
+        com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> cast = (com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack>) lit;
+
+        String root = null;
+        try {
+            root = cast.getLiteral();
+        } catch (Throwable ignored) {}
+
+        com.mojang.brigadier.CommandDispatcher<CommandSourceStack> dispatcher = commandDispatcher;
+        if (dispatcher == null && server != null) {
+            dispatcher = server.getCommands().getDispatcher();
+        }
+        if (dispatcher == null) {
+            try {
+                if (debugLogger != null) debugLogger.debugLog("[NeoForge] FAILED to register command /" + (root != null ? root : "<unknown>") + ": server and dispatcher are null");
+            } catch (Throwable ignored) {}
+            return;
+        }
+
+        String normalizedRoot = CommandPriority.normalizeRoot(root);
+        if (normalizedRoot == null) {
+            return;
+        }
+
+        com.mojang.brigadier.CommandDispatcher<CommandSourceStack> resolvedDispatcher = dispatcher;
+        if (!CommandPriority.shouldRegisterRoot(resolvedDispatcher, normalizedRoot)) {
+            return;
+        }
+        CommandPriority.RootRegistration registration = CommandPriority.registerRootLiteral(
+                resolvedDispatcher, normalizedRoot, () -> resolvedDispatcher.register(cast));
+        if (registration.managed() && !registration.owned()
+                && debugLogger != null) {
+            debugLogger.debugLog("[Paradigm] Command root /" + normalizedRoot + " did not resolve to the newly registered Paradigm node.");
+        }
+        try {
+            if (debugLogger != null) {
+                debugLogger.debugLog("[NeoForge] Registered command: /" + normalizedRoot);
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    @Override
+    public TaskScheduler getTaskScheduler() {
+        return taskScheduler;
+    }
+
+    @Override
+    public void provideMessageParser(MessageParser messageParser) {
+        this.messageParser = messageParser;
+    }
+
+    @Override
+    public Object getMinecraftServer() {
+        return this.server;
+    }
+
+    @Override
+    public void setMinecraftServer(Object server) {
+        this.server = (MinecraftServer) server;
+    }
+
+    @Override
+    public List<IPlayer> getOnlinePlayers() {
+        List<IPlayer> players = new ArrayList<>();
+        for (ServerPlayer player : ((MinecraftServer) getMinecraftServer()).getPlayerList().getPlayers()) {
+            players.add(new MinecraftPlayer(player));
+        }
+        return players;
+    }
+
+    @Override
+    @Nullable
+    public IPlayer getPlayerByName(String name) {
+        ServerPlayer player = ((MinecraftServer) getMinecraftServer()).getPlayerList().getPlayerByName(name);
+        return player != null ? new MinecraftPlayer(player) : null;
+    }
+
+    @Override
+    @Nullable
+    public IPlayer getPlayerByUuid(String uuid) {
+        if (uuid == null) return null;
+        try {
+            java.util.UUID id = java.util.UUID.fromString(uuid);
+            ServerPlayer player = ((MinecraftServer) getMinecraftServer()).getPlayerList().getPlayer(id);
+            return player != null ? new MinecraftPlayer(player) : null;
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    @Override
+    public boolean disconnectPlayer(IPlayer player, IComponent reason) {
+        if (!(player != null && player.getOriginalPlayer() instanceof ServerPlayer nativePlayer)) return false;
+        Object component = reason != null ? reason.getOriginalText() : null;
+        nativePlayer.connection.disconnect(component instanceof net.minecraft.network.chat.Component nativeComponent ? nativeComponent : net.minecraft.network.chat.Component.literal(reason != null ? reason.getRawText() : "Disconnected"));
+        return true;
+    }
+
+    @Override
+    public String getPlayerName(IPlayer player) {
+        return player.getName();
+    }
+
+    @Override
+    public IComponent getPlayerDisplayName(IPlayer player) {
+        ServerPlayer mcPlayer = ((MinecraftPlayer) player).getHandle();
+        return new MinecraftComponent(mcPlayer.getDisplayName().copy());
+    }
+
+    @Override
+    public IComponent createLiteralComponent(String text) {
+        return new MinecraftComponent(Component.literal(text));
+    }
+
+    @Override
+    public IComponent createTranslatableComponent(String key, Object... args) {
+        return new MinecraftComponent(Component.translatable(key, args));
+    }
+
+    @Override
+    public Object createItemStack(String itemId) {
+        var item = BuiltInRegistries.ITEM.getValue(Identifier.parse(itemId));
+        return item != null ? new ItemStack(item) : new ItemStack(Items.STONE);
+    }
+
+    @Override
+    public boolean hasPermission(IPlayer player, String permissionNode) {
+        return permissionsHandler != null && permissionsHandler.hasPermission(player, permissionNode);
+    }
+
+    @Override
+    public boolean hasPermission(IPlayer player, String permissionNode, int vanillaLevel) {
+        if (!(player instanceof MinecraftPlayer)) return false;
+        if (permissionsHandler != null) {
+            return permissionsHandler.hasPermission(player, permissionNode, vanillaLevel);
+        }
+        return hasVanillaPermissionLevel(player, vanillaLevel);
+    }
+
+    @Override
+    public boolean hasVanillaPermissionLevel(IPlayer player, int level) {
+        if (!(player instanceof MinecraftPlayer mp)) {
+            return false;
+        }
+        return mp.getHandle().permissions().hasPermission(new net.minecraft.server.permissions.Permission.HasCommandLevel(net.minecraft.server.permissions.PermissionLevel.byId(level)));
+    }
+
+    @Override
+    public void sendSystemMessage(IPlayer player, IComponent message) {
+        ServerPlayer mcPlayer = ((MinecraftPlayer) player).getHandle();
+        mcPlayer.sendSystemMessage(((MinecraftComponent) message).getHandle());
+        try {
+            if (debugLogger != null) debugLogger.debugLog("[NeoForge] sendSystemMessage -> " + (player != null ? player.getName() : "null") + ": " + (message != null ? message.getRawText() : "null"));
+        } catch (Throwable ignored) {}
+    }
+
+    @Override
+    public void broadcastSystemMessage(IComponent message) {
+        if (getMinecraftServer() != null) {
+            ((MinecraftServer) getMinecraftServer()).getPlayerList().broadcastSystemMessage(((MinecraftComponent) message).getHandle(), false);
+            try {
+                if (debugLogger != null) debugLogger.debugLog("[NeoForge] broadcastSystemMessage: " + (message != null ? message.getRawText() : "null"));
+            } catch (Throwable ignored) {}
+        }
+    }
+
+    @Override
+    public void broadcastChatMessage(IComponent message) {
+        if (getMinecraftServer() != null) {
+            ((MinecraftServer) getMinecraftServer()).getPlayerList().broadcastSystemMessage(((MinecraftComponent) message).getHandle(), false);
+        }
+    }
+
+    @Override
+    public void broadcastSystemMessage(IComponent message, String header, String footer, @Nullable IPlayer playerContext) {
+        if (messageParser == null) return;
+        IComponent headerComp = messageParser.parseMessage(header, playerContext);
+        IComponent footerComp = messageParser.parseMessage(footer, playerContext);
+        getOnlinePlayers().forEach(p -> {
+            sendSystemMessage(p, headerComp);
+            sendSystemMessage(p, message);
+            sendSystemMessage(p, footerComp);
+        });
+    }
+
+    @Override
+    public void sendTitle(IPlayer player, IComponent title, IComponent subtitle) {
+        ServerPlayer mcPlayer = ((MinecraftPlayer) player).getHandle();
+        mcPlayer.connection.send(new ClientboundSetTitleTextPacket(((MinecraftComponent) title).getHandle()));
+        if (subtitle != null && !subtitle.getRawText().isEmpty()) {
+            mcPlayer.connection.send(new ClientboundSetSubtitleTextPacket(((MinecraftComponent) subtitle).getHandle()));
+        }
+    }
+
+    @Override
+    public void sendSubtitle(IPlayer player, IComponent subtitle) {
+        ServerPlayer mcPlayer = ((MinecraftPlayer) player).getHandle();
+        if (subtitle != null && !subtitle.getRawText().isEmpty()) {
+            mcPlayer.connection.send(new ClientboundSetSubtitleTextPacket(((MinecraftComponent) subtitle).getHandle()));
+        }
+    }
+
+    @Override
+    public void sendActionBar(IPlayer player, IComponent message) {
+        ServerPlayer mcPlayer = ((MinecraftPlayer) player).getHandle();
+        mcPlayer.connection.send(new ClientboundSetActionBarTextPacket(((MinecraftComponent) message).getHandle()));
+    }
+
+    @Override
+    public void clearTitles(IPlayer player) {
+        ServerPlayer mcPlayer = ((MinecraftPlayer) player).getHandle();
+        mcPlayer.connection.send(new ClientboundClearTitlesPacket(true));
+    }
+
+    public void sendSystemMessage(IPlayer player, String message) {
+        if (messageParser != null) {
+            IComponent parsed = messageParser.parseMessage(message, player);
+            sendSystemMessage(player, parsed);
+        }
+    }
+
+    public void sendActionBar(IPlayer player, String message) {
+        if (messageParser != null) {
+            IComponent parsed = messageParser.parseMessage(message, player);
+            sendActionBar(player, parsed);
+        }
+    }
+
+    public void sendBossBar(List<IPlayer> players, String message, int durationSeconds, BossBarColor color, float progress) {
+        if (messageParser != null) {
+            IComponent parsed = messageParser.parseMessage(message, !players.isEmpty() ? players.getFirst() : null);
+            sendBossBar(players, parsed, durationSeconds, color, progress);
+        }
+    }
+
+    public void createOrUpdateRestartBossBar(String message, BossBarColor color, float progress) {
+        if (messageParser != null) {
+            IComponent parsed = messageParser.parseMessage(message, null);
+            createOrUpdateRestartBossBar(parsed, color, progress);
+        }
+    }
+
+    public void sendTitle(IPlayer player, String title, String subtitle) {
+        if (messageParser != null) {
+            IComponent titleComp = messageParser.parseMessage(title, player);
+            IComponent subtitleComp = subtitle != null ? messageParser.parseMessage(subtitle, player) : createLiteralComponent("");
+            sendTitle(player, titleComp, subtitleComp);
+        }
+    }
+
+    @Override
+    public void shutdownServer(IComponent kickMessage) {
+        MinecraftServer server = (MinecraftServer) getMinecraftServer();
+        if (server == null) {
+            debugLogger.debugLog("PlatformAdapter: Shutdown called but server instance is null.");
+            return;
+        }
+        try {
+            if (kickMessage instanceof MinecraftComponent mc) {
+                server.getPlayerList().broadcastSystemMessage(mc.getHandle(), false);
+            }
+            server.saveEverything(true, true, true);
+            scheduleJvmExitFallback();
+            server.halt(false);
+        } catch (Exception e) {
+            debugLogger.debugLog("PlatformAdapter: Failed to shutdown server: " + e.getMessage(), e);
+            scheduleJvmExitFallback();
+            try {
+                server.halt(false);
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private void scheduleJvmExitFallback() {
+        ServerShutdownWatchdog.arm();
+    }
+
+    @Override
+    public void sendSuccess(ICommandSource source, IComponent message, boolean toOps) {
+        if (source instanceof MinecraftCommandSource mcSource && message instanceof MinecraftComponent mc) {
+            mcSource.getHandle().sendSuccess(() -> mc.getHandle(), toOps);
+        }
+    }
+
+    @Override
+    public void sendFailure(ICommandSource source, IComponent message) {
+        if (source instanceof MinecraftCommandSource mcSource && message instanceof MinecraftComponent mc) {
+            mcSource.getHandle().sendFailure(mc.getHandle());
+        }
+    }
+
+    public String replacePlaceholders(String text, @Nullable IPlayer player) {
+        return placeholders.replacePlaceholders(text, player);
+    }
+
+    @Override
+    public boolean hasPermissionForCustomCommand(ICommandSource source, CustomCommand command) {
+        if (command == null || !command.isRequirePermission()) return true;
+        if (source == null) return true;
+        IPlayer p = source.getPlayer();
+        if (p == null) return true;
+        return hasPermission(p, command.getPermission());
+    }
+
+    @Override
+    public void executeOnServerThread(Runnable task) {
+        if (task == null) return;
+        if (server != null) server.execute(task);
+        else task.run();
+    }
+
+    @Override
+    public void executeCommandAs(ICommandSource source, String command) {
+        if (server == null || command == null) return;
+        Object orig = source != null ? source.getOriginalSource() : null;
+        if (orig instanceof CommandSourceStack css) {
+            server.getCommands().performPrefixedCommand(css, command);
+        } else {
+            executeCommandAsConsole(command);
+        }
+    }
+
+    @Override
+    public Object getConsoleCommandSource() {
+        return server != null ? server.createCommandSourceStack().withPermission(net.minecraft.server.permissions.LevelBasedPermissionSet.OWNER) : null;
+    }
+
+    public void executeCommandAsConsole(String command) {
+        if (server == null || command == null) return;
+        server.getCommands().performPrefixedCommand((CommandSourceStack) getConsoleCommandSource(), command);
+    }
+
+    @Override
+    public ICommandSource createCommandSourceForPlayer(IPlayer player) {
+        if (player instanceof MinecraftPlayer mp) {
+            return new MinecraftCommandSource(mp.getHandle().createCommandSourceStack());
+        }
+        return IPlatformAdapter.super.createCommandSourceForPlayer(player);
+    }
+
+    @Override
+    public boolean setGameMode(IPlayer player, String mode) {
+        if (!(player instanceof MinecraftPlayer mp)) {
+            return false;
+        }
+        GameType gameType = toGameType(mode);
+        return gameType != null && mp.getHandle().setGameMode(gameType);
+    }
+
+    @Override
+    public boolean setMovementSpeed(IPlayer player, double baseValue) {
+        if (!(player instanceof MinecraftPlayer mp) || baseValue < 0.0 || Double.isNaN(baseValue) || Double.isInfinite(baseValue)) {
+            return false;
+        }
+        var attribute = mp.getHandle().getAttribute(Attributes.MOVEMENT_SPEED);
+        if (attribute == null) {
+            return false;
+        }
+        attribute.setBaseValue(baseValue);
+        return true;
+    }
+
+    @Override
+    public boolean healPlayer(IPlayer player) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        ServerPlayer handle = mp.getHandle();
+        handle.setHealth(handle.getMaxHealth());
+        return true;
+    }
+
+    @Override
+    public boolean feedPlayer(IPlayer player) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        var food = mp.getHandle().getFoodData();
+        food.setFoodLevel(20);
+        food.setSaturation(20.0f);
+        ((eu.avalanche7.paradigm.mixin.FoodDataAccessor) food).paradigm$setExhaustion(0.0f);
+        return true;
+    }
+
+    @Override
+    public Boolean toggleFlight(IPlayer player) {
+        if (!(player instanceof MinecraftPlayer mp)) return null;
+        ServerPlayer handle = mp.getHandle();
+        var abilities = handle.getAbilities();
+        boolean enabled = !abilities.mayfly;
+        abilities.mayfly = enabled;
+        if (!enabled) abilities.flying = false;
+        handle.onUpdateAbilities();
+        return enabled;
+    }
+
+    @Override
+    public boolean setPlayerSpeed(IPlayer player, float walkSpeed, float flySpeed, double movementBaseValue) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        ServerPlayer handle = mp.getHandle();
+        handle.getAbilities().setWalkingSpeed(walkSpeed);
+        handle.getAbilities().setFlyingSpeed(flySpeed);
+        boolean movement = setMovementSpeed(player, movementBaseValue);
+        handle.onUpdateAbilities();
+        return movement;
+    }
+
+    @Override
+    public boolean clearPlayerInventory(IPlayer player) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        mp.getHandle().getInventory().clearContent();
+        mp.getHandle().containerMenu.broadcastChanges();
+        return true;
+    }
+
+    public void restoreGodAfterRespawn(IPlayer player) {
+        if (player != null && godOwnedPlayerIds.contains(player.getUUID())) {
+            setPlayerInvulnerable(player, true);
+        }
+    }
+
+    @Override
+    public boolean setPlayerInvulnerable(IPlayer player, boolean enabled) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        var handle = mp.getHandle();
+        if (enabled) {
+            if (handle.isInvulnerable() && !godOwnedPlayerIds.contains(player.getUUID())) return true;
+            godOwnedPlayerIds.add(player.getUUID());
+            handle.setInvulnerable(true);
+        } else if (godOwnedPlayerIds.remove(player.getUUID())) {
+            handle.setInvulnerable(false);
+        }
+        return true;
+    }
+
+    @Override
+    public boolean setPlayerVanished(IPlayer player, boolean enabled) {
+        if (!(player instanceof MinecraftPlayer) || server == null || !server.isSameThread()) return false;
+        for (IPlayer viewer : getOnlinePlayers()) refreshVanishVisibility(viewer, player);
+        return true;
+    }
+
+    @Override
+    public void refreshVanishVisibility(IPlayer viewer, IPlayer target) {
+        if (!(viewer instanceof MinecraftPlayer vp) || !(target instanceof MinecraftPlayer tp) || server == null) return;
+        if (!server.isSameThread()) throw new IllegalStateException("Vanish requires the server thread.");
+        var observer = vp.getHandle();
+        var subject = tp.getHandle();
+        if (observer == subject) return;
+        boolean visible = canSeePlayer(viewer, target);
+        if (visible) observer.connection.send(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(java.util.List.of(subject)));
+        eu.avalanche7.paradigm.platform.VanishTracking.refresh(observer, subject);
+        if (!visible) observer.connection.send(new net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket(java.util.List.of(subject.getUUID())));
+    }
+
+    @Override
+    public List<InventoryItem> inspectPlayerInventory(IPlayer player, boolean enderChest) {
+        if (!(player instanceof MinecraftPlayer mp)) return List.of();
+        net.minecraft.world.Container inventory = enderChest ? mp.getHandle().getEnderChestInventory() : mp.getHandle().getInventory();
+        List<InventoryItem> result = new ArrayList<>();
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            if (!stack.isEmpty()) result.add(new InventoryItem(slot, stack.getCount(), stack.getHoverName().getString()));
+        }
+        return result;
+    }
+
+    @Override
+    public int repairPlayerItems(IPlayer player, boolean all) {
+        if (!(player instanceof MinecraftPlayer mp)) return 0;
+        if (!all) {
+            ItemStack stack = mp.getHandle().getMainHandItem();
+            if (stack.isEmpty() || !stack.isDamageableItem() || stack.getDamageValue() == 0) return 0;
+            stack.setDamageValue(0);
+            return 1;
+        }
+        int changed = 0;
+        var inventory = mp.getHandle().getInventory();
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            if (!stack.isEmpty() && stack.isDamageableItem() && stack.getDamageValue() > 0) {
+                stack.setDamageValue(0);
+                changed++;
+            }
+        }
+        return changed;
+    }
+
+    @Override
+    public boolean enchantMainHand(IPlayer player, String enchantmentId, int level) {
+        if (!(player instanceof MinecraftPlayer mp) || server == null || enchantmentId == null || enchantmentId.isBlank()) return false;
+        Identifier id = Identifier.tryParse(enchantmentId);
+        if (id == null) return false;
+        ItemStack stack = mp.getHandle().getMainHandItem();
+        if (stack.isEmpty()) return false;
+        var enchantment = server.registryAccess()
+                .lookupOrThrow(Registries.ENCHANTMENT)
+                .get(ResourceKey.create(Registries.ENCHANTMENT, id));
+        if (enchantment.isEmpty()) return false;
+        stack.enchant(enchantment.get(), level);
+        return true;
+    }
+
+    @Override
+    public Integer getHighestBlockY(IPlayer player) {
+        if (!(player instanceof MinecraftPlayer mp)) return null;
+        ServerPlayer handle = mp.getHandle();
+        return handle.level().getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                (int) Math.floor(handle.getX()), (int) Math.floor(handle.getZ()));
+    }
+
+    private static final net.neoforged.neoforge.registries.DeferredRegister<net.minecraft.server.level.TicketType> TICKET_TYPES =
+            net.neoforged.neoforge.registries.DeferredRegister.create(Registries.TICKET_TYPE, "paradigm");
+    private static final net.neoforged.neoforge.registries.DeferredHolder<net.minecraft.server.level.TicketType, net.minecraft.server.level.TicketType> RTP_CHUNK_TICKET =
+            TICKET_TYPES.register("rtp", () -> new net.minecraft.server.level.TicketType(200, net.minecraft.server.level.TicketType.FLAG_LOADING));
+
+    public static void registerTicketTypes(net.neoforged.bus.api.IEventBus modBus) {
+        TICKET_TYPES.register(modBus);
+    }
+    private final java.util.Map<Object, java.util.Map<Long, Integer>> rtpChunkHolds = new java.util.IdentityHashMap<>();
+
+    private void releaseRtpChunks(ServerLevel level, java.util.List<net.minecraft.world.level.ChunkPos> held) {
+        var counts = rtpChunkHolds.get(level);
+        if (counts == null) return;
+        for (var position : held) {
+            long key = position.pack();
+            int remaining = counts.getOrDefault(key, 0) - 1;
+            if (remaining > 0) counts.put(key, remaining);
+            else {
+                counts.remove(key);
+                level.getChunkSource().removeTicketWithRadius(RTP_CHUNK_TICKET.get(), position, 0);
+            }
+        }
+        if (counts.isEmpty()) rtpChunkHolds.remove(level);
+    }
+
+    @Override
+    public java.util.concurrent.CompletableFuture<java.util.Optional<Double>> findSafeRtpYAsync(IPlayer player, double x, double z) {
+        if (!(player instanceof MinecraftPlayer mp) || !Double.isFinite(x) || !Double.isFinite(z)) return java.util.concurrent.CompletableFuture.completedFuture(java.util.Optional.empty());
+        ServerLevel level = mp.getHandle().level();
+        var dimensions = mp.getHandle().getDimensions(net.minecraft.world.entity.Pose.STANDING);
+        double halfWidth = Math.max(0.6, dimensions.width()) / 2.0;
+        double bodyHeight = Math.max(1.8, dimensions.height());
+        var border = level.getWorldBorder();
+        if (!Double.isFinite(halfWidth) || !Double.isFinite(bodyHeight)
+                || x - halfWidth < border.getMinX() || x + halfWidth > border.getMaxX()
+                || z - halfWidth < border.getMinZ() || z + halfWidth > border.getMaxZ()) return java.util.concurrent.CompletableFuture.completedFuture(java.util.Optional.empty());
+        int minChunkX = ((int) Math.floor(x - halfWidth) - 2) >> 4;
+        int maxChunkX = ((int) Math.floor(x + halfWidth) + 2) >> 4;
+        int minChunkZ = ((int) Math.floor(z - halfWidth) - 2) >> 4;
+        int maxChunkZ = ((int) Math.floor(z + halfWidth) + 2) >> 4;
+        if ((long) maxChunkX - minChunkX > 3 || (long) maxChunkZ - minChunkZ > 3) {
+            return java.util.concurrent.CompletableFuture.completedFuture(java.util.Optional.empty());
+        }
+        var chunkSource = level.getChunkSource();
+        java.util.List<net.minecraft.world.level.ChunkPos> held = new java.util.ArrayList<>();
+        var counts = rtpChunkHolds.computeIfAbsent(level, ignored -> new java.util.HashMap<>());
+        java.util.List<java.util.concurrent.CompletableFuture<?>> chunks = new java.util.ArrayList<>();
+        try {
+        for (int cx = minChunkX; cx <= maxChunkX; cx++) {
+            for (int cz = minChunkZ; cz <= maxChunkZ; cz++) {
+                var position = new net.minecraft.world.level.ChunkPos(cx, cz);
+                long key = position.pack();
+                if (!counts.containsKey(key)) { chunkSource.addTicketWithRadius(RTP_CHUNK_TICKET.get(), position, 0); }
+                counts.merge(key, 1, Integer::sum);
+                held.add(position);
+                int chunkX = cx;
+                int chunkZ = cz;
+                chunks.add(java.util.concurrent.CompletableFuture.supplyAsync(() -> chunkSource.getChunkFuture(chunkX, chunkZ, net.minecraft.world.level.chunk.status.ChunkStatus.FULL, true)).thenCompose(future -> future));
+            }
+        }
+        } catch (RuntimeException preparationFailure) {
+            releaseRtpChunks(level, held);
+            throw preparationFailure;
+        }
+        java.util.concurrent.CompletableFuture<java.util.Optional<Double>> result = new java.util.concurrent.CompletableFuture<>();
+        result.whenComplete((ignored, failure) -> executeOnServerThread(() -> releaseRtpChunks(level, held)));
+        java.util.concurrent.CompletableFuture.allOf(chunks.toArray(java.util.concurrent.CompletableFuture[]::new)).whenComplete((ignored, failure) -> {
+            if (result.isDone()) return;
+            if (failure != null) {
+                result.completeExceptionally(failure);
+                return;
+            }
+            executeOnServerThread(() -> {
+                if (result.isDone()) return;
+                try {
+                    result.complete(mp.getHandle().level() == level ? findSafeRtpY(player, x, z) : java.util.Optional.empty());
+                } catch (RuntimeException failureDuringValidation) {
+                    result.completeExceptionally(failureDuringValidation);
+                }
+            });
+        });
+        return result;
+    }
+
+    @Override
+    public java.util.Optional<Double> findSafeRtpY(IPlayer player, double x, double z) {
+        if (!(player instanceof MinecraftPlayer mp) || !Double.isFinite(x) || !Double.isFinite(z)) return java.util.Optional.empty();
+        ServerLevel level = mp.getHandle().level();
+        var dimensions = mp.getHandle().getDimensions(net.minecraft.world.entity.Pose.STANDING);
+        double halfWidth = Math.max(0.6, dimensions.width()) / 2.0;
+        double bodyHeight = Math.max(1.8, dimensions.height());
+        var border = level.getWorldBorder();
+        if (!Double.isFinite(halfWidth) || !Double.isFinite(bodyHeight)
+                || x - halfWidth < border.getMinX() || x + halfWidth > border.getMaxX()
+                || z - halfWidth < border.getMinZ() || z + halfWidth > border.getMaxZ()) return java.util.Optional.empty();
+        int blockX = (int) Math.floor(x);
+        int blockZ = (int) Math.floor(z);
+        for (int cx = ((int) Math.floor(x - halfWidth) - 2) >> 4; cx <= ((int) Math.floor(x + halfWidth) + 2) >> 4; cx++) {
+            for (int cz = ((int) Math.floor(z - halfWidth) - 2) >> 4; cz <= ((int) Math.floor(z + halfWidth) + 2) >> 4; cz++) {
+                if (!level.hasChunk(cx, cz) || level.getChunkSource().getChunkNow(cx, cz) == null) return java.util.Optional.empty();
+            }
+        }
+        int topY = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, blockX, blockZ);
+        if (topY <= level.getMinY() || topY + bodyHeight > level.getMaxY() + 1.0) return java.util.Optional.empty();
+        net.minecraft.core.BlockPos ground = new net.minecraft.core.BlockPos(blockX, topY - 1, blockZ);
+        var groundState = level.getBlockState(ground);
+        if (!groundState.isFaceSturdy(level, ground, net.minecraft.core.Direction.UP)) return java.util.Optional.empty();
+        net.minecraft.world.phys.AABB body = new net.minecraft.world.phys.AABB(x - halfWidth, topY, z - halfWidth, x + halfWidth, topY + bodyHeight, z + halfWidth);
+        if (!level.noCollision(mp.getHandle(), body.inflate(0.5, 0.0, 0.5))) return java.util.Optional.empty();
+        for (int bx = (int) Math.floor(body.minX) - 1; bx <= (int) Math.floor(body.maxX) + 1; bx++) {
+            for (int bz = (int) Math.floor(body.minZ) - 1; bz <= (int) Math.floor(body.maxZ) + 1; bz++) {
+                for (int by = topY - 1; by <= (int) Math.floor(body.maxY); by++) {
+                    var position = new net.minecraft.core.BlockPos(bx, by, bz);
+                    var state = level.getBlockState(position);
+                    if (!state.getFluidState().isEmpty() || state.getBlock() instanceof net.minecraft.world.level.block.BaseFireBlock
+                            || state.getBlock() instanceof net.minecraft.world.level.block.CactusBlock
+                            || state.getBlock() instanceof net.minecraft.world.level.block.MagmaBlock
+                            || state.getBlock() instanceof net.minecraft.world.level.block.CampfireBlock
+                            || state.getBlock() instanceof net.minecraft.world.level.block.SweetBerryBushBlock
+                            || state.getBlock() instanceof net.minecraft.world.level.block.WitherRoseBlock
+                            || state.getBlock() instanceof net.minecraft.world.level.block.PowderSnowBlock) return java.util.Optional.empty();
+                }
+            }
+        }
+        return java.util.Optional.of((double) topY);
+    }
+
+    @Override
+    public boolean jumpPlayerForward(IPlayer player, int distance) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        ServerPlayer handle = mp.getHandle();
+        var look = handle.getLookAngle();
+        handle.teleportTo(handle.getX() + look.x * distance, handle.getY() + look.y * distance, handle.getZ() + look.z * distance);
+        return true;
+    }
+
+    @Override
+    public boolean setTimeOfDay(long timeOfDay) {
+        if (server == null) return false;
+        boolean changed = false;
+        for (ServerLevel level : server.getAllLevels()) {
+            var clock = level.dimensionType().defaultClock();
+            if (clock.isPresent()) {
+                server.clockManager().setTotalTicks(clock.get(), timeOfDay);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    @Override
+    public boolean setWeather(String weather) {
+        if (server == null || weather == null) return false;
+        String normalized = weather.trim().toLowerCase(Locale.ROOT);
+        if (!Set.of("clear", "sun", "rain", "thunder").contains(normalized)) return false;
+        boolean raining = normalized.equals("rain") || normalized.equals("thunder");
+        boolean thundering = normalized.equals("thunder");
+        int clearTime = raining ? 0 : 6000;
+        server.setWeatherParameters(clearTime, 6000, raining, thundering);
+        return true;
+    }
+
+    private GameType toGameType(String mode) {
+        if (mode == null) {
+            return null;
+        }
+        return switch (mode.trim().toLowerCase(Locale.ROOT)) {
+            case "0", "s", "survival" -> GameType.SURVIVAL;
+            case "1", "c", "creative" -> GameType.CREATIVE;
+            case "2", "a", "adventure" -> GameType.ADVENTURE;
+            case "3", "sp", "spectator" -> GameType.SPECTATOR;
+            default -> null;
+        };
+    }
+
+    @Override
+    public IEventSystem getEventSystem() {
+        return eventSystem;
+    }
+
+    @Override
+    public List<String> getWorldNames() {
+        List<String> worldNames = new ArrayList<>();
+        if (server != null) {
+            for (ServerLevel level : server.getAllLevels()) {
+                worldNames.add(level.dimension().identifier().toString());
+            }
+        }
+        return worldNames;
+    }
+
+    @Override
+    public List<String> getOnlinePlayerNames() {
+        List<String> playerNames = new ArrayList<>();
+        for (IPlayer player : getOnlinePlayers()) {
+            playerNames.add(player.getName());
+        }
+        return playerNames;
+    }
+
+    @Override
+    public void sendBossBar(List<IPlayer> players, IComponent message, int durationSeconds, BossBarColor color, float progress) {
+        if (players == null || players.isEmpty() || message == null) return;
+        net.minecraft.network.chat.Component mcMessage = ((MinecraftComponent) message).getHandle();
+        net.minecraft.world.BossEvent.BossBarColor mcColor = net.minecraft.world.BossEvent.BossBarColor.valueOf(color.name());
+        net.minecraft.server.level.ServerBossEvent bossEvent = new net.minecraft.server.level.ServerBossEvent(java.util.UUID.randomUUID(), mcMessage, mcColor, net.minecraft.world.BossEvent.BossBarOverlay.PROGRESS);
+        bossEvent.setProgress(progress);
+        players.forEach(p -> {
+            if (p instanceof MinecraftPlayer mp) bossEvent.addPlayer(mp.getHandle());
+        });
+
+        taskScheduler.schedule(() -> {
+            bossEvent.removeAllPlayers();
+            bossEvent.setVisible(false);
+        }, durationSeconds, java.util.concurrent.TimeUnit.SECONDS);
+    }
+
+    @Override
+    public IComponent createEmptyComponent() {
+        return new MinecraftComponent(Component.literal(""));
+    }
+
+    @Override
+    public IComponent wrap(Object text) {
+        if (text == null) return createEmptyComponent();
+        if (text instanceof IComponent c) return c;
+        if (text instanceof Component c) return new MinecraftComponent(c);
+        return createComponentFromLiteral(String.valueOf(text));
+    }
+
+    @Override
+    public IComponent createComponentFromLiteral(String text) {
+        return new MinecraftComponent(Component.literal(text != null ? text : ""));
+    }
+
+    @Override
+    public String getMinecraftVersion() {
+        return net.minecraft.SharedConstants.getCurrentVersion().name();
+    }
+
+    @Override
+    public String getLoaderName() { return "NeoForge"; }
+
+    @Override
+    public Object createStyleWithClickEvent(Object baseStyle, String action, String value) {
+        if (!(baseStyle instanceof net.minecraft.network.chat.Style style)) return baseStyle;
+        net.minecraft.network.chat.ClickEvent.Action a;
+        try {
+            a = net.minecraft.network.chat.ClickEvent.Action.valueOf(String.valueOf(action).toUpperCase(java.util.Locale.ROOT));
+        } catch (Throwable t) {
+            return baseStyle;
+        }
+        String text = String.valueOf(value);
+        net.minecraft.network.chat.ClickEvent event = switch (a) {
+            case RUN_COMMAND -> new net.minecraft.network.chat.ClickEvent.RunCommand(text);
+            case SUGGEST_COMMAND -> new net.minecraft.network.chat.ClickEvent.SuggestCommand(text);
+            case OPEN_URL -> new net.minecraft.network.chat.ClickEvent.OpenUrl(java.net.URI.create(text));
+            case COPY_TO_CLIPBOARD -> new net.minecraft.network.chat.ClickEvent.CopyToClipboard(text);
+            case CHANGE_PAGE -> new net.minecraft.network.chat.ClickEvent.ChangePage(Integer.parseInt(text));
+            default -> null;
+        };
+        return event != null ? style.withClickEvent(event) : baseStyle;
+    }
+
+    @Override
+    public Object createStyleWithHoverEvent(Object baseStyle, Object hoverText) {
+        if (!(baseStyle instanceof net.minecraft.network.chat.Style style)) return baseStyle;
+
+        net.minecraft.network.chat.Component hover;
+        if (hoverText instanceof net.minecraft.network.chat.Component c) {
+            hover = c;
+        } else if (hoverText instanceof IComponent ic && ic.getOriginalText() instanceof net.minecraft.network.chat.Component c2) {
+            hover = c2;
+        } else {
+            hover = net.minecraft.network.chat.Component.literal(String.valueOf(hoverText));
+        }
+
+        return style.withHoverEvent(new net.minecraft.network.chat.HoverEvent.ShowText(hover));
+    }
+
+    @Override
+    public IComponent parseFormattingCode(String code, IComponent currentComponent) {
+        return currentComponent != null ? currentComponent : createEmptyComponent();
+    }
+
+    @Override
+    public IComponent parseHexColor(String hex, IComponent currentComponent) {
+        return currentComponent != null ? currentComponent : createEmptyComponent();
+    }
+
+    @Override
+    public IPlayer wrapPlayer(Object player) {
+        if (player instanceof ServerPlayer sp) {
+            return MinecraftPlayer.of(sp);
+        }
+        throw new IllegalArgumentException("Unsupported player type: " + (player == null ? "null" : player.getClass()));
+    }
+
+    @Override
+    public ICommandSource wrapCommandSource(Object source) {
+        if (source instanceof CommandSourceStack stack) {
+            return MinecraftCommandSource.of(stack);
+        }
+        throw new IllegalArgumentException("Unsupported command source type: " + (source == null ? "null" : source.getClass()));
+    }
+
+    @Override
+    public void playSound(IPlayer player, String soundId, String category, float volume, float pitch) {
+        if (!(player instanceof MinecraftPlayer mp)) return;
+        if (soundId == null || soundId.isBlank()) return;
+
+        Identifier id;
+        try {
+            id = Identifier.parse(soundId);
+        } catch (Throwable t) {
+            return;
+        }
+
+        net.minecraft.sounds.SoundEvent evt = BuiltInRegistries.SOUND_EVENT.getValue(id);
+        if (evt == null) return;
+
+        net.minecraft.sounds.SoundSource src;
+        try {
+            src = category != null ? net.minecraft.sounds.SoundSource.valueOf(category.toUpperCase(java.util.Locale.ROOT)) : net.minecraft.sounds.SoundSource.MASTER;
+        } catch (Throwable t) {
+            src = net.minecraft.sounds.SoundSource.MASTER;
+        }
+
+        mp.getHandle().connection.send(new net.minecraft.network.protocol.game.ClientboundSoundPacket(net.minecraft.core.Holder.direct(evt), src, mp.getHandle().getX(), mp.getHandle().getY(), mp.getHandle().getZ(), volume, pitch, mp.getHandle().getRandom().nextLong()));
+    }
+
+    @Override
+    public void removeRestartBossBar() {
+        if (restartBossBar != null) {
+            restartBossBar.setVisible(false);
+            restartBossBar.removeAllPlayers();
+            restartBossBar = null;
+        }
+    }
+
+    @Override
+    public void createOrUpdateRestartBossBar(IComponent message, BossBarColor color, float progress) {
+        if (message == null) return;
+        Component mcMessage = ((MinecraftComponent) message).getHandle();
+        if (restartBossBar == null) {
+            restartBossBar = new ServerBossEvent(java.util.UUID.randomUUID(), mcMessage,
+                    net.minecraft.world.BossEvent.BossBarColor.valueOf(color.name()),
+                    net.minecraft.world.BossEvent.BossBarOverlay.PROGRESS);
+            restartBossBar.setVisible(true);
+        }
+        getOnlinePlayers().forEach(p -> {
+            if (p instanceof MinecraftPlayer mp) restartBossBar.addPlayer(mp.getHandle());
+        });
+        restartBossBar.setName(mcMessage);
+        restartBossBar.setProgress(progress);
+    }
+
+    @Override
+    public void showPersistentBossBar(IPlayer player, IComponent message, BossBarColor color, BossBarOverlay overlay) {
+        if (player == null || message == null) return;
+        removePersistentBossBar(player);
+
+        Component mcMessage = ((MinecraftComponent) message).getHandle();
+        ServerBossEvent bar = new ServerBossEvent(
+                java.util.UUID.randomUUID(),
+                mcMessage,
+                net.minecraft.world.BossEvent.BossBarColor.valueOf(color.name()),
+                net.minecraft.world.BossEvent.BossBarOverlay.valueOf(overlay.name())
+        );
+
+        if (player instanceof MinecraftPlayer mp) {
+            bar.addPlayer(mp.getHandle());
+        }
+
+        try {
+            persistentBossBars.put(java.util.UUID.fromString(player.getUUID()), bar);
+        } catch (IllegalArgumentException ignored) {
+        }
+    }
+
+    @Override
+    public void removePersistentBossBar(IPlayer player) {
+        if (player == null) return;
+        java.util.UUID id;
+        try {
+            id = java.util.UUID.fromString(player.getUUID());
+        } catch (IllegalArgumentException e) {
+            return;
+        }
+
+        ServerBossEvent bar = persistentBossBars.remove(id);
+        if (bar != null && player instanceof MinecraftPlayer mp) {
+            bar.removePlayer(mp.getHandle());
+            bar.setVisible(false);
+        }
+    }
+
+    @Override
+    public void teleportPlayer(IPlayer player, double x, double y, double z) {
+        if (!(player instanceof MinecraftPlayer mp)) return;
+        mp.getHandle().teleportTo(x, y, z);
+    }
+
+    @Override
+    public boolean teleportPlayer(IPlayer player, PlayerDataStore.StoredLocation location) {
+        if (!(player instanceof MinecraftPlayer mp) || location == null || server == null) return false;
+        for (ServerLevel level : server.getAllLevels()) {
+            if (level.dimension().identifier().toString().equalsIgnoreCase(location.getWorldId())) {
+                return mp.getHandle().teleportTo(level, location.getX(), location.getY(), location.getZ(), java.util.Set.of(), location.getYaw(), location.getPitch(), true);
+            }
+        }
+        return false;
+    }
+
+    @Override
+    public String getPlayerRemoteAddress(IPlayer player) {
+        if (!(player instanceof MinecraftPlayer mp) || mp.getHandle().connection == null) return null;
+        return String.valueOf(mp.getHandle().connection.getRemoteAddress());
+    }
+
+    @Override
+    public void refreshPlayerCommandTree(IPlayer player) {
+        if (server != null && player instanceof MinecraftPlayer mp) server.getCommands().sendCommands(mp.getHandle());
+    }
+
+    @Override
+    public boolean playerHasItem(IPlayer player, String itemId, int amount) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        if (itemId == null) return false;
+
+        ServerPlayer sp = mp.getHandle();
+        if (sp == null) return false;
+
+        try {
+            net.minecraft.world.item.Item item = BuiltInRegistries.ITEM.getValue(Identifier.parse(itemId));
+            if (item == null || item == Items.AIR) {
+                return false;
+            }
+            int count = 0;
+            for (ItemStack stack : sp.getInventory().getNonEquipmentItems()) {
+                if (stack != null && stack.is(item)) {
+                    count += stack.getCount();
+                    if (count >= amount) return true;
+                }
+            }
+            return count >= amount;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    @Override
+    public boolean isPlayerInArea(IPlayer player, String worldId, List<Integer> corner1, List<Integer> corner2) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        if (worldId == null || corner1 == null || corner2 == null) return false;
+        if (corner1.size() != 3 || corner2.size() != 3) return false;
+
+        ServerPlayer sp = mp.getHandle();
+        if (sp == null) return false;
+
+        try {
+            ResourceKey<net.minecraft.world.level.Level> targetWorldKey = ResourceKey.create(
+                    Registries.DIMENSION,
+                    Identifier.parse(worldId)
+            );
+
+            if (!sp.level().dimension().equals(targetWorldKey)) {
+                return false;
+            }
+
+            net.minecraft.world.phys.Vec3 pos = sp.position();
+            double pX = pos.x();
+            double pY = pos.y();
+            double pZ = pos.z();
+
+            double x1 = Math.min(corner1.get(0), corner2.get(0));
+            double y1 = Math.min(corner1.get(1), corner2.get(1));
+            double z1 = Math.min(corner1.get(2), corner2.get(2));
+            double x2 = Math.max(corner1.get(0), corner2.get(0));
+            double y2 = Math.max(corner1.get(1), corner2.get(1));
+            double z2 = Math.max(corner1.get(2), corner2.get(2));
+
+            return pX >= x1 && pX <= x2 && pY >= y1 && pY <= y2 && pZ >= z1 && pZ <= z2;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    @Override
+    public boolean setPlayerListHeaderFooter(IPlayer player, IComponent header, IComponent footer) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        Component h = header instanceof MinecraftComponent c ? c.getHandle() : Component.empty();
+        Component f = footer instanceof MinecraftComponent c ? c.getHandle() : Component.empty();
+        mp.getHandle().setTabListHeaderFooter(h, f);
+        return true;
+    }
+
+    @Override
+    public boolean setPlayerListDisplayName(IPlayer player, @Nullable IComponent value) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        ((ITablistPlayerAccess) mp.getHandle()).paradigm$setTablistDisplayName(value instanceof MinecraftComponent c ? c.getHandle() : null);
+        mp.getHandle().refreshTabListName();
+        return true;
+    }
+
+    @Override
+    public boolean setPlayerListOrder(IPlayer player, int order) {
+        if (!(player instanceof MinecraftPlayer mp) || server == null) return false;
+        ((ITablistPlayerAccess) mp.getHandle()).paradigm$setTablistOrder(order);
+        server.getPlayerList().broadcastAll(new net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket(
+                java.util.EnumSet.of(net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LIST_ORDER), java.util.List.of(mp.getHandle())));
+        return true;
+    }
+    @Override public int getPlayerPing(IPlayer player) { return player instanceof MinecraftPlayer mp ? Math.max(0, mp.getHandle().connection.latency()) : 0; }
+    @Override public int getMaxPlayers() { return server != null ? server.getMaxPlayers() : 0; }
+
+    @Override
+    public boolean isFirstJoin(IPlayer player) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        ServerPlayer handle = mp.getHandle();
+        return handle != null && handle.getStats().getValue(Stats.CUSTOM.get(Stats.LEAVE_GAME)) == 0;
+    }
+}

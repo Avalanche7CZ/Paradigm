@@ -1,0 +1,26 @@
+pluginManagement {
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == 'com.diffplug.spotless') useVersion('8.0.0')
+        }
+    }
+    repositories {
+        maven { url = 'https://maven.neoforged.net/releases/' }
+        gradlePluginPortal()
+    }
+}
+
+rootProject.name = 'NeoForge-26.1.2'
+def sharedProperties = new Properties()
+file('../gradle.properties').withInputStream { sharedProperties.load(it) }
+gradle.beforeProject { project ->
+    project.ext.mod_version = sharedProperties.getProperty('mod_version')
+    if (project.name == 'common') {
+        project.layout.buildDirectory = file('build/common')
+        project.afterEvaluate {
+            project.dependencies.add('testRuntimeOnly', 'org.junit.platform:junit-platform-launcher:1.10.2')
+        }
+    }
+}
+include 'common'
+project(':common').projectDir = file('../common')

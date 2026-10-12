@@ -1,0 +1,27 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "eu.avalanche7.paradigm.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "mixins": [
+    "FoodDataAccessor",
+    "DisplayAccessor",
+    "TextDisplayAccessor",
+    "InteractionAccessor",
+    "PlayerListMixin",
+    "ServerStatusMixin",
+    "ServerPlayerTablistMixin",
+    "CommandSourcePermissionMixin",
+    "VanishMixin$Tracker",
+    "VanishMixin$PlayerInfo",
+    "VanishMixin$Connection",
+    "VanishMixin$Login",
+    "VanishMixin$Lifecycle",
+    "VanishMixin$Suggestions",
+    "VanishMixin$Status",
+    "VanishMixin$OnlineList"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
