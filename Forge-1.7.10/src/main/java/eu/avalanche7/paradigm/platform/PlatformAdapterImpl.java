@@ -1344,25 +1344,39 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     };
 
     private static WorldServer resolve(MinecraftServer server, String worldId) {
-        if (server == null || server.worldServers == null || worldId == null) {
+        if (server == null || server.worldServers == null || worldId == null || worldId.isBlank()) {
             return null;
         }
+        boolean dimensionFolder = worldId.matches("DIM-?[0-9]+");
         final int id;
         try {
-            id = Integer.parseInt(worldId);
+            id = Integer.parseInt(dimensionFolder ? worldId.substring(3) : worldId);
         } catch (NumberFormatException invalid) {
-            return null;
-        }
-        for (WorldServer world : server.worldServers) {
-            if (world != null && world.provider.dimensionId == id) {
-                return world;
+            if (dimensionFolder || worldId.matches("[+-]?[0-9]+")) {
+                return null;
             }
+            WorldServer match = null;
+            for (WorldServer world : server.worldServers) {
+                if (world == null || world.provider == null) continue;
+                if (worldId.equals(world.provider.getSaveFolder())
+                        || (world.getWorldInfo() != null && worldId.equals(world.getWorldInfo().getWorldName()))) {
+                    if (match != null && match != world) return null;
+                    match = world;
+                }
+            }
+            return match;
         }
-        if (!DimensionManager.isDimensionRegistered(id)) {
+        boolean overworldLoaded = false;
+        for (WorldServer world : server.worldServers) {
+            if (world == null || world.provider == null) continue;
+            if (world.provider.dimensionId == id) return world;
+            if (world.provider.dimensionId == 0) overworldLoaded = true;
+        }
+        if (!DimensionManager.isDimensionRegistered(id) || !overworldLoaded) {
             return null;
         }
         WorldServer world = server.worldServerForDimension(id);
-        return world != null && world.provider.dimensionId == id ? world : null;
+        return world != null && world.provider != null && world.provider.dimensionId == id ? world : null;
     }
 
     private static boolean teleport(MinecraftServer server, EntityPlayerMP player,

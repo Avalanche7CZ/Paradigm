@@ -1085,12 +1085,10 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public boolean teleportPlayer(IPlayer player, PlayerDataStore.StoredLocation location) {
         if (!(player instanceof MinecraftPlayer mp) || location == null || server == null) return false;
-        for (ServerLevel level : server.getAllLevels()) {
-            if (level.dimension().identifier().toString().equalsIgnoreCase(location.getWorldId())) {
-                return mp.getHandle().teleportTo(level, location.getX(), location.getY(), location.getZ(), java.util.Set.of(), location.getYaw(), location.getPitch(), true);
-            }
-        }
-        return false;
+        ServerLevel level = DimensionResolver.resolveRegistered(location.getWorldId(), server.getAllLevels(),
+                world -> world.dimension().identifier().toString());
+        if (level == null) return false;
+        return mp.getHandle().teleportTo(level, location.getX(), location.getY(), location.getZ(), java.util.Set.of(), location.getYaw(), location.getPitch(), true);
     }
 
     @Override
