@@ -18,7 +18,7 @@ public final class DashboardAuthorization {
     public record SectionAccess(boolean view, boolean edit) {
     }
 
-    public record Capabilities(Map<String, Boolean> pages, Map<String, SectionAccess> config) {
+    public record Capabilities(Map<String, Boolean> pages, Map<String, SectionAccess> config, Map<String, Boolean> mutations) {
     }
 
     private record SectionPermissions(String pageId, PermissionDefinition view, PermissionDefinition edit) {
@@ -189,6 +189,14 @@ public final class DashboardAuthorization {
             pages.put(section.pageId(), view);
             config.put(section.pageId(), new SectionAccess(view, edit));
         }
-        return new Capabilities(pages, config);
+        Map<String, Boolean> mutations = new LinkedHashMap<>();
+        mutations.put("network", check.test(ParadigmPermissions.NETWORK_MANAGE));
+        mutations.put("permissions", canManagePermissions(check));
+        mutations.put("menus", check.test(ParadigmPermissions.MENU_MANAGE));
+        mutations.put("holograms", check.test(ParadigmPermissions.HOLOGRAM_MANAGE));
+        mutations.put("customCommands", check.test(ParadigmPermissions.CONFIG_EDIT));
+        mutations.put("storage", check.test(ParadigmPermissions.STORAGE_MANAGE));
+        mutations.put("discord", check.test(ParadigmPermissions.DISCORD_MANAGE));
+        return new Capabilities(pages, config, mutations);
     }
 }

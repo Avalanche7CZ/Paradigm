@@ -80,6 +80,8 @@ public final class PlayerInputService {
                     throw new IllegalArgumentException(path + ": await_input must be last; use on_success for subsequent actions.");
                 }
             }
+            ItemActions.validate(action);
+            validateActions(action.getSteps(), path + " transaction actions", depth + 1);
             validateActions(action.getOnSuccess(), path + " action " + (index + 1) + " on_success", depth + 1);
             validateActions(action.getOnFailure(), path + " action " + (index + 1) + " on_failure", depth + 1);
         }

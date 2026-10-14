@@ -187,3 +187,10 @@ task buildAllAndNotify {
         println("\n🎉 Build and Discord notification complete!")
     }
 }
+
+subprojects {
+    def mergedDashboardOutput = layout.buildDirectory.dir('classes/java/main/dashboard')
+    tasks.matching { it.name == 'mergeCommonForDevRun' }.configureEach {
+        doFirst { mergedDashboardOutput.get().asFile.deleteDir() }
+    }
+}

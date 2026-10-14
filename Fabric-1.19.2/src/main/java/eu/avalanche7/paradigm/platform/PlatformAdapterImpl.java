@@ -858,23 +858,24 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         if (server != null && player instanceof MinecraftPlayer mp) server.getCommandManager().sendCommandTree(mp.getHandle());
     }
 
+    @Override public boolean isServerThread() { return server != null && server.isOnThread(); }
+
+    @Override public boolean supportsItemConsumption() { return true; }
+
+    @Override public InventoryConsumption prepareItemConsumption(IPlayer player, List<ItemRequirement> items) {
+        if (!isServerThread()) throw new IllegalStateException("Inventory operations require the server thread");
+        var live = player != null ? getPlayerByUuid(player.getUUID()) : null;
+        if (live == null || live.getOriginalPlayer() != player.getOriginalPlayer()) throw new IllegalStateException("Player session is unavailable");
+        if (!(player instanceof MinecraftPlayer mp)) throw new IllegalStateException("Native player is unavailable");
+        var handle = mp.getHandle();
+        return MinecraftItemInventory.prepare(handle, items).guarded(() -> isServerThread() && getPlayerByUuid(player.getUUID()) != null
+                && getPlayerByUuid(player.getUUID()).getOriginalPlayer() == player.getOriginalPlayer());
+    }
+
     @Override
     public boolean playerHasItem(IPlayer player, String itemId, int amount) {
-        if (player == null || itemId == null) {
-            return false;
-        }
-        if (!(player instanceof MinecraftPlayer mp)) {
-            return false;
-        }
-        if (itemId.isBlank()) return false;
-        Identifier id = Identifier.tryParse(itemId);
-        if (id == null || !Registry.ITEM.containsId(id)) return false;
-        Item item = Registry.ITEM.get(id);
-        if (item == Items.AIR) {
-            debugLogger.debugLog("PlatformAdapter: Could not find item with ID: " + itemId);
-            return false;
-        }
-        return mp.getHandle().getInventory().count(item) >= amount;
+        try { if (!(player instanceof MinecraftPlayer mp)) return false; var handle = mp.getHandle(); MinecraftItemInventory.prepare(handle, List.of(ItemRequirement.parse(itemId, amount))); return true; }
+        catch (IllegalArgumentException | IllegalStateException | UnsupportedOperationException invalid) { return false; }
     }
 
     @Override

@@ -80,3 +80,47 @@ tasks.register('apiJar', Jar) {
 tasks.named('assemble').configure {
     dependsOn tasks.named('apiJar')
 }
+
+def dashboardProjectDir = rootProject.layout.projectDirectory.dir('dashboard')
+if (!dashboardProjectDir.asFile.exists()) {
+    dashboardProjectDir = layout.projectDirectory.dir('../dashboard')
+}
+def dashboardOutput = layout.buildDirectory.dir('generated/dashboard')
+def dashboardProcessedResources = layout.buildDirectory.dir('resources/main/dashboard')
+def npmExecutable = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows') ? 'npm.cmd' : 'npm'
+
+tasks.register('dashboardInstall', Exec) {
+    group = 'build'
+    description = 'Installs locked dashboard development dependencies (never used by the Minecraft runtime).'
+    workingDir dashboardProjectDir
+    commandLine npmExecutable, 'ci', '--no-audit', '--no-fund'
+    inputs.files dashboardProjectDir.file('package.json'), dashboardProjectDir.file('package-lock.json')
+    outputs.dir dashboardProjectDir.dir('node_modules')
+}
+
+tasks.register('dashboardBuild', Exec) {
+    group = 'build'
+    description = 'Compiles the TypeScript dashboard into bundled static resources.'
+    dependsOn tasks.named('dashboardInstall')
+    workingDir dashboardProjectDir
+    commandLine npmExecutable, 'run', 'build', '--', '--outDir', dashboardOutput.get().asFile.absolutePath
+    inputs.dir dashboardProjectDir.dir('src')
+    inputs.dir dashboardProjectDir.dir('public')
+    inputs.files dashboardProjectDir.file('index.html'), dashboardProjectDir.file('tsconfig.json'), dashboardProjectDir.file('vite.config.ts'), dashboardProjectDir.file('package.json'), dashboardProjectDir.file('package-lock.json')
+    outputs.dir dashboardOutput
+}
+
+tasks.named('processResources').configure {
+    dependsOn tasks.named('dashboardBuild')
+    from(dashboardOutput) { into 'dashboard' }
+    doFirst { dashboardProcessedResources.get().asFile.deleteDir() }
+}
+tasks.register('dashboardTest', Exec) {
+    group = 'verification'
+    description = 'Runs local dashboard behavioral tests when present.'
+    onlyIf { dashboardProjectDir.dir('tests').asFile.exists() }
+    dependsOn tasks.named('dashboardInstall')
+    workingDir dashboardProjectDir
+    commandLine npmExecutable, 'test'
+}
+tasks.named('check').configure { dependsOn tasks.named('dashboardTest') }

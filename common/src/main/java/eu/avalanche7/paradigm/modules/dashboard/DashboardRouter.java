@@ -90,6 +90,11 @@ public class DashboardRouter {
                 }
 
                 if ("POST".equals(method) && "/api/auth/logout".equals(path)) return auth.logout(ctx);
+                String requestedServer = ctx.header("X-Paradigm-Server");
+                if (requestedServer != null && DashboardServerContext.hostOnly(path)
+                        && !requestedServer.equals(dashboard.services().getStorageService().context().serverIdentity().serverId())) {
+                    return DashboardResponse.apiError(409, "wrong_server", "This operation runs only on the dashboard host. Select it explicitly.");
+                }
 
                 if ("GET".equals(method) && "/api/overview".equals(path)) {
                     DashboardResponse denied = denyPage(ctx, ParadigmPermissions.DASHBOARD_OVERVIEW, "You do not have permission to view the overview.");
@@ -144,6 +149,7 @@ public class DashboardRouter {
                 if ("POST".equals(method) && "/api/discord/test".equals(path)) return discord.test(ctx);
                 if ("POST".equals(method) && "/api/discord/reconnect".equals(path)) return discord.reconnect(ctx);
 
+                if ("GET".equals(method) && "/api/config/formatting".equals(path)) return config.formatting(ctx);
                 if ("GET".equals(method) && "/api/config/snapshot".equals(path)) return config.snapshot(ctx);
                 if ("POST".equals(method) && "/api/config/patch".equals(path)) return config.patch(ctx);
                 if ("POST".equals(method) && "/api/config/apply".equals(path)) return config.apply(ctx);
@@ -265,6 +271,7 @@ public class DashboardRouter {
                         return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to view moderation.");
                     }
                 }
+                if ("GET".equals(method) && "/api/moderation/capabilities".equals(path)) return moderation.capabilities(ctx);
                 if ("GET".equals(method) && "/api/moderation/recent".equals(path)) return moderation.recent(ctx);
                 if ("GET".equals(method) && "/api/moderation/active".equals(path)) return moderation.active(ctx);
                 if ("GET".equals(method) && "/api/moderation/player".equals(path)) return moderation.player(ctx);

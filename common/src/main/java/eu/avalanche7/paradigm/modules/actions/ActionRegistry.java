@@ -11,7 +11,8 @@ public final class ActionRegistry extends TypeRegistry<ActionRegistry.Entry> {
         void execute(CustomCommand.Action action, ActionContext context);
     }
 
-    public record Entry(String type, Handler handler) {
+    public record Entry(String type, Handler handler, boolean workflow) {
+        public Entry(String type, Handler handler) { this(type, handler, false); }
     }
 
     public ActionRegistry() {
@@ -21,6 +22,15 @@ public final class ActionRegistry extends TypeRegistry<ActionRegistry.Entry> {
     public void register(String type, Handler handler, String... aliases) {
         put(type, handler != null ? new Entry(normalize(type), handler) : null, aliases,
                 "Action type and handler are required.");
+    }
+
+    void registerWorkflow(String type) {
+        put(type, new Entry(normalize(type), null, true), null, "Workflow type is required");
+    }
+
+    public boolean isWorkflow(String type) {
+        Entry entry = entry(type);
+        return entry != null && entry.workflow();
     }
 
     @Nullable

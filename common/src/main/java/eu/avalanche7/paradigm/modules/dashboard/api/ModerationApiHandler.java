@@ -18,6 +18,10 @@ public class ModerationApiHandler {
         this.dashboard = dashboard;
     }
 
+    public DashboardResponse capabilities(DashboardRequestContext ctx) {
+        return DashboardResponse.apiOk(java.util.Map.of("actions", dashboard.moderationCapabilities(ctx.principal())));
+    }
+
     public DashboardResponse recent(DashboardRequestContext ctx) throws Exception {
         return DashboardResponse.apiOk(dashboard.moderationRecentAsync().get());
     }

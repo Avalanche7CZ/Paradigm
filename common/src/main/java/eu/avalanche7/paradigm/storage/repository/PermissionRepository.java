@@ -9,6 +9,15 @@ import eu.avalanche7.paradigm.storage.model.StoredPermissionTrack;
 import eu.avalanche7.paradigm.storage.model.StoredUserPermissionData;
 
 public interface PermissionRepository {
+    record GroupChange(String group, boolean add) {
+        public GroupChange {
+            if (group == null || group.isBlank()) throw new IllegalArgumentException("Group name is required");
+            group = group.trim().toLowerCase(java.util.Locale.ROOT);
+        }
+    }
+    default boolean changeGlobalGroups(String uuid, List<GroupChange> changes, Runnable effect) {
+        throw new UnsupportedOperationException("Acknowledged group transactions are unavailable on this storage provider");
+    }
     List<StoredPermissionGroup> listGroups();
     Optional<StoredPermissionGroup> getGroup(String groupName);
     void saveGroup(StoredPermissionGroup group);
@@ -27,6 +36,7 @@ public interface PermissionRepository {
     List<StoredUserPermissionData> listUsers();
     Optional<StoredUserPermissionData> getUser(String uuid);
     void saveUser(StoredUserPermissionData user);
+    default void saveUserPreservingUnknownGroups(StoredUserPermissionData user, java.util.Set<String> knownGroups) { saveUser(user); }
     boolean deleteUser(String uuid);
     void addUserGroup(String uuid, StoredUserPermissionData.GroupAssignment assignment);
     boolean removeUserGroup(String uuid, String groupName);

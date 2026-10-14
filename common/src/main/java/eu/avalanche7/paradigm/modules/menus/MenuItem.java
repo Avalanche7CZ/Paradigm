@@ -18,6 +18,7 @@ public final class MenuItem {
     public List<String> lore = new ArrayList<>();
     public boolean glint;
     public Integer customModelData;
+    public Integer legacyMetadata;
     public boolean hideTooltip;
 
     public MenuItem copy() {
@@ -27,6 +28,7 @@ public final class MenuItem {
         copy.name = name;
         copy.glint = glint;
         copy.customModelData = customModelData;
+        copy.legacyMetadata = legacyMetadata;
         copy.hideTooltip = hideTooltip;
         copy.lore = lore != null ? new ArrayList<>(lore) : new ArrayList<>();
         return copy;
@@ -40,9 +42,12 @@ public final class MenuItem {
         if (!ITEM_ID.matcher(itemId).matches()) {
             throw new IllegalArgumentException("Invalid item id: " + itemId);
         }
-        if (!itemId.contains(":")) {
+        if (!itemId.contains(":") && !itemId.matches("[0-9]+")) {
             itemId = "minecraft:" + itemId;
         }
+        var requirement = eu.avalanche7.paradigm.platform.ItemRequirement.parse(itemId);
+        if (legacyMetadata != null && (legacyMetadata < 0 || legacyMetadata > 32767)) throw new IllegalArgumentException("Invalid legacyMetadata");
+        if (legacyMetadata != null && requirement.numeric() && itemId.contains(":") && !legacyMetadata.equals(requirement.metadata())) throw new IllegalArgumentException("Conflicting legacy metadata");
         if (amount < 1) {
             amount = 1;
         }

@@ -80,6 +80,7 @@ public class DashboardHttpServer implements AutoCloseable {
     private void write(HttpExchange exchange, DashboardResponse response) throws IOException {
         exchange.getResponseHeaders().set("X-Content-Type-Options", "nosniff");
         exchange.getResponseHeaders().set("Referrer-Policy", "no-referrer");
+        exchange.getResponseHeaders().set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'");
         exchange.getResponseHeaders().set("Content-Type", response.contentType());
         applyCorsHeaders(exchange);
         for (Map.Entry<String, String> header : response.headers().entrySet()) {
@@ -127,7 +128,7 @@ public class DashboardHttpServer implements AutoCloseable {
         }
         exchange.getResponseHeaders().set("Access-Control-Allow-Origin", normalizedOrigin);
         exchange.getResponseHeaders().set("Access-Control-Allow-Credentials", "true");
-        exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type, X-Paradigm-CSRF");
+        exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type, X-Paradigm-CSRF, X-Paradigm-Locale, X-Paradigm-Server");
         exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
         exchange.getResponseHeaders().add("Vary", "Origin");
     }

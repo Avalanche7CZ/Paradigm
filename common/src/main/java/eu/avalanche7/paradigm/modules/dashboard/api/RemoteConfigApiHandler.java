@@ -39,8 +39,8 @@ public class RemoteConfigApiHandler {
 
     public DashboardResponse patch(DashboardRequestContext ctx) throws Exception {
         RemoteConfigPatchRequest request = DashboardJson.fromJson(ctx.bodyReader(), RemoteConfigPatchRequest.class);
-        if (request == null) {
-            return DashboardResponse.apiError(400, "invalid_request", "Request body is required.");
+        if (request == null || request.section == null || request.section.isBlank()) {
+            return DashboardResponse.apiError(400, "invalid_request", "A configuration section is required.");
         }
         if (!authorizedFor(ctx, request.scope, request.serverId, request.section)) {
             return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to edit this server's configuration.");
@@ -80,7 +80,7 @@ public class RemoteConfigApiHandler {
             return DashboardResponse.json(409, new DashboardResponse.ApiEnvelope(false, result,
                     new DashboardResponse.ApiError(code, "The remote config patch was rejected."), result.warnings()));
         }
-        dashboard.audit().dashboard(ctx.principal(), AuditActionType.REMOTE_CONFIG_PATCH, AuditResult.SUCCESS, "Remote config patch applied.", details);
+        dashboard.audit().dashboard(ctx.principal(), AuditActionType.REMOTE_CONFIG_PATCH, AuditResult.SUCCESS, "Remote config patch saved; synchronization acknowledgment pending.", details);
         DashboardMutationFeedback.notifyRemoteConfigPatch(
                 dashboard.services(), ctx.principal(), ctx.header("X-Paradigm-Locale"),
                 before, request, outcome.result().accepted());
@@ -89,8 +89,8 @@ public class RemoteConfigApiHandler {
 
     public DashboardResponse copy(DashboardRequestContext ctx) throws Exception {
         RemoteConfigCopyRequest request = DashboardJson.fromJson(ctx.bodyReader(), RemoteConfigCopyRequest.class);
-        if (request == null) {
-            return DashboardResponse.apiError(400, "invalid_request", "Request body is required.");
+        if (request == null || request.section == null || request.section.isBlank()) {
+            return DashboardResponse.apiError(400, "invalid_request", "A configuration section is required.");
         }
         boolean crossServer = dashboard.requiresNetworkManage("SERVER", request.fromServerId)
                 || dashboard.requiresNetworkManage("SERVER", request.toServerId);
@@ -105,7 +105,7 @@ public class RemoteConfigApiHandler {
         } catch (Exception e) {
             return handleFailure(e);
         }
-        dashboard.audit().dashboard(ctx.principal(), AuditActionType.REMOTE_CONFIG_PATCH, AuditResult.SUCCESS, "Remote config section copied.",
+        dashboard.audit().dashboard(ctx.principal(), AuditActionType.REMOTE_CONFIG_PATCH, operationSucceeded(result) ? AuditResult.SUCCESS : AuditResult.FAILED, "Remote config copy processed.",
                 Map.of("fromServerId", request.fromServerId, "toServerId", request.toServerId, "section", request.section));
         if (operationSucceeded(result)) {
             DashboardMutationFeedback.notify(
@@ -114,13 +114,15 @@ public class RemoteConfigApiHandler {
                     List.of(DashboardMutationFeedback.info(
                             "section:" + safe(request.section) + " · " + safe(request.fromServerId) + " → " + safe(request.toServerId))));
         }
+        if (!operationSucceeded(result)) return DashboardResponse.json(409, new DashboardResponse.ApiEnvelope(false, result,
+                new DashboardResponse.ApiError("stale_revision", "Configuration changed. Reload the section before trying again."), List.of()));
         return DashboardResponse.apiOk(result);
     }
 
     public DashboardResponse adopt(DashboardRequestContext ctx) throws Exception {
         RemoteConfigAdoptRequest request = DashboardJson.fromJson(ctx.bodyReader(), RemoteConfigAdoptRequest.class);
-        if (request == null) {
-            return DashboardResponse.apiError(400, "invalid_request", "Request body is required.");
+        if (request == null || request.section == null || request.section.isBlank()) {
+            return DashboardResponse.apiError(400, "invalid_request", "A configuration section is required.");
         }
         if (!authorizedFor(ctx, request.scope, request.serverId, request.section)) {
             return DashboardResponse.apiError(403, "permission_denied", "You do not have permission to adopt configuration for this server.");
@@ -131,7 +133,7 @@ public class RemoteConfigApiHandler {
         } catch (Exception e) {
             return handleFailure(e);
         }
-        dashboard.audit().dashboard(ctx.principal(), AuditActionType.REMOTE_CONFIG_ADOPT, AuditResult.SUCCESS, "Section adopted for central management.",
+        dashboard.audit().dashboard(ctx.principal(), AuditActionType.REMOTE_CONFIG_ADOPT, operationSucceeded(result) ? AuditResult.SUCCESS : AuditResult.FAILED, "Central management adoption processed.",
                 Map.of("serverId", request.serverId, "scope", request.scope, "section", request.section));
         if (operationSucceeded(result)) {
             DashboardMutationFeedback.notify(
@@ -140,6 +142,8 @@ public class RemoteConfigApiHandler {
                     List.of(DashboardMutationFeedback.info(
                             "section:" + safe(request.section) + " adopted · " + safe(request.scope) + " · " + safe(request.serverId))));
         }
+        if (!operationSucceeded(result)) return DashboardResponse.json(409, new DashboardResponse.ApiEnvelope(false, result,
+                new DashboardResponse.ApiError("stale_revision", "Configuration changed. Reload the section before trying again."), List.of()));
         return DashboardResponse.apiOk(result);
     }
 

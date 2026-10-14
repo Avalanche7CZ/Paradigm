@@ -120,6 +120,7 @@ public class CustomCommand {
         private String type;
         private String value;
         private Integer item_amount;
+        private List<String> items;
         private boolean negate;
 
         private Condition() {}
@@ -132,12 +133,14 @@ public class CustomCommand {
         }
 
         public String getType() {
-            return type != null ? type.toLowerCase() : "";
+            return type != null ? type.trim().toLowerCase(java.util.Locale.ROOT) : "";
         }
 
         public String getValue() {
             return value;
         }
+
+        public List<String> getItems() { return items != null ? items : List.of(); }
 
         public int getItemAmount() {
             return item_amount != null ? item_amount : 1;
@@ -154,6 +157,9 @@ public class CustomCommand {
         private Integer x, y, z;
         private List<String> commands;
         private String menu;
+        private List<String> items;
+        private String group;
+        private List<Action> actions;
         private String key;
         private Integer timeout;
 
@@ -208,7 +214,7 @@ public class CustomCommand {
         }
 
         public String getType() {
-            return type != null ? type.toLowerCase() : "";
+            return type != null ? type.trim().toLowerCase(java.util.Locale.ROOT) : "";
         }
 
         public List<String> getText() {
@@ -230,6 +236,10 @@ public class CustomCommand {
         public List<String> getCommands() {
             return commands;
         }
+
+        public List<String> getItems() { return items != null ? items : List.of(); }
+        public String getGroup() { return group; }
+        public List<Action> getSteps() { return actions != null ? actions : List.of(); }
 
         public String getMenu() {
             return menu;

@@ -63,11 +63,22 @@ public final class MinecraftMenuPlatform implements IMenuPlatform {
     public static boolean validSize(int size) { return size >= 9 && size <= 54 && size % 9 == 0; }
 
     @Override public boolean isItemValid(String itemId) { return registeredItem(itemId) != null; }
+    @Override public boolean isItemValid(String itemId, Integer metadata) {
+        if (metadata != null && (metadata < 0 || metadata > 32767)) return false;
+        try {
+            var parsed = ItemRequirement.parse(itemId);
+            return isItemValid(itemId) && (metadata == null || !parsed.numeric() || !itemId.contains(":") || metadata.equals(parsed.metadata()));
+        } catch (IllegalArgumentException invalid) { return false; }
+    }
 
     private static Map<String, Item> normalizedItems;
 
     static Item registeredItem(String itemId) {
         if (itemId == null || itemId.isBlank()) return null;
+        if (itemId.matches("[0-9]+(:[0-9]+)?")) {
+            try { return MinecraftItemInventory.resolve(ItemRequirement.parse(itemId)); }
+            catch (IllegalArgumentException invalid) { return null; }
+        }
         Object item = Item.itemRegistry.getObject(itemId);
         if (item == null) {
             if (normalizedItems == null) {
@@ -90,7 +101,12 @@ public final class MinecraftMenuPlatform implements IMenuPlatform {
         if (spec == null) return null;
         Item item = registeredItem(spec.itemId());
         if (item == null) item = Items.paper;
-        ItemStack stack = new ItemStack(item, Math.max(1, Math.min(item.getItemStackLimit(), spec.amount())));
+        Integer metadata = spec.legacyMetadata();
+        var parsed = ItemRequirement.parse(spec.itemId());
+        if (metadata == null) metadata = parsed.metadata();
+        if (metadata != null && (metadata < 0 || metadata > 32767)) throw new IllegalArgumentException("Invalid legacy metadata");
+        if (spec.legacyMetadata() != null && parsed.numeric() && spec.itemId().contains(":") && !spec.legacyMetadata().equals(parsed.metadata())) throw new IllegalArgumentException("Conflicting legacy metadata");
+        ItemStack stack = new ItemStack(item, Math.max(1, Math.min(item.getItemStackLimit(), spec.amount())), metadata != null ? metadata : 0);
         NBTTagCompound display = new NBTTagCompound();
         if (spec.name() != null) display.setString("Name", "§r" + text(spec.name()));
         if (spec.lore() != null && !spec.lore().isEmpty()) {

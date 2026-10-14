@@ -248,6 +248,57 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
     }
 
     @Override
+    public boolean changeGlobalGroups(String uuid, List<GroupChange> changes, Runnable effect) {
+        String key = normalize(uuid);
+        if (changes == null || changes.isEmpty()) throw new IllegalArgumentException("At least one group change is required");
+        if ("mysql".equals(sql.dialectName())) {
+            int transactional = sql.query("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('permission_users', 'permission_groups', 'permission_user_groups') AND ENGINE = 'InnoDB'", null, rs -> rs.next() ? rs.getInt(1) : 0);
+            if (transactional != 3) throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException("Group workflows require InnoDB permission tables");
+        }
+        return sql.transaction(() -> {
+            String suffix = "mysql".equals(sql.dialectName()) ? " ON DUPLICATE KEY UPDATE uuid = VALUES(uuid)" : " ON CONFLICT(uuid) DO UPDATE SET uuid = excluded.uuid";
+            sql.update("INSERT INTO permission_users(uuid, name) VALUES(?, '')" + suffix, ps -> ps.setString(1, key));
+            var names = new java.util.TreeSet<String>();
+            for (var change : changes) {
+                if (change.group() == null || change.group().isBlank() || !names.add(change.group()))
+                    throw new IllegalArgumentException("Invalid or repeated group operation");
+            }
+            for (String group : names) {
+                boolean exists = sql.query("SELECT name FROM permission_groups WHERE name = ?" + ("mysql".equals(sql.dialectName()) ? " FOR UPDATE" : ""),
+                        ps -> ps.setString(1, group), java.sql.ResultSet::next);
+                if (!exists) throw new IllegalArgumentException("Unknown permission group: " + group);
+            }
+            var current = getUser(key).orElseThrow();
+            for (var change : changes) {
+                boolean present = current.groups().stream().anyMatch(group -> group.groupName().equals(change.group())
+                        && group.contextSet().isEmpty() && group.expiresAtMs() == null);
+                if (present == change.add()) return false;
+            }
+            for (var change : changes) {
+                if (change.add()) addUserGroup(key, new StoredUserPermissionData.GroupAssignment(change.group(), null, "custom-action", System.currentTimeMillis()));
+                else sql.update("DELETE FROM permission_user_groups WHERE uuid = ? AND group_name = ? AND context_hash = ? AND expires_at_ms IS NULL",
+                        ps -> { ps.setString(1, key); ps.setString(2, change.group()); ps.setString(3, PermissionContextSet.empty().canonical()); });
+            }
+            effect.run();
+            return true;
+        });
+    }
+
+    @Override
+    public void saveUserPreservingUnknownGroups(StoredUserPermissionData user, java.util.Set<String> knownGroups) {
+        sql.transaction(() -> {
+            String suffix = "mysql".equals(sql.dialectName()) ? " ON DUPLICATE KEY UPDATE uuid = VALUES(uuid)" : " ON CONFLICT(uuid) DO UPDATE SET uuid = excluded.uuid";
+            sql.update("INSERT INTO permission_users(uuid, name) VALUES(?, '')" + suffix, ps -> ps.setString(1, normalize(user.uuid())));
+            var groups = new java.util.ArrayList<>(user.groups());
+            var desired = groups.stream().filter(group -> group.contextSet().isEmpty() && group.expiresAtMs() == null).map(StoredUserPermissionData.GroupAssignment::groupName).collect(java.util.stream.Collectors.toSet());
+            for (var existing : getUser(user.uuid()).orElseThrow().groups())
+                if (existing.contextSet().isEmpty() && existing.expiresAtMs() == null && !knownGroups.contains(existing.groupName()) && !desired.contains(existing.groupName()))
+                    groups.add(existing);
+            saveUser(new StoredUserPermissionData(user.uuid(), user.name(), groups, user.permissions()));
+        });
+    }
+
+    @Override
     public boolean deleteUser(String uuid) {
         String normalizedUuid = normalize(uuid);
         return sql.transaction(() -> {

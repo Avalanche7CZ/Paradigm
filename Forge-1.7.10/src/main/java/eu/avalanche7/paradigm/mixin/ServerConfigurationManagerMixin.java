@@ -35,7 +35,7 @@ public abstract class ServerConfigurationManagerMixin {
         handler.kickPlayerFromServer(visuals != null ? visuals.shutdownReason(reason) : reason);
     }
 
-    @Redirect(method = "initializeConnectionToPlayer", at = @At(value = "INVOKE",
+    @Redirect(method = "initializeConnectionToPlayer", require = 0, at = @At(value = "INVOKE",
             target = "Lnet/minecraft/server/management/ServerConfigurationManager;sendChatMsg(Lnet/minecraft/util/IChatComponent;)V"))
     private void paradigm$joinAnnouncement(ServerConfigurationManager manager, IChatComponent message,
             NetworkManager network, EntityPlayerMP player, NetHandlerPlayServer handler) {

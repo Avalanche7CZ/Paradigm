@@ -200,6 +200,8 @@ public final class CustomCommandAdminService {
             String type = string(action, "type").toLowerCase(Locale.ROOT);
             String canonical = ActionDispatcher.isConditional(type) ? "conditional" : actionRegistry.canonicalType(type);
             if (canonical == null) throw new IllegalArgumentException("Unsupported action type: " + type);
+            eu.avalanche7.paradigm.modules.actions.ItemActions.validate(new Gson().fromJson(action, CustomCommand.Action.class));
+            if ("transaction".equals(canonical)) validateActions(array(action, "actions"), depth + 1);
             if ("await_input".equals(canonical)) {
                 requireInputString(action, "key");
                 requireInputNumber(action, "timeout");
@@ -215,7 +217,7 @@ public final class CustomCommandAdminService {
                     throw new IllegalArgumentException("await_input must be the last action in its list; use on_success for subsequent actions.");
                 }
             }
-            if (("message".equals(canonical) || "actionbar".equals(canonical) || "title".equals(canonical) || "sound".equals(canonical))
+            if (("message".equals(canonical) || "broadcast".equals(canonical) || "actionbar".equals(canonical) || "title".equals(canonical) || "sound".equals(canonical))
                     && array(action, "text").isEmpty()) throw new IllegalArgumentException("Action " + type + " requires text.");
             if ("sound".equals(canonical) && stringAt(array(action, "text"), 0).isBlank())
                 throw new IllegalArgumentException("Sound actions require a sound ID.");

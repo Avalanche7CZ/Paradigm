@@ -40,6 +40,8 @@ public class ConfigPatchService {
     private static final int MAX_HOVER_LINE_LENGTH = 256;
     private static final int MAX_HOVER_VARIANTS = 8;
 
+    private static final Object MUTATION_LOCK = new Object();
+
     private final Services services;
     private final ConfigSchemaRegistry registry;
 
@@ -48,7 +50,17 @@ public class ConfigPatchService {
         this.registry = registry;
     }
 
+    public static <T> T serialized(java.util.function.Supplier<T> action) {
+        synchronized (MUTATION_LOCK) {
+            return action.get();
+        }
+    }
+
     public ConfigValidationResult apply(ConfigPatch patch) {
+        return serialized(() -> applyLocked(patch));
+    }
+
+    private ConfigValidationResult applyLocked(ConfigPatch patch) {
         ConfigValidationResult result = new ConfigValidationResult();
         ConfigSnapshot current = registry.snapshot();
         if (patch == null || patch.operations() == null) {

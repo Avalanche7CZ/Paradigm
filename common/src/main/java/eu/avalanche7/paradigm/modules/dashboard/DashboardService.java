@@ -362,47 +362,11 @@ public class DashboardService implements AutoCloseable {
     }
 
     public boolean isManagedLocally(String category) {
-        return services.getManagedConfigSyncService().isManaged(category);
-    }
-
-    public ConfigValidationResult upsertSelfManagedField(String category, String key, Object value) {
         StorageService storage = services.getStorageService();
-        ConfigValidationResult result = new ConfigValidationResult();
-        if (storage == null || !storage.isMysqlActive()) {
-            result.reject(key, "Managed config storage is unavailable.");
-            return result;
-        }
+        if (storage == null || !storage.isMysqlActive()) return false;
         var identity = storage.context().serverIdentity();
-        String networkId = identity != null ? identity.networkId() : "default";
-        String selfServerId = identity != null ? identity.serverId() : "default";
-
-        ConfigField field = schemaRegistry().snapshot().fields().stream()
-                .filter(f -> f.key().equals(key)).findFirst().orElse(null);
-        if (field == null || !field.category().equals(category) || !RemoteConfigEligibility.isRemoteEligible(field)) {
-            result.reject(key, "Field is not centrally manageable.");
-            return result;
-        }
-        Object validated;
-        try {
-            validated = RemoteConfigValidationService.validateFieldValue(field, value);
-        } catch (IllegalArgumentException invalid) {
-            result.reject(key, invalid.getMessage());
-            return result;
-        }
-
-        String fingerprint = schemaRegistry().structuralFingerprint();
-        ManagedConfigEntry current = storage.managedConfig().get(networkId, ServerScope.SERVER, selfServerId, category).orElse(null);
-        Map<String, Object> merged = new LinkedHashMap<>(current != null ? current.data() : Map.of());
-        merged.put(key, validated);
-        long expected = current != null ? current.revision() : 0L;
-        ManagedConfigUpsertResult upsertResult = storage.managedConfig().upsert(networkId, ServerScope.SERVER, selfServerId, category,
-                merged, fingerprint, expected, null, null, selfServerId);
-        if (upsertResult.ok()) {
-            result.accept(key);
-            return result;
-        }
-        result.reject(key, "Managed config changed concurrently; reload and try again.");
-        return result;
+        return storage.managedConfig().get(identity.networkId(), ServerScope.GLOBAL, "", category).isPresent()
+                || storage.managedConfig().get(identity.networkId(), ServerScope.SERVER, identity.serverId(), category).isPresent();
     }
 
     public CompletableFuture<Object> remoteConfigSnapshotAsync(DashboardPrincipal principal, String serverId, String categoriesCsv) {
@@ -421,6 +385,7 @@ public class DashboardService implements AutoCloseable {
 
         ServerInstanceInfo instance = storage.servers().getServerInstance(serverId).orElse(null);
         long now = System.currentTimeMillis();
+        if (instance != null && !networkId.equals(instance.networkId())) throw new SecurityException("Server is outside this network.");
         boolean online = instance != null && instance.lastSeenMs() > 0 && now - instance.lastSeenMs() <= 90_000L;
         long lastSeenMs = instance != null ? instance.lastSeenMs() : 0L;
 
@@ -533,6 +498,7 @@ public class DashboardService implements AutoCloseable {
             throw new IllegalStateException("Remote server management requires shared MySQL storage.");
         }
         if (request == null) throw new IllegalArgumentException("Request body is required.");
+        if (!"NETWORK".equalsIgnoreCase(request.scope) && !"SERVER".equalsIgnoreCase(request.scope)) throw new IllegalArgumentException("Invalid configuration scope.");
         ServerScope scope = "NETWORK".equalsIgnoreCase(request.scope) ? ServerScope.GLOBAL : ServerScope.SERVER;
         String targetServerId = storageId(request.serverId, "serverId");
         String section = storageId(request.section, "section");
@@ -548,6 +514,7 @@ public class DashboardService implements AutoCloseable {
         String fingerprint = hostFingerprint;
         if (scope == ServerScope.SERVER) {
             ServerInstanceInfo instance = storage.servers().getServerInstance(targetServerId).orElse(null);
+            if (instance != null && !networkId.equals(instance.networkId())) throw new SecurityException("Server is outside this network.");
             String targetFingerprint = instance != null ? instance.schemaFingerprint() : null;
             if (targetFingerprint == null || targetFingerprint.isBlank() || !targetFingerprint.equals(hostFingerprint)) {
                 ConfigValidationResult result = new ConfigValidationResult();
@@ -624,11 +591,15 @@ public class DashboardService implements AutoCloseable {
         if (source == null) {
             throw new IllegalArgumentException("Source server has no SERVER-scope override for this section.");
         }
+        if (request.expectedSourceRevision == null || source.revision() != request.expectedSourceRevision) return Map.of("ok", false, "reason", "stale_source_revision");
         ManagedConfigEntry target = storage.managedConfig().get(networkId, ServerScope.SERVER, toServerId, section).orElse(null);
-        long expected = target != null ? target.revision() : 0L;
+        if (request.expectedRevision == null || request.expectedRevision < 0L) throw new IllegalArgumentException("The reviewed destination revision is required.");
+        long expected = request.expectedRevision;
+        if (expected != (target != null ? target.revision() : 0L)) return Map.of("ok", false, "reason", "stale_revision");
 
         ServerInstanceInfo targetInstance = storage.servers().getServerInstance(toServerId).orElse(null);
         String hostFingerprint = schemaRegistry().structuralFingerprint();
+        if (targetInstance != null && !networkId.equals(targetInstance.networkId())) throw new SecurityException("Server is outside this network.");
         String targetFingerprint = targetInstance != null ? targetInstance.schemaFingerprint() : null;
         if (targetFingerprint == null || targetFingerprint.isBlank() || !targetFingerprint.equals(hostFingerprint)) {
             throw new SchemaIncompatibleException("Target server schema is unknown or incompatible.");
@@ -670,6 +641,7 @@ public class DashboardService implements AutoCloseable {
         if (!RemoteConfigEligibility.isManagedCategory(section)) {
             throw new IllegalArgumentException("Section cannot be centrally managed.");
         }
+        if (!"NETWORK".equalsIgnoreCase(request.scope) && !"SERVER".equalsIgnoreCase(request.scope)) throw new IllegalArgumentException("Invalid configuration scope.");
         ServerScope scope = "NETWORK".equalsIgnoreCase(request.scope) ? ServerScope.GLOBAL : ServerScope.SERVER;
         var identity = storage.context().serverIdentity();
         String networkId = identity != null ? identity.networkId() : "default";
@@ -696,6 +668,9 @@ public class DashboardService implements AutoCloseable {
             return Map.of("ok", result.ok(), "revision", result.revision(), "reason", result.conflictReason() != null ? result.conflictReason() : "");
         }
 
+        ServerInstanceInfo target = storage.servers().getServerInstance(targetServerId).orElse(null);
+        if (target == null || !networkId.equals(target.networkId())) throw new IllegalArgumentException("Target server is unknown in this network.");
+        if (!fingerprint.equals(target.schemaFingerprint())) throw new SchemaIncompatibleException("Target server schema is incompatible.");
         storage.managedConfig().createAdoptionRequest(networkId, targetServerId, section,
                 actor != null ? actor.uuid() : null, actor != null ? actor.name() : null);
         return Map.of("ok", true, "pending", true);
@@ -1035,6 +1010,10 @@ public class DashboardService implements AutoCloseable {
         assignment.put("contexts", node.contextSet().asMap());
         assignment.put("expiresAtMs", node.expiresAtMs());
         return assignment;
+    }
+
+    public Map<String, Boolean> moderationCapabilities(DashboardPrincipal principal) {
+        return moderationService.capabilities(principal);
     }
 
     public CompletableFuture<Object> moderationRecentAsync() {

@@ -416,15 +416,129 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
                 (ICommandSender) source.getOriginalSource(), stripSlash(command));
     }
 
+
+
+
     @Override
     public void executeCommandAsConsole(String command) {
-        if (server == null)
+        if (server == null) {
             throw new IllegalStateException("Server has not started");
-        server.getCommandManager().executeCommand(server, stripSlash(command));
+        }
+
+        if (command == null || command.isBlank()) {
+            return;
+        }
+
+        String line = stripSlash(command.trim());
+        if (executeNativeNumericGive(line)) {
+            return;
+        }
+        if (dispatchBukkitConsole(line)) {
+            return;
+        }
+
+        server.getCommandManager().executeCommand(server, line);
     }
+
+    private boolean executeNativeNumericGive(String line) {
+        String[] args = line.split("\\s+");
+        if (args.length != 5 || !args[0].equalsIgnoreCase("give")) {
+            return false;
+        }
+
+        final int id;
+        final int amount;
+        final int metadata;
+
+        try {
+            id = Integer.parseInt(args[2]);
+            amount = Integer.parseInt(args[3]);
+            metadata = Integer.parseInt(args[4]);
+        } catch (NumberFormatException exception) {
+            return false;
+        }
+
+        if (amount < 1 || amount > 4096) {
+            throw new IllegalArgumentException(
+                    "Invalid give amount: " + amount);
+        }
+
+        if (metadata < 0 || metadata > 32767) {
+            throw new IllegalArgumentException(
+                    "Invalid item metadata: " + metadata);
+        }
+
+        EntityPlayerMP target =
+                server.getConfigurationManager().func_152612_a(args[1]);
+
+        if (target == null) {
+            throw new IllegalArgumentException(
+                    "Player not found: " + args[1]);
+        }
+
+        Item item = Item.getItemById(id);
+
+        if (item == null) {
+            throw new IllegalArgumentException(
+                    "Unknown Minecraft item ID: " + id);
+        }
+
+        ItemStack sample = new ItemStack(item, 1, metadata);
+        int maxStackSize = Math.max(1, sample.getMaxStackSize());
+
+        int remaining = amount;
+
+        while (remaining > 0) {
+            int count = Math.min(remaining, maxStackSize);
+            ItemStack stack = new ItemStack(item, count, metadata);
+
+            target.inventory.addItemStackToInventory(stack);
+            if (stack.stackSize > 0) {
+                target.entityDropItem(stack, 0.5F);
+            }
+
+            remaining -= count;
+        }
+
+        target.inventoryContainer.detectAndSendChanges();
+
+        LOGGER.info(
+                "Native give: {}x {}:{} -> {}",
+                amount, id, metadata, target.getCommandSenderName()
+        );
+
+        return true;
+    }
+
+
+
+    private static boolean dispatchBukkitConsole(String line) {
+        final java.lang.reflect.Method consoleMethod;
+        final java.lang.reflect.Method dispatchMethod;
+        try {
+            Class<?> bukkit = Class.forName("org.bukkit.Bukkit");
+            Class<?> senderType = Class.forName("org.bukkit.command.CommandSender");
+            consoleMethod = bukkit.getMethod("getConsoleSender");
+            dispatchMethod = bukkit.getMethod("dispatchCommand", senderType, String.class);
+        } catch (ClassNotFoundException | NoSuchMethodException unavailable) {
+            return false;
+        }
+        try {
+            Object console = consoleMethod.invoke(null);
+            return Boolean.TRUE.equals(dispatchMethod.invoke(null, console, line));
+        } catch (java.lang.reflect.InvocationTargetException failure) {
+            throw new IllegalStateException("Bukkit console command failed", failure.getCause());
+        } catch (ReflectiveOperationException | LinkageError failure) {
+            throw new IllegalStateException("Bukkit console command dispatch failed", failure);
+        }
+    }
+
     private static String stripSlash(String command) {
-        return command.startsWith("/") ? command.substring(1) : command;
+        return command.startsWith("/")
+                ? command.substring(1)
+                : command;
     }
+
 
     @Override
     public TaskScheduler getTaskScheduler() {
@@ -965,18 +1079,21 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
         invulnerablePlayerIds.remove(player.getUniqueID());
     }
 
+    @Override public boolean supportsItemConsumption() { return true; }
+
+    @Override public InventoryConsumption prepareItemConsumption(IPlayer player, List<ItemRequirement> items) {
+        if (!isServerThread()) throw new IllegalStateException("Inventory operations require the server thread");
+        var live = player != null ? getPlayerByUuid(player.getUUID()) : null;
+        if (live == null || live.getOriginalPlayer() != player.getOriginalPlayer()) throw new IllegalStateException("Player session is unavailable");
+        if (!(player.getOriginalPlayer() instanceof EntityPlayerMP handle)) throw new IllegalStateException("Native player is unavailable");
+        return MinecraftItemInventory.prepare(handle, items).guarded(() -> isServerThread() && getPlayerByUuid(player.getUUID()) != null
+                && getPlayerByUuid(player.getUUID()).getOriginalPlayer() == player.getOriginalPlayer());
+    }
+
     @Override
     public boolean playerHasItem(IPlayer player, String itemId, int amount) {
-        if (player == null || !(player.getOriginalPlayer() instanceof EntityPlayerMP handle)) return false;
-        if (handle == null || handle.inventory == null || itemId == null || itemId.isBlank()) return false;
-        Item item = (Item) Item.itemRegistry.getObject(itemId);
-        if (item == null) return false;
-        long count = 0;
-        for (ItemStack stack : handle.inventory.mainInventory) {
-            if (stack != null && stack.getItem() == item) count += Math.max(0, stack.stackSize);
-            if (count >= amount) return true;
-        }
-        return count >= amount;
+        try { if (player == null || !(player.getOriginalPlayer() instanceof EntityPlayerMP handle)) return false; MinecraftItemInventory.prepare(handle, List.of(ItemRequirement.parse(itemId, amount))); return true; }
+        catch (IllegalArgumentException | IllegalStateException | UnsupportedOperationException invalid) { return false; }
     }
 
     @Override
@@ -1343,40 +1460,33 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
         }
     };
 
-    private static WorldServer resolve(MinecraftServer server, String worldId) {
-        if (server == null || server.worldServers == null || worldId == null || worldId.isBlank()) {
-            return null;
-        }
-        boolean dimensionFolder = worldId.matches("DIM-?[0-9]+");
-        final int id;
-        try {
-            id = Integer.parseInt(dimensionFolder ? worldId.substring(3) : worldId);
-        } catch (NumberFormatException invalid) {
-            if (dimensionFolder || worldId.matches("[+-]?[0-9]+")) {
-                return null;
-            }
-            WorldServer match = null;
-            for (WorldServer world : server.worldServers) {
-                if (world == null || world.provider == null) continue;
-                if (worldId.equals(world.provider.getSaveFolder())
-                        || (world.getWorldInfo() != null && worldId.equals(world.getWorldInfo().getWorldName()))) {
-                    if (match != null && match != world) return null;
-                    match = world;
-                }
-            }
-            return match;
-        }
-        boolean overworldLoaded = false;
+    public static List<NativeWorldCatalog.World> inspectLoadedWorlds(MinecraftServer server) {
+        List<NativeWorldCatalog.World> result = new java.util.ArrayList<>();
+        java.util.Set<WorldServer> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        if (server == null || server.worldServers == null) return List.of();
         for (WorldServer world : server.worldServers) {
-            if (world == null || world.provider == null) continue;
-            if (world.provider.dimensionId == id) return world;
-            if (world.provider.dimensionId == 0) overworldLoaded = true;
+            if (world == null || world.provider == null || !seen.add(world)) continue;
+            result.add(new NativeWorldCatalog.World(world.provider.dimensionId,
+                    world.getWorldInfo() != null ? world.getWorldInfo().getWorldName() : null,
+                    world.provider.getSaveFolder(), world.getHeight()));
         }
-        if (!DimensionManager.isDimensionRegistered(id) || !overworldLoaded) {
+        return List.copyOf(result);
+    }
+
+    private static WorldServer resolve(MinecraftServer server, String worldId) {
+        if (server == null || server.worldServers == null) return null;
+        var resolution = NativeWorldCatalog.resolve(worldId, inspectLoadedWorlds(server));
+        if (resolution.status() == NativeWorldCatalog.Status.RESOLVED) {
+            for (WorldServer world : server.worldServers) {
+                if (world != null && world.provider != null && world.provider.dimensionId == resolution.dimensionId()) return world;
+            }
             return null;
         }
-        WorldServer world = server.worldServerForDimension(id);
-        return world != null && world.provider != null && world.provider.dimensionId == id ? world : null;
+        if (resolution.status() != NativeWorldCatalog.Status.UNLOADED_DIMENSION
+                || !DimensionManager.isDimensionRegistered(resolution.dimensionId())
+                || NativeWorldCatalog.resolve("0", inspectLoadedWorlds(server)).status() != NativeWorldCatalog.Status.RESOLVED) return null;
+        WorldServer world = server.worldServerForDimension(resolution.dimensionId());
+        return world != null && world.provider != null && world.provider.dimensionId == resolution.dimensionId() ? world : null;
     }
 
     private static boolean teleport(MinecraftServer server, EntityPlayerMP player,

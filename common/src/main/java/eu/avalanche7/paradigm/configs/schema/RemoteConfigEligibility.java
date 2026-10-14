@@ -9,7 +9,7 @@ public final class RemoteConfigEligibility {
     }
 
     public static boolean isRemoteEligible(ConfigField field) {
-        return field != null && field.editable() && !EXCLUDED_CATEGORIES.contains(field.category());
+        return field != null && field.editable() && (field.value() == null || !field.value().secret()) && !field.masked() && field.type() != ConfigFieldType.SECRET_MASKED && !EXCLUDED_CATEGORIES.contains(field.category());
     }
 
     public static boolean isManagedCategory(String category) {

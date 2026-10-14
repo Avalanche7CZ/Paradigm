@@ -41,7 +41,7 @@ public abstract class NetHandlerPlayServerMixin {
         LegacyClientCapabilities.viewDistance(playerEntity.playerNetServerHandler.netManager, packet.func_149521_d());
     }
 
-    @Redirect(method = "onDisconnect", at = @At(value = "INVOKE",
+    @Redirect(method = "onDisconnect", require = 0, at = @At(value = "INVOKE",
             target = "Lnet/minecraft/server/management/ServerConfigurationManager;sendChatMsg(Lnet/minecraft/util/IChatComponent;)V"))
     private void paradigm$leaveAnnouncement(ServerConfigurationManager manager, IChatComponent message) {
         MinecraftEventSystem.captureLeave(manager, playerEntity, message);

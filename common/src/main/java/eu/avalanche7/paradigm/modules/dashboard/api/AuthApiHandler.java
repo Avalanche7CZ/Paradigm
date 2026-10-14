@@ -31,6 +31,12 @@ public class AuthApiHandler {
         data.put("running", dashboard.running());
         data.put("principal", ctx.principal());
         data.put("csrfToken", ctx.session() != null ? ctx.session().csrfToken() : null);
+        if (ctx.principal() != null) {
+            var storage = dashboard.services().getStorageService();
+            data.put("serverId", storage.context().serverIdentity().serverId());
+            data.put("serverName", storage.context().serverIdentity().serverName());
+            data.put("networkActive", storage.isMysqlActive());
+        }
         data.put("capabilities", ctx.principal() != null ? dashboard.capabilities(ctx.principal()) : null);
         return DashboardResponse.apiOk(data);
     }

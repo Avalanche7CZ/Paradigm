@@ -18,10 +18,24 @@ public final class BuiltinConditions {
                         && services.getPermissionsHandler().hasPermission(context.player(), condition.getValue()),
                 "permission");
 
-        registry.register("has_item", true, (condition, context) ->
-                condition.getValue() != null
-                        && services.getPlatformAdapter().playerHasItem(
-                                context.player(), condition.getValue(), condition.getItemAmount()));
+        registry.register("has_item", true, (condition, context) -> {
+            var item = eu.avalanche7.paradigm.platform.ItemRequirement.parse(condition.getValue(), condition.getItemAmount());
+            if (!services.getPlatformAdapter().supportsItemConsumption()) {
+                if (item.numeric() || item.metadata() != null) throw new UnsupportedOperationException("Legacy item specifications are unavailable");
+                return services.getPlatformAdapter().playerHasItem(context.player(), item.itemId(), item.amount());
+            }
+            try { java.util.Objects.requireNonNull(services.getPlatformAdapter().prepareItemConsumption(context.player(), java.util.List.of(item)), "Inventory checks are unavailable"); return true; }
+            catch (eu.avalanche7.paradigm.platform.SlotInventory.MissingItemsException missing) {
+                return !item.numeric() && item.metadata() == null
+                        && services.getPlatformAdapter().playerHasItem(context.player(), item.itemId(), item.amount());
+            }
+
+        });
+
+        registry.register("has_items", true, (condition, context) -> {
+            try { java.util.Objects.requireNonNull(services.getPlatformAdapter().prepareItemConsumption(context.player(), ItemActions.requirements(condition.getItems())), "Inventory checks are unavailable"); return true; }
+            catch (eu.avalanche7.paradigm.platform.SlotInventory.MissingItemsException missing) { return false; }
+        });
 
         registry.register("health_above", true, (condition, context) -> {
             Double health = context.player().getHealth();

@@ -4,4 +4,6 @@ public final class RemoteConfigCopyRequest {
     public String fromServerId = "";
     public String toServerId = "";
     public String section = "";
+    public Long expectedRevision;
+    public Long expectedSourceRevision;
 }

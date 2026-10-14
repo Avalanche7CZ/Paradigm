@@ -8,6 +8,8 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 
 import eu.avalanche7.paradigm.storage.StorageException;
+import eu.avalanche7.paradigm.storage.StorageTransactionException;
+import eu.avalanche7.paradigm.storage.StorageTransactionException.Outcome;
 
 public class SqlExecutor {
     private final SqlConnectionProvider connections;
@@ -44,24 +46,34 @@ public class SqlExecutor {
             return work.get();
         }
         return withOperationLock(() -> {
+            boolean committed = false;
             try (Connection connection = connections.getConnection()) {
                 connection.setAutoCommit(false);
                 transactionConnection.set(connection);
                 try {
-                    T result = work.get();
-                    connection.commit();
+                    T result;
+                    try {
+                        result = work.get();
+                    } catch (RuntimeException | Error failure) {
+                        if (!rollback(connection, failure))
+                            throw new StorageTransactionException("SQL rollback could not be confirmed", failure, Outcome.UNKNOWN);
+                        throw failure;
+                    }
+                    try {
+                        connection.commit();
+                    } catch (SQLException | RuntimeException failure) {
+                        rollback(connection, failure);
+                        throw new StorageTransactionException("SQL commit outcome is unknown", failure, Outcome.UNKNOWN);
+                    }
+                    committed = true;
                     return result;
-                } catch (SQLException failure) {
-                    rollback(connection, failure);
-                    throw new StorageException("SQL transaction failed: " + failure.getMessage(), failure);
-                } catch (RuntimeException | Error failure) {
-                    rollback(connection, failure);
-                    throw failure;
                 } finally {
                     transactionConnection.remove();
                 }
-            } catch (SQLException failure) {
-                throw new StorageException("SQL transaction failed: " + failure.getMessage(), failure);
+            } catch (SQLException | RuntimeException failure) {
+                if (committed) throw new StorageTransactionException("SQL committed, but connection cleanup failed", failure, Outcome.COMMITTED);
+                if (failure instanceof RuntimeException runtime) throw runtime;
+                throw new StorageException("SQL transaction could not start: " + failure.getMessage(), failure);
             }
         });
     }
@@ -122,11 +134,13 @@ public class SqlExecutor {
         }
     }
 
-    private static void rollback(Connection connection, Throwable failure) {
+    private static boolean rollback(Connection connection, Throwable failure) {
         try {
             connection.rollback();
-        } catch (SQLException rollbackFailure) {
+            return true;
+        } catch (SQLException | RuntimeException rollbackFailure) {
             failure.addSuppressed(rollbackFailure);
+            return false;
         }
     }
 

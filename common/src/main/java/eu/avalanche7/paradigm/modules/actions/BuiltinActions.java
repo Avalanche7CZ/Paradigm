@@ -14,6 +14,13 @@ public final class BuiltinActions {
     }
 
     public static void register(ActionRegistry registry, Services services) {
+        for (String type : List.of("check_items", "consume_items", "add_group", "remove_group", "transaction"))
+            registry.registerWorkflow(type);
+        registry.register("broadcast", (action, context) -> {
+            if (action.getText() == null || action.getText().isEmpty()) throw new IllegalArgumentException("Broadcast requires text");
+            for (String line : action.getText()) services.getPlatformAdapter().broadcastSystemMessage(
+                    services.getMessageParser().parseMessage(context.expand(line), context.player()));
+        });
         registry.register("await_input", (action, context) ->
                 services.getPlayerInputService().start(action, context));
         registry.register("message", (action, context) -> {

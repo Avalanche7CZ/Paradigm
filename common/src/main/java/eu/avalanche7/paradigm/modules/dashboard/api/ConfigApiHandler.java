@@ -31,6 +31,10 @@ public class ConfigApiHandler {
         this.dashboard = dashboard;
     }
 
+    public DashboardResponse formatting(DashboardRequestContext ctx) {
+        return DashboardResponse.apiOk(Map.of("tokens", dashboard.services().getMessageParser().availablePlaceholderTokens()));
+    }
+
     public DashboardResponse snapshot(DashboardRequestContext ctx) {
         ConfigSnapshot full = dashboard.schemaRegistry().snapshot();
         DashboardPrincipal principal = ctx.principal();
@@ -48,6 +52,10 @@ public class ConfigApiHandler {
     }
 
     public DashboardResponse patch(DashboardRequestContext ctx) {
+        return eu.avalanche7.paradigm.configs.schema.ConfigPatchService.serialized(() -> patchLocked(ctx));
+    }
+
+    private DashboardResponse patchLocked(DashboardRequestContext ctx) {
         ConfigPatch patch = eu.avalanche7.paradigm.modules.dashboard.DashboardJson.fromJson(ctx.bodyReader(), ConfigPatch.class);
         if (patch == null || patch.operations() == null) {
             ConfigValidationResult empty = new ConfigValidationResult();
@@ -56,6 +64,7 @@ public class ConfigApiHandler {
                     new DashboardResponse.ApiError("validation_failed", "One or more config fields were rejected."), empty.warnings()));
         }
 
+        if (patch.revision() == null || patch.revision().isBlank()) return DashboardResponse.apiError(400, "revision_required", "The reviewed configuration revision is required.");
         ConfigSnapshot current = dashboard.schemaRegistry().snapshot();
         if (patch.revision() != null && !patch.revision().isBlank()
                 && !patch.revision().equals(current.revision())) {
@@ -104,15 +113,8 @@ public class ConfigApiHandler {
         if (!unmanagedOps.isEmpty()) {
             mergeInto(result, dashboard.patchService().apply(new ConfigPatch(patch.revision(), unmanagedOps)));
         }
-        boolean managedAccepted = false;
         for (ConfigPatchOperation op : managedOps) {
-            ConfigField field = fieldsByKey.get(op.key());
-            ConfigValidationResult fieldResult = dashboard.upsertSelfManagedField(field.category(), op.key(), op.value());
-            mergeInto(result, fieldResult);
-            managedAccepted = managedAccepted || fieldResult.ok();
-        }
-        if (managedAccepted) {
-            dashboard.services().getManagedConfigSyncService().triggerImmediateSync();
+            result.reject(op.key(), "This section is centrally managed. Use the server override editor with its reviewed shared revision.");
         }
         ConfigSnapshot updated = dashboard.schemaRegistry().snapshot();
         result.newRevision(updated.revision());

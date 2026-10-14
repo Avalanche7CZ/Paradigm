@@ -18,6 +18,13 @@ public class PlayerApiHandler {
     private record OnlinePlayer(String uuid, String name, boolean afk, long playtimeMs) {
     }
 
+    private record OnlineDirectory(List<OnlinePlayer> players, boolean available) {
+    }
+
+    private static final class DirectoryStorageFailure extends RuntimeException {
+        DirectoryStorageFailure(RuntimeException cause) { super(cause); }
+    }
+
     private final DashboardService dashboard;
 
     public PlayerApiHandler(DashboardService dashboard) {
@@ -31,23 +38,30 @@ public class PlayerApiHandler {
         int page = positiveInt(query.get("page"), 1);
         int pageSize = Math.max(10, Math.min(positiveInt(query.get("pageSize"), 50), 100));
 
-        CompletableFuture<List<OnlinePlayer>> onlineFuture = ServerThreadCalls.supply(dashboard.services(), this::captureOnlinePlayers)
-                .exceptionally(failure -> List.of());
+        CompletableFuture<OnlineDirectory> onlineFuture = ServerThreadCalls.supply(dashboard.services(), this::captureOnlinePlayers)
+                .handle((online, failure) -> new OnlineDirectory(online != null ? online : List.of(), failure == null));
 
-        Object data = onlineFuture.thenApplyAsync(online -> buildDirectory(filter, page, pageSize, online), dashboard.executor()).get();
-        return DashboardResponse.apiOk(data);
+        try {
+            Object data = onlineFuture.thenApplyAsync(online -> buildDirectory(filter, page, pageSize, online.players(), online.available(), query.get("serverId"), query.get("status")), dashboard.executor()).get();
+            return DashboardResponse.apiOk(data);
+        } catch (java.util.concurrent.ExecutionException failure) {
+            if (failure.getCause() instanceof DirectoryStorageFailure) return DashboardResponse.apiError(503, "storage_unavailable", "Player directory storage is unavailable.");
+            throw failure;
+        }
     }
 
-    private Object buildDirectory(String filter, int page, int pageSize, List<OnlinePlayer> onlinePlayers) {
+    private Object buildDirectory(String filter, int page, int pageSize, List<OnlinePlayer> onlinePlayers, boolean onlineAvailable, String requestedServerId, String requestedStatus) {
         Map<String, Map<String, Object>> discovered = new LinkedHashMap<>();
+        List<String> warnings = new ArrayList<>();
+        if (!onlineAvailable) warnings.add("Live player presence is unavailable.");
 
         try {
             for (var profile : dashboard.services().getStorageService().players().listProfiles()) {
                 merge(discovered, profile.uuid(), profile.name(), profile.lastSeenMs(), false)
                         .merge("playtimeMs", profile.playtimeMs(), PlayerApiHandler::maxPlaytime);
             }
-        } catch (Throwable ignored) {
-
+        } catch (RuntimeException failure) {
+            throw new DirectoryStorageFailure(failure);
         }
 
         try {
@@ -57,8 +71,8 @@ public class PlayerApiHandler {
                             .merge("playtimeMs", profile.getPlaytimeMs(), PlayerApiHandler::maxPlaytime);
                 }
             }
-        } catch (Throwable ignored) {
-
+        } catch (RuntimeException failure) {
+            warnings.add("The local profile cache is unavailable.");
         }
 
         long now = System.currentTimeMillis();
@@ -68,6 +82,8 @@ public class PlayerApiHandler {
             row.merge("playtimeMs", online.playtimeMs(), PlayerApiHandler::maxPlaytime);
         }
 
+        String hostId = dashboard.services().getStorageService().context().serverIdentity().serverId();
+        boolean localPresence = onlineAvailable && (safe(requestedServerId).isBlank() || hostId.equals(requestedServerId));
         int knownTotal = discovered.size();
         List<Map<String, Object>> rows = new ArrayList<>();
         for (Map<String, Object> row : discovered.values()) {
@@ -78,6 +94,13 @@ public class PlayerApiHandler {
                     && !name.toLowerCase(Locale.ROOT).contains(filter)) {
                 continue;
             }
+            row.put("presenceServerId", hostId);
+            if (!localPresence) {
+                row.put("online", null);
+                row.put("afk", null);
+            }
+            if ("online".equals(requestedStatus) && !Boolean.TRUE.equals(row.get("online"))) continue;
+            if ("offline".equals(requestedStatus) && !Boolean.FALSE.equals(row.get("online"))) continue;
             rows.add(row);
         }
 
@@ -94,6 +117,10 @@ public class PlayerApiHandler {
                 "total", knownTotal,
                 "matchTotal", rows.size(),
                 "knownTotal", knownTotal,
+                "presenceServerId", hostId,
+                "remotePresenceAvailable", false,
+                "presenceAvailable", localPresence,
+                "warnings", List.copyOf(warnings),
                 "page", current,
                 "pageSize", pageSize
         );

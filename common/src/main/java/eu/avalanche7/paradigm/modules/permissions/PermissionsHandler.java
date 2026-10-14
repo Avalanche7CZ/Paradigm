@@ -844,6 +844,13 @@ public class PermissionsHandler {
         return changed;
     }
 
+    public boolean changeGlobalGroups(UUID uuid, java.util.List<eu.avalanche7.paradigm.storage.repository.PermissionRepository.GroupChange> changes, Runnable effect) {
+        if (!isInternalPermissionsEnabled()) throw new IllegalStateException("Internal permissions are disabled");
+        boolean changed = internalPermissionApi.changeGlobalGroups(uuid, changes, effect);
+        if (changed) refreshPlayerCommandTree(uuid);
+        return changed;
+    }
+
     public boolean assignPlayerGroupTemp(UUID playerUuid, String groupName, long expiresAtMs, String assignedBy) {
         if (!isInternalPermissionsEnabled()) return false;
         boolean changed = internalPermissionApi.assignGroup(playerUuid, groupName, expiresAtMs, assignedBy);

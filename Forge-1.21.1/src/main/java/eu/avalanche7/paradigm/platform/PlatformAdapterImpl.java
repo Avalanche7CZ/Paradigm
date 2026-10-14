@@ -1143,32 +1143,24 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         if (server != null && player instanceof MinecraftPlayer mp) server.getCommands().sendCommands(mp.getHandle());
     }
 
+    @Override public boolean isServerThread() { return server != null && server.isSameThread(); }
+
+    @Override public boolean supportsItemConsumption() { return true; }
+
+    @Override public InventoryConsumption prepareItemConsumption(IPlayer player, List<ItemRequirement> items) {
+        if (!isServerThread()) throw new IllegalStateException("Inventory operations require the server thread");
+        var live = player != null ? getPlayerByUuid(player.getUUID()) : null;
+        if (live == null || live.getOriginalPlayer() != player.getOriginalPlayer()) throw new IllegalStateException("Player session is unavailable");
+        if (!(player instanceof MinecraftPlayer mp)) throw new IllegalStateException("Native player is unavailable");
+        var handle = mp.getHandle();
+        return MinecraftItemInventory.prepare(handle, items).guarded(() -> isServerThread() && getPlayerByUuid(player.getUUID()) != null
+                && getPlayerByUuid(player.getUUID()).getOriginalPlayer() == player.getOriginalPlayer());
+    }
+
     @Override
     public boolean playerHasItem(IPlayer player, String itemId, int amount) {
-        if (!(player instanceof MinecraftPlayer mp)) return false;
-        if (itemId == null) return false;
-
-        ServerPlayer sp = mp.getHandle();
-        if (sp == null) return false;
-
-        try {
-            Item item = ForgeRegistries.ITEMS.getValue(ResourceLocation.parse(itemId));
-            if (item == null || item == Items.AIR) {
-                debugLogger.debugLog("PlatformAdapter: Could not find item with ID: " + itemId);
-                return false;
-            }
-            int count = 0;
-            for (ItemStack stack : sp.getInventory().items) {
-                if (stack != null && stack.is(item)) {
-                    count += stack.getCount();
-                    if (count >= amount) return true;
-                }
-            }
-            return count >= amount;
-        } catch (Exception e) {
-            debugLogger.debugLog("PlatformAdapter: Failed playerHasItem for " + itemId, e);
-            return false;
-        }
+        try { if (!(player instanceof MinecraftPlayer mp)) return false; var handle = mp.getHandle(); MinecraftItemInventory.prepare(handle, List.of(ItemRequirement.parse(itemId, amount))); return true; }
+        catch (IllegalArgumentException | IllegalStateException | UnsupportedOperationException invalid) { return false; }
     }
 
     @Override

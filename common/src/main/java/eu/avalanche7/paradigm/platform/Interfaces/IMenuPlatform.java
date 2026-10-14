@@ -29,7 +29,11 @@ public interface IMenuPlatform {
             List<IComponent> lore,
             boolean glint,
             @Nullable Integer customModelData,
-            boolean hideTooltip) {
+            boolean hideTooltip,
+            @Nullable Integer legacyMetadata) {
+        public ItemSpec(String itemId, int amount, IComponent name, List<IComponent> lore, boolean glint, Integer customModelData, boolean hideTooltip) {
+            this(itemId, amount, name, lore, glint, customModelData, hideTooltip, null);
+        }
     }
 
     interface Handle {
@@ -54,6 +58,9 @@ public interface IMenuPlatform {
     Handle open(IPlayer player, IComponent title, int size, Map<Integer, ItemSpec> items, ClickListener listener);
 
     boolean isItemValid(String itemId);
+    default boolean isItemValid(String itemId, Integer legacyMetadata) {
+        return legacyMetadata == null && isItemValid(itemId);
+    }
 
     void closeAll();
 

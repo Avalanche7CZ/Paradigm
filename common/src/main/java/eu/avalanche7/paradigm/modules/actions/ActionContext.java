@@ -31,6 +31,7 @@ public final class ActionContext {
     private final Set<String> literalKeys;
     private final String origin;
     private final Predicate<IPlayer> authorization;
+    private final java.util.concurrent.atomic.AtomicLong failures;
 
     private ActionContext(Builder builder) {
         this.services = builder.services;
@@ -42,6 +43,7 @@ public final class ActionContext {
         this.literalKeys = Collections.unmodifiableSet(new LinkedHashSet<>(builder.literalKeys));
         this.origin = builder.origin != null ? builder.origin : "unknown";
         this.authorization = builder.authorization;
+        this.failures = builder.failures;
     }
 
     public static Builder builder(Services services) {
@@ -101,8 +103,10 @@ public final class ActionContext {
     }
 
     public void replyFailure(String rawMessage) {
+        failures.incrementAndGet();
         reply(rawMessage, true);
     }
+    long failureCount() { return failures.get(); }
 
     private void reply(String rawMessage, boolean failure) {
         if (services == null || services.getPlatformAdapter() == null || services.getMessageParser() == null) {
@@ -130,6 +134,7 @@ public final class ActionContext {
                 .authorization(authorization);
         builder.values.putAll(values);
         builder.literalKeys.addAll(literalKeys);
+        builder.failures = failures;
         return builder;
     }
 
@@ -172,6 +177,7 @@ public final class ActionContext {
     }
 
     public static final class Builder {
+        private java.util.concurrent.atomic.AtomicLong failures = new java.util.concurrent.atomic.AtomicLong();
         private Predicate<IPlayer> authorization = player -> true;
         private final Services services;
         private final Map<String, String> values = new LinkedHashMap<>();

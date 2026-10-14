@@ -119,6 +119,17 @@ public class ModerationService {
         );
     }
 
+    public Map<String, Boolean> capabilities(DashboardPrincipal actor) {
+        Map<String, Boolean> actions = new java.util.LinkedHashMap<>();
+        for (ModerationActionType type : ModerationActionType.values()) {
+            boolean allowed = type == ModerationActionType.REVOKE
+                    ? java.util.Arrays.stream(PunishmentType.values()).anyMatch(punishment -> canRevoke(actor, punishment))
+                    : canApply(actor, type);
+            actions.put(type.name().toLowerCase(java.util.Locale.ROOT), allowed);
+        }
+        return actions;
+    }
+
     private boolean hasPermission(DashboardPrincipal actor, PermissionDefinition permission) {
         return actor != null && (actor.console() || services.getPermissionsHandler()
                 .hasPermission(actor.uuid(), permission.node(), permission.fallbackLevel()));

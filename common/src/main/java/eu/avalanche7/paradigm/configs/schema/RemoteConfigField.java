@@ -33,10 +33,10 @@ public record RemoteConfigField(
 ) {
     public static RemoteConfigField of(ConfigField field, Object effectiveValue, boolean hasValue, String origin) {
         boolean remoteEditable = RemoteConfigEligibility.isRemoteEligible(field);
-        ConfigFieldValue value = hasValue ? ConfigFieldValue.plain(effectiveValue) : new ConfigFieldValue(null, false, false);
+        ConfigFieldValue value = configValue(field, effectiveValue, hasValue);
         return new RemoteConfigField(
                 field.key(), field.category(), field.label(), field.help(), field.type(),
-                value, field.defaultValue(), field.requiredPermission(), field.reloadBehavior(), field.riskLevel(),
+                value, safeDefault(field), field.requiredPermission(), field.reloadBehavior(), field.riskLevel(),
                 field.owner(), field.min(), field.max(), field.step(), field.options(), field.listElementType(),
                 remoteEditable, field.required(), field.nullable(), field.masked(), field.durationUnit(),
                 field.trim(), field.allowEmptyItems(), origin,
@@ -54,16 +54,24 @@ public record RemoteConfigField(
         boolean remoteEditable = RemoteConfigEligibility.isRemoteEligible(field);
         return new RemoteConfigField(
                 field.key(), field.category(), field.label(), field.help(), field.type(),
-                configValue(effectiveValue, hasValue), field.defaultValue(), field.requiredPermission(),
+                configValue(field, effectiveValue, hasValue), safeDefault(field), field.requiredPermission(),
                 field.reloadBehavior(), field.riskLevel(), field.owner(), field.min(), field.max(), field.step(),
                 field.options(), field.listElementType(), remoteEditable, field.required(), field.nullable(),
                 field.masked(), field.durationUnit(), field.trim(), field.allowEmptyItems(), origin,
-                configValue(networkValue, hasNetworkValue), configValue(serverValue, hasServerValue),
-                configValue(baselineValue, hasBaselineValue)
+                configValue(field, networkValue, hasNetworkValue), configValue(field, serverValue, hasServerValue),
+                configValue(field, baselineValue, hasBaselineValue)
         );
     }
 
-    private static ConfigFieldValue configValue(Object value, boolean present) {
+    private static ConfigFieldValue safeDefault(ConfigField field) {
+        if (field.masked() || field.type() == ConfigFieldType.SECRET_MASKED || field.value() != null && field.value().secret()) {
+            return ConfigFieldValue.masked(field.defaultValue() != null && field.defaultValue().set());
+        }
+        return field.defaultValue();
+    }
+
+    private static ConfigFieldValue configValue(ConfigField field, Object value, boolean present) {
+        if (field.masked() || field.type() == ConfigFieldType.SECRET_MASKED || field.value() != null && field.value().secret()) return ConfigFieldValue.masked(present && value != null);
         return present ? new ConfigFieldValue(value, false, true) : new ConfigFieldValue(null, false, false);
     }
 }

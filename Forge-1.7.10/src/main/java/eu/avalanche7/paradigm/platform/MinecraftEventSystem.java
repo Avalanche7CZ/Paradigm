@@ -151,7 +151,7 @@ public final class MinecraftEventSystem implements IEventSystem {
     @SubscribeEvent
     public void joined(PlayerEvent.PlayerLoggedInEvent forge) {
         if (forge.player instanceof EntityPlayerMP player) {
-            boolean announce = visible(player);
+            boolean announce = pendingJoins.containsKey(player) && visible(player);
             JoinLeaveEvent event = new JoinLeaveEvent(new MinecraftPlayer(player), pendingJoins.remove(player));
             for (PlayerJoinEventListener listener : joinListeners) {
                 listener.onPlayerJoin(event);
@@ -164,7 +164,7 @@ public final class MinecraftEventSystem implements IEventSystem {
     @SubscribeEvent
     public void left(PlayerEvent.PlayerLoggedOutEvent forge) {
         if (forge.player instanceof EntityPlayerMP player) {
-            boolean announce = visible(player);
+            boolean announce = pendingLeaves.containsKey(player) && visible(player);
             JoinLeaveEvent event = new JoinLeaveEvent(new MinecraftPlayer(player), pendingLeaves.remove(player));
             for (PlayerLeaveEventListener listener : leaveListeners) {
                 listener.onPlayerLeave(event);

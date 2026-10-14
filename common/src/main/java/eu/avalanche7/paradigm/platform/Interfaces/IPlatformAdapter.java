@@ -177,6 +177,11 @@ public interface IPlatformAdapter {
 
     void teleportPlayer(IPlayer player, double x, double y, double z);
     boolean playerHasItem(IPlayer player, String itemId, int amount);
+    default eu.avalanche7.paradigm.platform.InventoryConsumption prepareItemConsumption(IPlayer player, List<eu.avalanche7.paradigm.platform.ItemRequirement> items) {
+        throw new UnsupportedOperationException("Transactional inventory operations are unavailable on this loader");
+    }
+    default boolean supportsItemConsumption() { return false; }
+    default boolean isServerThread() { return false; }
     boolean isPlayerInArea(IPlayer player, String worldId, List<Integer> corner1, List<Integer> corner2);
 
     List<String> getOnlinePlayerNames();
