@@ -775,8 +775,8 @@ public class DashboardService implements AutoCloseable {
         return CompletableFuture.supplyAsync(() -> {
             var permissions = services.getPermissionsHandler();
             Map<String, Object> data = new LinkedHashMap<>();
-            int groupCount = safeList(() -> services.getStorageService().permissions().listGroups()).size();
-            int userCount = safeList(() -> services.getStorageService().permissions().listUsers()).size();
+            int groupCount = services.getStorageService().permissions().listGroups().size();
+            int userCount = services.getStorageService().permissions().listUsers().size();
             int trackCount = permissions.listPermissionTracks().size();
             int nodeCount = permissions.knownPermissionNodes().size();
             data.put("internalEnabled", permissions.isInternalPermissionsEnabled());
@@ -789,6 +789,9 @@ public class DashboardService implements AutoCloseable {
             var identity = services.getStorageService().context().serverIdentity();
             data.put("serverId", identity != null ? identity.serverId() : "");
             data.put("networkId", identity != null ? identity.networkId() : "");
+            data.put("sharedStorage", services.getStorageService().isMysqlActive());
+            data.put("contextKeys", java.util.Arrays.stream(eu.avalanche7.paradigm.modules.permissions.context.PermissionContextType.values()).map(eu.avalanche7.paradigm.modules.permissions.context.PermissionContextType::key).toList());
+            data.put("mutationAcknowledgement", "host_runtime");
             return data;
         }, executor);
     }
@@ -796,7 +799,7 @@ public class DashboardService implements AutoCloseable {
     public CompletableFuture<Object> permissionGroupsAsync() {
         return CompletableFuture.supplyAsync(() -> {
             List<Map<String, Object>> rows = new ArrayList<>();
-            for (var group : safeList(() -> services.getStorageService().permissions().listGroups())) {
+            for (var group : services.getStorageService().permissions().listGroups()) {
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("name", group.name());
                 row.put("description", group.description());
@@ -820,7 +823,7 @@ public class DashboardService implements AutoCloseable {
         return CompletableFuture.supplyAsync(() -> {
             var group = services.getStorageService().permissions().getGroup(safeText(groupName)).orElse(null);
             if (group == null) {
-                return Map.of("group", null);
+                return java.util.Collections.singletonMap("group", null);
             }
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("name", group.name());
@@ -830,6 +833,24 @@ public class DashboardService implements AutoCloseable {
             row.put("weight", group.weight());
             row.put("parents", group.parents());
             row.put("permissions", group.permissions());
+            row.put("assignments", group.permissions().stream().map(node -> permissionAssignment("group permission", group.name(), group.name(), node)).toList());
+            List<Map<String, Object>> members = new ArrayList<>();
+            int membershipCount = 0;
+            for (var user : services.getStorageService().permissions().listUsers()) {
+                for (var membership : user.groups()) {
+                    if (!group.name().equalsIgnoreCase(membership.groupName())) continue;
+                    membershipCount++;
+                    if (members.size() >= 1000) continue;
+                    Map<String, Object> member = new LinkedHashMap<>();
+                    member.put("uuid", user.uuid());
+                    member.put("name", user.name());
+                    member.put("contexts", membership.contextSet().asMap());
+                    member.put("expiresAtMs", membership.expiresAtMs());
+                    members.add(member);
+                }
+            }
+            row.put("members", members);
+            row.put("membershipCount", membershipCount);
             return Map.of("group", row);
         }, executor);
     }
@@ -838,7 +859,7 @@ public class DashboardService implements AutoCloseable {
         return onlinePlayersAsync().thenApplyAsync(onlinePlayers -> {
             String q = query != null ? query.trim().toLowerCase(java.util.Locale.ROOT) : "";
             Map<String, Map<String, Object>> discovered = new LinkedHashMap<>();
-            for (var profile : safeList(() -> services.getStorageService().players().listProfiles())) {
+            for (var profile : services.getStorageService().players().listProfiles()) {
                 mergeUser(discovered, profile.uuid(), profile.name(), profile.lastSeenMs(), false);
             }
             if (services.getPlayerDataStore() != null) {
@@ -849,7 +870,7 @@ public class DashboardService implements AutoCloseable {
             for (OnlinePlayerSnapshot online : onlinePlayers) {
                 mergeUser(discovered, online.uuid(), online.name(), System.currentTimeMillis(), true);
             }
-            for (var user : safeList(() -> services.getStorageService().permissions().listUsers())) {
+            for (var user : services.getStorageService().permissions().listUsers()) {
                 Map<String, Object> row = mergeUser(discovered, user.uuid(), user.name(), 0L, false);
                 row.put("groups", user.groups().size());
                 row.put("permissions", user.permissions().size());
@@ -902,7 +923,7 @@ public class DashboardService implements AutoCloseable {
     public CompletableFuture<Object> permissionUserAsync(String uuidOrName) {
         return resolveUuidAsync(uuidOrName).thenApplyAsync(uuid -> {
             if (uuid == null) {
-                return (Object) Map.of("user", null);
+                return (Object) java.util.Collections.singletonMap("user", null);
             }
             var info = services.getPermissionsHandler().getPlayerPermissionInfo(uuid);
             Map<String, Object> data = new LinkedHashMap<>();
@@ -937,7 +958,7 @@ public class DashboardService implements AutoCloseable {
     public CompletableFuture<Object> permissionNodesAsync(String query, int page, int pageSize) {
         return CompletableFuture.supplyAsync(() -> {
             List<Map<String, Object>> rows = new ArrayList<>();
-            for (PermissionNodeRegistry.DiscoveredPermission node : services.getPermissionsHandler().listDiscoveredPermissionNodes(query, 2000)) {
+            for (PermissionNodeRegistry.DiscoveredPermission node : services.getPermissionsHandler().listDiscoveredPermissionNodes(query, Integer.MAX_VALUE)) {
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("node", node.node);
                 row.put("source", node.source);
@@ -970,11 +991,12 @@ public class DashboardService implements AutoCloseable {
             String q = safeText(query).toLowerCase(java.util.Locale.ROOT);
             Set<String> nodes = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
             nodes.addAll(services.getPermissionsHandler().knownPermissionNodes().keySet());
+            nodes.addAll(services.getPermissionsHandler().listDiscoveredPermissionNodes(null, Integer.MAX_VALUE).stream().map(node -> node.node).toList());
             List<Map<String, Object>> entries = new ArrayList<>();
             for (String node : nodes) {
                 if (!q.isBlank() && !node.toLowerCase(java.util.Locale.ROOT).contains(q)) continue;
                 var explain = services.getPermissionsHandler().explainPlayerPermission(uuid, node);
-                if (explain == null || explain.allowed() == null) continue;
+                if (explain == null) continue;
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("node", node);
                 row.put("allowed", explain.allowed());
@@ -1331,8 +1353,9 @@ public class DashboardService implements AutoCloseable {
 
     private static <T> List<T> page(List<T> values, int page, int pageSize) {
         if (values == null || values.isEmpty()) return List.of();
-        int from = Math.min(values.size(), Math.max(0, page - 1) * pageSize);
-        int to = Math.min(values.size(), from + pageSize);
+        long requestedFrom = Math.max(0L, (long) page - 1L) * pageSize;
+        int from = (int) Math.min(values.size(), requestedFrom);
+        int to = (int) Math.min(values.size(), (long) from + pageSize);
         return List.copyOf(values.subList(from, to));
     }
 

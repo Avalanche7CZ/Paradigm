@@ -141,7 +141,7 @@ public class HomeCommand implements ParadigmModule {
                 .literal("home")
                 .requires(source -> source.getPlayer() != null)
                 .executes(ctx -> canUseHome(ctx.getSource().getPlayer())
-                        ? executeHome(ctx.getSource().getPlayer(), "home")
+                        ? executeDefaultHome(ctx.getSource().getPlayer())
                         : 0)
                 .then(platform.createCommandBuilder()
                         .literal("set")
@@ -286,6 +286,20 @@ public class HomeCommand implements ParadigmModule {
             }
             send(current, "home.sethome_success", "Home {home} has been set.", "{home}", normalized);
         }, "home.error_save");
+    }
+
+    private int executeDefaultHome(IPlayer player) {
+        if (player == null) return 0;
+        String uuid = player.getUUID();
+        return StorageCommandSupport.runForPlayer(services, player, "home.default_load",
+                () -> services.getStorageService().players().listHomes(uuid), (current, homes) -> {
+                    if (!canUseHome(current)) return;
+                    updateHomeCache(uuid, homes);
+                    HomeSelection.defaultHome(homes).ifPresentOrElse(home ->
+                            CommandCooldowns.run(services, current, "home", fresh -> canUseHome(fresh)
+                                    ? teleportHome(fresh, home.name(), toDataLocation(home.location())) : 0),
+                            () -> sendHomes(current, homes));
+                }, "home.error_load");
     }
 
     private int executeHome(IPlayer player, String homeName) {

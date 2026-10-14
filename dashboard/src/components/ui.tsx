@@ -88,13 +88,15 @@ export function Tabs({
   values,
   selected,
   onChange,
+  label = 'View options',
 }: {
+  label?: string;
   values: { id: string; label: string }[];
   selected: string;
   onChange: (id: string) => void;
 }) {
   return (
-    <nav class="tabs" aria-label="View options">
+    <nav class="tabs" aria-label={label}>
       {values.map((v) => (
         <button
           key={v.id}
