@@ -1,0 +1,254 @@
+{
+  "menuResponse": {
+    "definition": {
+      "id": "shop",
+      "title": "Shop",
+      "rows": 3,
+      "permission": "",
+      "refreshSeconds": 0,
+      "slots": [
+        {
+          "slot": 17,
+          "item": {
+            "itemId": "minecraft:diamond",
+            "amount": 7,
+            "name": "Buy",
+            "lore": [
+              "one"
+            ],
+            "glint": true,
+            "legacyMetadata": 2,
+            "customModelData": 12,
+            "hideTooltip": false
+          },
+          "visibleIf": [],
+          "actions": [
+            {
+              "type": "message",
+              "text": [
+                "hello"
+              ]
+            }
+          ],
+          "leftActions": [],
+          "rightActions": [],
+          "refresh": true
+        }
+      ],
+      "openConditions": [],
+      "onClose": [],
+      "fillEmpty": false
+    }
+  },
+  "commandResponse": {
+    "command": {
+      "name": "sample",
+      "command": {
+        "name": "sample",
+        "description": "Original",
+        "actions": [
+          {
+            "type": "conditional",
+            "conditions": [
+              {
+                "type": "has_permission",
+                "value": "x"
+              }
+            ],
+            "on_success": [
+              {
+                "type": "message",
+                "text": [
+                  "yes"
+                ],
+                "extension": {
+                  "keep": [
+                    1,
+                    2
+                  ]
+                }
+              }
+            ],
+            "on_failure": [
+              {
+                "type": "message",
+                "text": [
+                  "no"
+                ]
+              }
+            ]
+          }
+        ],
+        "arguments": [
+          {
+            "name": "who",
+            "type": "custom",
+            "required": false,
+            "customCompletions": [
+              "a",
+              "b"
+            ]
+          }
+        ],
+        "extension": {
+          "opaque": true
+        }
+      }
+    }
+  },
+  "actions": [
+    {
+      "type": "message",
+      "text": [
+        "Hello"
+      ]
+    },
+    {
+      "type": "broadcast",
+      "text": [
+        "Hello"
+      ]
+    },
+    {
+      "type": "actionbar",
+      "text": [
+        "Hello"
+      ]
+    },
+    {
+      "type": "title",
+      "text": [
+        "Title",
+        "Subtitle"
+      ]
+    },
+    {
+      "type": "sound",
+      "text": [
+        "minecraft:entity.experience_orb.pickup 1 1 master"
+      ]
+    },
+    {
+      "type": "teleport",
+      "x": 1,
+      "y": 64,
+      "z": 3
+    },
+    {
+      "type": "run_command",
+      "commands": [
+        "say hello"
+      ]
+    },
+    {
+      "type": "run_console",
+      "commands": [
+        "say hello"
+      ]
+    },
+    {
+      "type": "open_menu",
+      "menu": "shop"
+    },
+    {
+      "type": "close_menu"
+    },
+    {
+      "type": "menu_back"
+    },
+    {
+      "type": "conditional",
+      "conditions": [
+        {
+          "type": "context_equals",
+          "value": "answer=yes"
+        }
+      ],
+      "on_success": [
+        {
+          "type": "message",
+          "text": [
+            "yes"
+          ]
+        }
+      ],
+      "on_failure": [
+        {
+          "type": "message",
+          "text": [
+            "no"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "await_input",
+      "key": "answer",
+      "timeout": 60,
+      "text": [
+        "Answer"
+      ],
+      "on_success": [
+        {
+          "type": "message",
+          "text": [
+            "Received {answer}"
+          ]
+        }
+      ],
+      "on_failure": []
+    },
+    {
+      "type": "check_items",
+      "items": [
+        "minecraft:diamond 2"
+      ],
+      "on_success": [],
+      "on_failure": []
+    },
+    {
+      "type": "consume_items",
+      "items": [
+        "minecraft:diamond 2"
+      ],
+      "on_success": [],
+      "on_failure": []
+    },
+    {
+      "type": "add_group",
+      "group": "member",
+      "on_success": [],
+      "on_failure": []
+    },
+    {
+      "type": "remove_group",
+      "group": "member",
+      "on_success": [],
+      "on_failure": []
+    },
+    {
+      "type": "transaction",
+      "actions": [
+        {
+          "type": "consume_items",
+          "items": [
+            "minecraft:diamond 2"
+          ]
+        },
+        {
+          "type": "add_group",
+          "group": "member"
+        }
+      ],
+      "on_success": [
+        {
+          "type": "message",
+          "text": [
+            "Done"
+          ]
+        }
+      ],
+      "on_failure": []
+    }
+  ]
+}

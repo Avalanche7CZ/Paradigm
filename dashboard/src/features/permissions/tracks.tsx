@@ -1,13 +1,15 @@
 import { useLayoutEffect, useState } from 'preact/hooks';
-import { array, string, type Obj } from '../../core/types';
+import { string, type Obj } from '../../core/types';
 import { Empty } from '../../components/ui';
 import { Popup } from './controls';
-import { subjectValid, type Group } from './model';
+import { subjectValid, trackPreview, type Group } from './model';
 import { useWorkflow } from './workflow';
 export function TrackEditor({ track, groups }: { track: Obj; groups: Group[] }) {
   const flow = useWorkflow();
   const name = string(track.name);
-  const [ranks, setRanks] = useState(array(track.groups).map(string));
+  const preview = trackPreview(track, flow.changes);
+  const ranks = preview.ranks;
+  const editable = flow.editable && !preview.unavailable && !preview.error;
   const [next, setNext] = useState('');
   const [position, setPosition] = useState(1);
   const [rename, setRename] = useState<'rename' | 'clone'>();
@@ -25,9 +27,6 @@ export function TrackEditor({ track, groups }: { track: Obj; groups: Group[] }) 
         body: { track: name, group: rank, position: index + 1 },
       },
     ]);
-    const changed = ranks.filter((r) => r !== rank);
-    changed.splice(index, 0, rank);
-    setRanks(changed);
   }
   const modal = (value: typeof rename) => {
     setRename(value);
@@ -43,15 +42,15 @@ export function TrackEditor({ track, groups }: { track: Obj; groups: Group[] }) 
           <p class="muted">{ranks.length} ranks · lowest to highest</p>
         </div>
         <div class="actions">
-          <button disabled={!flow.editable} onClick={() => modal('rename')}>
+          <button disabled={!editable} onClick={() => modal('rename')}>
             Rename
           </button>
-          <button disabled={!flow.editable} onClick={() => modal('clone')}>
+          <button disabled={!editable} onClick={() => modal('clone')}>
             Clone
           </button>
           <button
             class="danger"
-            disabled={!flow.editable}
+            disabled={!editable}
             onClick={() =>
               flow.stage([
                 { label: `Delete track ${name}`, route: 'track/delete', body: { track: name } },
@@ -65,6 +64,14 @@ export function TrackEditor({ track, groups }: { track: Obj; groups: Group[] }) 
       <p class="help">
         Promotion follows this order. Changes are staged individually; positions start at 1.
       </p>
+      {preview.error && (
+        <p role="alert" class="text-error">
+          {preview.error}
+        </p>
+      )}
+      {preview.unavailable && (
+        <p role="status">Rename or deletion staged. Apply or unstage it before further edits.</p>
+      )}
       <ol class="permission-ranks">
         {ranks.map((rank, index) => (
           <li>
@@ -73,21 +80,21 @@ export function TrackEditor({ track, groups }: { track: Obj; groups: Group[] }) 
             <span class="actions">
               <button
                 aria-label={`Move ${rank} up`}
-                disabled={!flow.editable || index === 0}
+                disabled={!editable || index === 0}
                 onClick={() => move(rank, index - 1)}
               >
                 ↑
               </button>
               <button
                 aria-label={`Move ${rank} down`}
-                disabled={!flow.editable || index === ranks.length - 1}
+                disabled={!editable || index === ranks.length - 1}
                 onClick={() => move(rank, index + 1)}
               >
                 ↓
               </button>
               <button
                 class="danger"
-                disabled={!flow.editable}
+                disabled={!editable}
                 onClick={() => {
                   flow.stage([
                     {
@@ -96,7 +103,6 @@ export function TrackEditor({ track, groups }: { track: Obj; groups: Group[] }) 
                       body: { track: name, group: rank },
                     },
                   ]);
-                  setRanks(ranks.filter((r) => r !== rank));
                 }}
               >
                 Remove
@@ -126,9 +132,6 @@ export function TrackEditor({ track, groups }: { track: Obj; groups: Group[] }) 
               body: { track: name, group: next, position },
             },
           ]);
-          const changed = [...ranks];
-          changed.splice(position - 1, 0, next);
-          setRanks(changed);
           setNext('');
         }}
       >
@@ -136,7 +139,7 @@ export function TrackEditor({ track, groups }: { track: Obj; groups: Group[] }) 
           <span>Existing group</span>
           <select
             value={next}
-            disabled={!flow.editable}
+            disabled={!editable}
             onChange={(e) => setNext(e.currentTarget.value)}
           >
             <option value="">Choose rank…</option>
@@ -154,17 +157,17 @@ export function TrackEditor({ track, groups }: { track: Obj; groups: Group[] }) 
             min={1}
             max={ranks.length + 1}
             value={position}
-            disabled={!flow.editable}
+            disabled={!editable}
             onInput={(e) => setPosition(Number(e.currentTarget.value))}
           />
         </label>
-        <button class="primary" disabled={!flow.editable || !next}>
+        <button class="primary" disabled={!editable || !next}>
           Stage rank
         </button>
         <button
           type="button"
           class="danger"
-          disabled={!flow.editable || !ranks.length}
+          disabled={!editable || !ranks.length}
           onClick={() => {
             flow.stage([
               {
@@ -173,7 +176,6 @@ export function TrackEditor({ track, groups }: { track: Obj; groups: Group[] }) 
                 body: { track: name },
               },
             ]);
-            setRanks([]);
           }}
         >
           Clear track
@@ -215,7 +217,7 @@ export function TrackEditor({ track, groups }: { track: Obj; groups: Group[] }) 
                 {error}
               </p>
             )}
-            <button class="primary" disabled={!flow.editable}>
+            <button class="primary" disabled={!editable}>
               Stage {rename}
             </button>
           </form>

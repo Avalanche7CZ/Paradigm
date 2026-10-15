@@ -11,7 +11,6 @@ import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.modules.actions.ActionContext;
 import eu.avalanche7.paradigm.modules.actions.ActionRegistry;
-import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
 public final class MenuActions {
@@ -107,15 +106,6 @@ public final class MenuActions {
     }
 
     private static void feedback(Services services, ActionContext context, String rawMessage) {
-        IPlayer player = context.player();
-        if (services.getMessageParser() == null || services.getPlatformAdapter() == null) {
-            return;
-        }
-        IComponent message = services.getMessageParser().parseMessage(rawMessage, player);
-        if (context.source() != null) {
-            services.getPlatformAdapter().sendFailure(context.source(), message);
-        } else if (player != null) {
-            services.getPlatformAdapter().sendSystemMessage(player, message);
-        }
+        context.replyFailure(rawMessage);
     }
 }

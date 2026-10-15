@@ -67,6 +67,7 @@ public final class PlayerInputService {
         if (depth > ActionDispatcher.MAX_DEPTH) {
             throw new IllegalArgumentException(path + ": action nesting is too deep.");
         }
+        ItemActions.validateSequence(actions);
         for (int index = 0; index < actions.size(); index++) {
             CustomCommand.Action action = actions.get(index);
             if (action == null) continue;

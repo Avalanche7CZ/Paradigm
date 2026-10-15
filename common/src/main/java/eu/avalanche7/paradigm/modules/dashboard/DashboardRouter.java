@@ -239,6 +239,7 @@ public class DashboardRouter {
                 if ("GET".equals(method) && "/api/permissions/summary".equals(path)) return permissions.summary(ctx);
                 if ("GET".equals(method) && "/api/permissions/groups".equals(path)) return permissions.groups(ctx);
                 if ("GET".equals(method) && "/api/permissions/group".equals(path)) return permissions.group(ctx);
+                if ("GET".equals(method) && "/api/permissions/group/members".equals(path)) return permissions.members(ctx);
                 if ("GET".equals(method) && "/api/permissions/users".equals(path)) return permissions.users(ctx);
                 if ("GET".equals(method) && "/api/permissions/user".equals(path)) return permissions.user(ctx);
                 if ("GET".equals(method) && "/api/permissions/nodes".equals(path)) return permissions.nodes(ctx);

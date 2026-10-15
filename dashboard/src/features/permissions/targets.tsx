@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from 'preact/hooks';
+import { useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { query } from '../../core/api';
 import { AsyncBoundary, useResource, useWorkspace } from '../../core/context';
 import { array, number, object, string, type Json, type Obj } from '../../core/types';
@@ -10,6 +10,7 @@ import {
   assignment,
   expiryLabel,
   inheritedAssignments,
+  metadataPreview,
   subjectValid,
   wouldCycle,
   type Assignment,
@@ -174,10 +175,10 @@ export function TargetEditor({
               <>
                 <p class="help">
                   Direct memberships reported by the storage backend. Implicit default membership
-                  and inherited membership are not counted. Showing {array(row.members).length} of{' '}
-                  {number(row.membershipCount)} assignments.
+                  and inherited membership are not counted. Total: {number(row.membershipCount)}{' '}
+                  assignments. Search and pagination query matching memberships.
                 </p>
-                <Members rows={array(row.members).map(object)} select={selectUser} />
+                <Members group={id} revision={revision} select={selectUser} />
               </>
             )}
             {section === 'metadata' && <Metadata key={id} initial={row} id={id} />}
@@ -320,11 +321,26 @@ function Inheritance({
     </>
   );
 }
-function Members({ rows, select }: { rows: Obj[]; select: (id: string, label: string) => void }) {
+function Members({
+  group,
+  revision,
+  select,
+}: {
+  group: string;
+  revision: number;
+  select: (id: string, label: string) => void;
+}) {
+  const w = useWorkspace();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const matches = rows.filter((r) =>
-    (string(r.name) + ' ' + string(r.uuid)).toLowerCase().includes(search.toLowerCase()),
+  const resource = useResource<Json>(
+    (signal) =>
+      w.api.request(
+        query('/api/permissions/group/members', { id: group, query: search, page, pageSize: 50 }),
+        undefined,
+        signal,
+      ),
+    `${group}:${revision}:${search}:${page}`,
   );
   return (
     <>
@@ -338,59 +354,79 @@ function Members({ rows, select }: { rows: Obj[]; select: (id: string, label: st
           setPage(1);
         }}
       />
-      <div
-        class="table-wrap permission-table"
-        tabIndex={0}
-        role="region"
-        aria-label="Permission assignment table"
-      >
-        <table>
-          <thead>
-            <tr>
-              <th scope="col">User</th>
-              <th scope="col">Context</th>
-              <th scope="col">Expiration</th>
-            </tr>
-          </thead>
-          <tbody>
-            {matches.slice((page - 1) * 50, page * 50).map((r) => (
-              <tr>
-                <td>
-                  <button
-                    class="text-button"
-                    onClick={() => select(string(r.uuid), string(r.name) || string(r.uuid))}
-                  >
-                    {string(r.name) || string(r.uuid)}
-                  </button>
-                  <small class="code muted">{string(r.uuid)}</small>
-                </td>
-                <td>
-                  <ContextChips
-                    value={Object.fromEntries(
-                      Object.entries(object(r.contexts)).map(([k, v]) => [k, string(v)]),
-                    )}
-                  />
-                </td>
-                <td>{expiryLabel(typeof r.expiresAtMs === 'number' ? r.expiresAtMs : null)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <Pager page={page} total={matches.length} size={50} change={setPage} />
+      <AsyncBoundary resource={resource}>
+        {(data) => (
+          <>
+            <div
+              class="table-wrap permission-table"
+              tabIndex={0}
+              role="region"
+              aria-label="Permission assignment table"
+            >
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">User</th>
+                    <th scope="col">Context</th>
+                    <th scope="col">Expiration</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {array(object(data).members)
+                    .map(object)
+                    .map((r) => (
+                      <tr>
+                        <td>
+                          <button
+                            class="text-button"
+                            onClick={() => select(string(r.uuid), string(r.name) || string(r.uuid))}
+                          >
+                            {string(r.name) || string(r.uuid)}
+                          </button>
+                          <small class="code muted">{string(r.uuid)}</small>
+                        </td>
+                        <td>
+                          <ContextChips
+                            value={Object.fromEntries(
+                              Object.entries(object(r.contexts)).map(([k, v]) => [k, string(v)]),
+                            )}
+                          />
+                        </td>
+                        <td>
+                          {expiryLabel(typeof r.expiresAtMs === 'number' ? r.expiresAtMs : null)}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+            <Pager page={page} total={number(object(data).total)} size={50} change={setPage} />
+          </>
+        )}
+      </AsyncBoundary>
     </>
   );
 }
 function Metadata({ id, initial }: { id: string; initial: Obj }) {
   const flow = useWorkflow();
-  const initialValues = {
-    description: string(initial.description),
-    prefix: string(initial.prefix),
-    suffix: string(initial.suffix),
-    weight: String(number(initial.weight)),
-  };
-  const [baseline, setBaseline] = useState(initialValues);
-  const [values, setValues] = useState(initialValues);
+  const baseline = metadataPreview(initial, id, flow.changes);
+  const [values, setValues] = useState(baseline);
+  const previous = useRef(baseline);
+  useLayoutEffect(() => {
+    const old = previous.current;
+    setValues(
+      (current) =>
+        Object.fromEntries(
+          Object.entries(baseline).map(([key, value]) => [
+            key,
+            current[key as keyof typeof current] === old[key as keyof typeof old]
+              ? value
+              : current[key as keyof typeof current],
+          ]),
+        ) as typeof baseline,
+    );
+    previous.current = baseline;
+  }, [JSON.stringify(baseline)]);
   const [error, setError] = useState('');
   const dirty = JSON.stringify(values) !== JSON.stringify(baseline);
   useLayoutEffect(() => {
@@ -416,16 +452,18 @@ function Metadata({ id, initial }: { id: string; initial: Obj }) {
       setError('Metadata values are limited to 512 characters.');
       return;
     }
-    flow.stage(
-      Object.entries(values)
-        .filter(([k, v]) => baseline[k as keyof typeof baseline] !== v)
-        .map(([key, value]) => ({
-          label: `Set ${id} ${key}`,
-          route: 'group/update',
-          body: { group: id, metadata: { [key]: value } },
-        })),
-    );
-    setBaseline(values);
+    if (
+      !flow.stage(
+        Object.entries(values)
+          .filter(([k, v]) => baseline[k as keyof typeof baseline] !== v)
+          .map(([key, value]) => ({
+            label: `Set ${id} ${key}`,
+            route: 'group/update',
+            body: { group: id, metadata: { [key]: value } },
+          })),
+      )
+    )
+      return;
     setError('');
   }
   return (

@@ -28,6 +28,10 @@ public class PermissionsApiHandler {
         return DashboardResponse.apiOk(dashboard.permissionGroupAsync(ctx.query().get("id")).get());
     }
 
+    public DashboardResponse members(DashboardRequestContext ctx) throws Exception {
+        return DashboardResponse.apiOk(dashboard.permissionGroupMembersAsync(ctx.query().get("id"), ctx.query().get("query"), integer(ctx, "page", 1), integer(ctx, "pageSize", 50)).get());
+    }
+
     public DashboardResponse users(DashboardRequestContext ctx) throws Exception {
         return DashboardResponse.apiOk(dashboard.permissionUsersAsync(ctx.query().get("query"), integer(ctx, "page", 1), integer(ctx, "pageSize", 25)).get());
     }
@@ -117,6 +121,9 @@ public class PermissionsApiHandler {
     }
 
     private static int statusFor(String code) {
+        if ("assignment_not_found".equals(code)) return 404;
+        if ("persistence_uncertain".equals(code)) return 503;
+        if ("persistence_conflict".equals(code)) return 409;
         if ("permission_denied".equals(code)) {
             return 403;
         }

@@ -46,6 +46,7 @@ dependencies {
     testImplementation 'org.slf4j:slf4j-api:2.0.9'
     testImplementation 'org.apache.logging.log4j:log4j-core:2.25.4'
     testRuntimeOnly 'org.xerial:sqlite-jdbc:3.46.1.3'
+    testRuntimeOnly 'org.mariadb.jdbc:mariadb-java-client:3.4.1'
 }
 
 java {
@@ -59,8 +60,19 @@ tasks.withType(JavaCompile).configureEach {
     it.options.release.set(17)
 }
 
+def isolatedTestWork = layout.projectDirectory.dir("build/test-workspace-${rootProject.name}")
+tasks.register('prepareTestWorkspace', Sync) {
+    from layout.projectDirectory.dir('src/main')
+    into isolatedTestWork.dir('src/main')
+}
+
 test {
     useJUnitPlatform()
+    inputs.property('regressionMariaDb', providers.environmentVariable('PARADIGM_REGRESSION_MARIADB').orElse('false'))
+    dependsOn tasks.named('prepareTestWorkspace')
+    workingDir isolatedTestWork
+    systemProperty 'vanish.source.root', projectDir.parentFile.absolutePath
+    systemProperty 'paradigm.repository.root', projectDir.parentFile.absolutePath
 }
 
 jar {

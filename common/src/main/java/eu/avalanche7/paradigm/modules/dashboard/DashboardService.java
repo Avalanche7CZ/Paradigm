@@ -53,7 +53,6 @@ import eu.avalanche7.paradigm.modules.permissions.PermissionAdminService;
 import eu.avalanche7.paradigm.modules.permissions.PermissionAssignmentId;
 import eu.avalanche7.paradigm.modules.permissions.PermissionDefinition;
 import eu.avalanche7.paradigm.modules.permissions.PermissionMutationRequest;
-import eu.avalanche7.paradigm.modules.permissions.PermissionNodeRegistry;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.StorageConfig;
 import eu.avalanche7.paradigm.storage.StorageProviderType;
@@ -776,7 +775,7 @@ public class DashboardService implements AutoCloseable {
             var permissions = services.getPermissionsHandler();
             Map<String, Object> data = new LinkedHashMap<>();
             int groupCount = services.getStorageService().permissions().listGroups().size();
-            int userCount = services.getStorageService().permissions().listUsers().size();
+            long userCount = services.getStorageService().permissions().countUsers();
             int trackCount = permissions.listPermissionTracks().size();
             int nodeCount = permissions.knownPermissionNodes().size();
             data.put("internalEnabled", permissions.isInternalPermissionsEnabled());
@@ -834,25 +833,29 @@ public class DashboardService implements AutoCloseable {
             row.put("parents", group.parents());
             row.put("permissions", group.permissions());
             row.put("assignments", group.permissions().stream().map(node -> permissionAssignment("group permission", group.name(), group.name(), node)).toList());
-            List<Map<String, Object>> members = new ArrayList<>();
-            int membershipCount = 0;
-            for (var user : services.getStorageService().permissions().listUsers()) {
-                for (var membership : user.groups()) {
-                    if (!group.name().equalsIgnoreCase(membership.groupName())) continue;
-                    membershipCount++;
-                    if (members.size() >= 1000) continue;
-                    Map<String, Object> member = new LinkedHashMap<>();
-                    member.put("uuid", user.uuid());
-                    member.put("name", user.name());
-                    member.put("contexts", membership.contextSet().asMap());
-                    member.put("expiresAtMs", membership.expiresAtMs());
-                    members.add(member);
-                }
-            }
-            row.put("members", members);
-            row.put("membershipCount", membershipCount);
+            var members = permissionGroupMembers(group.name(), "", 1, 50);
+            row.put("members", members.get("members"));
+            row.put("membershipCount", members.get("total"));
             return Map.of("group", row);
         }, executor);
+    }
+
+    public CompletableFuture<Object> permissionGroupMembersAsync(String group, String query, int page, int pageSize) {
+        return CompletableFuture.supplyAsync(() -> permissionGroupMembers(group, query, page, pageSize), executor);
+    }
+
+    private Map<String, Object> permissionGroupMembers(String group, String query, int page, int pageSize) {
+        var result = services.getStorageService().permissions().groupMembers(group, query, page, pageSize);
+        List<Map<String, Object>> rows = new ArrayList<>();
+        for (var member : result.members()) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("uuid", member.uuid()); row.put("name", member.name());
+            row.put("contexts", member.assignment().contextSet().asMap());
+            row.put("expiresAtMs", member.assignment().expiresAtMs());
+            row.put("id", member.assignment().assignmentId());
+            rows.add(row);
+        }
+        return Map.of("members", rows, "total", result.total(), "page", result.page(), "pageSize", result.pageSize());
     }
 
     public CompletableFuture<Object> permissionUsersAsync(String query, int page, int pageSize) {
@@ -957,44 +960,40 @@ public class DashboardService implements AutoCloseable {
 
     public CompletableFuture<Object> permissionNodesAsync(String query, int page, int pageSize) {
         return CompletableFuture.supplyAsync(() -> {
-            List<Map<String, Object>> rows = new ArrayList<>();
-            for (PermissionNodeRegistry.DiscoveredPermission node : services.getPermissionsHandler().listDiscoveredPermissionNodes(query, Integer.MAX_VALUE)) {
-                Map<String, Object> row = new LinkedHashMap<>();
-                row.put("node", node.node);
-                row.put("source", node.source);
-                row.put("description", node.description);
-                row.put("defaultLevel", node.defaultLevel);
-                rows.add(row);
-            }
-            if (rows.isEmpty()) {
-                for (Map.Entry<String, String> entry : services.getPermissionsHandler().knownPermissionNodes().entrySet()) {
-                    String q = query != null ? query.trim().toLowerCase(java.util.Locale.ROOT) : "";
-                    if (!q.isBlank() && !entry.getKey().toLowerCase(java.util.Locale.ROOT).contains(q)) continue;
-                    Map<String, Object> row = new LinkedHashMap<>();
-                    row.put("node", entry.getKey());
-                    row.put("source", "paradigm");
-                    row.put("description", entry.getValue());
-                    row.put("defaultLevel", -1);
-                    rows.add(row);
-                }
-            }
-            rows.sort(java.util.Comparator.comparing(row -> safeText((String) row.get("node")), String.CASE_INSENSITIVE_ORDER));
             int size = clampPageSize(pageSize);
             int current = Math.max(1, page);
-            return Map.of("nodes", page(rows, current, size), "total", rows.size(), "page", current, "pageSize", size);
+            var discovered = services.getPermissionsHandler().pageDiscoveredPermissionNodes(query, (long) (current - 1) * size, size);
+            List<Map<String, Object>> rows = new ArrayList<>();
+            for (var node : discovered.nodes()) {
+                rows.add(Map.of("node", safeText(node.node), "source", safeText(node.source), "description", safeText(node.description), "defaultLevel", node.defaultLevel));
+            }
+            long total = discovered.total();
+            if (total == 0) {
+                String q = safeText(query).toLowerCase(java.util.Locale.ROOT);
+                var known = services.getPermissionsHandler().knownPermissionNodes().entrySet().stream()
+                        .filter(entry -> q.isBlank() || entry.getKey().toLowerCase(java.util.Locale.ROOT).contains(q))
+                        .sorted(Map.Entry.comparingByKey(String.CASE_INSENSITIVE_ORDER)).toList();
+                total = known.size();
+                for (var entry : page(known, current, size))
+                    rows.add(Map.of("node", entry.getKey(), "source", "paradigm", "description", entry.getValue(), "defaultLevel", -1));
+            }
+            return Map.of("nodes", rows, "total", total, "page", current, "pageSize", size);
         }, executor);
     }
 
     public CompletableFuture<Object> permissionEffectiveAsync(String uuidOrName, String query, int page, int pageSize) {
         return resolveUuidAsync(uuidOrName).thenApplyAsync(uuid -> {
             if (uuid == null) return (Object) Map.of("entries", List.of(), "total", 0, "page", 1, "pageSize", clampPageSize(pageSize));
+            if (!services.getPermissionsHandler().isInternalPermissionsEnabled()) return (Object) Map.of("entries", List.of(), "total", 0, "page", Math.max(1, page), "pageSize", clampPageSize(pageSize));
             String q = safeText(query).toLowerCase(java.util.Locale.ROOT);
             Set<String> nodes = new java.util.TreeSet<>(String.CASE_INSENSITIVE_ORDER);
             nodes.addAll(services.getPermissionsHandler().knownPermissionNodes().keySet());
             nodes.addAll(services.getPermissionsHandler().listDiscoveredPermissionNodes(null, Integer.MAX_VALUE).stream().map(node -> node.node).toList());
+            int size = clampPageSize(pageSize);
+            int current = Math.max(1, page);
+            List<String> matching = nodes.stream().filter(node -> q.isBlank() || node.toLowerCase(java.util.Locale.ROOT).contains(q)).toList();
             List<Map<String, Object>> entries = new ArrayList<>();
-            for (String node : nodes) {
-                if (!q.isBlank() && !node.toLowerCase(java.util.Locale.ROOT).contains(q)) continue;
+            for (String node : page(matching, current, size)) {
                 var explain = services.getPermissionsHandler().explainPlayerPermission(uuid, node);
                 if (explain == null) continue;
                 Map<String, Object> row = new LinkedHashMap<>();
@@ -1006,9 +1005,7 @@ public class DashboardService implements AutoCloseable {
                 row.put("groups", explain.groupsChecked());
                 entries.add(row);
             }
-            int size = clampPageSize(pageSize);
-            int current = Math.max(1, page);
-            return (Object) Map.of("entries", page(entries, current, size), "total", entries.size(), "page", current, "pageSize", size);
+            return (Object) Map.of("entries", entries, "total", matching.size(), "page", current, "pageSize", size);
         }, executor);
     }
 
@@ -1025,7 +1022,7 @@ public class DashboardService implements AutoCloseable {
         assignment.put("kind", kind);
         assignment.put("owner", owner);
         assignment.put("target", target);
-        assignment.put("id", PermissionAssignmentId.ensure(node.assignmentId(), kind.replace(' ', '_').toUpperCase(java.util.Locale.ROOT), target, node.permission(), node.denied(),
+        assignment.put("id", PermissionAssignmentId.ensure(node.contextSet().isEmpty() && node.expiresAtMs() == null ? null : node.assignmentId(), kind.replace(' ', '_').toUpperCase(java.util.Locale.ROOT), target, node.permission(), node.denied(),
                 node.contextSet(), node.expiresAtMs(), "legacy"));
         assignment.put("node", node.permission());
         assignment.put("denied", node.denied());

@@ -4,7 +4,7 @@ import type { Change } from './model';
 export interface Workflow {
   editable: boolean;
   changes: Change[];
-  stage: (changes: Omit<Change, 'key'>[]) => void;
+  stage: (changes: Omit<Change, 'key'>[]) => boolean;
   open: (modal: boolean) => void;
   draft: (dirty: boolean) => void;
   draftDirty: boolean;

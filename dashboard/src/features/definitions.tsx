@@ -4,7 +4,7 @@ import { AsyncBoundary, useDirty, useResource, useWorkspace } from '../core/cont
 import { array, object, string, title, type Json, type Obj } from '../core/types';
 import { Card, DataView, Empty, JsonEditor, SaveBar } from '../components/ui';
 import { ObjectEditor, ListEditor } from '../components/settings';
-import { ActionList, ConditionList } from '../components/actions';
+import { ActionList, ConditionList, actionProblems } from '../components/actions';
 import { FormatEditor, FormatPreview } from '../components/formatting';
 type Kind = 'menus' | 'holograms' | 'customCommands';
 const endpoint: Record<Kind, string> = {
@@ -13,7 +13,18 @@ const endpoint: Record<Kind, string> = {
   customCommands: '/api/custom-commands',
 };
 const defaults: Record<Kind, Obj> = {
-  menus: { id: '', title: 'New menu', rows: 3, permission: '', refreshSeconds: 0, slots: [] },
+  menus: {
+    id: '',
+    title: 'New menu',
+    rows: 3,
+    permission: '',
+    refreshSeconds: 0,
+    slots: [],
+    openConditions: [],
+    onClose: [],
+    fillEmpty: false,
+    filler: null,
+  },
   holograms: {
     enabled: true,
     dimension: 'minecraft:overworld',
@@ -243,7 +254,11 @@ function DefinitionLoader({
   const resource = useResource<Json>(
     (signal) =>
       creating
-        ? Promise.resolve({ definition: defaults[kind] })
+        ? Promise.resolve<Json>(
+            kind === 'customCommands'
+              ? { command: { command: defaults[kind] } }
+              : { definition: defaults[kind] },
+          )
         : w.api.request(
             query(endpoint[kind] + '/item', { [kind === 'customCommands' ? 'name' : 'id']: id }),
             undefined,
@@ -258,7 +273,11 @@ function DefinitionLoader({
           kind={kind}
           id={id}
           creating={creating}
-          initial={object(object(data)[kind === 'customCommands' ? 'command' : 'definition'])}
+          initial={
+            kind === 'customCommands'
+              ? object(object(object(data).command).command)
+              : object(object(data).definition)
+          }
           metadata={metadata}
           onDirty={onDirty}
           saved={saved}
@@ -337,6 +356,22 @@ function DefinitionEditor({
     }
     const name =
       kind === 'customCommands' ? string(value.name) : kind === 'menus' ? string(value.id) : newId;
+    const actionLists =
+      kind === 'customCommands'
+        ? [array(value.actions)]
+        : kind === 'menus'
+          ? [
+              array(value.onClose),
+              ...array(value.slots).flatMap((slot) =>
+                ['actions', 'leftActions', 'rightActions'].map((key) => array(object(slot)[key])),
+              ),
+            ]
+          : [];
+    const problems = actionLists.flatMap((list) => actionProblems(list));
+    if (problems.length) {
+      w.notify(problems[0], true);
+      return;
+    }
     if (!name.trim()) {
       w.notify('A stable identifier is required.', true);
       return;
@@ -427,7 +462,7 @@ function DefinitionEditor({
                 (_, index) => {
                   const item = array(draft.slots)
                     .map(object)
-                    .find((s) => s.index === index);
+                    .find((s) => s.slot === index);
                   return (
                     <button
                       class={`inventory-slot ${item ? 'filled' : ''}`}
@@ -450,6 +485,45 @@ function DefinitionEditor({
               conditions={conditions}
               disabled={disabled}
             />
+            <details>
+              <summary>Menu access and closing actions</summary>
+              <p class="help">
+                Open conditions and slot visibility are checked again on the server during clicks.
+                Use a conditional action to restrict clicks independently.
+              </p>
+              <ConditionList
+                value={array(draft.openConditions)}
+                change={(v) => set('openConditions', v)}
+                types={conditions}
+                disabled={disabled}
+              />
+              <ActionList
+                label="On close"
+                value={array(draft.onClose)}
+                change={(v) => set('onClose', v)}
+                types={types}
+                conditions={conditions}
+                disabled={disabled}
+              />
+            </details>
+            <label class="field">
+              <span>Fill empty slots</span>
+              <input
+                type="checkbox"
+                checked={draft.fillEmpty === true}
+                disabled={disabled}
+                onChange={(e) => set('fillEmpty', e.currentTarget.checked)}
+              />
+            </label>
+            {draft.fillEmpty === true && (
+              <MenuItemEditor
+                value={object(
+                  draft.filler || { itemId: 'minecraft:gray_stained_glass_pane', amount: 1 },
+                )}
+                change={(v) => set('filler', v)}
+                disabled={disabled}
+              />
+            )}
           </>
         ) : kind === 'holograms' ? (
           <>
@@ -685,12 +759,20 @@ function MenuSlot({
   disabled: boolean;
 }) {
   const slots = array(draft.slots);
-  const selected = slots.map(object).find((s) => s.index === index);
+  const selected = slots.map(object).find((s) => s.slot === index);
   const value: Obj = selected || {
-    index,
-    item: { itemId: 'minecraft:stone', count: 1, name: '', lore: [] },
+    slot: index,
+    item: {
+      itemId: 'minecraft:stone',
+      amount: 1,
+      name: '',
+      lore: [],
+      glint: false,
+      customModelData: null,
+      legacyMetadata: null,
+      hideTooltip: false,
+    },
     visibleIf: [],
-    clickableIf: [],
     actions: [],
     leftActions: [],
     rightActions: [],
@@ -699,20 +781,26 @@ function MenuSlot({
     const entry = { ...value, [key]: next };
     set(
       'slots',
-      selected
-        ? slots.map((raw) => (object(raw).index === index ? entry : raw))
-        : [...slots, entry],
+      selected ? slots.map((raw) => (object(raw).slot === index ? entry : raw)) : [...slots, entry],
     );
   };
   return (
     <Card title={`Slot ${index}`}>
-      <ObjectEditor
-        label="Item, count, name and lore"
-        value={value.item}
+      <MenuItemEditor
+        value={object(value.item)}
         change={(v) => update('item', v)}
         disabled={disabled}
       />
-      {['visibleIf', 'clickableIf'].map((key) => (
+      <label class="field">
+        <span>Refresh slot</span>
+        <input
+          type="checkbox"
+          checked={value.refresh === true}
+          disabled={disabled}
+          onChange={(e) => update('refresh', e.currentTarget.checked)}
+        />
+      </label>
+      {['visibleIf'].map((key) => (
         <details>
           <summary>{title(key)}</summary>
           <ConditionList
@@ -742,13 +830,71 @@ function MenuSlot({
         onClick={() =>
           set(
             'slots',
-            slots.filter((raw) => object(raw).index !== index),
+            slots.filter((raw) => object(raw).slot !== index),
           )
         }
       >
         Clear slot
       </button>
     </Card>
+  );
+}
+function MenuItemEditor({
+  value,
+  change,
+  disabled,
+}: {
+  value: Obj;
+  change: (v: Obj) => void;
+  disabled: boolean;
+}) {
+  const set = (key: string, next: Json) => change({ ...value, [key]: next });
+  return (
+    <fieldset disabled={disabled}>
+      <legend>Item, amount, name and lore</legend>
+      <label class="field">
+        <span>itemId</span>
+        <input value={string(value.itemId)} onInput={(e) => set('itemId', e.currentTarget.value)} />
+      </label>
+      {['amount', 'customModelData', 'legacyMetadata'].map((key) => (
+        <label class="field">
+          <span>{key}</span>
+          <input
+            type="number"
+            min={key === 'amount' ? 1 : 0}
+            max={key === 'amount' ? 64 : key === 'legacyMetadata' ? 32767 : undefined}
+            step={1}
+            value={string(value[key])}
+            onInput={(e) =>
+              set(key, e.currentTarget.value === '' ? null : Number(e.currentTarget.value))
+            }
+          />
+        </label>
+      ))}
+      <FormatEditor
+        label="Item name"
+        value={string(value.name)}
+        change={(v) => set('name', v)}
+        disabled={disabled}
+      />
+      <ListEditor
+        label="Lore"
+        value={array(value.lore)}
+        change={(v) => set('lore', v)}
+        formatted
+        disabled={disabled}
+      />
+      {['glint', 'hideTooltip'].map((key) => (
+        <label class="field">
+          <span>{title(key)}</span>
+          <input
+            type="checkbox"
+            checked={value[key] === true}
+            onChange={(e) => set(key, e.currentTarget.checked)}
+          />
+        </label>
+      ))}
+    </fieldset>
   );
 }
 function PlayerPlacement({

@@ -136,24 +136,27 @@ public class PermissionNodeRegistry {
     }
 
     public List<DiscoveredPermission> listNodes(String query, int limit) {
+        return pageNodes(query, 0, limit <= 0 ? 50 : limit).nodes();
+    }
+
+    public record NodePage(List<DiscoveredPermission> nodes, long total) {}
+
+    public NodePage pageNodes(String query, long offset, int limit) {
         String q = query != null ? query.trim().toLowerCase(Locale.ROOT) : "";
-        int max = limit <= 0 ? 50 : limit;
         synchronized (lock) {
             List<DiscoveredPermission> result = new ArrayList<>();
             Map<String, DiscoveredPermission> combined = new LinkedHashMap<>(state.nodes);
             externalNodes.forEach((node, entry) -> combined.put(node, entry.permission));
+            long total = 0;
             for (DiscoveredPermission entry : combined.values().stream()
                     .sorted((a, b) -> String.CASE_INSENSITIVE_ORDER.compare(a.node, b.node))
                     .toList()) {
                 if (!q.isEmpty() && (entry.node == null || !entry.node.toLowerCase(Locale.ROOT).contains(q))) {
                     continue;
                 }
-                result.add(entry.copy());
-                if (result.size() >= max) {
-                    break;
-                }
+                if (total++ >= offset && result.size() < limit) result.add(entry.copy());
             }
-            return result;
+            return new NodePage(result, total);
         }
     }
 

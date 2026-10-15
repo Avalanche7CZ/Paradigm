@@ -17,7 +17,7 @@ public final class MinecraftItemInventory {
     }
     public static InventoryConsumption prepare(ServerPlayerEntity player, List<ItemRequirement> items) {
         return new SlotInventory<ItemStack>() {
-            @Override protected int size() { return player.getInventory().size(); }
+            @Override protected int size() { return Math.min(36, player.getInventory().size()); }
             @Override protected ItemStack get(int slot) { return player.getInventory().getStack(slot); }
             @Override protected ItemStack copy(ItemStack stack) { return stack != null ? stack.copy() : ItemStack.EMPTY; }
             @Override protected int count(ItemStack stack) { return stack != null && !stack.isEmpty() ? stack.getCount() : 0; }

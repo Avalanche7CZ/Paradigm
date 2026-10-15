@@ -5,7 +5,15 @@ import { AsyncBoundary, useDirty, useResource, useWorkspace } from '../core/cont
 import { array, number, object, string, type Json, type Obj } from '../core/types';
 import { Badge, Empty, Pager, Tabs } from '../components/ui';
 import { Popup } from './permissions/controls';
-import { describeChange, group, subjectValid, type Change, type View } from './permissions/model';
+import {
+  appendChanges,
+  describeChange,
+  group,
+  subjectValid,
+  trackPreview,
+  type Change,
+  type View,
+} from './permissions/model';
 import { TargetEditor } from './permissions/targets';
 import { TrackEditor } from './permissions/tracks';
 import { WorkflowContext, useWorkflow } from './permissions/workflow';
@@ -63,24 +71,22 @@ export function Permissions() {
   const canManage = w.session.capabilities?.mutations?.permissions === true;
   const editable = !w.busy && !uncertain && canManage && meta.internalEnabled === true;
   const keys = array(meta.contextKeys).map(string);
-  function stage(values: Omit<Change, 'key'>[]) {
+  function stage(values: Omit<Change, 'key'>[]): boolean {
     if (!editable || uncertain) {
       w.notify(
         'Editing is unavailable until permissions and the current state are verified.',
         true,
       );
-      return;
+      return false;
     }
-    setChanges((previous) => [
-      ...previous,
-      ...values
-        .filter(
-          (value) =>
-            !value.assignmentId || !previous.some((c) => c.assignmentId === value.assignmentId),
-        )
-        .map((value) => ({ ...value, key: String(++changeSequence.current) })),
-    ]);
+    try {
+      setChanges(appendChanges(changes, values, () => String(++changeSequence.current)));
+    } catch (error) {
+      w.notify(String(error), true);
+      return false;
+    }
     setOutcome('');
+    return true;
   }
   async function discard() {
     if (
@@ -113,6 +119,11 @@ export function Permissions() {
       w.notify('Stage or discard the open editor fields before applying.', true);
       return;
     }
+    const invalidTrack = tracks.map((track) => trackPreview(track, changes).error).find(Boolean);
+    if (invalidTrack) {
+      w.notify(invalidTrack, true);
+      return;
+    }
     const reviewed = [...changes];
     const review = reviewed.map((c, i) => `${i + 1}. ${describeChange(c)}`).join('\n\n');
     if (
@@ -123,45 +134,67 @@ export function Permissions() {
     )
       return;
     let applied = 0;
+    let alreadyAbsent = 0;
     try {
       await w.mutate(async () => {
         for (const change of reviewed) {
-          const result = object(
-            await w.api.request<Json>('/api/permissions/' + change.route, {
-              ...change.body,
-              confirmed: true,
-            }),
-          );
+          let result: Obj;
+          try {
+            result = object(
+              await w.api.request<Json>('/api/permissions/' + change.route, {
+                ...change.body,
+                confirmed: true,
+              }),
+            );
+          } catch (error) {
+            if (
+              error instanceof ApiError &&
+              error.code === 'assignment_not_found' &&
+              change.bundle &&
+              change.assignmentId &&
+              change.route.endsWith('/remove')
+            ) {
+              alreadyAbsent++;
+              setChanges((previous) => previous.filter((c) => c.key !== change.key));
+              continue;
+            }
+            throw error;
+          }
+          if (typeof result.applied !== 'boolean')
+            throw new ApiError(
+              0,
+              'invalid_response',
+              'The backend did not provide a verifiable mutation outcome. Inspect current state before retrying.',
+            );
           if (result.applied !== true)
             throw new Error(string(result.message) || 'The backend did not apply this operation.');
           applied++;
+          if (change.route === 'track/rename')
+            setSelected((current) =>
+              current === change.body.track ? string(change.body.target) : current,
+            );
+          if (change.route === 'track/delete' || change.route === 'group/delete')
+            setSelected((current) =>
+              current === (change.body.track || change.body.group) ? '' : current,
+            );
           setChanges((previous) => previous.filter((c) => c.key !== change.key));
         }
       });
-      const renamed = reviewed.find(
-        (change) => change.route === 'track/rename' && change.body.track === selected,
-      );
-      if (renamed) setSelected(string(renamed.body.target));
-      if (
-        reviewed.some(
-          (change) =>
-            (change.route === 'track/delete' && change.body.track === selected) ||
-            (change.route === 'group/delete' && change.body.group === selected),
-        )
-      )
-        setSelected('');
       setOutcome(
-        `${applied} changes applied by the host permission service. Storage durability is not independently acknowledged by this API.`,
+        `${applied} changes applied by the host permission service. ${alreadyAbsent} original replacement assignments were already absent. Storage durability is not independently acknowledged by this API.`,
       );
-      w.notify(`${applied} permission changes applied.`);
+      w.notify(
+        `${applied} permission changes applied.${alreadyAbsent ? ` ${alreadyAbsent} original assignments were already absent.` : ''}`,
+      );
     } catch (error) {
       const unknown =
         error instanceof ApiError &&
         (['connection_failed', 'request_timeout', 'invalid_response'].includes(error.code) ||
           error.status >= 500);
-      setUncertain(unknown);
+      const conflict = error instanceof ApiError && error.code === 'persistence_conflict';
+      setUncertain(unknown || conflict);
       setOutcome(
-        `${applied} of ${reviewed.length} changes acknowledged. ${unknown ? 'The last outcome is unknown. Inspect current assignments and discard the remaining queue before starting a new change. No automatic retry.' : 'Remaining changes are still staged; remove or correct the failed operation before applying again.'} ${String(error)}`,
+        `${applied} of ${reviewed.length} changes acknowledged. ${conflict ? 'The last definition change was rejected because another server changed it. Reload server permissions and discard the remaining queue before reviewing again. No automatic retry.' : unknown ? 'The last outcome is unknown. Inspect current assignments and discard the remaining queue before starting a new change. No automatic retry.' : 'Remaining changes are still staged; remove or correct the failed operation before applying again.'} ${String(error)}`,
       );
       w.notify(`${applied} changes applied; processing stopped.`, true);
     } finally {

@@ -155,3 +155,94 @@ export function describeChange(change: Change) {
   });
   return `${change.label}\n${lines.join('\n')}`;
 }
+
+export function trackPreview(track: Obj, changes: Change[]) {
+  const ranks = array(track.groups).map(string);
+  let unavailable = false;
+  let error = '';
+  for (const change of changes) {
+    if (change.body.track !== track.name || !change.route.startsWith('track/')) continue;
+    const rank = string(change.body.group);
+    const position = Number(change.body.position);
+    if (unavailable) {
+      error = 'A staged operation targets a renamed or deleted track.';
+      break;
+    }
+    switch (change.route) {
+      case 'track/rename':
+      case 'track/delete':
+        unavailable = true;
+        break;
+      case 'track/clear':
+        ranks.splice(0);
+        break;
+      case 'track/remove':
+        if (!ranks.includes(rank)) error = `${rank} is no longer in the staged track.`;
+        else ranks.splice(ranks.indexOf(rank), 1);
+        break;
+      case 'track/move':
+      case 'track/insert':
+        if (
+          !Number.isInteger(position) ||
+          position < 1 ||
+          position > ranks.length + (change.route === 'track/insert' ? 1 : 0) ||
+          (change.route === 'track/move' ? !ranks.includes(rank) : ranks.includes(rank))
+        ) {
+          error = `Review the staged position for ${rank}; earlier changes may have been unstaged.`;
+          break;
+        }
+        if (change.route === 'track/move') ranks.splice(ranks.indexOf(rank), 1);
+        ranks.splice(position - 1, 0, rank);
+        break;
+    }
+    if (error) break;
+  }
+  return { ranks, unavailable, error };
+}
+
+export function metadataPreview(initial: Obj, id: string, changes: Change[]) {
+  const values = {
+    description: string(initial.description),
+    prefix: string(initial.prefix),
+    suffix: string(initial.suffix),
+    weight: String(Number(initial.weight) || 0),
+  };
+  for (const change of changes) {
+    if (change.route !== 'group/update' || change.body.group !== id) continue;
+    for (const [key, value] of Object.entries(object(change.body.metadata)))
+      if (key in values) values[key as keyof typeof values] = string(value);
+  }
+  return values;
+}
+
+function canonical(value: Json): string {
+  return JSON.stringify(
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? Object.fromEntries(
+          Object.entries(value)
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([key, v]) => [key, canonical(v)]),
+        )
+      : value,
+  );
+}
+
+export function appendChanges(
+  previous: Change[],
+  values: Omit<Change, 'key'>[],
+  key: () => string,
+): Change[] {
+  const pending = [...previous];
+  for (const value of values) {
+    if (
+      pending.some(
+        (c) =>
+          (value.assignmentId && c.assignmentId === value.assignmentId) ||
+          (c.route === value.route && canonical(c.body) === canonical(value.body)),
+      )
+    )
+      throw new Error('This operation is already staged. Unstage it before replacing it.');
+    pending.push({ ...value, key: key() });
+  }
+  return pending;
+}

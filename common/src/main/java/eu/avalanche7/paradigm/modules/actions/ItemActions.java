@@ -30,6 +30,22 @@ public final class ItemActions {
             default -> { }
         }
     }
+    public static void validateSequence(List<CustomCommand.Action> actions) {
+        if (actions == null) return;
+        for (int index = 0; index < actions.size(); index++) {
+            var action = actions.get(index);
+            if (action == null) continue;
+            switch (action.getType()) {
+                case "consume_items" -> {
+                    var steps = new ArrayList<>(action.getOnSuccess());
+                    steps.addAll(actions.subList(index + 1, actions.size()));
+                    collect(steps, new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), 0);
+                }
+                case "add_group", "remove_group" -> collect(List.of(action), new ArrayList<>(), new ArrayList<>(), new ArrayList<>(), 0, action);
+                default -> { }
+            }
+        }
+    }
     public static boolean execute(CustomCommand.Action action, List<CustomCommand.Action> tail, ActionContext context, ActionDispatcher dispatcher, int depth) {
         var services = context.services();
         var player = context.player();

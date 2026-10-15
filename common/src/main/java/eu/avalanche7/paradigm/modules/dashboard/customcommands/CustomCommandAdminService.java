@@ -193,6 +193,7 @@ public final class CustomCommandAdminService {
 
     private void validateActions(JsonArray actions, int depth) {
         if (depth > 6) throw new IllegalArgumentException("Conditional action nesting is too deep.");
+        eu.avalanche7.paradigm.modules.actions.ItemActions.validateSequence(java.util.Arrays.asList(new Gson().fromJson(actions, CustomCommand.Action[].class)));
         for (int index = 0; index < actions.size(); index++) {
             JsonElement element = actions.get(index);
             if (!element.isJsonObject()) throw new IllegalArgumentException("Every action must be an object.");

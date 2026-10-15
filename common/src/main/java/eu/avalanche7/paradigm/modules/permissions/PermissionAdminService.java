@@ -67,7 +67,9 @@ public class PermissionAdminService {
             if (trackArgumentError != null) {
                 return result(false, trackArgumentError.startsWith("Expiry") ? "invalid_expiry" : "invalid_argument", trackArgumentError, false);
             }
-            PermissionMutationResult trackResult = mutateTrack(actor, safe, action, contexts, expiresAtMs);
+            PermissionMutationResult trackResult;
+            try { trackResult = mutateTrack(actor, safe, action, contexts, expiresAtMs); }
+            catch (eu.avalanche7.paradigm.storage.StorageException failure) { return persistenceFailure(actor, action, failure); }
             if (trackResult.applied() && services.getPlatformAdapter() != null) {
                 try { services.getPlatformAdapter().refreshAllPlayerCommandTrees(); } catch (Throwable ignored) { }
             }
@@ -122,6 +124,8 @@ public class PermissionAdminService {
                 }
                 default -> false;
             };
+        } catch (eu.avalanche7.paradigm.storage.StorageException failure) {
+            return persistenceFailure(actor, action, failure);
         } catch (Throwable t) {
             audit(actor, auditType(action), AuditResult.FAILED, "Permission mutation failed.", Map.of("action", action, "error", t.getClass().getSimpleName()));
             return result(false, "validation_failed", "Permission change failed.", dangerous);
@@ -137,6 +141,9 @@ public class PermissionAdminService {
             } catch (Throwable ignored) {
             }
         }
+        if (!changed && !assignmentId.isBlank() && services.getPermissionsHandler().isInternalPermissionsEnabled()
+                && Set.of("group_permission_remove", "user_permission_remove", "user_group_remove").contains(action))
+            return result(false, "assignment_not_found", "The original assignment is already absent from the host runtime. No removal was applied.", false);
         return result(changed, changed ? "ok" : "validation_failed", changed ? "Permission change applied." : "Permission change was rejected.", dangerous);
     }
 
@@ -259,6 +266,13 @@ public class PermissionAdminService {
         if (audit != null) {
             audit.dashboard(actor, type, result, message, details);
         }
+    }
+
+    private PermissionMutationResult persistenceFailure(DashboardPrincipal actor, String action, eu.avalanche7.paradigm.storage.StorageException failure) {
+        audit(actor, auditType(action), AuditResult.FAILED, "Permission persistence was not acknowledged.", Map.of("action", action, "error", failure.getClass().getSimpleName()));
+        if (failure instanceof eu.avalanche7.paradigm.storage.StorageConflictException)
+            return result(false, "persistence_conflict", failure.getMessage(), false);
+        return result(false, "persistence_uncertain", "Runtime state may have changed, but persistence was not confirmed. Inspect and reload before retrying.", false);
     }
 
     private PermissionMutationResult mutateTrack(DashboardPrincipal actor, PermissionMutationRequest request, String action,

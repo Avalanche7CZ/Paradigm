@@ -1,6 +1,41 @@
 import { array, object, string, type Json, type Obj, title } from '../core/types';
 import { ObjectEditor, ListEditor } from './settings';
 import { FormatEditor } from './formatting';
+export function actionProblems(value: Json[], depth = 0): string[] {
+  if (depth > 16) return ['Action nesting is too deep.'];
+  const problems: string[] = [];
+  function transaction(steps: Json[], nested: number) {
+    if (nested > 16) {
+      problems.push('Action nesting is too deep.');
+      return;
+    }
+    for (const raw of steps) {
+      const step = object(raw);
+      const type = string(step.type).trim().toLowerCase();
+      if (array(step.conditions).length || array(step.on_failure).length)
+        problems.push('Put transaction conditions and failure actions on the outer action.');
+      if (['consume_items', 'add_group', 'remove_group'].includes(type))
+        transaction(array(step.on_success), nested + 1);
+      else if (!['message', 'broadcast', 'actionbar', 'title', 'sound', 'open_menu'].includes(type))
+        problems.push(`${type || 'Unknown action'} cannot participate in an item transaction.`);
+    }
+  }
+  value.forEach((raw, index) => {
+    const action = object(raw);
+    const type = string(action.type).trim().toLowerCase();
+    if (type === 'consume_items')
+      transaction([...array(action.on_success), ...value.slice(index + 1)], depth + 1);
+    if (type === 'transaction')
+      transaction([...array(action.actions), ...array(action.on_success)], depth + 1);
+    if (['add_group', 'remove_group'].includes(type))
+      transaction(array(action.on_success), depth + 1);
+    if (type === 'await_input' && index !== value.length - 1)
+      problems.push('await_input must be last; put subsequent actions in on_success.');
+    for (const key of ['actions', 'on_success', 'on_failure'])
+      problems.push(...actionProblems(array(action[key]), depth + 1));
+  });
+  return [...new Set(problems)];
+}
 export function actionTemplate(type: string): Obj {
   switch (type) {
     case 'message':
@@ -9,6 +44,14 @@ export function actionTemplate(type: string): Obj {
     case 'run_command':
     case 'run_console':
       return { type, commands: [] };
+    case 'play_sound':
+      return { type, text: ['minecraft:entity.experience_orb.pickup 1 1 master'] };
+    case 'runcmd':
+    case 'command':
+    case 'player_command':
+    case 'console_command':
+      return { type, commands: [] };
+    case 'menu':
     case 'open_menu':
       return { type, menu: '' };
     case 'check_items':
@@ -26,11 +69,11 @@ export function actionTemplate(type: string): Obj {
     case 'await_input':
       return { type, key: 'input', timeout: 60, text: [], on_success: [], on_failure: [] };
     case 'teleport':
-      return { type, world: 'minecraft:overworld', x: 0, y: 64, z: 0 };
+      return { type, x: 0, y: 64, z: 0 };
     case 'title':
-      return { type, title: '', subtitle: '', fadeIn: 10, stay: 70, fadeOut: 20 };
+      return { type, text: ['', ''] };
     case 'sound':
-      return { type, sound: 'minecraft:entity.experience_orb.pickup', volume: 1, pitch: 1 };
+      return { type, text: ['minecraft:entity.experience_orb.pickup 1 1 master'] };
     default:
       return { type };
   }
@@ -54,13 +97,39 @@ export function ActionList({
   return (
     <section class="action-list">
       <h3>{label}</h3>
+      {actionProblems(value).map((problem) => (
+        <p role="alert" class="text-error">
+          {problem}
+        </p>
+      ))}
       <p class="help">
-        Runs from top to bottom. Available types come from the server's live registry.
+        Runs from top to bottom. Use conditional for guarded actions. consume_items includes all
+        following actions in its transaction; only item/group mutations and message, broadcast,
+        actionbar, title, sound or open_menu notifications are supported there. Put conditions and
+        failure actions on the outer transaction. Teleport uses the current world. Title text
+        contains title then subtitle; sound text uses ID, volume, pitch and category.
       </p>
       {value.map((raw, i) => {
         const action = object(raw);
+        const type = string(action.type).trim().toLowerCase();
+        const unsupported =
+          type === 'teleport'
+            ? ['world']
+            : type === 'title'
+              ? ['title', 'subtitle', 'fadeIn', 'stay', 'fadeOut']
+              : ['sound', 'play_sound'].includes(type)
+                ? ['sound', 'volume', 'pitch', 'category']
+                : [];
+        const ignored = unsupported.filter((key) => key in action);
         return (
           <div class="card" key={i}>
+            {ignored.length > 0 && (
+              <p role="alert" class="text-warning">
+                The server does not use these fields: {ignored.join(', ')}. They remain in the
+                complete definition JSON. Title and sound use text; teleport uses coordinates in the
+                current world.
+              </p>
+            )}
             <div class="toolbar">
               <label class="field compact">
                 <span>Action type</span>
@@ -119,7 +188,7 @@ export function ActionList({
               </div>
             </div>
             {Object.entries(action)
-              .filter(([key]) => key !== 'type')
+              .filter(([key]) => key !== 'type' && !unsupported.includes(key))
               .map(([key, v]) =>
                 ['on_success', 'on_failure', 'actions'].includes(key) ? (
                   <ActionList

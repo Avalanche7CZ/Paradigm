@@ -385,7 +385,7 @@ export function AssignmentEditor({
           ...(initial ? [removal(kind, target, initial, membership)] : []),
         ].map((change) => (initial ? { ...change, bundle: initial.id } : change));
       });
-      flow.stage(changes);
+      if (!flow.stage(changes)) return;
       close();
     } catch (error) {
       setError(String(error instanceof Error ? error.message : error));

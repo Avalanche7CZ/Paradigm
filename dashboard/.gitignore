@@ -6,3 +6,8 @@ playwright-report/
 tests/
 vitest.config.ts
 playwright.config.ts
+
+
+!tests/
+!vitest.config.ts
+!playwright.config.ts

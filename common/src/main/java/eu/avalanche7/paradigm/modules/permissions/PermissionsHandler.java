@@ -414,6 +414,10 @@ public class PermissionsHandler {
         return permissionNodeRegistry.listNodes(query, limit);
     }
 
+    public PermissionNodeRegistry.NodePage pageDiscoveredPermissionNodes(String query, long offset, int limit) {
+        return permissionNodeRegistry.pageNodes(query, offset, limit);
+    }
+
     public CommandGuardResult evaluateCommandPermission(IPlayer player, String commandLine) {
         if (!isExternalCommandPermissionsEnabled()) {
             return CommandGuardResult.allowed(commandLine, null, "disabled");
