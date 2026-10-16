@@ -37,17 +37,11 @@ public class ServerHeartbeatPublisher {
 
     private void publishSafely() {
         StorageService storage = services.getStorageService();
-        if (storage == null || !storage.isMysqlActive()) {
+        if (storage == null || !storage.isMysqlActive() || !services.getTaskScheduler().isServerAvailable()) {
             return;
         }
-        storage.runStorageAsync("network.heartbeat.publish", this::publish);
-    }
-
-    private void publish() {
-        StorageService storage = services.getStorageService();
-        if (storage == null || !storage.isMysqlActive()) {
-            return;
-        }
+        // scheduleAtFixedRate invokes this on the server thread; only persistence is asynchronous.
+        var runtime = ServerRuntimeTelemetry.capture(services);
         ServerIdentity identity = storage.context().serverIdentity();
         if (identity == null) {
             return;
@@ -62,9 +56,10 @@ public class ServerHeartbeatPublisher {
                 safeLoaderName(),
                 fingerprint,
                 System.currentTimeMillis(),
-                0L
+                0L,
+                runtime
         );
-        storage.servers().publishHeartbeat(info);
+        storage.runStorageAsync("network.heartbeat.publish", () -> storage.servers().publishHeartbeat(info));
     }
 
     private String safeMinecraftVersion() {

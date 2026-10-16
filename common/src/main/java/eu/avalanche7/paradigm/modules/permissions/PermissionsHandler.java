@@ -6,6 +6,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
 
@@ -21,6 +24,7 @@ import eu.avalanche7.paradigm.storage.StorageService;
 import eu.avalanche7.paradigm.utils.CommandPriority;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 import eu.avalanche7.paradigm.utils.Placeholders;
+import eu.avalanche7.paradigm.utils.TaskScheduler;
 
 public class PermissionsHandler {
     private final Logger logger;
@@ -31,6 +35,8 @@ public class PermissionsHandler {
     private final Set<UUID> discoveryWarmedUsers = ConcurrentHashMap.newKeySet();
     private final PermissionAPI internalPermissionApi;
     private final PermissionNodeRegistry permissionNodeRegistry;
+    private ScheduledFuture<?> definitionSyncFuture;
+    private final AtomicBoolean definitionSyncInFlight = new AtomicBoolean();
 
     public static final String MENTION_EVERYONE_PERMISSION = ParadigmPermissions.MENTION_EVERYONE.node();
     public static final String MENTION_PLAYER_PERMISSION = ParadigmPermissions.MENTION_PLAYER.node();
@@ -213,6 +219,27 @@ public class PermissionsHandler {
         if (isInternalPermissionsEnabled()) {
             internalPermissionApi.initialize();
         }
+    }
+
+    public synchronized void startDefinitionSync(TaskScheduler scheduler) {
+        if (definitionSyncFuture != null || scheduler == null || storageService == null || !storageService.isMysqlActive()) return;
+        definitionSyncFuture = scheduler.scheduleAtFixedRateRaw(() -> {
+            if (!isInternalPermissionsEnabled() || !definitionSyncInFlight.compareAndSet(false, true)) return;
+            storageService.submitAcknowledged(() -> {
+                if (internalPermissionApi.synchronizeDefinitions() && platform != null) {
+                    platform.executeOnServerThread(platform::refreshAllPlayerCommandTrees);
+                }
+                return null;
+            }).whenComplete((ignored, failure) -> {
+                definitionSyncInFlight.set(false);
+                if (failure != null) logger.warn("Paradigm: Failed to synchronize shared permission definitions; keeping last known cache.", failure);
+            });
+        }, 3L, 3L, TimeUnit.SECONDS);
+    }
+
+    public synchronized void stopDefinitionSync() {
+        if (definitionSyncFuture != null) definitionSyncFuture.cancel(false);
+        definitionSyncFuture = null;
     }
 
     public void registerLuckPermsPermissions() {

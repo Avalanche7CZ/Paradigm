@@ -43,6 +43,7 @@ import net.minecraft.world.Teleporter;
 import net.minecraft.world.WorldServer;
 import net.minecraft.world.WorldSettings.GameType;
 import net.minecraftforge.common.DimensionManager;
+import net.minecraftforge.event.CommandEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -70,7 +71,7 @@ import eu.avalanche7.paradigm.utils.TaskScheduler;
 public final class PlatformAdapterImpl implements IPlatformAdapter {
     private static final Logger LOGGER = LoggerFactory.getLogger(PlatformAdapterImpl.class);
     private final ForgeConfig config;
-    private final MinecraftEventSystem events = new MinecraftEventSystem();
+    private final MinecraftEventSystem events = new MinecraftEventSystem(this);
     private final TaskScheduler scheduler;
     private final DebugLogger debugLogger;
     private Placeholders placeholders;
@@ -79,6 +80,7 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     private final Set<String> priorityWarnings = new HashSet<>();
     private final Set<String> commandCollisions = new HashSet<>();
     private final Set<ForgeCommand> ownedCommands = new LinkedHashSet<>();
+    private final Map<ForgeCommand, List<Object>> hybridCommandWrappers = new LinkedHashMap<>();
     private final Map<Object, Runnable> commandContributors = new LinkedHashMap<>();
     private final Map<String, ICommand> displacedCommands = new LinkedHashMap<>();
     private Object registeringContributor;
@@ -135,6 +137,9 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     public void clear() {
+        for (ForgeCommand command : new ArrayList<>(hybridCommandWrappers.keySet())) {
+            restoreHybridCommandPermissions(command);
+        }
         menuPlatform.stopped();
         hologramPlatform.clear();
         if (visuals != null) visuals.clear();
@@ -1293,8 +1298,73 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
         }
         ForgeCommand command = new ForgeCommand(root, this, contributor);
         manager.registerCommand(command);
+        relaxHybridCommandPermissions(command);
         commandCollisions.remove(name);
         ownedCommands.add(command);
+    }
+
+    private void relaxHybridCommandPermissions(ForgeCommand command) {
+        try {
+            // Register normally first: Crucible's empty-node overload can leave an unrestricted
+            // Bukkit wrapper behind when native ownership changes. Track only wrappers we change.
+            Class<?> bukkit = Class.forName("org.bukkit.Bukkit");
+            Object craftServer = bukkit.getMethod("getServer").invoke(null);
+            if (craftServer == null) return;
+            Object commandMap = craftServer.getClass().getMethod("getCraftCommandMap").invoke(craftServer);
+            Collection<?> wrappers = (Collection<?>) commandMap.getClass().getMethod("getCommands").invoke(commandMap);
+            for (Object wrapper : new HashSet<>(wrappers)) {
+                Class<?> type = wrapper.getClass();
+                if (!type.getName().equals("org.bukkit.craftbukkit.v1_7_R4.command.ModCustomCommand")
+                        || !command.getCommandName().equals(type.getMethod("getName").invoke(wrapper))
+                        || !ForgeCommand.class.getName().equals(type.getMethod("getPermission").invoke(wrapper))) {
+                    continue;
+                }
+                hybridCommandWrappers.computeIfAbsent(command, ignored -> new ArrayList<>()).add(wrapper);
+                // ForgeCommand.processCommand rechecks every .requires() predicate, even on
+                // Crucible, which skips ICommand.canCommandSenderUseCommand during execution.
+                type.getMethod("setPermission", String.class).invoke(wrapper, "");
+            }
+        } catch (ClassNotFoundException | NoSuchMethodException unavailable) {
+            restoreHybridCommandPermissions(command);
+            LOGGER.debug("Crucible command permission bridge unavailable for /{}; using native registration",
+                    command.getCommandName());
+        } catch (ReflectiveOperationException | SecurityException | LinkageError failure) {
+            restoreHybridCommandPermissions(command);
+            LOGGER.warn("Could not relax Crucible's outer permission gate for /{}; using native registration",
+                    command.getCommandName(), failure);
+        }
+    }
+
+    private void restoreHybridCommandPermissions(ForgeCommand command) {
+        List<Object> wrappers = hybridCommandWrappers.get(command);
+        if (wrappers == null) return;
+        try {
+            for (Object wrapper : wrappers) {
+                if ("".equals(wrapper.getClass().getMethod("getPermission").invoke(wrapper))) {
+                    wrapper.getClass().getMethod("setPermission", String.class)
+                            .invoke(wrapper, ForgeCommand.class.getName());
+                }
+            }
+        } catch (ReflectiveOperationException | SecurityException | LinkageError failure) {
+            // Do not hand the native root to another command while its Bukkit gate is open.
+            throw new IllegalStateException("Could not restore Crucible permission gate for /"
+                    + command.getCommandName(), failure);
+        }
+        hybridCommandWrappers.remove(command);
+    }
+
+    void guardHybridCommandOwnership(CommandEvent event) {
+        if (event.command instanceof ForgeCommand own && own.ownedBy(this)) return;
+        if (server == null || !(server.getCommandManager() instanceof CommandHandler manager)) return;
+        // A later mod registration can replace the native root while our Bukkit wrapper survives.
+        // Crucible skips native permission checks, so restore that check for this handoff only.
+        for (ForgeCommand command : hybridCommandWrappers.keySet()) {
+            if (manager.getCommands().get(command.getCommandName()) == event.command
+                    && !event.command.canCommandSenderUseCommand(event.sender)) {
+                event.setCanceled(true);
+                return;
+            }
+        }
     }
 
     @Override
@@ -1386,6 +1456,7 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     private void removeNativeCommand(CommandHandler manager, String root, ForgeCommand command) {
+        restoreHybridCommandPermissions(command);
         boolean removed = manager.getCommands().remove(root, command);
         nativeCommandSet(manager).remove(command);
         ICommand displaced = displacedCommands.remove(root);

@@ -125,7 +125,15 @@ export function AssignmentTable({
         role="region"
         aria-label="Permission assignment table"
       >
-        <table>
+        <table class="permission-assignment-grid">
+          <colgroup>
+            {!inherited && <col class="permission-selection-column" />}
+            <col />
+            <col class={inherited ? 'permission-source-column' : 'permission-value-column'} />
+            <col class="permission-context-column" />
+            <col class="permission-expiry-column" />
+            {!inherited && <col class="permission-actions-column" />}
+          </colgroup>
           <thead>
             <tr>
               {!inherited && (
@@ -207,7 +215,7 @@ export function AssignmentTable({
                 </td>
                 <td class="permission-expiry">{expiryLabel(row.expiresAtMs)}</td>
                 {!inherited && (
-                  <td>
+                  <td class="permission-actions">
                     <div class="actions">
                       <button
                         disabled={!flow.editable || pending.has(row.id) || !row.id}

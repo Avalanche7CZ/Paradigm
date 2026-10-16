@@ -1727,52 +1727,7 @@ public class PermissionAPI {
             repository.initializeDefaultGroups(groups);
             definitions = repository.definitions();
         }
-        for (StoredPermissionGroup group : definitions.groups()) {
-            if (group == null) {
-                continue;
-            }
-            String groupName = normalizeGroupName(group.name());
-            if (groupName == null) {
-                continue;
-            }
-            PermissionDataStore.GroupEntry entry = new PermissionDataStore.GroupEntry();
-            entry.description = group.description() != null ? group.description() : "";
-            entry.prefix = group.prefix() != null ? group.prefix() : "";
-            entry.suffix = group.suffix() != null ? group.suffix() : "";
-            entry.weight = group.weight();
-            entry.inherits = new ArrayList<>();
-            for (String parent : group.parents()) {
-                String normalizedParent = normalizeGroupName(parent);
-                if (normalizedParent != null && !entry.inherits.contains(normalizedParent)) {
-                    entry.inherits.add(normalizedParent);
-                }
-            }
-            entry.permissions = new ArrayList<>();
-            for (StoredPermissionNode node : group.permissions()) {
-                String rule = nodeToRule(node);
-                if (rule != null && node.contextSet().isEmpty() && node.expiresAtMs() == null && !entry.permissions.contains(rule)) {
-                    entry.permissions.add(rule);
-                } else if (rule != null) {
-                    boolean denied = rule.startsWith("-");
-                    String permission = denied ? rule.substring(1) : rule;
-                    entry.contextualPermissions.add(new PermissionDataStore.PermissionRuleEntry(node.assignmentId(), permission, denied, node.contextSet(), node.expiresAtMs()));
-                }
-            }
-            entry.normalize();
-            loaded.groups.put(groupName, entry);
-        }
-
-        for (StoredPermissionTrack track : definitions.tracks()) {
-            if (track == null) continue;
-            String name = normalizeGroupName(track.name());
-            if (name == null) continue;
-            List<String> members = new ArrayList<>();
-            for (String group : track.groups()) {
-                String normalized = normalizeGroupName(group);
-                if (normalized != null && loaded.groups.containsKey(normalized) && !members.contains(normalized)) members.add(normalized);
-            }
-            loaded.tracks.put(name, members);
-        }
+        loadDefinitions(loaded, definitions);
 
         long now = System.currentTimeMillis();
         for (StoredUserPermissionData userData : repository.listUsers()) {
@@ -1829,6 +1784,92 @@ public class PermissionAPI {
         persistedTracks.clear();
         for (var track : definitions.tracks()) persistedTracks.put(track.name(), track);
         return loaded;
+    }
+
+    private static void loadDefinitions(PermissionDataStore.PermissionState loaded, PermissionRepository.Definitions definitions) {
+        for (StoredPermissionGroup group : definitions.groups()) {
+            if (group == null) {
+                continue;
+            }
+            String groupName = normalizeGroupName(group.name());
+            if (groupName == null) {
+                continue;
+            }
+            PermissionDataStore.GroupEntry entry = new PermissionDataStore.GroupEntry();
+            entry.description = group.description() != null ? group.description() : "";
+            entry.prefix = group.prefix() != null ? group.prefix() : "";
+            entry.suffix = group.suffix() != null ? group.suffix() : "";
+            entry.weight = group.weight();
+            entry.inherits = new ArrayList<>();
+            for (String parent : group.parents()) {
+                String normalizedParent = normalizeGroupName(parent);
+                if (normalizedParent != null && !entry.inherits.contains(normalizedParent)) {
+                    entry.inherits.add(normalizedParent);
+                }
+            }
+            entry.permissions = new ArrayList<>();
+            for (StoredPermissionNode node : group.permissions()) {
+                String rule = nodeToRule(node);
+                if (rule != null && node.contextSet().isEmpty() && node.expiresAtMs() == null && !entry.permissions.contains(rule)) {
+                    entry.permissions.add(rule);
+                } else if (rule != null) {
+                    boolean denied = rule.startsWith("-");
+                    String permission = denied ? rule.substring(1) : rule;
+                    entry.contextualPermissions.add(new PermissionDataStore.PermissionRuleEntry(node.assignmentId(), permission, denied, node.contextSet(), node.expiresAtMs()));
+                }
+            }
+            entry.normalize();
+            loaded.groups.put(groupName, entry);
+        }
+
+        for (StoredPermissionTrack track : definitions.tracks()) {
+            if (track == null) continue;
+            String name = normalizeGroupName(track.name());
+            if (name == null) continue;
+            List<String> members = new ArrayList<>();
+            for (String group : track.groups()) {
+                String normalized = normalizeGroupName(group);
+                if (normalized != null && loaded.groups.containsKey(normalized) && !members.contains(normalized)) members.add(normalized);
+            }
+            loaded.tracks.put(name, members);
+        }
+    }
+
+    /** Refresh shared definitions without reloading or persisting local user assignments. */
+    public boolean synchronizeDefinitions() {
+        stateLock.writeLock().lock();
+        try {
+            PermissionRepository repository = permissionRepository;
+            // Unknown writes require explicit recovery; a background read must not acknowledge them.
+            if (repository == null || persistedState == null || persistenceRecovery != null) return false;
+            var definitions = repository.definitions();
+            var groups = new LinkedHashMap<String, StoredPermissionGroup>();
+            for (var group : definitions.groups()) groups.put(group.name(), group);
+            var tracks = new LinkedHashMap<String, StoredPermissionTrack>();
+            for (var track : definitions.tracks()) tracks.put(track.name(), track);
+            if (groups.equals(persistedGroups) && tracks.equals(persistedTracks)
+                    && definitions.versions().groups().equals(groupVersions)
+                    && definitions.versions().tracks().equals(trackVersions)) return false;
+
+            var refreshed = new PermissionDataStore.PermissionState();
+            refreshed.defaultGroup = state.defaultGroup;
+            loadDefinitions(refreshed, definitions);
+            refreshed.normalize();
+            // Preserve each snapshot's user state, including writes queued on the storage executor.
+            for (var target : List.of(state, acceptedState, persistedState)) {
+                var copy = copyState(refreshed);
+                target.groups = copy.groups;
+                target.tracks = copy.tracks;
+            }
+            persistedGroups.clear(); persistedGroups.putAll(groups);
+            persistedTracks.clear(); persistedTracks.putAll(tracks);
+            groupVersions.clear(); groupVersions.putAll(definitions.versions().groups());
+            trackVersions.clear(); trackVersions.putAll(definitions.versions().tracks());
+            stateVersion.incrementAndGet();
+            return true;
+        } finally {
+            stateLock.writeLock().unlock();
+        }
     }
 
     private void saveStateToRepository(PermissionRepository repository, PermissionDataStore.PermissionState snapshot) {

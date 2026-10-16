@@ -121,14 +121,17 @@ export function FormatEditor({
   change,
   disabled,
   label,
+  id,
   placeholders = [],
 }: {
   value: string;
   change: (v: string) => void;
   disabled?: boolean;
   label: string;
+  id?: string;
   placeholders?: string[];
 }) {
+  const Field = id ? 'div' : 'label';
   const ref = useRef<HTMLTextAreaElement>(null);
   const wrap = (start: string, end = '') => {
     const element = ref.current;
@@ -167,9 +170,10 @@ export function FormatEditor({
           ))}
         </select>
       </div>
-      <label class="field">
-        <span>{label}</span>
+      <Field class="field">
+        {!id && <span>{label}</span>}
         <textarea
+          id={id}
           ref={ref}
           class="code"
           value={value}
@@ -177,7 +181,7 @@ export function FormatEditor({
           onInput={(e) => change(e.currentTarget.value)}
           rows={4}
         />
-      </label>
+      </Field>
       <FormatPreview text={value} />
     </div>
   );

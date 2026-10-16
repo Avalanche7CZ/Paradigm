@@ -33,6 +33,16 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.platform.visual.LegacyVisualController;
 
 public final class MinecraftEventSystem implements IEventSystem {
+    private final PlatformAdapterImpl platform;
+
+    public MinecraftEventSystem() {
+        this(null);
+    }
+
+    MinecraftEventSystem(PlatformAdapterImpl platform) {
+        this.platform = platform;
+    }
+
     private static volatile MinecraftEventSystem active;
     private static final String JOINED = "paradigmJoined";
     private final Map<EntityPlayerMP, IChatComponent> pendingJoins = new IdentityHashMap<>();
@@ -101,6 +111,19 @@ public final class MinecraftEventSystem implements IEventSystem {
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void chat(ServerChatEvent forge) {
+        if (platform != null && !platform.isServerThread()) {
+            try {
+                CrucibleChatBridge.onServerThread(platform, () -> { handleChat(forge); return null; });
+            } catch (RuntimeException failure) {
+                forge.setCanceled(true);
+                org.slf4j.LoggerFactory.getLogger(MinecraftEventSystem.class).error("Forge chat handling failed; message cancelled", failure);
+            }
+            return;
+        }
+        handleChat(forge);
+    }
+
+    private void handleChat(ServerChatEvent forge) {
         ChatEvent event = new ChatEvent() {
             private String message = forge.message;
 
@@ -141,7 +164,7 @@ public final class MinecraftEventSystem implements IEventSystem {
         if (event.isCancelled()) return;
 
         Services services = Paradigm.getServices();
-        if (services == null) return;
+        if (services == null || CrucibleChatBridge.available()) return;
         IComponent formatted = services.getChatFormatter().format(event.getPlayer(), event.getMessage());
         if (formatted != null) {
             forge.component = new ChatComponentTranslation("%s", formatted.getOriginalText());
@@ -185,6 +208,10 @@ public final class MinecraftEventSystem implements IEventSystem {
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void command(CommandEvent forge) {
+        if (platform != null) {
+            platform.guardHybridCommandOwnership(forge);
+            if (forge.isCanceled()) return;
+        }
         if (!(forge.sender instanceof EntityPlayerMP player)) {
             return;
         }

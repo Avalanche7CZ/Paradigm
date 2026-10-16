@@ -95,9 +95,7 @@ export function TargetEditor({
               <div>
                 <span class="eyebrow">{kind === 'group' ? 'Group' : 'User'}</span>
                 <h2>{kind === 'group' ? id : label || id}</h2>
-                <p class="muted">
-                  {kind === 'group' ? string(row.description) || 'No description' : id}
-                </p>
+                {kind === 'user' && <p class="muted">{id}</p>}
               </div>
               <div class="permission-stats">
                 <span>

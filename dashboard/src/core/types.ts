@@ -43,6 +43,7 @@ export interface Server {
   activeProvider: string;
   storageHealth: string | null;
   runtimeDetailsAvailable: boolean;
+  runtimeUpdatedAtMs?: number | null;
 }
 export interface Servers {
   servers: Server[];

@@ -256,7 +256,7 @@
     "teleported": "Teleport na home {home} proběhl.",
     "delhome_success": "Home {home} byl smazán.",
     "delhome_missing": "Home {home} neexistuje.",
-    "homes_header": "Homes ({count}):",
+    "homes_header": "Domovy ({count}):",
     "homes_empty": "Zatím nemáš žádné homes.",
     "homes_list": "Tvoje homes: {homes}",
     "back_missing": "Pro /back není uložená žádná předchozí pozice.",

@@ -12,6 +12,8 @@ repositories {
 
 configurations {
     embeddedLogging
+    embeddedJson { canBeConsumed = false }
+    legacyGsonFixture { canBeConsumed = false }
     developmentBootstrap { canBeConsumed = false }
     developmentRuntime { canBeConsumed = false }
 }
@@ -116,6 +118,8 @@ dependencies {
     embeddedLogging('org.slf4j:slf4j-simple:2.0.9') {
         transitive = false
     }
+    embeddedJson('com.google.code.gson:gson:2.10.1') { transitive = false }
+    legacyGsonFixture('com.google.code.gson:gson:2.2.4') { transitive = false }
     testImplementation project(':common')
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testImplementation 'org.mockito:mockito-core:5.14.2'
@@ -125,7 +129,14 @@ dependencies {
     testRuntimeOnly 'net.luckperms:api:5.4'
 }
 
-tasks.named('test', Test).configure { useJUnitPlatform() }
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
+    dependsOn tasks.named('reobfJar')
+    doFirst {
+        systemProperty 'packagedForgeJar', layout.buildDirectory.file("libs/${base.archivesName.get()}-${project.version}.jar").get().asFile.absolutePath
+        systemProperty 'legacyGsonJar', configurations.legacyGsonFixture.singleFile.absolutePath
+    }
+}
 
 tasks.named('processResources', ProcessResources).configure {
     inputs.property('mod_version', project.version)
@@ -144,12 +155,13 @@ tasks.named('jar', Jar).configure {
 
 tasks.named('shadowJar').configure {
     archiveClassifier.set('shadow-dev')
-    configurations = [project.configurations.embeddedLogging]
+    configurations = [project.configurations.embeddedLogging, project.configurations.embeddedJson]
     dependsOn project(':common').tasks.named('jar')
     from({ zipTree(project(':common').tasks.named('jar').get().archiveFile.get().asFile) }) {
         exclude 'META-INF/*.SF', 'META-INF/*.DSA', 'META-INF/*.RSA'
     }
     relocate 'org.slf4j', 'eu.avalanche7.paradigm.internal.slf4j'
+    relocate 'com.google.gson', 'eu.avalanche7.paradigm.internal.gson'
     mergeServiceFiles()
 }
 

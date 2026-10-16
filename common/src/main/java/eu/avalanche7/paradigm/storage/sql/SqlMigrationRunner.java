@@ -301,6 +301,7 @@ public class SqlMigrationRunner implements MigrationRunner {
                 case 15 -> "escalation_claims";
                 case 16 -> "player_playtime_streams";
                 case 17 -> "permission_definition_lock";
+                case 18 -> "server_runtime";
                 default -> "migration";
             } + ".sql";
             String sql = resourceText(resource);

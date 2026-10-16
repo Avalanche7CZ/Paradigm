@@ -27,7 +27,7 @@ export function Players() {
   );
   return (
     <>
-      <div class="scope-note">
+      <div class="scope-note directory-scope">
         <strong>{w.networkActive ? 'Network profile directory' : 'Local profile directory'}</strong>
         <p>
           Online and AFK states are established only for the dashboard host. Remote presence is
@@ -71,10 +71,21 @@ export function Players() {
               ))}
               <Card>
                 <Rows
+                  label="Player directory"
+                  emptyTitle="No matching players"
+                  emptyMessage="Try another name, UUID or presence filter. Profiles appear after players join."
                   rows={array(data.players)}
                   columns={[
-                    { key: 'name', label: 'Player' },
-                    { key: 'uuid', label: 'UUID' },
+                    {
+                      key: 'name',
+                      label: 'Player',
+                      render: (r) => (
+                        <>
+                          <strong>{string(r.name) || 'Unknown player'}</strong>
+                          <small class="muted code">{string(r.uuid)}</small>
+                        </>
+                      ),
+                    },
                     {
                       key: 'online',
                       label: 'Presence',

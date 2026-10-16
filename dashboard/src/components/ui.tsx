@@ -168,7 +168,13 @@ export function Rows({
   rows,
   columns,
   onSelect,
+  label = 'Results',
+  emptyTitle = 'No matching results',
+  emptyMessage = 'Try changing the filters.',
 }: {
+  label?: string;
+  emptyTitle?: string;
+  emptyMessage?: string;
   rows: Json[];
   columns: {
     key: string;
@@ -177,12 +183,9 @@ export function Rows({
   }[];
   onSelect?: (row: ReturnType<typeof object>) => void;
 }) {
-  if (!rows.length)
-    return (
-      <Empty title="No matching results">Try changing the filters or create a new entry.</Empty>
-    );
+  if (!rows.length) return <Empty title={emptyTitle}>{emptyMessage}</Empty>;
   return (
-    <div class="table-wrap">
+    <div class="table-wrap" tabIndex={0} role="region" aria-label={label}>
       <table>
         <thead>
           <tr>

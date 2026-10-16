@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import { DictionaryContext, type Dictionary } from './core/i18n';
 import { ApiClient } from './core/api';
 import { WorkspaceContext, type Workspace } from './core/context';
-import { pages, route, type Page } from './core/navigation';
+import { navigationGroups, pages, route, type Page } from './core/navigation';
 import { readPreference, writePreference } from './core/preferences';
 import { ALL, type Server, type Servers, type Session } from './core/types';
 import { Dialog, Empty } from './components/ui';
@@ -43,8 +43,17 @@ export function App() {
     media.addEventListener('change', update);
     return () => media.removeEventListener('change', update);
   }, []);
+  const drawerWasOpen = useRef(false);
   useEffect(() => {
     if (mobile && navOpen) document.querySelector<HTMLElement>('.sidebar input')?.focus();
+    else if (drawerWasOpen.current) document.querySelector<HTMLElement>('.nav-toggle')?.focus();
+    drawerWasOpen.current = mobile && navOpen;
+    if (!mobile || !navOpen) return;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = overflow;
+    };
   }, [mobile, navOpen]);
   const [theme, setTheme] = useState(readPreference('paradigm-theme', 'light'));
   const [locale, setLocale] = useState(readPreference('paradigm-locale', 'en'));
@@ -123,7 +132,10 @@ export function App() {
   );
   const navigate = useCallback(
     async (next: string) => {
-      if (next === page) return;
+      if (next === page) {
+        setNavOpen(false);
+        return;
+      }
       if (await canLeave()) {
         setPage(next);
         setNavOpen(false);
@@ -151,7 +163,10 @@ export function App() {
     };
     const back = () => {
       const next = route(location.hash || '#' + location.pathname.split('/').pop());
-      if (next === page) return;
+      if (next === page) {
+        setNavOpen(false);
+        return;
+      }
       void canLeave().then((yes) => {
         if (yes) setPage(next);
         else history.replaceState(null, '', `/${page}`);
@@ -373,7 +388,6 @@ export function App() {
                 if (!mobile || !navOpen) return;
                 if (e.key === 'Escape') {
                   setNavOpen(false);
-                  document.querySelector<HTMLElement>('.nav-toggle')?.focus();
                 }
                 if (e.key === 'Tab') {
                   const elements = [
@@ -396,7 +410,6 @@ export function App() {
                 aria-label="Close navigation"
                 onClick={() => {
                   setNavOpen(false);
-                  document.querySelector<HTMLElement>('.nav-toggle')?.focus();
                 }}
               >
                 ×
@@ -414,12 +427,6 @@ export function App() {
                   Paradigm<small>Administration</small>
                 </span>
               </a>
-              <div class="workspace-label">
-                <span class="workspace-avatar">P</span>
-                <div>
-                  Server workspace<small>Dashboard 2.0</small>
-                </div>
-              </div>
               <label class="nav-search">
                 <span class="sr-only">{t('Find a page')}</span>
                 <input
@@ -430,38 +437,38 @@ export function App() {
                 />
               </label>
               <nav aria-label="Dashboard sections">
-                {(['Workspace', 'Management', 'System'] as const).map((group) => (
-                  <section key={group}>
-                    <h2>{t(group)}</h2>
-                    {pages
-                      .filter(
-                        (p) =>
-                          p.group === group &&
-                          accessible(p) &&
-                          `${p.label}`.toLowerCase().includes(search.toLowerCase()),
-                      )
-                      .map((p) => (
-                        <a
-                          href={`/${p.id}`}
-                          aria-current={page === p.id ? 'page' : undefined}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            void navigate(p.id);
-                          }}
-                        >
-                          <span class="nav-icon" aria-hidden="true">
-                            {p.group === 'Workspace' ? '◫' : p.group === 'System' ? '⚙' : '◇'}
-                          </span>
-                          {t(p.label)}
-                        </a>
-                      ))}
-                  </section>
-                ))}
+                {navigationGroups.map((group) => {
+                  const links = pages.filter(
+                    (p) =>
+                      p.group === group &&
+                      accessible(p) &&
+                      t(p.label).toLowerCase().includes(search.toLowerCase()),
+                  );
+                  return (
+                    links.length > 0 && (
+                      <section key={group}>
+                        <h2>{t(group)}</h2>
+                        {links.map((p) => (
+                          <a
+                            key={p.id}
+                            href={`/${p.id}`}
+                            aria-current={page === p.id ? 'page' : undefined}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              void navigate(p.id);
+                            }}
+                          >
+                            {t(p.label)}
+                          </a>
+                        ))}
+                      </section>
+                    )
+                  );
+                })}
+                {!pages.some(
+                  (p) => accessible(p) && t(p.label).toLowerCase().includes(search.toLowerCase()),
+                ) && <p class="nav-empty">{t('No matching pages. Try another search.')}</p>}
               </nav>
-              <div class="sidebar-footer">
-                <span class="status-dot" />
-                Embedded server dashboard
-              </div>
             </aside>
             <button
               class="nav-scrim"
@@ -486,18 +493,28 @@ export function App() {
                     disabled={busy}
                     onChange={(e) => void select(e.currentTarget.value)}
                   >
-                    <option value={ALL}>All servers · Network overview</option>
+                    <option value={ALL}>All servers</option>
                     {!servers.some((s) => s.serverId === selected) && selected !== ALL && (
                       <option value={selected}>{selected} · no longer discovered</option>
                     )}
                     {servers.map((s) => (
                       <option key={s.serverId} value={s.serverId}>
-                        {s.serverName || s.serverId} · {s.online ? 'Online' : 'Offline'} ·{' '}
-                        {s.minecraftVersion || '?'} {s.loader || ''}
+                        {s.serverName || s.serverId}
                         {s.current ? ' · Host' : ''}
+                        {!s.online ? ' · Offline' : ''}
                       </option>
                     ))}
                   </select>
+                  <small class="server-context-detail">
+                    {selected === ALL
+                      ? `${servers.filter((s) => s.online).length} online · ${servers.length} known servers`
+                      : (() => {
+                          const server = servers.find((s) => s.serverId === selected);
+                          return server
+                            ? `${server.online ? 'Online' : 'Offline'} · ${server.minecraftVersion || 'Unknown version'} ${server.loader || ''} · ${server.serverId}`
+                            : 'Server no longer discovered';
+                        })()}
+                  </small>
                 </label>
                 <div class="topbar-actions">
                   <button
@@ -548,7 +565,6 @@ export function App() {
                         ? 'Network overview'
                         : t(currentPage.label)}
                     </h1>
-                    <p>{currentPage.description}</p>
                   </div>
                   <span class="page-context">
                     {selected === ALL
@@ -573,10 +589,11 @@ export function App() {
                   {view()}
                 </div>
               </main>
-              <footer class="main-footer">
-                <span>Paradigm Essentials</span>
-                <span>{busy ? 'Operation in progress…' : 'Server-side administration'}</span>
-              </footer>
+              {busy && (
+                <div class="operation-status" role="status">
+                  Operation in progress…
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -585,8 +602,7 @@ export function App() {
               <span class="brand-mark">P</span>Paradigm
             </div>
             <form class="login-card" onSubmit={login}>
-              <span class="badge">Dashboard 2.0</span>
-              <h1>Welcome to your workspace</h1>
+              <h1>Sign in to Paradigm</h1>
               <p>
                 Open the dashboard from Minecraft with <code>/paradigm dashboard open</code>. Your
                 link signs you in once.

@@ -4,7 +4,7 @@ import { Badge, Card, DataView, Empty } from '../components/ui';
 export function ServersTable({ servers }: { servers: Server[] }) {
   const w = useWorkspace();
   return servers.length ? (
-    <div class="table-wrap">
+    <div class="table-wrap" tabIndex={0} role="region" aria-label="Server directory">
       <table>
         <thead>
           <tr>
@@ -37,7 +37,13 @@ export function ServersTable({ servers }: { servers: Server[] }) {
                   {server.loader || 'Unknown loader'} · Paradigm {server.version || 'unknown'}
                 </small>
               </td>
-              <td>{server.onlinePlayers ?? 'Unavailable'}</td>
+              <td>
+                {server.online && server.runtimeDetailsAvailable
+                  ? (server.onlinePlayers ?? 'Not reported')
+                  : server.online
+                    ? 'Not reported'
+                    : '—'}
+              </td>
               <td>{formatTime(server.lastSeenMs)}</td>
               <td>
                 <button disabled={w.busy} onClick={() => w.select(server.serverId)}>
@@ -86,8 +92,8 @@ export function Overview() {
           </AsyncBoundary>
         </Card>
         <div class="scope-note">
-          Runtime metrics come from available heartbeat details. Unreported metrics remain
-          unavailable. Network configuration is available from the management pages.
+          Status follows the latest server heartbeat. Player counts require fresh telemetry; an
+          online server can be missing telemetry. Counts refresh with server discovery.
         </div>
       </>
     );
@@ -104,8 +110,43 @@ export function Overview() {
       <>
         <div class="metrics">
           <Metric label="Server status" value={selected.online ? 'Online' : 'Offline'} />
-          <Metric label="Online players" value={selected.onlinePlayers ?? 'Unavailable'} />
-          <Metric label="Enabled modules" value={selected.enabledModuleCount ?? 'Unavailable'} />
+          <Metric
+            label="Online players"
+            value={
+              selected.online && selected.runtimeDetailsAvailable
+                ? (selected.onlinePlayers ?? 'Not reported')
+                : 'Not reported'
+            }
+          />
+          <Metric
+            label="Enabled modules"
+            value={
+              selected.online && selected.runtimeDetailsAvailable
+                ? (selected.enabledModuleCount ?? 'Not reported')
+                : 'Not reported'
+            }
+          />
+        </div>
+        <div class="scope-note" role="status">
+          <div>
+            <strong>
+              {!selected.online
+                ? 'Server offline'
+                : selected.runtimeDetailsAvailable
+                  ? 'Runtime telemetry received'
+                  : 'Online · telemetry not reported'}
+            </strong>
+            <p>
+              {!selected.online
+                ? 'No recent server heartbeat. Previous runtime counts are not shown as current.'
+                : selected.runtimeDetailsAvailable
+                  ? 'Player and module counts come from the latest runtime snapshot. Unreported fields remain blank.'
+                  : 'The server is sending heartbeats without a fresh runtime snapshot. Runtime counts require a server version that publishes telemetry to the shared MySQL / MariaDB database.'}
+            </p>
+            {selected.runtimeUpdatedAtMs && (
+              <p>Last runtime snapshot: {formatTime(selected.runtimeUpdatedAtMs)}</p>
+            )}
+          </div>
         </div>
         <Card title={selected.serverName}>
           <DataView
@@ -114,7 +155,8 @@ export function Overview() {
               minecraftVersion: selected.minecraftVersion,
               loader: selected.loader,
               version: selected.version,
-              storageHealth: selected.storageHealth,
+              storageHealth:
+                selected.online && selected.runtimeDetailsAvailable ? selected.storageHealth : null,
               lastHeartbeat: formatTime(selected.lastSeenMs),
             }}
           />

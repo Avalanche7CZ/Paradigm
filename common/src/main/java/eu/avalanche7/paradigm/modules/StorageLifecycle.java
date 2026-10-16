@@ -16,6 +16,7 @@ public class StorageLifecycle implements ParadigmModule {
         services.getManagedConfigSyncService().reconcileOnStartup();
         services.getServerHeartbeatPublisher().start();
         services.getManagedConfigSyncService().start();
+        services.getPermissionsHandler().startDefinitionSync(services.getTaskScheduler());
     }
 
     @Override public void onEnable(Services services) {}
@@ -25,6 +26,7 @@ public class StorageLifecycle implements ParadigmModule {
 
     @Override
     public void onServerStopping(Object event, Services services) {
+        services.getPermissionsHandler().stopDefinitionSync();
         services.getManagedConfigSyncService().stop();
         services.getServerHeartbeatPublisher().stop();
         ApiProviderRegistry.uninstall();

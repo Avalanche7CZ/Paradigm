@@ -2,7 +2,7 @@ import { useState } from 'preact/hooks';
 import { AsyncBoundary, useDirty, useResource, useWorkspace } from '../core/context';
 import { object, string, title, type Json, type Obj } from '../core/types';
 import type { Page } from '../core/navigation';
-import { Card, DataView, SaveBar } from '../components/ui';
+import { Badge, Card, DataView, SaveBar } from '../components/ui';
 import { Configuration } from './configuration';
 export function Storage() {
   const w = useWorkspace();
@@ -14,7 +14,10 @@ export function Storage() {
   const [source, setSource] = useState('json');
   const [target, setTarget] = useState('sql');
   const [policy, setPolicy] = useState('skip');
-  async function run(path: string, body?: Obj) {
+  const [resultTitle, setResultTitle] = useState('');
+  async function run(label: string, path: string, body?: Obj) {
+    setResult(undefined);
+    setResultTitle(label);
     try {
       setResult(await w.mutate(() => w.api.request(path, body, undefined, w.hostId)));
     } catch (error) {
@@ -23,27 +26,125 @@ export function Storage() {
   }
   return (
     <>
-      <Card title="Storage runtime">
-        <AsyncBoundary resource={resource}>{(data) => <DataView data={data} />}</AsyncBoundary>
-        <div class="actions">
-          <button
-            disabled={w.busy || w.session.capabilities?.mutations?.storage === false}
-            onClick={() => run('/api/storage/test', {})}
-          >
-            Test connection
-          </button>
-          <button disabled={w.busy} onClick={() => run('/api/storage/health')}>
-            Health report
-          </button>
-          <button disabled={w.busy} onClick={() => run('/api/storage/repair/check')}>
-            Check repair requirements
-          </button>
-        </div>
-      </Card>
-      <Card title="Migration dry run">
+      <AsyncBoundary resource={resource}>
+        {(raw) => {
+          const data = object(raw);
+          return (
+            <>
+              <Card title="Storage status">
+                <div class="storage-summary">
+                  <div>
+                    <span class="muted">Active provider</span>
+                    <strong>
+                      {string(data.activeDataProvider || data.activeProvider) || 'Unavailable'}
+                    </strong>
+                  </div>
+                  <div>
+                    <span class="muted">Data access</span>
+                    <Badge tone={data.repositoriesAvailable === true ? 'success' : 'danger'}>
+                      {data.repositoriesAvailable === true
+                        ? 'Available'
+                        : data.repositoriesAvailable === false
+                          ? 'Unavailable'
+                          : 'Unknown'}
+                    </Badge>
+                  </div>
+                  <div>
+                    <span class="muted">Configured provider</span>
+                    <strong>
+                      {string(data.configuredDataProvider || data.selectedProvider) || 'Unknown'}
+                    </strong>
+                  </div>
+                </div>
+                <dl class="data-details storage-location">
+                  <div>
+                    <dt>Data location</dt>
+                    <dd>{string(data.dataLocation || data.target) || 'Not reported'}</dd>
+                  </div>
+                  <div>
+                    <dt>Server</dt>
+                    <dd>
+                      {string(
+                        object(data.serverIdentity).serverName ||
+                          object(data.serverIdentity).serverId,
+                      ) || w.hostId}
+                    </dd>
+                  </div>
+                </dl>
+                {data.fallbackActive === true && (
+                  <p class="notice warning">
+                    Fallback storage is active. {string(data.fallbackReason)}
+                  </p>
+                )}
+                {data.fallbackWarning && (
+                  <p class="notice warning">{string(data.fallbackWarning)}</p>
+                )}
+                {data.migrationRecommendation && (
+                  <p class="help">{string(data.migrationRecommendation)}</p>
+                )}
+                <div class="actions">
+                  <button
+                    disabled={w.busy || w.session.capabilities?.mutations?.storage === false}
+                    onClick={() => run('Connection test', '/api/storage/test', {})}
+                  >
+                    Test connection
+                  </button>
+                  <button disabled={w.busy} onClick={resource.refresh}>
+                    Refresh status
+                  </button>
+                  {w.session.capabilities?.pages.storageConfig !== false && (
+                    <button onClick={() => w.navigate('storageConfig')}>Connection settings</button>
+                  )}
+                </div>
+              </Card>
+              <details class="card storage-diagnostics">
+                <summary>Technical diagnostics</summary>
+                <h3>Provider and schema</h3>
+                <DataView
+                  data={{
+                    selectedProvider: data.selectedProvider,
+                    activeProvider: data.activeProvider,
+                    migrationVersion: data.migrationVersion,
+                    serverRegistered: data.serverRegistered,
+                    serverIdentity: data.serverIdentity,
+                    fallbackDataPresent: data.fallbackDataPresent,
+                  }}
+                />
+                <h3>Drivers and connection</h3>
+                <DataView
+                  data={{
+                    dependencyMode: data.dependencyMode,
+                    runtimeLibraryCachePath: data.runtimeLibraryCachePath,
+                    sqliteDriverState: data.sqliteDriverState,
+                    mysqlDriverState: data.mysqlDriverState,
+                    sql: data.sql,
+                    lastTestResult: data.lastTestResult,
+                  }}
+                />
+                <div class="actions">
+                  <button
+                    disabled={w.busy}
+                    onClick={() => run('Health report', '/api/storage/health')}
+                  >
+                    Health report
+                  </button>
+                  <button
+                    disabled={w.busy}
+                    onClick={() => run('Repair requirements', '/api/storage/repair/check')}
+                  >
+                    Check repair requirements
+                  </button>
+                </div>
+              </details>
+            </>
+          );
+        }}
+      </AsyncBoundary>
+      <details class="card storage-diagnostics">
+        <summary>Migration preview</summary>
         <p class="help">
-          Preview conflicts and counts. No player data is changed by this operation. Saving a new
-          provider never migrates data automatically.
+          Preview conflicts and counts without changing player data. Saving a new provider does not
+          migrate data.
         </p>
         <div class="field-grid">
           <label class="field">
@@ -73,14 +174,23 @@ export function Storage() {
           disabled={
             w.busy || source === target || w.session.capabilities?.mutations?.storage === false
           }
-          onClick={() => run('/api/storage/migration/dry-run', { source, target, policy })}
+          onClick={() =>
+            run('Migration preview', '/api/storage/migration/dry-run', { source, target, policy })
+          }
         >
           Preview migration
         </button>
-      </Card>
-      {result && (
-        <Card title="Diagnostic result">
-          <DataView data={result} />
+      </details>
+      {result !== undefined && (
+        <Card title={resultTitle}>
+          <p role="status">
+            {string(object(result).message) ||
+              'Report ready. Expand the result to inspect the details.'}
+          </p>
+          <details>
+            <summary>Result details</summary>
+            <DataView data={result} />
+          </details>
         </Card>
       )}
     </>

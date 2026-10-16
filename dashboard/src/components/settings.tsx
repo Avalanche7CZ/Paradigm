@@ -90,6 +90,7 @@ export function SettingControl({
   else if (formatted && typeof value === 'string')
     control = (
       <FormatEditor
+        id={inputId}
         label={field.label}
         value={value}
         change={change}
@@ -136,7 +137,7 @@ export function SettingControl({
           </span>
         )}
       </div>
-      <p class="help">{field.help}</p>
+      {field.help && field.help.trim() !== field.label.trim() && <p class="help">{field.help}</p>}
       {control}
       {error && (
         <p class="text-error" role="alert">

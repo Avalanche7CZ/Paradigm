@@ -25,6 +25,7 @@ public class HomeCommand implements ParadigmModule {
     private static final String HOME_LIMIT_PREFIX = "paradigm.home.limit.";
     private static final String HOME_LIMIT_UNLIMITED = "paradigm.home.limit.unlimited";
     private static final int HOME_LIMIT_SCAN_MAX = 256;
+    private static final int HOMES_PER_CHAT_LINE = 6;
     private static final long HOME_SUGGESTION_REFRESH_MS = 10_000L;
     private static final Pattern SAFE_NAME = Pattern.compile("[A-Za-z0-9_-]{1,32}");
 
@@ -384,25 +385,34 @@ public class HomeCommand implements ParadigmModule {
             return;
         }
 
-        send(player, "home.homes_header", "Homes ({count}):", "{count}", String.valueOf(homes.size()));
-        for (StoredHome home : homes) {
+        String header = services.getLang().getTranslation("home.homes_header");
+        if (header == null || header.equals("home.homes_header")) header = "Homes ({count}):";
+        IComponent line = services.getMessageParser().parseMessage(
+                "<color:#34D399><bold>[Home]</bold></color> <color:#E5E7EB>"
+                        + header.replace("{count}", String.valueOf(homes.size())) + " </color>", player);
+        for (int index = 0; index < homes.size(); index++) {
+            if (index > 0 && index % HOMES_PER_CHAT_LINE == 0) {
+                // Keep chat packets bounded even with high or unlimited home limits.
+                platform.sendSystemMessage(player, line);
+                line = platform.createEmptyComponent();
+            } else if (index > 0) {
+                line.append(platform.createComponentFromLiteral(", ").withColorHex("6B7280"));
+            }
+            StoredHome home = homes.get(index);
             String homeName = home.name();
-            String hoverText = "Click to teleport";
-            if (home != null && home.location() != null) {
+            String safeHome = safe(homeName);
+            String hoverText = "/home " + safeHome;
+            if (home.location() != null) {
                 StoredLocation loc = home.location();
-                hoverText = String.format("%s | %.1f %.1f %.1f", loc.worldId(), loc.x(), loc.y(), loc.z());
+                hoverText += String.format("\n%s | %.1f %.1f %.1f", loc.worldId(), loc.x(), loc.y(), loc.z());
             }
 
-            String safeHome = safe(homeName);
-            IComponent line = platform.createEmptyComponent()
-                    .append(platform.createComponentFromLiteral("[Home]").withColorHex("34D399").withFormatting("bold"))
-                    .append(platform.createComponentFromLiteral(" "))
-                    .append(platform.createComponentFromLiteral("• " + safeHome)
+            line.append(platform.createComponentFromLiteral(safeHome)
                             .withColorHex("93C5FD")
-                            .onHoverText(safe(hoverText))
+                            .onHoverText(hoverText)
                             .onClickRunCommand("/home " + safeHome));
-            platform.sendSystemMessage(player, line);
         }
+        platform.sendSystemMessage(player, line);
     }
 
     private int executeBack(IPlayer player) {

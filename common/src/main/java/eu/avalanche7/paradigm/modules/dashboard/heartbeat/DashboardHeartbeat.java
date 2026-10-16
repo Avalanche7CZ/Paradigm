@@ -11,9 +11,9 @@ public record DashboardHeartbeat(
         String activeProvider,
         String storageHealth,
         boolean dashboardEnabled,
-        int onlinePlayers,
-        int moduleCount,
-        int enabledModuleCount,
+        Integer onlinePlayers,
+        Integer moduleCount,
+        Integer enabledModuleCount,
         long lastSeenMs
 ) {
 }

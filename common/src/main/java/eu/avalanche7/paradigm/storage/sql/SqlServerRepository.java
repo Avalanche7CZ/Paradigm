@@ -6,11 +6,17 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonParseException;
+import org.slf4j.LoggerFactory;
+
 import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
 import eu.avalanche7.paradigm.storage.managedconfig.ServerInstanceInfo;
+import eu.avalanche7.paradigm.storage.managedconfig.ServerRuntimeInfo;
 import eu.avalanche7.paradigm.storage.repository.ServerRepository;
 
 public class SqlServerRepository implements ServerRepository {
+    private static final Gson GSON = new Gson();
     private final SqlExecutor sql;
 
     public SqlServerRepository(SqlExecutor sql) {
@@ -77,7 +83,7 @@ public class SqlServerRepository implements ServerRepository {
         sql.transaction(() -> {
             long now = System.currentTimeMillis();
             int updated = sql.update("UPDATE server_instances SET network_id = ?, server_name = ?, last_seen_ms = ?, " +
-                    "mod_version = ?, minecraft_version = ?, loader = ?, schema_fingerprint = ? WHERE server_id = ?", ps -> {
+                    "mod_version = ?, minecraft_version = ?, loader = ?, schema_fingerprint = ?, runtime_details = ? WHERE server_id = ?", ps -> {
                 ps.setString(1, info.networkId());
                 ps.setString(2, info.serverName());
                 ps.setLong(3, now);
@@ -85,12 +91,13 @@ public class SqlServerRepository implements ServerRepository {
                 ps.setString(5, info.minecraftVersion());
                 ps.setString(6, info.loader());
                 ps.setString(7, info.schemaFingerprint());
-                ps.setString(8, info.serverId());
+                ps.setString(8, GSON.toJson(info.runtime()));
+                ps.setString(9, info.serverId());
             });
             if (updated <= 0) {
                 try {
                     sql.update("INSERT INTO server_instances(server_id, network_id, server_name, created_at_ms, last_seen_ms, " +
-                            "mod_version, minecraft_version, loader, schema_fingerprint) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", ps -> {
+                            "mod_version, minecraft_version, loader, schema_fingerprint, runtime_details) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", ps -> {
                         ps.setString(1, info.serverId());
                         ps.setString(2, info.networkId());
                         ps.setString(3, info.serverName());
@@ -100,10 +107,11 @@ public class SqlServerRepository implements ServerRepository {
                         ps.setString(7, info.minecraftVersion());
                         ps.setString(8, info.loader());
                         ps.setString(9, info.schemaFingerprint());
+                        ps.setString(10, GSON.toJson(info.runtime()));
                     });
                 } catch (eu.avalanche7.paradigm.storage.StorageException duplicate) {
                     sql.update("UPDATE server_instances SET network_id = ?, server_name = ?, last_seen_ms = ?, " +
-                            "mod_version = ?, minecraft_version = ?, loader = ?, schema_fingerprint = ? WHERE server_id = ?", ps -> {
+                            "mod_version = ?, minecraft_version = ?, loader = ?, schema_fingerprint = ?, runtime_details = ? WHERE server_id = ?", ps -> {
                         ps.setString(1, info.networkId());
                         ps.setString(2, info.serverName());
                         ps.setLong(3, now);
@@ -111,7 +119,8 @@ public class SqlServerRepository implements ServerRepository {
                         ps.setString(5, info.minecraftVersion());
                         ps.setString(6, info.loader());
                         ps.setString(7, info.schemaFingerprint());
-                        ps.setString(8, info.serverId());
+                        ps.setString(8, GSON.toJson(info.runtime()));
+                        ps.setString(9, info.serverId());
                     });
                 }
             }
@@ -146,7 +155,17 @@ public class SqlServerRepository implements ServerRepository {
                 rs.getString("loader"),
                 rs.getString("schema_fingerprint"),
                 rs.getLong("last_seen_ms"),
-                rs.getLong("created_at_ms")
+                rs.getLong("created_at_ms"),
+                readRuntime(rs.getString("runtime_details"))
         );
     }
+    private ServerRuntimeInfo readRuntime(String json) {
+        try {
+            return GSON.fromJson(json, ServerRuntimeInfo.class);
+        } catch (JsonParseException failure) {
+            LoggerFactory.getLogger(SqlServerRepository.class).warn("Ignoring malformed server heartbeat telemetry", failure);
+            return null;
+        }
+    }
+
 }

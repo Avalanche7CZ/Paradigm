@@ -1,7 +1,14 @@
+export const navigationGroups = [
+  'Network',
+  'Players & access',
+  'Server settings',
+  'Content & commands',
+  'System',
+] as const;
 export interface Page {
   id: string;
   label: string;
-  group: 'Workspace' | 'Management' | 'System';
+  group: (typeof navigationGroups)[number];
   categories?: string[];
   hostOnly?: boolean;
   description: string;
@@ -10,25 +17,25 @@ export const pages: Page[] = [
   {
     id: 'overview',
     label: 'Overview',
-    group: 'Workspace',
+    group: 'Network',
     description: 'Your network, at a glance.',
   },
   {
     id: 'servers',
     label: 'Servers',
-    group: 'Workspace',
+    group: 'Network',
     description: 'Known servers and their latest heartbeat.',
   },
   {
     id: 'players',
     label: 'Players',
-    group: 'Workspace',
+    group: 'Players & access',
     description: 'Player profiles and available online information.',
   },
   {
     id: 'general',
     label: 'Modules & configuration',
-    group: 'Management',
+    group: 'Server settings',
     categories: [
       'modules',
       'command_groups',
@@ -42,97 +49,97 @@ export const pages: Page[] = [
   {
     id: 'motd',
     label: 'MOTD & welcome',
-    group: 'Management',
+    group: 'Server settings',
     categories: ['motd'],
     description: 'Craft the first impression of your server.',
   },
   {
     id: 'chat',
     label: 'Chat',
-    group: 'Management',
+    group: 'Server settings',
     categories: ['chat'],
     description: 'Formatting, mentions and player interactions.',
   },
   {
     id: 'announcements',
     label: 'Announcements',
-    group: 'Management',
+    group: 'Server settings',
     categories: ['announcements'],
     description: 'Messages, channels and scheduled delivery.',
   },
   {
     id: 'teleports',
     label: 'Teleports',
-    group: 'Management',
+    group: 'Server settings',
     categories: ['teleports'],
     description: 'Homes, warps, spawn and teleport requests.',
   },
   {
     id: 'tablist',
     label: 'Tablist',
-    group: 'Management',
+    group: 'Server settings',
     categories: ['tablist'],
     description: 'Headers, player names and world overrides.',
   },
   {
     id: 'restart',
     label: 'Restart schedule',
-    group: 'Management',
+    group: 'Server settings',
     categories: ['restart'],
     description: 'Schedules, warnings and restart actions.',
   },
   {
     id: 'menus',
     label: 'Menus',
-    group: 'Management',
+    group: 'Content & commands',
     hostOnly: true,
     description: 'Inventory layouts, items and click actions.',
   },
   {
     id: 'holograms',
     label: 'Holograms',
-    group: 'Management',
+    group: 'Content & commands',
     hostOnly: true,
     description: 'Text displays, placement and interaction.',
   },
   {
     id: 'customCommands',
     label: 'Custom commands',
-    group: 'Management',
+    group: 'Content & commands',
     hostOnly: true,
     description: 'Commands, arguments, actions and conditions.',
   },
   {
     id: 'commands',
     label: 'Command settings',
-    group: 'Management',
+    group: 'Content & commands',
     categories: ['commands'],
     description: 'Enable commands and control root ownership.',
   },
   {
     id: 'cooldowns',
     label: 'Cooldowns & warmups',
-    group: 'Management',
+    group: 'Content & commands',
     categories: ['cooldowns'],
     description: 'Timing for built-in commands.',
   },
   {
     id: 'permissions',
     label: 'Permissions',
-    group: 'Management',
+    group: 'Players & access',
     description: 'Groups, users, contexts and ordered tracks.',
   },
   {
     id: 'moderation',
     label: 'Moderation',
-    group: 'Management',
+    group: 'Players & access',
     hostOnly: true,
     description: 'Player history, punishments and revocations.',
   },
   {
     id: 'tickets',
     label: 'Support tickets',
-    group: 'Management',
+    group: 'Players & access',
     description: 'Network support requests and conversations.',
   },
   {

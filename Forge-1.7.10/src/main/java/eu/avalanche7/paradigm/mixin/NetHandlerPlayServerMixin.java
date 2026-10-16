@@ -5,6 +5,7 @@ import net.minecraft.network.NetHandlerPlayServer;
 import net.minecraft.network.Packet;
 import net.minecraft.network.play.client.C15PacketClientSettings;
 import net.minecraft.network.play.server.S38PacketPlayerListItem;
+import net.minecraft.network.play.server.S3EPacketTeams;
 import net.minecraft.server.management.ServerConfigurationManager;
 import net.minecraft.util.IChatComponent;
 import org.spongepowered.asm.mixin.Mixin;
@@ -27,6 +28,10 @@ public abstract class NetHandlerPlayServerMixin {
     @Inject(method = "sendPacket", at = @At("HEAD"), cancellable = true)
     private void paradigm$playerList(Packet packet, CallbackInfo callback) {
         LegacyVisualController visuals = LegacyVisualController.current();
+        if (visuals != null && packet instanceof S3EPacketTeams) {
+            TeamPacketAccess team = (TeamPacketAccess) packet;
+            visuals.tablist().packetSent(playerEntity, team.paradigm$name(), team.paradigm$mode(), team.paradigm$members());
+        }
         if (visuals != null && packet instanceof S38PacketPlayerListItem) {
             PlayerListPacketAccess item = (PlayerListPacketAccess) packet;
             if (item.paradigm$online()) {

@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -280,19 +281,28 @@ public final class Tablist implements ParadigmModule {
         }
 
         PlayerSnapshot previous = snapshots.get(entry.uuid());
-        if (previous == null || !previous.header().equals(header) || !previous.footer().equals(footer)) {
+        // Group placeholders are expanded by MessageParser, after these template comparisons.
+        boolean sameContext = previous != null && previous.metadata().equals(entry.metadata()) && previous.world().equals(entry.worldId());
+        String appliedHeader = sameContext ? previous.header() : null;
+        String appliedFooter = sameContext ? previous.footer() : null;
+        String appliedName = sameContext ? previous.displayName() : null;
+        int appliedOrder = previous != null ? previous.order() : -1;
+        if (!Objects.equals(appliedHeader, header) || !Objects.equals(appliedFooter, footer)) {
             IComponent parsedHeader = services.getMessageParser().parseMessage(header, entry.player());
             IComponent parsedFooter = services.getMessageParser().parseMessage(footer, entry.player());
-            services.getPlatformAdapter().setPlayerListHeaderFooter(entry.player(), parsedHeader, parsedFooter);
+            if (services.getPlatformAdapter().setPlayerListHeaderFooter(entry.player(), parsedHeader, parsedFooter)) {
+                appliedHeader = header;
+                appliedFooter = footer;
+            }
         }
-        if (previous == null || !previous.displayName().equals(name)) {
-            services.getPlatformAdapter().setPlayerListDisplayName(entry.player(),
-                    services.getMessageParser().parseMessage(name, entry.player()));
+        if (!Objects.equals(appliedName, name)) {
+            if (services.getPlatformAdapter().setPlayerListDisplayName(entry.player(),
+                    services.getMessageParser().parseMessage(name, entry.player()))) appliedName = name;
         }
         if (previous == null || previous.order() != order) {
-            services.getPlatformAdapter().setPlayerListOrder(entry.player(), order);
+            if (services.getPlatformAdapter().setPlayerListOrder(entry.player(), order)) appliedOrder = order;
         }
-        snapshots.put(entry.uuid(), new PlayerSnapshot(header, footer, name, order, entry.worldId(), entry.ping(), entry.metadata()));
+        snapshots.put(entry.uuid(), new PlayerSnapshot(appliedHeader, appliedFooter, appliedName, appliedOrder, entry.worldId(), entry.ping(), entry.metadata()));
     }
 
     private static String safe(String value) {
