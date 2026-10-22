@@ -23,18 +23,15 @@ run-data/
 /NeoForge-1.21.1/bin
 /NeoForge-1.21.1/.eclipse
 
-# Local tests, tools and dependencies.
-src/test/
-/common/src/test
-/Forge-1.7.10/src/test
+test/
+tests/
+*.md
+!README.md
+
 /scripts
 /Libs
 /Legacy_code
 /release-jars
-
-# Public companion API documentation.
-/docs/*
-!/docs/COMPANION_API.md
 
 # Local release secrets.
 *.env
@@ -54,3 +51,18 @@ ForgeAnnoucements-1.0.0/META-INF/MANIFEST.MF
 ForgeAnnoucements-1.0.0/META-INF/maven/net.kaikk.mc/BetterChunkLoader/pom.properties
 ForgeAnnoucements-1.0.0/META-INF/maven/net.kaikk.mc/BetterChunkLoader/pom.xml
 ForgeAnnoucements-1.0.0/plugin.yml
+/verification
+/Essentials
+
+!/common/src/test/
+/common/src/test/**
+!/common/src/test/**/
+!/common/src/test/java/eu/avalanche7/paradigm/modules/dashboard/auth/DashboardInstanceAuthTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/modules/dashboard/DashboardInstanceHttpTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/storage/sql/PermissionInstanceSyncTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/storage/sql/MariaDbPermissionInstanceSyncTest.java
+!/dashboard/tests/
+/dashboard/tests/**
+!/dashboard/tests/login.test.tsx
+
+!/common/src/test/java/eu/avalanche7/paradigm/platform/VanishTrackingDimensionTest.java

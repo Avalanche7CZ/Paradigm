@@ -26,15 +26,17 @@ public final class PlaytimeService {
     private final Supplier<PlayerRepository> repository;
     private final Function<Supplier<StoredPlayerProfileState>, CompletableFuture<StoredPlayerProfileState>> submit;
     private final PlaytimeJournal journal;
+    private final String serverId;
     private volatile ScheduledFuture<?> flushTask;
     private volatile boolean running;
     private boolean recoveryPending = true;
     private boolean flushRequested;
     private CompletableFuture<StoredPlayerProfileState> batchInFlight;
     private String lastFailure;
+    private volatile String failureStatus = "recovery_pending";
 
     public PlaytimeService(Services services) {
-        this(services, new PlaytimeJournal(services.getStorageService().playtimeJournalPath(), services.getStorageService().playtimeStorageIdentity(), () -> services.getStorageService().players()),
+        this(services, new PlaytimeJournal(services.getStorageService().playtimeJournalPath(), services.getStorageService().playtimeStorageIdentity(), () -> services.getStorageService().players(), services.getStorageService().context().serverId(), () -> services.getStorageService().authoritativePlaytimeStorageIdentity()),
                 () -> services.getStorageService().players(), work -> services.getStorageService().submitAcknowledged(work), monotonicClock());
         services.getStorageService().registerStorageResource(journal);
     }
@@ -46,6 +48,7 @@ public final class PlaytimeService {
         this.repository = repository;
         this.submit = submit;
         this.clock = clock;
+        this.serverId = journal.serverId();
     }
 
     private static LongSupplier monotonicClock() {
@@ -119,6 +122,27 @@ public final class PlaytimeService {
 
     public boolean isTracking(String uuid) { return uuid != null && sessions.containsKey(uuid.toLowerCase(Locale.ROOT)); }
 
+    public synchronized boolean isPlaytimeLoaded(String uuid) {
+        Counter counter = uuid != null ? counters.get(uuid.toLowerCase(Locale.ROOT)) : null;
+        if (counter == null) return false;
+        synchronized (counter) { return !recoveryPending && counter.loaded && counter.blocked == null && !"identity_conflict".equals(recoveryStatus(uuid)); }
+    }
+
+    public synchronized String recoveryStatus(String uuid) {
+        Counter counter = uuid != null ? counters.get(uuid.toLowerCase(Locale.ROOT)) : null;
+        if (counter != null) synchronized (counter) { if (counter.blocked != null) return "recovery_failed"; }
+        if (lastFailure != null) return failureStatus;
+        if (recoveryPending || counter != null && !counter.loaded) return "recovery_pending";
+        return "available";
+    }
+
+    public synchronized java.util.Set<String> legacyImportBlockedPlayers() {
+        if (recoveryPending) throw new IllegalStateException("Playtime journal recovery is pending; retry after storage recovery.");
+        var blocked = new java.util.HashSet<>(counters.keySet());
+        blocked.addAll(sessions.keySet());
+        return java.util.Set.copyOf(blocked);
+    }
+
     public long totalPlaytimeMs(String uuid, String input) {
         String key = uuid != null ? uuid.toLowerCase(Locale.ROOT) : null;
         Session session = key != null ? sessions.get(key) : null;
@@ -126,7 +150,8 @@ public final class PlaytimeService {
         Counter counter = key != null ? counters.get(key) : null;
         if (counter != null) synchronized (counter) { return counter.total(); }
         if (services == null) return 0L;
-        return services.getPlayerProfileService().findByNameOrUuid(input != null ? input : uuid).map(StoredPlayerProfile::playtimeMs).orElse(0L);
+        return services.getPlayerProfileService().findByNameOrUuid(input != null ? input : uuid)
+                .map(profile -> repository.get().readPlaytime(profile.uuid()).localPlaytimeMs(serverId)).orElse(0L);
     }
 
     public synchronized void flushAll() {
@@ -145,7 +170,7 @@ public final class PlaytimeService {
                     CompletableFuture<StoredPlayerProfileState> future = requestFlush();
                     future.get(Math.max(1L, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
                     synchronized (counter) {
-                        if (counter.loaded && counter.acknowledgedMs >= counter.target() && counter.recoveryPendingMs() == 0L) break;
+                        if (counter.loaded && counter.acknowledgedMs >= counter.target() && counter.pendingRecoveryMs == 0L) break;
                     }
                     if (System.nanoTime() >= deadline) throw new java.util.concurrent.TimeoutException();
                     requestFlush();
@@ -153,8 +178,11 @@ public final class PlaytimeService {
             } catch (Exception failure) {
                 if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
                 synchronized (counter) {
+                    long unjournaled = Math.max(0L, counter.target() - counter.journaledMs);
                     report("shutdown could not acknowledge playtime for " + entry.getKey() + "; pending="
-                            + (Math.max(0L, counter.target() - counter.acknowledgedMs) + counter.recoveryPendingMs()) + "ms; unjournaled measurements may be lost on exit", failure);
+                            + (Math.max(0L, counter.target() - counter.acknowledgedMs) + counter.pendingRecoveryMs)
+                            + "ms; unjournaled=" + unjournaled + "ms; "
+                            + (unjournaled == 0 ? "local measurements are journaled for retry" : "these unjournaled measurements may be lost on exit"), failure);
                 }
             }
         }
@@ -168,11 +196,11 @@ public final class PlaytimeService {
         counters.forEach((uuid, counter) -> {
             synchronized (counter) {
                 if (!sessions.containsKey(uuid) && counter.loaded && counter.acknowledgedMs >= counter.target()
-                        && counter.recoveryPendingMs() == 0L) counters.remove(uuid, counter);
+                        && counter.pendingRecoveryMs == 0L) counters.remove(uuid, counter);
             }
         });
         if (!recoveryPending && counters.values().stream().allMatch(counter -> {
-            synchronized (counter) { return counter.loaded && counter.acknowledgedMs >= counter.target() && counter.recoveryPendingMs() == 0L; }
+            synchronized (counter) { return counter.loaded && counter.acknowledgedMs >= counter.target() && counter.pendingRecoveryMs == 0L; }
         })) return CompletableFuture.completedFuture(null);
         var completion = new CompletableFuture<StoredPlayerProfileState>();
         batchInFlight = completion;
@@ -192,15 +220,17 @@ public final class PlaytimeService {
                                 long watermark = state.playtimeStreams().getOrDefault(counter.writerId, 0L);
                                 counter.loaded = true;
                                 counter.acknowledgedMs = Math.max(counter.acknowledgedMs, watermark);
-                                counter.recovered.forEach((writer, entry) -> counter.recoveredAcknowledged.merge(writer,
-                                        state.playtimeStreams().getOrDefault(writer, 0L), Math::max));
-                                counter.otherBaseMs = Math.max(counter.otherBaseMs, state.profile().playtimeMs() - watermark + counter.recoveryPendingMs());
-                                if (!sessions.containsKey(uuid) && counter.acknowledgedMs >= counter.target() && counter.recoveryPendingMs() == 0L) counters.remove(uuid, counter);
+                                counter.pendingRecoveryMs = journal.pendingMs(uuid, state, false);
+                                counter.otherBaseMs = Math.max(counter.otherBaseMs, state.localPlaytimeMs(serverId) - watermark + journal.pendingMs(uuid, state, true));
+                                if (!sessions.containsKey(uuid) && counter.acknowledgedMs >= counter.target() && counter.pendingRecoveryMs == 0L) counters.remove(uuid, counter);
                             }
                         });
                     }
                     Throwable reported = failure != null ? failure : failures.values().stream().findFirst().orElse(null);
                     if (reported != null) {
+                        if (attempted.values().stream().anyMatch(counter -> counter.blocked != null)) failureStatus = "recovery_failed";
+                        for (Throwable cause = reported; cause != null; cause = cause.getCause())
+                            if (cause instanceof eu.avalanche7.paradigm.storage.StorageCompatibilityException) failureStatus = "identity_conflict";
                         String message = reported.toString();
                         if (!message.equals(lastFailure)) report("unacknowledged playtime retained; recovery/retry required", reported);
                         lastFailure = message;
@@ -223,87 +253,72 @@ public final class PlaytimeService {
 
     private void persistBatch(Map<String, StoredPlayerProfileState> results, Map<String, Counter> attempted,
                               Map<String, RuntimeException> failures) {
-        PlaytimeJournal.Data data = journal.open();
+        failureStatus = "recovery_failed";
+        PlaytimeJournal.Data recoveredData = journal.open();
         synchronized (this) {
             if (recoveryPending) {
-                data.streams.values().forEach(players -> players.forEach((uuid, entry) -> counters.computeIfAbsent(uuid,
-                        ignored -> new Counter(entry.name(), entry.firstSeenMs(), entry.lastSeenMs()))));
+                recoveredData.streams.forEach((writer, players) -> players.forEach((uuid, entry) -> counters.computeIfAbsent(uuid,
+                        ignored -> new Counter(entry.name(), recoveredData.streamServers.get(writer).isEmpty() ? 0L : entry.firstSeenMs(), recoveredData.streamServers.get(writer).isEmpty() ? 0L : entry.lastSeenMs()))));
                 recoveryPending = false;
             }
             attempted.putAll(counters);
         }
         var entries = new java.util.LinkedHashMap<String, PlaytimeJournal.Entry>();
-        var recoveredWrites = new java.util.LinkedHashMap<String, Map<String, PlaytimeJournal.Entry>>();
-        attempted.forEach((uuid, counter) -> {
-            try {
-                boolean initialize;
-                synchronized (counter) {
-                    if (counter.blocked != null) throw counter.blocked;
-                    initialize = !counter.initialized;
+        for (var item : attempted.entrySet()) {
+            String uuid = item.getKey();
+            Counter counter = item.getValue();
+            synchronized (counter) {
+                if (counter.writerId == null) {
+                    var saved = recoveredData.players.get(uuid);
+                    counter.baseCounterMs = saved != null ? saved.cumulativeMs() : 0L;
+                    counter.writerId = recoveredData.writerId;
                 }
-                var existing = initialize ? repository.get().getProfileState(uuid) : null;
-                synchronized (counter) {
-                    if (initialize) {
-                        PlaytimeJournal.Entry saved = data.players.get(uuid);
-                        long baseline = saved != null ? saved.cumulativeMs() : 0L;
-                        for (var stream : data.streams.entrySet()) {
-                            PlaytimeJournal.Entry recovered = stream.getValue().get(uuid);
-                            if (recovered == null) continue;
-                            long watermark = existing.playtimeStreams().getOrDefault(stream.getKey(), 0L);
-                            if (watermark > recovered.cumulativeMs()) {
-                                counter.otherBaseMs = Math.max(counter.otherBaseMs, existing.profile().playtimeMs());
-                                counter.blocked = new IllegalStateException("Playtime reconciliation required for " + uuid
-                                        + ": recovered baseline " + recovered.cumulativeMs() + " is below database watermark " + watermark
-                                        + " in stream " + stream.getKey()
-                                        + ". Stop writers and restore a coherent journal/database backup; no automatic reset is safe.");
-                                throw counter.blocked;
-                            }
-                            if (!stream.getKey().equals(data.writerId)) {
-                                counter.recovered.put(stream.getKey(), recovered);
-                                counter.recoveredAcknowledged.put(stream.getKey(), watermark);
-                            }
-                            if (counter.firstSeenMs <= 0L || recovered.firstSeenMs() > 0L && recovered.firstSeenMs() < counter.firstSeenMs) counter.firstSeenMs = recovered.firstSeenMs();
-                            counter.lastSeenMs = Math.max(counter.lastSeenMs, recovered.lastSeenMs());
-                        }
-                        counter.baseCounterMs = baseline;
-                        counter.writerId = data.writerId;
-                        counter.initialized = true;
-                        counter.loaded = true;
-                        counter.acknowledgedMs = existing.playtimeStreams().getOrDefault(data.writerId, 0L);
-                        counter.otherBaseMs = Math.max(counter.otherBaseMs, existing.profile().playtimeMs() - counter.acknowledgedMs + counter.recoveryPendingMs());
-                        results.put(uuid, existing);
-                    }
-                    var pending = new java.util.LinkedHashMap<String, PlaytimeJournal.Entry>();
-                    counter.recovered.forEach((writer, recovered) -> {
-                        if (recovered.cumulativeMs() > counter.recoveredAcknowledged.getOrDefault(writer, 0L)) pending.put(writer, recovered);
-                    });
-                    if (!pending.isEmpty()) recoveredWrites.put(uuid, pending);
-                    if (counter.acknowledgedMs >= counter.target()) {
-                        if (!sessions.containsKey(uuid) && pending.isEmpty() && !results.containsKey(uuid)) {
-                            var watermarks = new java.util.LinkedHashMap<>(counter.recoveredAcknowledged);
-                            watermarks.put(counter.writerId, counter.acknowledgedMs);
-                            results.put(uuid, new StoredPlayerProfileState(
-                                    new StoredPlayerProfile(uuid, counter.name, counter.firstSeenMs, counter.lastSeenMs, counter.total()), watermarks));
-                        }
-                        return;
-                    }
+                if (counter.target() > 0 || sessions.containsKey(uuid) || recoveredData.players.containsKey(uuid))
                     entries.put(uuid, new PlaytimeJournal.Entry(counter.name, counter.firstSeenMs, counter.lastSeenMs, counter.target()));
+            }
+        }
+        journal.saveAll(entries);
+        entries.forEach((uuid, entry) -> {
+            synchronized (attempted.get(uuid)) { attempted.get(uuid).journaledMs = entry.cumulativeMs(); }
+        });
+        failureStatus = "sql_unavailable";
+        journal.verifyTarget();
+        var data = journal.open();
+        for (var item : attempted.entrySet()) {
+            String uuid = item.getKey();
+            Counter counter = item.getValue();
+            try {
+                synchronized (counter) { if (counter.blocked != null) throw counter.blocked; }
+                var state = repository.get().getProfileState(uuid);
+                for (var stream : data.streams.entrySet()) {
+                    var saved = stream.getValue().get(uuid);
+                    if (saved == null) continue;
+                    long watermark = state.playtimeStreams().getOrDefault(stream.getKey(), 0L);
+                    if (state.playtimeStreams().containsKey(stream.getKey())
+                            && !data.streamServers.get(stream.getKey()).equals(state.streamServers().getOrDefault(stream.getKey(), ""))
+                            || watermark > saved.cumulativeMs()) {
+                        synchronized (counter) {
+                            counter.otherBaseMs = Math.max(counter.otherBaseMs, state.localPlaytimeMs(serverId));
+                            counter.blocked = new IllegalStateException("Playtime reconciliation required for " + uuid
+                                    + ": journal/database watermark or server conflict in " + stream.getKey()
+                                    + "; stop writers and restore a coherent backup. Original streams are preserved.");
+                            throw counter.blocked;
+                        }
+                    }
+                }
+                results.put(uuid, state);
+                for (var stream : data.streams.entrySet()) {
+                    var saved = stream.getValue().get(uuid);
+                    if (saved == null || saved.cumulativeMs() == 0L || state.playtimeStreams().containsKey(stream.getKey())
+                            && state.playtimeStreams().get(stream.getKey()) == saved.cumulativeMs()) continue;
+                    state = repository.get().recordPlaytime(new StoredPlayerProfile(uuid, saved.name(), saved.firstSeenMs(), saved.lastSeenMs(), 0L),
+                            data.streamServers.get(stream.getKey()), stream.getKey(), saved.cumulativeMs());
+                    results.put(uuid, state);
                 }
             } catch (RuntimeException failure) { failures.put(uuid, failure); }
-        });
-        journal.saveAll(entries);
-        recoveredWrites.forEach((uuid, pending) -> pending.forEach((writer, entry) -> {
-            try {
-                results.put(uuid, repository.get().recordPlaytime(new StoredPlayerProfile(uuid, entry.name(),
-                        entry.firstSeenMs(), entry.lastSeenMs(), 0L), writer, entry.cumulativeMs()));
-            } catch (RuntimeException failure) { failures.put(uuid, failure); }
-        }));
-        entries.forEach((uuid, entry) -> {
-            try {
-                results.put(uuid, repository.get().recordPlaytime(new StoredPlayerProfile(uuid, entry.name(),
-                        entry.firstSeenMs(), entry.lastSeenMs(), 0L), data.writerId, entry.cumulativeMs()));
-            } catch (RuntimeException failure) { failures.put(uuid, failure); }
-        });
+        }
+        try { journal.compact(results); }
+        catch (RuntimeException failure) { failureStatus = "recovery_failed"; throw failure; }
     }
 
     private void report(String operation, Throwable failure) {
@@ -334,18 +349,11 @@ public final class PlaytimeService {
         long measuredMs;
         long acknowledgedMs;
         long otherBaseMs;
-        boolean initialized;
         boolean loaded;
         String writerId;
         RuntimeException blocked;
-        final Map<String, PlaytimeJournal.Entry> recovered = new java.util.LinkedHashMap<>();
-        final Map<String, Long> recoveredAcknowledged = new java.util.LinkedHashMap<>();
-        long recoveryPendingMs() {
-            long pending = 0L;
-            for (var entry : recovered.entrySet()) pending = Math.addExact(pending,
-                    Math.max(0L, entry.getValue().cumulativeMs() - recoveredAcknowledged.getOrDefault(entry.getKey(), 0L)));
-            return pending;
-        }
+        long journaledMs;
+        long pendingRecoveryMs;
         Counter(String name, long first, long last) { this.name = name; firstSeenMs = first; lastSeenMs = last; }
         long target() { return Math.addExact(baseCounterMs, measuredMs); }
         long total() { return Math.addExact(otherBaseMs, target()); }

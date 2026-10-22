@@ -420,6 +420,9 @@ public class ConfigSchemaRegistry {
         fields.add(simpleField("dashboard.host", "dashboard", "Bind Host", "Local bind host such as 127.0.0.1. Use 0.0.0.0 only with remote access deliberately enabled.",
                 ConfigFieldType.STRING, config.host, defaults.host, "dashboard.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.ADVANCED,
                 null, null, null, List.of(), null, true, false, true, "", true, false));
+        fields.add(simpleField("dashboard.centralHostServerId", "dashboard", "Central Dashboard Host", "Optional server ID hosting the Dashboard in the same shared MariaDB network. Other servers issue login links without starting a local HTTP listener.",
+                ConfigFieldType.STRING, config.centralHostServerId, defaults.centralHostServerId, "dashboard.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.ADVANCED,
+                null, null, null, List.of(), null, true, true, false, "", true, false));
         fields.add(simpleField("dashboard.publicBaseUrl", "dashboard", "Public Dashboard URL", "Optional browser-visible http(s) URL used by /paradigm dashboard open.",
                 ConfigFieldType.STRING, config.publicBaseUrl, defaults.publicBaseUrl, "dashboard.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.ADVANCED,
                 null, null, null, List.of(), null, true, true, false, "", true, false));

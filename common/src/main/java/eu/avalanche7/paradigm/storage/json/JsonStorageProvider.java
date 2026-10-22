@@ -45,7 +45,7 @@ public class JsonStorageProvider implements StorageProvider {
             ModerationDataStore moderationDataStore,
             AdminUtilityDataStore adminUtilityDataStore
     ) {
-        this.players = new JsonPlayerRepository(playerDataStore);
+        this.players = new JsonPlayerRepository(playerDataStore, context.serverId());
         this.warps = new JsonWarpRepository(warpStore);
         this.permissions = new JsonPermissionRepository(logger, debugLogger, config, playerDataStore);
         this.moderation = new JsonModerationRepository(moderationDataStore, context);

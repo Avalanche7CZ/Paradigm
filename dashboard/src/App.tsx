@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import { DictionaryContext, type Dictionary } from './core/i18n';
-import { ApiClient } from './core/api';
+import { ApiClient, dashboardUrl } from './core/api';
 import { WorkspaceContext, type Workspace } from './core/context';
 import { navigationGroups, pages, route, type Page } from './core/navigation';
 import { readPreference, writePreference } from './core/preferences';
@@ -20,6 +20,19 @@ interface Confirmation {
   resolve: (ok: boolean) => void;
 }
 export function App() {
+  const [initialLoginToken] = useState(() => {
+    const params = new URLSearchParams(location.search);
+    const oneTime = params.get('token');
+    if (params.has('token')) {
+      params.delete('token');
+      history.replaceState(
+        null,
+        '',
+        `${location.pathname}${params.size ? '?' + params : ''}${location.hash}`,
+      );
+    }
+    return oneTime;
+  });
   const [needsLogin, setNeedsLogin] = useState(false);
   const [session, setSession] = useState<Session>();
   const [authError, setAuthError] = useState('');
@@ -74,7 +87,7 @@ export function App() {
   const [dictionary, setDictionary] = useState<Dictionary>({});
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`/lang/${['en', 'cs', 'ru'].includes(locale) ? locale : 'en'}.json`, {
+    fetch(dashboardUrl(`/lang/${['en', 'cs', 'ru'].includes(locale) ? locale : 'en'}.json`), {
       signal: controller.signal,
     })
       .then((r) => r.json())
@@ -139,7 +152,7 @@ export function App() {
       if (await canLeave()) {
         setPage(next);
         setNavOpen(false);
-        history.pushState(null, '', `/${next}`);
+        history.pushState(null, '', dashboardUrl(`/${next}`));
       }
     },
     [page, canLeave],
@@ -169,7 +182,7 @@ export function App() {
       }
       void canLeave().then((yes) => {
         if (yes) setPage(next);
-        else history.replaceState(null, '', `/${page}`);
+        else history.replaceState(null, '', dashboardUrl(`/${page}`));
       });
     };
     window.addEventListener('beforeunload', before);
@@ -244,20 +257,13 @@ export function App() {
     const controller = new AbortController();
     void (async () => {
       try {
-        const params = new URLSearchParams(location.search);
-        const oneTime = params.get('token');
+        const oneTime = initialLoginToken;
         let status: Session;
         if (oneTime) {
           const login = await api.request<Session>(
             '/api/auth/login',
             { token: oneTime },
             controller.signal,
-          );
-          params.delete('token');
-          history.replaceState(
-            null,
-            '',
-            `${location.pathname}${params.size ? '?' + params : ''}${location.hash}`,
           );
           status = {
             ...(await api.request<Session>('/api/auth/status', undefined, controller.signal)),
@@ -416,7 +422,7 @@ export function App() {
               </button>
               <a
                 class="brand"
-                href="/overview"
+                href={dashboardUrl('/overview')}
                 onClick={(e) => {
                   e.preventDefault();
                   void navigate('overview');
@@ -451,7 +457,7 @@ export function App() {
                         {links.map((p) => (
                           <a
                             key={p.id}
-                            href={`/${p.id}`}
+                            href={dashboardUrl(`/${p.id}`)}
                             aria-current={page === p.id ? 'page' : undefined}
                             onClick={(e) => {
                               e.preventDefault();

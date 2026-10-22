@@ -36,6 +36,10 @@ public interface StorageProvider extends AutoCloseable {
         return NoopTicketRepository.INSTANCE;
     }
 
+    default eu.avalanche7.paradigm.storage.repository.DashboardLoginRepository dashboardLogins() {
+        throw new StorageException("Shared Dashboard login storage is unavailable.");
+    }
+
     StorageService.StorageTestResult test();
     int migrationVersion();
 

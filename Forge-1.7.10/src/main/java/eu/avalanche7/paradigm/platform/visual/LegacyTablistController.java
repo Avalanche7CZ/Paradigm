@@ -68,20 +68,27 @@ public final class LegacyTablistController {
         if (visible.isEmpty()) return limit(text);
         int tail = text.length();
         while (tail >= 2 && text.charAt(tail - 2) == '§') tail -= 2;
-        String separator = Character.isWhitespace(visible.charAt(visible.length() - 1)) ? "" : " ";
-        String separated = text.substring(0, tail) + separator + text.substring(tail);
+        String body = text.substring(0, tail).replaceFirst("(?i)(?:§[0-9a-fk-or]|\\s)+$", "");
+        String style = formatting(text);
+        String trailingStyle = text.substring(tail);
+        if (trailingStyle.isEmpty() && !formatting(body).equals(style)) trailingStyle = style;
+        String separated = body + " " + trailingStyle;
         if (separated.length() <= 16) return separated;
 
         // Reserve the separator and final style before truncating rank text. Otherwise
         // a long prefix can lose both its space and the color/reset intended for the name.
-        String style = formatting(text);
         if (style.isEmpty()) style = "§r";
         int budget = 16 - style.length() - 1;
-        String body = text.substring(0, tail).stripTrailing();
         if (FORMAT_RUN.matcher(body).replaceAll("").length() <= budget) {
             // Prefer a complete rank over decorations when its visible text fits.
             if (body.length() > budget) body = compact(body.replaceAll("(?i)§[k-o]", ""));
-            while (body.length() > budget) body = FORMAT_RUN.matcher(body).replaceFirst("");
+            while (body.length() > budget) {
+                Matcher runs = FORMAT_RUN.matcher(body);
+                int start = -1, end = -1;
+                while (runs.find()) { start = runs.start(); end = runs.end(); }
+                if (start < 0) break;
+                body = body.substring(0, start) + body.substring(end);
+            }
         }
         return limit(body, budget).stripTrailing() + " " + style;
     }

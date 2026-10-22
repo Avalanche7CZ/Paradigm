@@ -56,6 +56,8 @@ public class SqlMigrationRunner implements MigrationRunner {
             connection.commit();
 
             Set<Integer> existing = appliedVersions(connection);
+            int supported = migrations.stream().mapToInt(Migration::version).max().orElse(0);
+            if (existing.stream().anyMatch(version -> version > supported)) throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException("Database schema is newer than this build; deploy compatible Paradigm builds together.");
             for (Migration migration : migrations) {
                 if (existing.contains(migration.version())) {
                     continue;
@@ -160,6 +162,13 @@ public class SqlMigrationRunner implements MigrationRunner {
     private boolean alreadyAppliedDdl(Connection connection, String sql) throws SQLException {
         String normalized = sql.trim().replaceAll("\\s+", " ");
 
+        if (normalized.equalsIgnoreCase("ALTER TABLE player_playtime_streams RENAME TO player_playtime_legacy_streams")) {
+            boolean oldExists = tableExists(connection, "player_playtime_streams");
+            boolean newExists = tableExists(connection, "player_playtime_legacy_streams");
+            if (oldExists && newExists) throw new SQLException("Ambiguous playtime migration: both stream tables exist; stop writers and reconcile.");
+            if (!oldExists && newExists) return true;
+        }
+
         Matcher addColumn = ADD_COLUMN.matcher(normalized);
         if (addColumn.matches()) {
             ColumnInfo column = findColumn(connection, addColumn.group(1), addColumn.group(2));
@@ -190,6 +199,12 @@ public class SqlMigrationRunner implements MigrationRunner {
         }
 
         return false;
+    }
+
+    private boolean tableExists(Connection connection, String table) throws SQLException {
+        try (ResultSet rows = connection.getMetaData().getTables(connection.getCatalog(), null, table, new String[]{"TABLE"})) {
+            return rows.next();
+        }
     }
 
     private ColumnInfo findColumn(Connection connection, String table, String column) throws SQLException {
@@ -302,6 +317,10 @@ public class SqlMigrationRunner implements MigrationRunner {
                 case 16 -> "player_playtime_streams";
                 case 17 -> "permission_definition_lock";
                 case 18 -> "server_runtime";
+                case 19 -> "dashboard_login_grants";
+                case 20 -> "server_playtime";
+                case 21 -> "storage_identity";
+                case 22 -> "permission_sync";
                 default -> "migration";
             } + ".sql";
             String sql = resourceText(resource);

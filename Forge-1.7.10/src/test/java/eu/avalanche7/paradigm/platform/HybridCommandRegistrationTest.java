@@ -279,6 +279,113 @@ public class HybridCommandRegistrationTest {
         verify(external, never()).processCommand(any(), any());
     }
 
+    @Test void legacyPlaytimeUsesNativeHybridRootAndRechecksOperatorAndStoragePermission() {
+        SimulatedCrucible manager = hybrid();
+        Services services = mock(Services.class);
+        when(services.getPlatformAdapter()).thenReturn(platform);
+        when(services.getPermissionsHandler()).thenReturn(permissions);
+        var importer = new eu.avalanche7.paradigm.modules.playtime.LegacyPlaytimeCommand(services);
+        platform.registerCommandContributor(importer, importer::register);
+        ICommand command = (ICommand) manager.getCommands().get("paradigm");
+        assertNotNull(command);
+        assertEquals("", manager.wrappers.get("paradigm").getPermission());
+        EntityPlayerMP player = player(false);
+        assertFalse(command.addTabCompletionOptions(player, new String[]{""}).contains("importplaytime"));
+        assertTrue(permissions.addPermissionToPlayer(player.getUniqueID(), "paradigm.storage.manage", false));
+        assertFalse(command.addTabCompletionOptions(player, new String[]{""}).contains("importplaytime"));
+        when(player.canCommandSenderUseCommand(2, "paradigm")).thenReturn(true);
+        assertTrue(command.addTabCompletionOptions(player, new String[]{""}).contains("importplaytime"));
+        assertEquals(List.of("confirm"), command.addTabCompletionOptions(player, new String[]{"importplaytime", ""}));
+        assertTrue(permissions.addPermissionToPlayer(player.getUniqueID(), "paradigm.storage.manage", true));
+        assertFalse(command.addTabCompletionOptions(player, new String[]{""}).contains("importplaytime"));
+        manager.forward("paradigm", player, "importplaytime", "confirm");
+        verify(services, never()).getStorageService();
+        assertTrue(command.addTabCompletionOptions((MinecraftServer) platform.getMinecraftServer(), new String[]{""}).contains("importplaytime"));
+        platform.refreshRegisteredCommandContributors();
+        command = (ICommand) manager.getCommands().get("paradigm");
+        assertEquals(List.of("confirm"), command.addTabCompletionOptions((MinecraftServer) platform.getMinecraftServer(), new String[]{"importplaytime", ""}));
+    }
+
+    @Test void playtimeUsesLocalTotalsAndReservesNetworkWithoutLosingPlayerLookupOrPermissions() {
+        SimulatedCrucible manager = hybrid();
+        Services services = mock(Services.class);
+        var storage = mock(eu.avalanche7.paradigm.storage.StorageService.class);
+        var profiles = mock(eu.avalanche7.paradigm.modules.profile.PlayerProfileService.class);
+        var repo = mock(eu.avalanche7.paradigm.storage.repository.PlayerRepository.class);
+        var playtime = mock(eu.avalanche7.paradigm.modules.playtime.PlaytimeService.class);
+        var messenger = mock(eu.avalanche7.paradigm.core.PlayerMessenger.class);
+        when(services.getPlatformAdapter()).thenReturn(platform);
+        when(services.getPermissionsHandler()).thenReturn(permissions);
+        when(services.getCommandToggleStore()).thenReturn(toggles);
+        when(services.getStorageService()).thenReturn(storage);
+        when(services.getPlayerProfileService()).thenReturn(profiles);
+        when(services.getPlaytimeService()).thenReturn(playtime);
+        when(services.getPlayerMessenger()).thenReturn(messenger);
+        when(storage.context()).thenReturn(new eu.avalanche7.paradigm.storage.identity.StorageContext(new eu.avalanche7.paradigm.storage.identity.ServerIdentity("test", "gtnh", "GTNH")));
+        when(storage.players()).thenReturn(repo);
+        EntityPlayerMP player = player(true);
+        String uuid = player.getUniqueID().toString();
+        var profile = new eu.avalanche7.paradigm.storage.model.StoredPlayerProfile(uuid, "Player", 100, 200, 3_600_000);
+        var state = new eu.avalanche7.paradigm.storage.model.StoredPlayerProfileState(profile, Map.of(), 3_540_000,
+                Map.of("gtnh", new eu.avalanche7.paradigm.storage.model.StoredServerPlaytime(uuid, "gtnh", 60_000, 100, 200)), Map.of());
+        when(profiles.findByNameOrUuid(anyString())).thenReturn(java.util.Optional.of(profile));
+        when(repo.readPlaytime(uuid)).thenReturn(state);
+        when(playtime.onlinePlaytimeMs(any())).thenReturn(60_000L);
+        when(playtime.sessionMs(any())).thenReturn(10_000L);
+        when(playtime.isPlaytimeLoaded(anyString())).thenReturn(true);
+        List<String> messages = new ArrayList<>();
+        doAnswer(call -> {
+            String rendered = call.getArgument(3);
+            String[] tokens = (String[]) call.getRawArguments()[4];
+            for (int i = 0; i < tokens.length; i += 2) rendered = rendered.replace(tokens[i], tokens[i + 1]);
+            messages.add(rendered); return null;
+        }).when(messenger).sendDecorated(any(), anyString(), anyString(), anyString(), any(String[].class));
+        doAnswer(call -> {
+            ((java.util.function.Consumer<Object>) call.getArgument(3)).accept(((java.util.function.Supplier<?>) call.getArgument(1)).get());
+            return null;
+        }).when(storage).runAsync(anyString(), any(), any(), any(), any());
+        var captured = spy(platform);
+        when(services.getPlatformAdapter()).thenReturn(captured);
+        new eu.avalanche7.paradigm.modules.playtime.PlaytimeModule().registerCommands(manager, null, services);
+        var commandTree = org.mockito.ArgumentCaptor.forClass(eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder.class);
+        verify(captured, times(2)).registerCommand(commandTree.capture());
+        var childNames = new java.util.HashSet<String>();
+        for (var child : ((ForgeCommandBuilder) commandTree.getValue()).children()) {
+            String name = child.literalName() != null ? child.literalName() : child.argumentName();
+            assertTrue(childNames.add(name), "Brigadier sibling names must be unique: " + name);
+        }
+        assertTrue(childNames.containsAll(List.of("network", "player", "target")));
+        manager.forward("playtime", player);
+        assertTrue(messages.get(0).contains("this server"));
+        manager.forward("playtime", player, "network");
+        assertTrue(messages.get(1).contains("across the network"));
+        assertTrue(messages.get(1).contains("unattributed legacy"));
+        verify(profiles).findByNameOrUuid(uuid);
+        manager.forward("playtime", player, "player", "network");
+        verify(profiles).findByNameOrUuid("network");
+        assertTrue(messages.get(2).contains("this server"));
+        manager.forward("playtime", player, "SomePlayer");
+        verify(profiles).findByNameOrUuid("SomePlayer");
+        int before = messages.size();
+        assertTrue(permissions.addPermissionToPlayer(player.getUniqueID(), "paradigm.playtime.others", true));
+        manager.forward("playtime", player, "network", "OtherPlayer");
+        manager.forward("playtime", player, "SomePlayer");
+        assertEquals(before, messages.size());
+        manager.forward("playtime", player, "network");
+        assertEquals(before + 1, messages.size());
+        when(playtime.isPlaytimeLoaded(anyString())).thenReturn(false);
+        when(playtime.recoveryStatus(any())).thenReturn("sql_unavailable");
+        manager.forward("playtime", player);
+        assertTrue(messages.get(messages.size() - 1).contains("Historical playtime is unavailable"));
+        manager.forward("playtime", player, "status");
+        assertTrue(messages.get(messages.size() - 1).contains("sql_unavailable"));
+        int afterStatus = messages.size();
+        assertTrue(permissions.addPermissionToPlayer(player.getUniqueID(), "paradigm.playtime", true));
+        manager.forward("playtime", player);
+        manager.forward("playtime", player, "network");
+        assertEquals(afterStatus, messages.size());
+    }
+
     private ForgeCommandBuilder root(String name) {
         return new ForgeCommandBuilder().literal(name)
                 .requires(source -> toggles.isEnabled(name) && source.getPlayer() != null

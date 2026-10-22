@@ -9,11 +9,12 @@ import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
+import eu.avalanche7.paradigm.storage.model.StoredPlayerProfileState;
 import eu.avalanche7.paradigm.utils.DurationFormatter;
 
 public final class PlaytimeModule implements ParadigmModule {
     private Services services;
+    private LegacyPlaytimeCommand importer;
 
     @Override
     public String getName() {
@@ -65,16 +66,37 @@ public final class PlaytimeModule implements ParadigmModule {
     @Override
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         this.services = services;
+        if (importer == null) importer = new LegacyPlaytimeCommand(services);
+        importer.register();
         ICommandBuilder cmd = services.getPlatformAdapter().createCommandBuilder()
                 .literal("playtime")
                 .requires(src -> services.getCommandToggleStore().isEnabled("playtime")
                         && allowed(src, ParadigmPermissions.PLAYTIME))
                 .executes(ctx -> self(ctx.getSource()))
+                .then(services.getPlatformAdapter().createCommandBuilder().literal("status")
+                        .executes(ctx -> {
+                            var source = ctx.getSource();
+                            CommandMessages.source(services, source, "Playtime", "playtime.recovery.status", "Playtime persistence: {status}.",
+                                    "{status}", services.getPlaytimeService().recoveryStatus(source.getPlayer() != null ? source.getPlayer().getUUID() : null));
+                            return 1;
+                        }))
+                .then(services.getPlatformAdapter().createCommandBuilder().literal("network")
+                        .executes(ctx -> networkSelf(ctx.getSource()))
+                        .then(services.getPlatformAdapter().createCommandBuilder().argument("target", ICommandBuilder.ArgumentType.WORD)
+                                .requires(src -> allowed(src, ParadigmPermissions.PLAYTIME_OTHERS))
+                                .suggests((ctx, input) -> services.getPlatformAdapter().getVisiblePlayerNames(ctx.getSource().getPlayer()))
+                                .executes(ctx -> lookup(ctx.getSource(), ctx.getStringArgument("target"), true))))
+                .then(services.getPlatformAdapter().createCommandBuilder().literal("player")
+                        .requires(src -> allowed(src, ParadigmPermissions.PLAYTIME_OTHERS))
+                        .executes(ctx -> other(ctx.getSource(), "player"))
+                        .then(services.getPlatformAdapter().createCommandBuilder().argument("target", ICommandBuilder.ArgumentType.WORD)
+                                .requires(src -> allowed(src, ParadigmPermissions.PLAYTIME_OTHERS))
+                                .executes(ctx -> other(ctx.getSource(), ctx.getStringArgument("target")))))
                 .then(services.getPlatformAdapter().createCommandBuilder()
-                        .argument("player", ICommandBuilder.ArgumentType.WORD)
+                        .argument("target", ICommandBuilder.ArgumentType.WORD)
                         .requires(src -> allowed(src, ParadigmPermissions.PLAYTIME_OTHERS))
                         .suggests((ctx, input) -> services.getPlatformAdapter().getVisiblePlayerNames(ctx.getSource().getPlayer()))
-                        .executes(ctx -> other(ctx.getSource(), ctx.getStringArgument("player"))));
+                        .executes(ctx -> other(ctx.getSource(), ctx.getStringArgument("target"))));
         services.getPlatformAdapter().registerCommand(cmd);
     }
 
@@ -117,10 +139,15 @@ public final class PlaytimeModule implements ParadigmModule {
                     "Use /playtime <player> from the console.");
             return 0;
         }
+        if (!services.getPlaytimeService().isPlaytimeLoaded(player.getUUID())) {
+            CommandMessages.source(services, source, "Playtime", "playtime.recovery.pending", "Historical playtime is unavailable ({status}). New measurements are tracked; use /playtime status.",
+                    "{status}", services.getPlaytimeService().recoveryStatus(player.getUUID()));
+            return 0;
+        }
         long total = services.getPlaytimeService().onlinePlaytimeMs(player);
         long session = services.getPlaytimeService().sessionMs(player);
-        CommandMessages.send(services, player, "Playtime", "playtime.self",
-                "Playtime: {total} (this session: {session}).",
+        CommandMessages.send(services, player, "Playtime", "playtime.local.self",
+                "Playtime on this server: {total} (this session: {session}).",
                 "{total}", DurationFormatter.humanize(total),
                 "{session}", DurationFormatter.humanize(session));
         return 1;
@@ -136,30 +163,52 @@ public final class PlaytimeModule implements ParadigmModule {
         if (online == null) {
             online = services.getPlatformAdapter().getPlayerByUuid(query);
         }
-        if (online != null && services.getPlaytimeService().isTracking(online.getUUID())) {
-            CommandMessages.source(services, source, "Playtime", "playtime.other",
-                    "{player} has played for {total}.",
+        if (online != null && services.getPlaytimeService().isTracking(online.getUUID()) && services.getPlaytimeService().isPlaytimeLoaded(online.getUUID())) {
+            CommandMessages.source(services, source, "Playtime", "playtime.local.other",
+                    "{player} has played for {total} on this server.",
                     "{player}", online.getName(),
                     "{total}", DurationFormatter.humanize(services.getPlaytimeService().onlinePlaytimeMs(online)));
             return 1;
         }
 
-        return StorageCommandSupport.runForSource(services, source, "playtime.lookup",
-                () -> services.getPlayerProfileService().findByNameOrUuid(query).orElse(null),
-                profile -> sendLookup(source, query, profile),
-                "playtime.error_load");
+        return lookup(source, query, false);
     }
 
-    private void sendLookup(ICommandSource source, String query, StoredPlayerProfile profile) {
-        if (profile == null) {
-            CommandMessages.source(services, source, "Playtime", "playtime.unknown",
-                    "No playtime data for {player}.", "{player}", query);
+    private int networkSelf(ICommandSource source) {
+        if (source.getPlayer() == null) {
+            CommandMessages.source(services, source, "Playtime", "playtime.network.player_only", "Use /playtime network <player> from the console.");
+            return 0;
+        }
+        return lookup(source, source.getPlayer().getUUID(), true);
+    }
+
+    private int lookup(ICommandSource source, String query, boolean network) {
+        return StorageCommandSupport.runForSource(services, source, "playtime.lookup",
+                () -> services.getPlayerProfileService().findByNameOrUuid(query)
+                        .map(profile -> services.getStorageService().players().readPlaytime(profile.uuid())).orElse(null),
+                state -> sendLookup(source, query, state, network), "playtime.error_load");
+    }
+
+    private void sendLookup(ICommandSource source, String query, StoredPlayerProfileState state, boolean network) {
+        if (!allowed(source, ParadigmPermissions.PLAYTIME)) return;
+        boolean self = source.getPlayer() != null && (query.equalsIgnoreCase(source.getPlayer().getUUID()) || query.equalsIgnoreCase(source.getPlayer().getName()));
+        if (!self && !allowed(source, ParadigmPermissions.PLAYTIME_OTHERS)) return;
+        if (state == null) {
+            CommandMessages.source(services, source, "Playtime", "playtime.unknown", "No playtime data for {player}.", "{player}", query);
             return;
         }
+        var profile = state.profile();
         String name = profile.name() != null && !profile.name().isBlank() ? profile.name() : profile.uuid();
-        CommandMessages.source(services, source, "Playtime", "playtime.other",
-                "{player} has played for {total}.",
-                "{player}", name,
-                "{total}", DurationFormatter.humanize(profile.playtimeMs()));
+        String server = services.getStorageService().context().serverId();
+        long local = state.localPlaytimeMs(server);
+        long livePending = 0L;
+        IPlayer online = services.getPlatformAdapter().getPlayerByUuid(profile.uuid());
+        if (online != null && services.getPlaytimeService().isTracking(profile.uuid()) && services.getPlaytimeService().isPlaytimeLoaded(profile.uuid()))
+            livePending = Math.max(0L, services.getPlaytimeService().onlinePlaytimeMs(online) - local);
+        long total = Math.addExact(network ? profile.playtimeMs() : local, livePending);
+        CommandMessages.source(services, source, "Playtime", network ? "playtime.network.other" : "playtime.local.other",
+                network ? "{player} has played for {total} across the network (stored + loaded live time on this server; unattributed legacy: {legacy})."
+                        : "{player} has played for {total} on this server.",
+                "{player}", name, "{total}", DurationFormatter.humanize(total), "{legacy}", DurationFormatter.humanize(state.unattributedPlaytimeMs()));
     }
 }

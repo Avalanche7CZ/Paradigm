@@ -60,7 +60,7 @@ public final class VanishMixin {
         }
         @Override public void paradigm$refreshVisibility(Object viewer) {
             if (viewer instanceof ServerPlayerEntity player) {
-                if (VanishTracking.canSee(player, entity)) updateTrackedStatus(player); else stopTracking(player);
+                if (player.getWorld() == entity.getWorld() && VanishTracking.canSee(player, entity)) updateTrackedStatus(player); else stopTracking(player);
             }
         }
     }

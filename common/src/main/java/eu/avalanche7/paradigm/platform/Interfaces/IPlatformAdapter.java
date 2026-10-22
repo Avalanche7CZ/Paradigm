@@ -18,6 +18,9 @@ public interface IPlatformAdapter {
 
     void provideMessageParser(MessageParser messageParser);
     Object getMinecraftServer();
+    default java.nio.file.Path getPlayerStatisticsDirectory() {
+        throw new UnsupportedOperationException("World statistics directory is unavailable on this platform.");
+    }
     void setMinecraftServer(Object server);
     List<IPlayer> getOnlinePlayers();
     @Nullable IPlayer getPlayerByName(String name);

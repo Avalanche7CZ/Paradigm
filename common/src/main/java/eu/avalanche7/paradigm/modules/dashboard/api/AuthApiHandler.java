@@ -48,16 +48,26 @@ public class AuthApiHandler {
         } catch (Throwable ignored) {
             body = new JsonObject();
         }
-        String token = body.has("token") ? body.get("token").getAsString() : ctx.query().get("token");
+        String token = body.has("token") ? (body.get("token").isJsonPrimitive() && body.getAsJsonPrimitive("token").isString()
+                ? body.get("token").getAsString() : null) : ctx.query().get("token");
         token = extractToken(token);
-        DashboardAuthService.IssuedSession issued = dashboard.auth().consumeLoginToken(token, dashboard.config());
+        DashboardAuthService.IssuedSession issued;
+        try {
+            issued = dashboard.auth().consumeLoginToken(token, dashboard.config());
+        } catch (eu.avalanche7.paradigm.storage.StorageException failure) {
+            if (dashboard.services().getLogger() != null) dashboard.services().getLogger().warn("Dashboard shared login redemption failed", failure);
+            dashboard.audit().dashboard(null, AuditActionType.DASHBOARD_LOGIN, AuditResult.FAILED,
+                    "Dashboard login storage unavailable.", Map.of("reason", "shared_storage_unavailable"));
+            return DashboardResponse.apiError(503, "login_storage_unavailable",
+                    "Shared login storage is unavailable. No session was created; request a new link after storage is restored.");
+        }
         if (issued == null) {
             dashboard.audit().dashboard(null, AuditActionType.DASHBOARD_LOGIN, AuditResult.DENIED, "Dashboard login failed.", Map.of("reason", "invalid_or_expired_token"));
             return DashboardResponse.apiError(401, "invalid_request", "Login token is invalid, expired, or already used.");
         }
         dashboard.audit().dashboard(issued.session().principal(), AuditActionType.DASHBOARD_LOGIN, AuditResult.SUCCESS, "Dashboard login succeeded.", Map.of());
         String secure = dashboard.baseUrl().startsWith("https://") ? "; Secure" : "";
-        String cookie = COOKIE_NAME + "=" + issued.token() + "; Path=/; HttpOnly; SameSite=Lax; Max-Age=" + Math.max(60, dashboard.config().sessionMinutes * 60) + secure;
+        String cookie = COOKIE_NAME + "=" + issued.token() + "; Path=" + dashboard.config().sessionCookiePath() + "; HttpOnly; SameSite=Lax; Max-Age=" + Math.max(60, dashboard.config().sessionMinutes * 60) + secure;
         Map<String, Object> loginData = new LinkedHashMap<>();
         loginData.put("principal", issued.session().principal());
         loginData.put("csrfToken", issued.csrfToken());
@@ -77,7 +87,7 @@ public class AuthApiHandler {
                 200,
                 "application/json; charset=utf-8",
                 eu.avalanche7.paradigm.modules.dashboard.DashboardJson.toJson(new DashboardResponse.ApiEnvelope(true, Map.of("loggedOut", true), null, java.util.List.of())).getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                Map.of("Set-Cookie", COOKIE_NAME + "=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0", "Cache-Control", "no-store")
+                Map.of("Set-Cookie", COOKIE_NAME + "=; Path=" + dashboard.config().sessionCookiePath() + "; HttpOnly; SameSite=Lax; Max-Age=0", "Cache-Control", "no-store")
         );
     }
 

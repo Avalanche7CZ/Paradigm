@@ -223,6 +223,12 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public java.nio.file.Path getPlayerStatisticsDirectory() {
+        if (server == null) throw new IllegalStateException("Minecraft server is unavailable.");
+        return server.getWorldPath(net.minecraft.world.level.storage.LevelResource.PLAYER_STATS_DIR);
+    }
+
+    @Override
     public Object getMinecraftServer() {
         return this.server;
     }

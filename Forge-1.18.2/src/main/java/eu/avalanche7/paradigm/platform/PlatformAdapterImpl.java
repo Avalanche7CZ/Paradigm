@@ -94,6 +94,12 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public java.nio.file.Path getPlayerStatisticsDirectory() {
+        if (server == null) throw new IllegalStateException("Minecraft server is unavailable.");
+        return server.getWorldPath(net.minecraft.world.level.storage.LevelResource.PLAYER_STATS_DIR);
+    }
+
+    @Override
     public Object getMinecraftServer() {
         return server;
     }
@@ -366,7 +372,8 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             return false;
         }
         GameType gameType = toGameType(mode);
-        return gameType != null && mp.getHandle().setGameMode(gameType);
+        return gameType != null && (mp.getHandle().gameMode.getGameModeForPlayer() == gameType
+                || mp.getHandle().setGameMode(gameType));
     }
 
     @Override

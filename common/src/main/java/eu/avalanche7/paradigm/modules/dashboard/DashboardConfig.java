@@ -24,6 +24,7 @@ public class DashboardConfig {
     public String host = "127.0.0.1";
     public int port = 8765;
     public String publicBaseUrl = "";
+    public String centralHostServerId = "";
     public boolean requireLogin = true;
     public int loginTokenMinutes = 10;
     public int sessionMinutes = 120;
@@ -116,6 +117,12 @@ public class DashboardConfig {
         return "http://" + browserHost + ":" + port;
     }
 
+    public String sessionCookiePath() {
+        String path = java.net.URI.create(localBaseUrl()).getRawPath();
+        if (path == null || path.isEmpty() || path.equals("/")) return "/";
+        return path.replaceAll("/+$", "") + "/";
+    }
+
     private static DashboardConfig merge(DashboardConfig defaults, DashboardConfig loaded) {
         if (loaded == null) {
             return defaults;
@@ -124,6 +131,7 @@ public class DashboardConfig {
         defaults.host = safe(loaded.host, defaults.host);
         defaults.port = loaded.port > 0 && loaded.port <= 65535 ? loaded.port : defaults.port;
         defaults.publicBaseUrl = safe(loaded.publicBaseUrl, "");
+        defaults.centralHostServerId = loaded.centralHostServerId != null ? loaded.centralHostServerId.trim().toLowerCase(java.util.Locale.ROOT) : "";
         defaults.requireLogin = loaded.requireLogin;
         defaults.loginTokenMinutes = Math.max(1, loaded.loginTokenMinutes);
         defaults.sessionMinutes = Math.max(5, loaded.sessionMinutes);

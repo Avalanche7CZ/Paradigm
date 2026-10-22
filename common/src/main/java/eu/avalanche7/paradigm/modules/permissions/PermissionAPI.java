@@ -40,6 +40,8 @@ public class PermissionAPI {
     private volatile PermissionContextResolver contextResolver;
     private final java.util.concurrent.atomic.AtomicLong stateVersion = new java.util.concurrent.atomic.AtomicLong();
 
+    private long synchronizedRevision = -1L;
+    private boolean permissionWritesPending;
     private PermissionDataStore.PermissionState persistedState;
     private eu.avalanche7.paradigm.storage.StorageException persistenceRecovery;
     private final Map<String, StoredPermissionGroup> persistedGroups = new LinkedHashMap<>();
@@ -62,7 +64,7 @@ public class PermissionAPI {
     public void setPermissionRepository(PermissionRepository permissionRepository) {
         stateLock.writeLock().lock();
         try {
-            if (this.permissionRepository != permissionRepository) { persistedState = null; persistedUsers.clear(); persistedGroups.clear(); persistedTracks.clear(); groupVersions.clear(); trackVersions.clear(); persistenceRecovery = null; }
+            if (this.permissionRepository != permissionRepository) { synchronizedRevision = -1L; permissionWritesPending = false; persistedState = null; persistedUsers.clear(); persistedGroups.clear(); persistedTracks.clear(); groupVersions.clear(); trackVersions.clear(); persistenceRecovery = null; }
             this.permissionRepository = permissionRepository;
         } finally { stateLock.writeLock().unlock(); }
     }
@@ -99,6 +101,7 @@ public class PermissionAPI {
             persistedUsers.clear();
             persistedUsers.putAll(loadedUsers);
             persistenceRecovery = null;
+            permissionWritesPending = false;
             stateVersion.incrementAndGet();
         } finally {
             stateLock.writeLock().unlock();
@@ -370,7 +373,7 @@ public class PermissionAPI {
                 if (ranks.contains(group)) result.add(new DirectTrackAssignment(group, index, null, null, null));
             }
         }
-        if (contexts.isEmpty() && playerDataStore != null) {
+        if (contexts.isEmpty() && playerDataStore != null && permissionRepository == null) {
             for (PlayerDataStore.TemporaryGroupEntry temporary : playerDataStore.getTemporaryGroups(uuid)) {
                 String group = temporary != null ? normalizeGroupName(temporary.getGroup()) : null;
                 if (group != null && ranks.contains(group)) {
@@ -392,7 +395,7 @@ public class PermissionAPI {
 
     private void replaceDirectAssignment(PermissionDataStore.UserEntry user, DirectTrackAssignment assignment, String target,
                                          PermissionContextSet contexts, String uuid) {
-        if (assignment.temporary() != null && playerDataStore != null) {
+        if (assignment.temporary() != null && playerDataStore != null && permissionRepository == null) {
             PlayerDataStore.TemporaryGroupEntry temporary = assignment.temporary();
             playerDataStore.removeTemporaryGroup(uuid, assignment.group());
             playerDataStore.setTemporaryGroup(uuid, target, temporary.getExpiresAtMs(), temporary.getAssignedAtMs(), temporary.getAssignedBy());
@@ -407,7 +410,7 @@ public class PermissionAPI {
             for (DirectTrackAssignment assignment : assignments) if (assignment.entry() == null) indices.add(assignment.index());
             for (int index = user.groups.size() - 1; index >= 0; index--) if (indices.contains(index)) user.groups.remove(index);
         }
-        if (contexts.isEmpty() && playerDataStore != null) {
+        if (contexts.isEmpty() && playerDataStore != null && permissionRepository == null) {
             for (DirectTrackAssignment assignment : assignments) {
                 if (assignment.temporary() != null) playerDataStore.removeTemporaryGroup(uuid, assignment.group());
             }
@@ -416,7 +419,7 @@ public class PermissionAPI {
     }
 
     private void addExistingAssignment(PermissionDataStore.UserEntry user, String uuid, DirectTrackAssignment assignment, PermissionContextSet contexts) {
-        if (assignment.temporary() != null && playerDataStore != null) {
+        if (assignment.temporary() != null && playerDataStore != null && permissionRepository == null) {
             PlayerDataStore.TemporaryGroupEntry temporary = assignment.temporary();
             playerDataStore.setTemporaryGroup(uuid, assignment.group(), temporary.getExpiresAtMs(), temporary.getAssignedAtMs(), temporary.getAssignedBy());
         } else if (assignment.entry() != null) user.contextualGroups.add(assignment.entry());
@@ -425,7 +428,7 @@ public class PermissionAPI {
 
     private void addDirectAssignment(PermissionDataStore.UserEntry user, String uuid, String group, PermissionContextSet contexts,
                                      Long expiresAtMs, String assignedBy) {
-        if (contexts.isEmpty() && expiresAtMs != null && playerDataStore != null) {
+        if (contexts.isEmpty() && expiresAtMs != null && playerDataStore != null && permissionRepository == null) {
             playerDataStore.setTemporaryGroup(uuid, group, expiresAtMs, System.currentTimeMillis(), assignedBy != null ? assignedBy : "");
         } else if (contexts.isEmpty() && expiresAtMs == null) user.groups.add(group);
         else user.contextualGroups.add(new PermissionDataStore.GroupAssignmentEntry(PermissionAssignmentId.generated(), group, contexts,
@@ -499,7 +502,7 @@ public class PermissionAPI {
                 if (track != null) track.removeIf(member -> normalized.equals(normalizeGroupName(member)));
             }
             saveLocked();
-            if (playerDataStore != null) {
+            if (playerDataStore != null && permissionRepository == null) {
                 for (PlayerDataStore.PlayerEntry player : playerDataStore.listPlayerEntries()) {
                     if (player != null && player.getUuid() != null) {
                         playerDataStore.removeTemporaryGroup(player.getUuid(), normalized);
@@ -794,22 +797,24 @@ public class PermissionAPI {
             PermissionContextSet contexts = contextSet != null ? contextSet : PermissionContextSet.empty();
 
             if (contexts.isEmpty() && expiresAtMs > 0L) {
-                if (playerDataStore != null) {
+                if (playerDataStore != null && permissionRepository == null) {
                     playerDataStore.setTemporaryGroup(playerUuid.toString(), group, expiresAtMs, System.currentTimeMillis(), assignedBy);
                 } else {
                     if (user.contextualGroups == null) {
                         user.contextualGroups = new ArrayList<>();
                     }
+                    user.contextualGroups.removeIf(existing -> group.equals(normalizeGroupName(existing.group)) && existing.contextSet().isEmpty());
                     user.contextualGroups.add(new PermissionDataStore.GroupAssignmentEntry(PermissionAssignmentId.generated(), group, PermissionContextSet.empty(), expiresAtMs, System.currentTimeMillis(), assignedBy));
                 }
             } else if (contexts.isEmpty()) {
+                user.contextualGroups.removeIf(existing -> group.equals(normalizeGroupName(existing.group)) && existing.contextSet().isEmpty());
                 if (user.groups == null) {
                     user.groups = new ArrayList<>();
                 }
                 if (!user.groups.contains(group)) {
                     user.groups.add(group);
                 }
-                if (playerDataStore != null) {
+                if (playerDataStore != null && permissionRepository == null) {
                     playerDataStore.removeTemporaryGroup(playerUuid.toString(), group);
                 }
             } else {
@@ -859,7 +864,7 @@ public class PermissionAPI {
                 changed |= user.groups.removeIf(g -> contexts.isEmpty() && group.equals(normalizeGroupName(g)));
             }
             if (contexts.isEmpty()) {
-                if (playerDataStore != null) {
+                if (playerDataStore != null && permissionRepository == null) {
                     changed |= playerDataStore.removeTemporaryGroup(playerUuid.toString(), group);
                 }
             }
@@ -890,7 +895,7 @@ public class PermissionAPI {
                 changed |= user.contextualGroups.removeIf(group -> assignmentId.equals(PermissionAssignmentId.ensure(group.assignmentId,
                         "USER_GROUP", uuid, group.group, false, group.contextSet(), group.expiresAtMs, group.assignedBy + "@" + group.assignedAtMs)));
             }
-            if (playerDataStore != null) {
+            if (playerDataStore != null && permissionRepository == null) {
                 for (PlayerDataStore.TemporaryGroupEntry temp : playerDataStore.getTemporaryGroups(uuid)) {
                     String id = PermissionAssignmentId.deterministic("USER_GROUP", uuid, temp.getGroup(), false, PermissionContextSet.empty(),
                             temp.getExpiresAtMs(), (temp.getAssignedBy() != null ? temp.getAssignedBy() : "") + "@" + temp.getAssignedAtMs());
@@ -1140,13 +1145,20 @@ public class PermissionAPI {
 
             List<String> permanent = user.groups != null ? List.copyOf(user.groups) : List.of();
             List<TemporaryGroupInfo> temporary = new ArrayList<>();
-            if (playerDataStore != null) {
+            if (playerDataStore != null && permissionRepository == null) {
                 for (PlayerDataStore.TemporaryGroupEntry entry : playerDataStore.getTemporaryGroups(playerUuid.toString())) {
                     if (entry == null || entry.getGroup() == null || entry.getGroup().isBlank()) {
                         continue;
                     }
                     temporary.add(new TemporaryGroupInfo(entry.getGroup(), entry.getExpiresAtMs(), entry.getAssignedAtMs(), entry.getAssignedBy() != null ? entry.getAssignedBy() : ""));
                 }
+            }
+
+            long now = System.currentTimeMillis();
+            for (var group : user.contextualGroups) {
+                if (group.contextSet().isEmpty() && group.expiresAtMs != null && group.expiresAtMs > now)
+                    temporary.add(new TemporaryGroupInfo(group.group, group.expiresAtMs, group.assignedAtMs,
+                            group.assignedBy != null ? group.assignedBy : ""));
             }
 
             return new UserGroupsInfo(permanent, List.copyOf(temporary));
@@ -1276,32 +1288,70 @@ public class PermissionAPI {
 
         stateLock.readLock().lock();
         try {
+            if (permissionRepository != null && persistedState == null) return false;
             PermissionDataStore.PermissionState snapshot = this.state;
-            String normalizedNode = permissionNode.trim().toLowerCase(Locale.ROOT);
-            String normalizedUuid = playerUuid.toString().toLowerCase(Locale.ROOT);
-
-            PermissionDataStore.UserEntry user = snapshot.users.get(normalizedUuid);
-
-            RuleDecision userDecision = bestRuleMatch(user != null ? user.permissions : List.of(), normalizedNode, "user", normalizedUuid, currentContext, 20);
-            userDecision = pickBetter(userDecision, bestContextRuleMatch(user != null ? user.contextualPermissions : List.of(), normalizedNode, "user", normalizedUuid, currentContext, 20));
-
-            List<String> groups = resolvePlayerGroups(snapshot, normalizedUuid, user, currentContext);
-            RuleDecision groupDecision = null;
-
-            for (String groupName : groups) {
-                RuleDecision candidate = evaluateGroup(snapshot, groupName, normalizedNode, currentContext, new HashSet<>(), 0);
-                groupDecision = pickBetter(groupDecision, candidate);
-            }
-
-            RuleDecision decision = pickBetter(userDecision, groupDecision);
-            if (decision != null) {
-                return decision.allowed;
-            }
-
-            return null;
+            return checkPermission(snapshot, playerUuid, permissionNode, currentContext, true);
         } finally {
             stateLock.readLock().unlock();
         }
+    }
+
+    public Boolean hasStoredPermission(UUID playerUuid, String permissionNode) {
+        var resolver = contextResolver;
+        return hasStoredPermission(playerUuid, permissionNode,
+                resolver != null ? resolver.currentServer() : PermissionContextSet.empty());
+    }
+
+    public Boolean hasStoredPermission(UUID playerUuid, String permissionNode, PermissionContextSet context) {
+        if (playerUuid == null || permissionNode == null || permissionNode.isBlank()) return null;
+        PermissionRepository repository = permissionRepository;
+        if (repository == null) throw new eu.avalanche7.paradigm.storage.StorageException("Shared permission storage is unavailable.");
+        var snapshot = new PermissionDataStore.PermissionState();
+        stateLock.readLock().lock();
+        try { snapshot.defaultGroup = state.defaultGroup; }
+        finally { stateLock.readLock().unlock(); }
+        loadDefinitions(snapshot, repository.definitions());
+        repository.getUser(playerUuid.toString()).ifPresent(stored -> {
+            var user = new PermissionDataStore.UserEntry();
+            for (var group : stored.groups()) {
+                user.contextualGroups.add(new PermissionDataStore.GroupAssignmentEntry(group.assignmentId(), group.groupName(),
+                        group.contextSet(), group.expiresAtMs(), group.assignedAtMs(), group.assignedBy()));
+            }
+            for (var node : stored.permissions()) {
+                String rule = nodeToRule(node);
+                if (rule != null) user.contextualPermissions.add(new PermissionDataStore.PermissionRuleEntry(node.assignmentId(),
+                        rule.startsWith("-") ? rule.substring(1) : rule, rule.startsWith("-"), node.contextSet(), node.expiresAtMs()));
+            }
+            user.normalize();
+            snapshot.users.put(playerUuid.toString(), user);
+        });
+        return checkPermission(snapshot, playerUuid, permissionNode, context != null ? context : PermissionContextSet.empty(), false);
+    }
+
+    private Boolean checkPermission(PermissionDataStore.PermissionState snapshot, UUID playerUuid, String permissionNode,
+                                    PermissionContextSet currentContext, boolean localTemporaryGroups) {
+        String normalizedNode = permissionNode.trim().toLowerCase(Locale.ROOT);
+        String normalizedUuid = playerUuid.toString().toLowerCase(Locale.ROOT);
+
+        PermissionDataStore.UserEntry user = snapshot.users.get(normalizedUuid);
+
+        RuleDecision userDecision = bestRuleMatch(user != null ? user.permissions : List.of(), normalizedNode, "user", normalizedUuid, currentContext, 20);
+        userDecision = pickBetter(userDecision, bestContextRuleMatch(user != null ? user.contextualPermissions : List.of(), normalizedNode, "user", normalizedUuid, currentContext, 20));
+
+        List<String> groups = resolvePlayerGroups(snapshot, normalizedUuid, user, currentContext, localTemporaryGroups);
+        RuleDecision groupDecision = null;
+
+        for (String groupName : groups) {
+            RuleDecision candidate = evaluateGroup(snapshot, groupName, normalizedNode, currentContext, new HashSet<>(), 0);
+            groupDecision = pickBetter(groupDecision, candidate);
+        }
+
+        RuleDecision decision = pickBetter(userDecision, groupDecision);
+        if (decision != null) {
+            return decision.allowed;
+        }
+
+        return null;
     }
 
     public PermissionExplain explainPermission(UUID playerUuid, String permissionNode) {
@@ -1340,6 +1390,11 @@ public class PermissionAPI {
     }
 
     private List<String> resolvePlayerGroups(PermissionDataStore.PermissionState snapshot, String normalizedUuid, PermissionDataStore.UserEntry user, PermissionContextSet currentContext) {
+        return resolvePlayerGroups(snapshot, normalizedUuid, user, currentContext, true);
+    }
+
+    private List<String> resolvePlayerGroups(PermissionDataStore.PermissionState snapshot, String normalizedUuid, PermissionDataStore.UserEntry user,
+                                                PermissionContextSet currentContext, boolean localTemporaryGroups) {
         Map<String, Long> groups = new LinkedHashMap<>();
         long now = System.currentTimeMillis();
 
@@ -1353,7 +1408,7 @@ public class PermissionAPI {
                     groups.put(group.trim().toLowerCase(Locale.ROOT), Long.MAX_VALUE);
                 }
             }
-            if (normalizedUuid != null && playerDataStore != null) {
+            if (localTemporaryGroups && normalizedUuid != null && playerDataStore != null && permissionRepository == null) {
                 for (PlayerDataStore.TemporaryGroupEntry temp : playerDataStore.getTemporaryGroups(normalizedUuid)) {
                     if (temp == null || temp.getGroup() == null || temp.getGroup().isBlank()) {
                         continue;
@@ -1689,7 +1744,7 @@ public class PermissionAPI {
                         contexts, assignment.expiresAtMs, false, assignment.assignedBy));
             }
         }
-        if (playerDataStore != null) {
+        if (playerDataStore != null && permissionRepository == null) {
             for (PlayerDataStore.TemporaryGroupEntry temp : playerDataStore.getTemporaryGroups(uuid)) {
                 if (temp == null || temp.getGroup() == null) continue;
                 String group = normalizeGroupName(temp.getGroup());
@@ -1725,56 +1780,18 @@ public class PermissionAPI {
             var groups = new ArrayList<StoredPermissionGroup>();
             defaults.groups.forEach((name, entry) -> groups.add(toStoredGroup(name, entry, null)));
             repository.initializeDefaultGroups(groups);
-            definitions = repository.definitions();
         }
+        var changes = repository.changesSince(-1L);
+        definitions = changes.definitions();
         loadDefinitions(loaded, definitions);
 
-        long now = System.currentTimeMillis();
-        for (StoredUserPermissionData userData : repository.listUsers()) {
-            if (userData == null) {
-                continue;
-            }
-            String uuid = normalizeUuid(userData.uuid());
-            if (uuid == null) {
-                continue;
-            }
-            PermissionDataStore.UserEntry entry = new PermissionDataStore.UserEntry();
-            for (StoredUserPermissionData.GroupAssignment group : userData.groups()) {
-                if (group == null) {
-                    continue;
-                }
-                String groupName = normalizeGroupName(group.groupName());
-                if (groupName == null) {
-                    continue;
-                }
-                if (!group.contextSet().isEmpty()) {
-                    if (group.expiresAtMs() == null || group.expiresAtMs() > now) {
-                        entry.contextualGroups.add(new PermissionDataStore.GroupAssignmentEntry(group.assignmentId(), groupName, group.contextSet(), group.expiresAtMs(), group.assignedAtMs(), group.assignedBy()));
-                    }
-                } else if (group.expiresAtMs() != null && group.expiresAtMs() > now) {
-                    if (playerDataStore != null) {
-                        playerDataStore.setTemporaryGroup(uuid, groupName, group.expiresAtMs(), group.assignedAtMs(), group.assignedBy());
-                    } else {
-                        entry.contextualGroups.add(new PermissionDataStore.GroupAssignmentEntry(group.assignmentId(), groupName, PermissionContextSet.empty(), group.expiresAtMs(), group.assignedAtMs(), group.assignedBy()));
-                    }
-                } else if (group.expiresAtMs() == null && !entry.groups.contains(groupName)) {
-                    entry.groups.add(groupName);
-                }
-            }
-            for (StoredPermissionNode node : userData.permissions()) {
-                String rule = nodeToRule(node);
-                if (rule != null && node.contextSet().isEmpty() && node.expiresAtMs() == null && !entry.permissions.contains(rule)) {
-                    entry.permissions.add(rule);
-                } else if (rule != null && (node.expiresAtMs() == null || node.expiresAtMs() > now)) {
-                    boolean denied = rule.startsWith("-");
-                    String permission = denied ? rule.substring(1) : rule;
-                    entry.contextualPermissions.add(new PermissionDataStore.PermissionRuleEntry(node.assignmentId(), permission, denied, node.contextSet(), node.expiresAtMs()));
-                }
-            }
-            entry.normalize();
-            loaded.users.put(uuid, entry);
+        for (StoredUserPermissionData userData : changes.users()) {
+            String uuid = userData != null ? normalizeUuid(userData.uuid()) : null;
+            if (uuid == null) continue;
+            loaded.users.put(uuid, loadUser(userData));
             loadedUsers.put(uuid, userData);
         }
+        synchronizedRevision = changes.revision();
 
         loaded.normalize();
         groupVersions.clear(); groupVersions.putAll(definitions.versions().groups());
@@ -1784,6 +1801,41 @@ public class PermissionAPI {
         persistedTracks.clear();
         for (var track : definitions.tracks()) persistedTracks.put(track.name(), track);
         return loaded;
+    }
+
+    private PermissionDataStore.UserEntry loadUser(StoredUserPermissionData userData) {
+        long now = System.currentTimeMillis();
+        PermissionDataStore.UserEntry entry = new PermissionDataStore.UserEntry();
+        for (StoredUserPermissionData.GroupAssignment group : userData.groups()) {
+            if (group == null) {
+                continue;
+            }
+            String groupName = normalizeGroupName(group.groupName());
+            if (groupName == null) {
+                continue;
+            }
+            if (!group.contextSet().isEmpty()) {
+                if (group.expiresAtMs() == null || group.expiresAtMs() > now) {
+                    entry.contextualGroups.add(new PermissionDataStore.GroupAssignmentEntry(group.assignmentId(), groupName, group.contextSet(), group.expiresAtMs(), group.assignedAtMs(), group.assignedBy()));
+                }
+            } else if (group.expiresAtMs() != null && group.expiresAtMs() > now) {
+                entry.contextualGroups.add(new PermissionDataStore.GroupAssignmentEntry(group.assignmentId(), groupName, PermissionContextSet.empty(), group.expiresAtMs(), group.assignedAtMs(), group.assignedBy()));
+            } else if (group.expiresAtMs() == null && !entry.groups.contains(groupName)) {
+                entry.groups.add(groupName);
+            }
+        }
+        for (StoredPermissionNode node : userData.permissions()) {
+            String rule = nodeToRule(node);
+            if (rule != null && node.contextSet().isEmpty() && node.expiresAtMs() == null && !entry.permissions.contains(rule)) {
+                entry.permissions.add(rule);
+            } else if (rule != null && (node.expiresAtMs() == null || node.expiresAtMs() > now)) {
+                boolean denied = rule.startsWith("-");
+                String permission = denied ? rule.substring(1) : rule;
+                entry.contextualPermissions.add(new PermissionDataStore.PermissionRuleEntry(node.assignmentId(), permission, denied, node.contextSet(), node.expiresAtMs()));
+            }
+        }
+        entry.normalize();
+        return entry;
     }
 
     private static void loadDefinitions(PermissionDataStore.PermissionState loaded, PermissionRepository.Definitions definitions) {
@@ -1835,41 +1887,75 @@ public class PermissionAPI {
         }
     }
 
+    public boolean synchronizePermissions() {
+        stateLock.writeLock().lock();
+        try {
+            var repository = permissionRepository;
+            if (repository == null || persistenceRecovery != null) return false;
+            if (persistedState == null) { reload(); return persistedState != null; }
+            if (permissionWritesPending) {
+                saveStateToRepository(repository, copyState(state));
+                acceptedState = copyState(state);
+            }
+            var changes = repository.changesSince(synchronizedRevision);
+            if (changes.revision() >= 0 && changes.revision() == synchronizedRevision) return false;
+            boolean changed = changes.definitions() != null && synchronizeDefinitions(changes.definitions());
+            for (var stored : changes.users()) {
+                String uuid = normalizeUuid(stored.uuid());
+                if (uuid == null || stored.equals(persistedUsers.get(uuid))) continue;
+                var entry = loadUser(stored);
+                changed = true;
+                state.users.put(uuid, entry);
+                var userSnapshot = new PermissionDataStore.PermissionState();
+                userSnapshot.users.put(uuid, entry);
+                acceptedState.users.put(uuid, copyState(userSnapshot).users.get(uuid));
+                persistedState.users.put(uuid, copyState(userSnapshot).users.get(uuid));
+                persistedUsers.put(uuid, stored);
+            }
+            synchronizedRevision = changes.revision();
+            if (changed) stateVersion.incrementAndGet();
+            return changed;
+        } finally { stateLock.writeLock().unlock(); }
+    }
+
     /** Refresh shared definitions without reloading or persisting local user assignments. */
     public boolean synchronizeDefinitions() {
         stateLock.writeLock().lock();
         try {
             PermissionRepository repository = permissionRepository;
             // Unknown writes require explicit recovery; a background read must not acknowledge them.
-            if (repository == null || persistedState == null || persistenceRecovery != null) return false;
-            var definitions = repository.definitions();
-            var groups = new LinkedHashMap<String, StoredPermissionGroup>();
-            for (var group : definitions.groups()) groups.put(group.name(), group);
-            var tracks = new LinkedHashMap<String, StoredPermissionTrack>();
-            for (var track : definitions.tracks()) tracks.put(track.name(), track);
-            if (groups.equals(persistedGroups) && tracks.equals(persistedTracks)
-                    && definitions.versions().groups().equals(groupVersions)
-                    && definitions.versions().tracks().equals(trackVersions)) return false;
-
-            var refreshed = new PermissionDataStore.PermissionState();
-            refreshed.defaultGroup = state.defaultGroup;
-            loadDefinitions(refreshed, definitions);
-            refreshed.normalize();
-            // Preserve each snapshot's user state, including writes queued on the storage executor.
-            for (var target : List.of(state, acceptedState, persistedState)) {
-                var copy = copyState(refreshed);
-                target.groups = copy.groups;
-                target.tracks = copy.tracks;
-            }
-            persistedGroups.clear(); persistedGroups.putAll(groups);
-            persistedTracks.clear(); persistedTracks.putAll(tracks);
-            groupVersions.clear(); groupVersions.putAll(definitions.versions().groups());
-            trackVersions.clear(); trackVersions.putAll(definitions.versions().tracks());
-            stateVersion.incrementAndGet();
-            return true;
+            if (repository == null || persistenceRecovery != null) return false;
+            if (persistedState == null) { reload(); return persistedState != null; }
+            return synchronizeDefinitions(repository.definitions());
         } finally {
             stateLock.writeLock().unlock();
         }
+    }
+
+    private boolean synchronizeDefinitions(PermissionRepository.Definitions definitions) {
+        var groups = new LinkedHashMap<String, StoredPermissionGroup>();
+        for (var group : definitions.groups()) groups.put(group.name(), group);
+        var tracks = new LinkedHashMap<String, StoredPermissionTrack>();
+        for (var track : definitions.tracks()) tracks.put(track.name(), track);
+        if (groups.equals(persistedGroups) && tracks.equals(persistedTracks)
+                && definitions.versions().groups().equals(groupVersions)
+                && definitions.versions().tracks().equals(trackVersions)) return false;
+
+        var refreshed = new PermissionDataStore.PermissionState();
+        refreshed.defaultGroup = state.defaultGroup;
+        loadDefinitions(refreshed, definitions);
+        refreshed.normalize();
+        for (var target : List.of(state, acceptedState, persistedState)) {
+            var copy = copyState(refreshed);
+            target.groups = copy.groups;
+            target.tracks = copy.tracks;
+        }
+        persistedGroups.clear(); persistedGroups.putAll(groups);
+        persistedTracks.clear(); persistedTracks.putAll(tracks);
+        groupVersions.clear(); groupVersions.putAll(definitions.versions().groups());
+        trackVersions.clear(); trackVersions.putAll(definitions.versions().tracks());
+        stateVersion.incrementAndGet();
+        return true;
     }
 
     private void saveStateToRepository(PermissionRepository repository, PermissionDataStore.PermissionState snapshot) {
@@ -1942,6 +2028,7 @@ public class PermissionAPI {
             persistedUsers.put(uuid, stored);
         }
         persistedState = copyState(snapshot);
+        permissionWritesPending = false;
     }
 
     private static StoredPermissionGroup toStoredGroup(String name, PermissionDataStore.GroupEntry entry, StoredPermissionGroup previous) {
@@ -1978,7 +2065,7 @@ public class PermissionAPI {
                 groups.add(new StoredUserPermissionData.GroupAssignment(groupName, null, "", 0L));
             }
         }
-        if (playerDataStore != null) {
+        if (playerDataStore != null && permissionRepository == null) {
             for (PlayerDataStore.TemporaryGroupEntry temp : playerDataStore.getTemporaryGroups(uuid)) {
                 if (temp == null || temp.getGroup() == null || temp.getGroup().isBlank() || removedGroups.contains(normalizeGroupName(temp.getGroup()))) {
                     continue;
@@ -2076,6 +2163,8 @@ public class PermissionAPI {
         PermissionDataStore.PermissionState snapshot = copyState(state);
         try {
             if (repository != null) {
+                if (persistedState == null) throw new eu.avalanche7.paradigm.storage.StorageException("SQL permission baseline is unavailable; reload must succeed before changing permissions.");
+                permissionWritesPending = true;
                 BiConsumer<String, Runnable> executor = this.asyncPersistenceExecutor;
                 if (executor != null && !definitionsChanged(snapshot)) {
                     executor.accept("permissions.save", () -> {

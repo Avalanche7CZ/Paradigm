@@ -1,3 +1,8 @@
+export function dashboardUrl(path: string): string {
+  const url = new URL(path.replace(/^\/+/, ''), document.baseURI);
+  return url.pathname + url.search + url.hash;
+}
+
 import type { Envelope } from './types';
 export class ApiError extends Error {
   constructor(
@@ -43,7 +48,7 @@ export class ApiClient {
       if (target) headers['X-Paradigm-Server'] = target;
       let response: Response;
       try {
-        response = await fetch(path, {
+        response = await fetch(dashboardUrl(path), {
           method: body === undefined ? 'GET' : 'POST',
           headers,
           credentials: 'same-origin',

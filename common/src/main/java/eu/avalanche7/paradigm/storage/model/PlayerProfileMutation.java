@@ -6,7 +6,9 @@ public final class PlayerProfileMutation {
     public static void requireCompatibleImport(StoredPlayerProfileState existing, StoredPlayerProfileState incoming) {
         boolean occupied = existing.profile().playtimeMs() > 0L || !existing.playtimeStreams().isEmpty();
         boolean tracked = !existing.playtimeStreams().isEmpty() || !incoming.playtimeStreams().isEmpty();
-        if (occupied && tracked && !existing.playtimeStreams().equals(incoming.playtimeStreams())) {
+        if (occupied && tracked && (!existing.playtimeStreams().equals(incoming.playtimeStreams())
+                || !existing.serverPlaytimes().equals(incoming.serverPlaytimes()) || !existing.streamServers().equals(incoming.streamServers())
+                || existing.unattributedPlaytimeMs() != incoming.unattributedPlaytimeMs())) {
             throw new eu.avalanche7.paradigm.storage.StorageException("Incompatible playtime histories for " + incoming.profile().uuid()
                     + ": migrate into an empty destination or restore a coherent matching profile/watermark snapshot. Independent histories require explicit reconciliation.");
         }

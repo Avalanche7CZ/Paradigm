@@ -33,7 +33,7 @@ public class SqlStorageProvider implements StorageProvider {
 
     private PlayerRepository players;
     private WarpRepository warps;
-    private PermissionRepository permissions;
+    private final PermissionRepository permissions;
     private ModerationRepository moderation;
     private AdminStateRepository adminState;
     private ServerRepository servers;
@@ -59,6 +59,7 @@ public class SqlStorageProvider implements StorageProvider {
         this.connections = new SqlConnectionProvider(config, dialect, runtimeDrivers);
         this.migrations = new SqlMigrationRunner(connections, logger);
         this.executor = new SqlExecutor(connections);
+        this.permissions = new SqlPermissionRepository(executor, context);
     }
 
     @Override
@@ -66,7 +67,6 @@ public class SqlStorageProvider implements StorageProvider {
         migrations.runAvailableMigrations();
         this.players = new SqlPlayerRepository(executor, context);
         this.warps = new SqlWarpRepository(executor, context);
-        this.permissions = new SqlPermissionRepository(executor, context);
         this.moderation = new SqlModerationRepository(executor, context);
         this.adminState = new SqlAdminStateRepository(executor, context);
         this.servers = new SqlServerRepository(executor);
@@ -92,6 +92,7 @@ public class SqlStorageProvider implements StorageProvider {
     @Override public ManagedConfigRepository managedConfig() { return managedConfig; }
     @Override public AuditRepository audit() { return audit; }
     @Override public TicketRepository tickets() { return tickets; }
+    @Override public eu.avalanche7.paradigm.storage.repository.DashboardLoginRepository dashboardLogins() { return new SqlDashboardLoginRepository(executor); }
 
     @Override
     public StorageService.StorageTestResult test() {
@@ -103,6 +104,14 @@ public class SqlStorageProvider implements StorageProvider {
 
     public boolean serverRegistered() {
         return serverRegistered;
+    }
+
+    public String playtimeStorageIdentity() {
+        return executor.query("SELECT metadata_value FROM storage_metadata WHERE metadata_key = 'database_id'", null, rs -> {
+            if (!rs.next() || rs.getString(1) == null || !rs.getString(1).matches("(?i)([0-9a-f]{32}|[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12})"))
+                throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException("SQL database identity is missing or invalid; restore storage metadata from backup.");
+            return "sql:" + rs.getString(1).toLowerCase(java.util.Locale.ROOT);
+        });
     }
 
     @Override

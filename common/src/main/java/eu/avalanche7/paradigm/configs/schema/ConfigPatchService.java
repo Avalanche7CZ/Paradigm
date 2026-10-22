@@ -596,6 +596,11 @@ public class ConfigPatchService {
                 if (host.length() > 255 || !host.matches("(?:[A-Za-z0-9.-]+|[0-9A-Fa-f:]+|\\[[0-9A-Fa-f:]+\\])")) throw new IllegalArgumentException("Dashboard host is invalid.");
                 config.host = host;
             }
+            case "centralHostServerId" -> {
+                String id = ((String) value).trim().toLowerCase(java.util.Locale.ROOT);
+                if (!id.isEmpty() && !id.matches("[a-z0-9_.:-]{1,64}")) throw new IllegalArgumentException("Central Dashboard host must be a server ID.");
+                config.centralHostServerId = id;
+            }
             case "publicBaseUrl" -> {
                 String url = ((String) value).trim();
                 if (!url.isBlank() && !(url.startsWith("http://") || url.startsWith("https://"))) throw new IllegalArgumentException("Public dashboard URL must use http or https.");

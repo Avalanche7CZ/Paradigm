@@ -16,6 +16,9 @@ public class ServerIdentityService {
 
     public ServerIdentityService(Logger logger, StorageConfig config) {
         this.logger = logger;
+        if (config != null && eu.avalanche7.paradigm.storage.StorageProviderType.parse(config.provider) == eu.avalanche7.paradigm.storage.StorageProviderType.MYSQL
+                && (config.serverId == null || !SAFE_ID.matcher(config.serverId.trim()).matches() || "default".equalsIgnoreCase(config.serverId.trim())))
+            throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException("Shared MySQL/MariaDB storage requires an explicit stable serverId (1-64 letters, digits, _, ., :, -); 'default' is not a network identity. Give each server its own existing ID.");
         this.identity = new ServerIdentity(
                 normalizeId(config != null ? config.networkId : null, "default", "networkId"),
                 normalizeId(config != null ? config.serverId : null, "default", "serverId"),

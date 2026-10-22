@@ -9,6 +9,7 @@ import eu.avalanche7.paradigm.modules.audit.AuditActionType;
 import eu.avalanche7.paradigm.modules.audit.AuditEntry;
 import eu.avalanche7.paradigm.modules.audit.AuditResult;
 import eu.avalanche7.paradigm.modules.audit.AuditService;
+import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardAuthService;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
 import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.modules.permissions.PermissionDefinition;
@@ -17,6 +18,7 @@ import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.storage.StorageException;
 
 public class LocalDashboardModule implements ParadigmModule {
     private static volatile LocalDashboardModule INSTANCE;
@@ -186,7 +188,8 @@ public class LocalDashboardModule implements ParadigmModule {
             send(source, "dashboard.token.failed", "Could not create dashboard login token.");
             return 0;
         }
-        var issued = dashboard.auth().createLoginToken(principal, dashboard.config());
+        var issued = issueToken(source, principal);
+        if (issued == null) return 0;
         String url = loginUrl(issued.token());
         if (services.getLogger() != null) {
             services.getLogger().info("Paradigm Dashboard: one-time login token created for {}.", principal.name());
@@ -201,7 +204,7 @@ public class LocalDashboardModule implements ParadigmModule {
             send(source, "dashboard.error.unavailable", "Dashboard is unavailable.");
             return 0;
         }
-        if (!dashboard.running()) {
+        if (!dashboard.usesCentralHost() && !dashboard.running()) {
             if (!hasManagePermission(source, services)) {
                 send(source, "dashboard.error.permission_denied", "You do not have permission to start the Dashboard.");
                 return 0;
@@ -218,11 +221,26 @@ public class LocalDashboardModule implements ParadigmModule {
             send(source, "dashboard.token.failed", "Could not create dashboard login token.");
             return 0;
         }
-        var issued = dashboard.auth().createLoginToken(principal, dashboard.config());
+        var issued = issueToken(source, principal);
+        if (issued == null) return 0;
         sendLoginLink(source, loginUrl(issued.token()));
         dashboard.audit().command(source, AuditActionType.DASHBOARD_STATUS, AuditResult.SUCCESS,
                 "Dashboard login link created.", java.util.Map.of("action", "open"));
         return 1;
+    }
+
+    private DashboardAuthService.IssuedToken issueToken(ICommandSource source, DashboardPrincipal principal) {
+        try {
+            return dashboard.issueLoginToken(principal);
+        } catch (StorageException | IllegalArgumentException failure) {
+            if (services.getLogger() != null) services.getLogger().warn("Dashboard login link could not be issued", failure);
+            dashboard.audit().command(source, AuditActionType.DASHBOARD_STATUS, AuditResult.FAILED,
+                    "Dashboard login link could not be issued.", java.util.Map.of("action", "issue_login_link"));
+            services.getPlatformAdapter().sendSuccess(source, services.getPlatformAdapter().createLiteralComponent(
+                    "Dashboard login link could not be issued: " + (failure instanceof IllegalArgumentException ? failure.getMessage()
+                            : "Shared login storage is unavailable, or the issuer and central host are not registered in the same network. Check centralHostServerId and shared MariaDB.")), false);
+            return null;
+        }
     }
 
     private String loginUrl(String token) {

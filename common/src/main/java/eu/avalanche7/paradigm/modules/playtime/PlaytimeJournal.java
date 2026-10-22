@@ -20,6 +20,8 @@ import eu.avalanche7.paradigm.utils.AtomicFileIO;
 final class PlaytimeJournal implements AutoCloseable {
     private final Path path;
     private final String storageIdentity;
+    private final String serverId;
+    private final java.util.function.Supplier<String> targetIdentity;
     private final java.util.function.Supplier<eu.avalanche7.paradigm.storage.repository.PlayerRepository> repository;
     private final Gson gson = new GsonBuilder().registerTypeAdapter(Entry.class, (JsonDeserializer<Entry>) (json, type, context) -> {
         if (json.isJsonNull()) return null;
@@ -37,10 +39,23 @@ final class PlaytimeJournal implements AutoCloseable {
     }
 
     PlaytimeJournal(Path path, String storageIdentity, java.util.function.Supplier<eu.avalanche7.paradigm.storage.repository.PlayerRepository> repository) {
+        this(path, storageIdentity, repository, "default");
+    }
+
+    PlaytimeJournal(Path path, String storageIdentity, java.util.function.Supplier<eu.avalanche7.paradigm.storage.repository.PlayerRepository> repository, String serverId) {
+        this(path, storageIdentity, repository, serverId, () -> storageIdentity);
+    }
+
+    PlaytimeJournal(Path path, String storageIdentity, java.util.function.Supplier<eu.avalanche7.paradigm.storage.repository.PlayerRepository> repository,
+                    String serverId, java.util.function.Supplier<String> targetIdentity) {
         this.path = path;
+        this.targetIdentity = targetIdentity;
         this.storageIdentity = storageIdentity;
         this.repository = repository;
+        this.serverId = serverId;
     }
+
+    String serverId() { return serverId; }
 
     synchronized Data open() {
         if (data != null) return data;
@@ -66,21 +81,24 @@ final class PlaytimeJournal implements AutoCloseable {
             } else loaded = new Data();
             if (loaded == null || loaded.streams == null) throw new StorageException("Invalid playtime journal: " + path);
             if (Files.exists(path) && (loaded.storageIdentity == null || loaded.storageIdentity.isBlank())) throw new StorageException("Missing storage identity in recovered playtime journal: " + path);
+            if (loaded.serverId != null && !loaded.serverId.equals(serverId)) throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException("Playtime journal server identity changed from " + loaded.serverId + " to " + serverId + "; quiesced reconciliation required.");
+            boolean legacyFormat = loaded.serverId == null;
+            if (legacyFormat) {
+                loaded.serverId = serverId;
+                loaded.streams.keySet().forEach(writer -> loaded.streamServers.put(writer, ""));
+            }
             loaded.streams.forEach((writerId, players) -> {
                 UUID.fromString(writerId);
+                String scope = loaded.streamServers.get(writerId);
+                if (scope == null || !scope.isEmpty() && !scope.equals(serverId)) throw new StorageException("Invalid journal stream server identity: " + writerId);
                 if (players == null) throw new StorageException("Invalid playtime journal stream: " + writerId);
                 players.forEach((uuid, entry) -> {
                     if (entry == null || entry.cumulativeMs < 0L) throw new StorageException("Invalid playtime journal counter: " + uuid);
                 });
             });
-            if (loaded.storageIdentity != null && !loaded.storageIdentity.equals(storageIdentity)) {
-                if (repository == null || !loaded.streams.entrySet().stream().allMatch(stream -> stream.getValue().entrySet().stream().allMatch(entry ->
-                        repository.get().getProfileState(entry.getKey()).playtimeStreams().getOrDefault(stream.getKey(), 0L) == entry.getValue().cumulativeMs()))) {
-                    throw new StorageException("Playtime storage target changed; pending journal requires an explicit, quiesced migration: " + path);
-                }
-            }
-            boolean changed = !Files.exists(path) || !java.util.Objects.equals(loaded.storageIdentity, storageIdentity);
-            loaded.storageIdentity = storageIdentity;
+            boolean changed = legacyFormat || !Files.exists(path);
+            if (loaded.storageIdentity == null) loaded.storageIdentity = storageIdentity;
+            loaded.streamServers.put(bootWriterId, serverId);
             loaded.writerId = bootWriterId;
             loaded.players = loaded.streams.getOrDefault(bootWriterId, Map.of());
             if (changed) AtomicFileIO.writeUtf8Durable(path, writer -> gson.toJson(loaded, writer));
@@ -90,6 +108,45 @@ final class PlaytimeJournal implements AutoCloseable {
             try { close(); } catch (IOException closeFailure) { failure.addSuppressed(closeFailure); }
             throw new StorageException("Cannot open playtime journal: " + path, failure);
         }
+    }
+
+    synchronized void verifyTarget() {
+        Data current = open();
+        String target = targetIdentity.get();
+        if (target == null || target.isBlank()) throw new StorageException("Authoritative storage identity is unavailable.");
+        if (target.equals(current.storageIdentity)) return;
+        boolean adoptLegacy = !current.storageIdentity.startsWith("sql:") && target.startsWith("sql:")
+                && current.storageIdentity.equals(storageIdentity);
+        if (!adoptLegacy) {
+            if (current.storageIdentity.startsWith("sql:") || repository == null)
+                throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException("Playtime storage identity conflict; original identity retained. Stop writers and reconcile backups.");
+            var states = new java.util.HashMap<String, eu.avalanche7.paradigm.storage.model.StoredPlayerProfileState>();
+            boolean evidence = false;
+            for (var stream : current.streams.entrySet()) for (var player : stream.getValue().entrySet()) {
+                if (stream.getKey().equals(bootWriterId)) continue;
+                var state = states.computeIfAbsent(player.getKey(), uuid -> repository.get().readPlaytime(uuid));
+                long saved = player.getValue().cumulativeMs();
+                if (state.playtimeStreams().getOrDefault(stream.getKey(), 0L) != saved
+                        || state.playtimeStreams().containsKey(stream.getKey())
+                        && !current.streamServers.get(stream.getKey()).equals(state.streamServers().getOrDefault(stream.getKey(), "")))
+                    throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException("Playtime storage target changed; pending journal requires an explicit, quiesced migration.");
+                evidence |= saved > 0L;
+            }
+            if (!evidence) throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException("Cannot prove the legacy journal belongs to this storage target; explicit reconciliation required.");
+        }
+        Data next = copy(current);
+        next.storageIdentity = target;
+        replace(next);
+    }
+
+    synchronized long pendingMs(String uuid, eu.avalanche7.paradigm.storage.model.StoredPlayerProfileState state, boolean localOnly) {
+        long pending = 0L;
+        for (var stream : data.streams.entrySet()) {
+            if (stream.getKey().equals(bootWriterId) || localOnly && !serverId.equals(data.streamServers.get(stream.getKey()))) continue;
+            var entry = stream.getValue().get(uuid);
+            if (entry != null) pending = Math.addExact(pending, Math.max(0L, entry.cumulativeMs() - state.playtimeStreams().getOrDefault(stream.getKey(), 0L)));
+        }
+        return pending;
     }
 
     synchronized void save(String uuid, Entry entry) {
@@ -103,13 +160,48 @@ final class PlaytimeJournal implements AutoCloseable {
             if (old != null && old.cumulativeMs > entry.cumulativeMs) throw new StorageException("Playtime journal counter regressed: " + uuid);
         });
         if (entries.entrySet().stream().allMatch(entry -> entry.getValue().equals(current.players.get(entry.getKey())))) return;
+        Data next = copy(current);
+        next.players.putAll(entries);
+        next.streams.put(bootWriterId, next.players);
+        replace(next);
+    }
+
+    synchronized void compact(Map<String, eu.avalanche7.paradigm.storage.model.StoredPlayerProfileState> acknowledged) {
+        Data current = open();
+        Data next = copy(current);
+        boolean changed = false;
+        for (var stream : next.streams.entrySet()) {
+            if (stream.getKey().equals(bootWriterId)) continue;
+            var iterator = stream.getValue().entrySet().iterator();
+            while (iterator.hasNext()) {
+                var player = iterator.next();
+                var state = acknowledged.get(player.getKey());
+                if (state != null && state.playtimeStreams().getOrDefault(stream.getKey(), 0L) == player.getValue().cumulativeMs()
+                        && (player.getValue().cumulativeMs() == 0L
+                        || current.streamServers.get(stream.getKey()).equals(state.streamServers().get(stream.getKey())))) {
+                    iterator.remove(); changed = true;
+                }
+            }
+        }
+        if (!changed) return;
+        next.streams.entrySet().removeIf(entry -> !entry.getKey().equals(bootWriterId) && entry.getValue().isEmpty());
+        next.streamServers.keySet().removeIf(writer -> !writer.equals(bootWriterId) && !next.streams.containsKey(writer));
+        replace(next);
+    }
+
+    private static Data copy(Data current) {
         Data next = new Data();
         next.writerId = current.writerId;
         next.storageIdentity = current.storageIdentity;
-        next.streams = new LinkedHashMap<>(current.streams);
+        next.serverId = current.serverId;
+        next.streamServers = new LinkedHashMap<>(current.streamServers);
+        current.streams.forEach((writer, players) -> next.streams.put(writer, new LinkedHashMap<>(players)));
         next.players = new LinkedHashMap<>(current.players);
-        next.players.putAll(entries);
-        next.streams.put(bootWriterId, next.players);
+        if (next.streams.containsKey(next.writerId)) next.players = next.streams.get(next.writerId);
+        return next;
+    }
+
+    private void replace(Data next) {
         try {
             AtomicFileIO.writeUtf8Durable(path, writer -> gson.toJson(next, writer));
             data = next;
@@ -134,6 +226,8 @@ final class PlaytimeJournal implements AutoCloseable {
         transient String writerId;
         transient Map<String, Entry> players;
         String storageIdentity;
+        String serverId;
+        Map<String, String> streamServers = new LinkedHashMap<>();
         Map<String, Map<String, Entry>> streams = new LinkedHashMap<>();
     }
 

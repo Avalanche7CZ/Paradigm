@@ -721,6 +721,10 @@ public class TicketService {
 
     private boolean canHandle(Ticket ticket, TicketActor actor) {
         TicketsConfigHandler.Config config = config();
+        if (ticket.metadata().containsKey("webCategoryId")
+                && (config == null || config.category(ticket.category()) == null)) {
+            return false;
+        }
         if (config == null) {
             return true;
         }

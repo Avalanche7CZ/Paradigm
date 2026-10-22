@@ -15,9 +15,32 @@ import eu.avalanche7.paradigm.storage.repository.PlayerRepository;
 
 public class JsonPlayerRepository implements PlayerRepository {
     private final PlayerDataStore store;
+    private final String serverId;
 
     public JsonPlayerRepository(PlayerDataStore store) {
+        this(store, "default");
+    }
+
+    public JsonPlayerRepository(PlayerDataStore store, String serverId) {
         this.store = store;
+        this.serverId = serverId;
+    }
+
+    @Override public String playtimeServerId() { return serverId; }
+
+    @Override public StoredPlayerProfileState recordPlaytime(StoredPlayerProfile update, String server, String writer, long cumulative) {
+        if (!server.isEmpty() && !server.equals(serverId)) throw new IllegalArgumentException("Playtime server identity differs from repository identity.");
+        return store.recordPlaytime(update, server, writer, cumulative);
+    }
+
+    @Override public java.util.List<eu.avalanche7.paradigm.storage.model.StoredServerPlaytime> listServerPlaytime(String server) {
+        var result = new java.util.ArrayList<eu.avalanche7.paradigm.storage.model.StoredServerPlaytime>();
+        for (var profile : listProfiles()) {
+            var value = getProfileState(profile.uuid()).serverPlaytimes().get(server);
+            if (value != null) result.add(value);
+        }
+        result.sort(java.util.Comparator.comparingLong(eu.avalanche7.paradigm.storage.model.StoredServerPlaytime::playtimeMs).reversed());
+        return java.util.List.copyOf(result);
     }
 
     @Override

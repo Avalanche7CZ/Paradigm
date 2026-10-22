@@ -9,6 +9,11 @@ import eu.avalanche7.paradigm.storage.model.StoredPermissionTrack;
 import eu.avalanche7.paradigm.storage.model.StoredUserPermissionData;
 
 public interface PermissionRepository {
+    record Changes(long revision, Definitions definitions, List<StoredUserPermissionData> users) {
+        public Changes { users = List.copyOf(users); }
+    }
+    default Changes changesSince(long revision) { return new Changes(-1, definitions(), listUsers()); }
+
     record GroupChange(String group, boolean add) {
         public GroupChange {
             if (group == null || group.isBlank()) throw new IllegalArgumentException("Group name is required");

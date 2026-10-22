@@ -199,7 +199,7 @@ public class PermissionsHandler {
                 new PermissionDataStore(logger, debugLogger, platform != null ? platform.getConfig() : null),
                 playerDataStore
         );
-        if (storageService != null && storageService.isSqlActive()) {
+        if (storageService != null && (storageService.isSqlActive() || storageService.isSqlAuthoritative())) {
             this.internalPermissionApi.setPermissionRepository(storageService.permissions());
             this.internalPermissionApi.setAsyncPersistenceExecutor(storageService::runStorageAsync);
         }
@@ -222,17 +222,19 @@ public class PermissionsHandler {
     }
 
     public synchronized void startDefinitionSync(TaskScheduler scheduler) {
-        if (definitionSyncFuture != null || scheduler == null || storageService == null || !storageService.isMysqlActive()) return;
+        if (definitionSyncFuture != null || scheduler == null || storageService == null || !(storageService.isMysqlActive() || storageService.isSqlRecoveryPending())) return;
         definitionSyncFuture = scheduler.scheduleAtFixedRateRaw(() -> {
+            if (!storageService.isMysqlActive() && !storageService.isSqlRecoveryPending()) { stopDefinitionSync(); return; }
             if (!isInternalPermissionsEnabled() || !definitionSyncInFlight.compareAndSet(false, true)) return;
             storageService.submitAcknowledged(() -> {
-                if (internalPermissionApi.synchronizeDefinitions() && platform != null) {
+                storageService.recoverConfiguredSql();
+                if (internalPermissionApi.synchronizePermissions() && platform != null) {
                     platform.executeOnServerThread(platform::refreshAllPlayerCommandTrees);
                 }
                 return null;
             }).whenComplete((ignored, failure) -> {
                 definitionSyncInFlight.set(false);
-                if (failure != null) logger.warn("Paradigm: Failed to synchronize shared permission definitions; keeping last known cache.", failure);
+                if (failure != null) logger.warn("Paradigm: Failed to synchronize shared permissions; keeping last known cache.", failure);
             });
         }, 3L, 3L, TimeUnit.SECONDS);
     }
@@ -396,7 +398,7 @@ public class PermissionsHandler {
 
     public void refreshCustomCommandPermissions() {
         if (isInternalPermissionsEnabled()) {
-            if (storageService != null && storageService.isSqlActive()) {
+            if (storageService != null && (storageService.isSqlActive() || storageService.isSqlAuthoritative())) {
                 storageService.runStorageAsync("permissions.reload", internalPermissionApi::reload);
             } else {
                 internalPermissionApi.reload();
@@ -691,6 +693,33 @@ public class PermissionsHandler {
             if (result != null) return result;
         }
         return false;
+    }
+
+    public boolean hasDashboardLoginPermission(String playerUuid, PermissionDefinition permission) {
+        if (storageService == null || !storageService.isMysqlActive() || !isInternalPermissionsEnabled())
+            return hasPermission(playerUuid, permission);
+        UUID uuid = UUID.fromString(playerUuid);
+        if (isLuckPermsAvailable()) {
+            try {
+                var user = net.luckperms.api.LuckPermsProvider.get().getUserManager().getUser(uuid);
+                if (user != null) {
+                    var result = user.getCachedData().getPermissionData().checkPermission(permission.node());
+                    if (result != net.luckperms.api.util.Tristate.UNDEFINED) return result.asBoolean();
+                }
+            } catch (RuntimeException | LinkageError failure) {
+                debugLogger.debugLog("[PermissionsHandler] LuckPerms login query failed: " + failure);
+            }
+        }
+        IPlayer online = platform != null ? platform.getPlayerByUuid(playerUuid) : null;
+        var contexts = new PermissionContextResolver(() -> storageService.context().serverIdentity()).resolve(online);
+        Boolean result = internalPermissionApi.hasStoredPermission(uuid, permission.node(), contexts);
+        if (result != null) return result;
+        try {
+            return online != null && permission.fallbackLevel() >= 0 && platform.hasVanillaPermissionLevel(online, permission.fallbackLevel());
+        } catch (RuntimeException | LinkageError failure) {
+            debugLogger.debugLog("[PermissionsHandler] Dashboard login platform fallback failed: " + failure);
+            return false;
+        }
     }
 
     private boolean hasOperatorBypass(IPlayer player) {

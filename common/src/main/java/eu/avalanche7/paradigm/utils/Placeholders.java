@@ -1,20 +1,40 @@
 package eu.avalanche7.paradigm.utils;
 
 import java.util.List;
+import java.util.UUID;
 import java.util.function.Function;
+import java.util.function.LongSupplier;
 import java.util.function.ToIntFunction;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import eu.avalanche7.paradigm.api.internal.ApiProviderRegistry;
+import eu.avalanche7.paradigm.configs.CMConfig;
+import eu.avalanche7.paradigm.configs.CooldownConfigHandler;
+import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
 public class Placeholders {
 
+    private static final Pattern CUSTOM_COOLDOWN = Pattern.compile("\\{custom_cooldown(_seconds)?:([^{}]+)}");
+    private final CMConfig customCommands;
+    private final LongSupplier clock;
     private Boolean luckPermsClassPresent = null;
     private static volatile Function<IPlayer, PermissionMeta> permissionMetaResolver;
     private static volatile ToIntFunction<IPlayer> pingResolver;
     private static volatile Function<IPlayer, PlayerActivity> activityResolver;
 
     public Placeholders() {
+        this(null);
+    }
+
+    public Placeholders(CMConfig customCommands) {
+        this(customCommands, System::currentTimeMillis);
+    }
+
+    Placeholders(CMConfig customCommands, LongSupplier clock) {
+        this.customCommands = customCommands;
+        this.clock = clock;
     }
 
     public static void setPermissionMetaResolver(Function<IPlayer, PermissionMeta> resolver) {
@@ -88,7 +108,7 @@ public class Placeholders {
             } else {
                 replacedText = replaceInternalPermissionPlaceholders(replacedText, player);
             }
-            return resolveExternal(replacedText, uuidStr);
+            return resolveExternal(replaceCustomCooldowns(replacedText, uuidStr), uuidStr);
         }
 
         replacedText = replacedText.replace("{player}", "");
@@ -191,7 +211,51 @@ public class Placeholders {
             if (rawUuid == null) rawUuid = invoke(player, "getUuid");
             if (rawUuid != null) uuid = String.valueOf(rawUuid);
         }
-        return resolveExternal(replacedText, uuid);
+        return resolveExternal(replaceCustomCooldowns(replacedText, uuid), uuid);
+    }
+
+    private String replaceCustomCooldowns(String text, String playerUuid) {
+        if (customCommands == null || playerUuid == null || !text.contains("{custom_cooldown")) {
+            return text;
+        }
+        UUID uuid;
+        try {
+            uuid = UUID.fromString(playerUuid);
+        } catch (IllegalArgumentException unavailable) {
+            return text;
+        }
+        Matcher matcher = CUSTOM_COOLDOWN.matcher(text);
+        StringBuffer result = new StringBuffer();
+        long now = clock.getAsLong();
+        while (matcher.find()) {
+            CustomCommand command = customCommands.getLoadedCommands().stream()
+                    .filter(candidate -> candidate.getName().equalsIgnoreCase(matcher.group(2)))
+                    .findFirst().orElse(null);
+            if (command == null) {
+                continue;
+            }
+            long remainingSeconds = 0L;
+            Integer cooldown = command.getCooldownSeconds();
+            if (cooldown != null && cooldown > 0) {
+                long lastUsage;
+                try {
+                    lastUsage = CooldownConfigHandler.getLastUsage(uuid, command.getName());
+                } catch (IllegalStateException unavailable) {
+                    continue;
+                }
+                if (lastUsage != 0L) {
+                    long remainingMillis = lastUsage + cooldown * 1000L - now;
+                    if (remainingMillis > 0L) {
+                        remainingSeconds = remainingMillis / 1000L + (remainingMillis % 1000L > 0L ? 1L : 0L);
+                    }
+                }
+            }
+            String replacement = matcher.group(1) != null ? Long.toString(remainingSeconds)
+                    : remainingSeconds == 0L ? "Ready" : DurationFormatter.humanize(remainingSeconds * 1000L);
+            matcher.appendReplacement(result, Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(result);
+        return result.toString();
     }
 
     private static String resolveExternal(String text, String playerUuid) {

@@ -31,32 +31,7 @@ public class MinecraftPlayer implements IPlayer {
 
     @Override
     public String getWorldId() {
-        try {
-            Object level;
-            try {
-                level = player.getClass().getMethod("level").invoke(player);
-            } catch (Throwable ignored) {
-                level = player.getClass().getField("level").get(player);
-            }
-            if (level == null) return null;
-
-            Object key = level.getClass().getMethod("dimension").invoke(level);
-            if (key == null) return null;
-
-            try {
-                Object location = key.getClass().getMethod("location").invoke(key);
-                return location != null ? location.toString() : null;
-            } catch (Throwable ignored) {
-            }
-            try {
-                Object value = key.getClass().getMethod("getValue").invoke(key);
-                return value != null ? value.toString() : null;
-            } catch (Throwable ignored) {
-            }
-            return key.toString();
-        } catch (Throwable t) {
-            return null;
-        }
+        return player.getLevel().dimension().location().toString();
     }
 
     @Override

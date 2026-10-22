@@ -10,21 +10,25 @@ import java.util.Optional;
 import java.util.Set;
 
 import eu.avalanche7.paradigm.storage.identity.StorageContext;
+import eu.avalanche7.paradigm.storage.model.LegacyPlaytimeResult;
 import eu.avalanche7.paradigm.storage.model.PlayerProfileMutation;
 import eu.avalanche7.paradigm.storage.model.StoredHome;
 import eu.avalanche7.paradigm.storage.model.StoredLocation;
 import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
 import eu.avalanche7.paradigm.storage.model.StoredPlayerProfileState;
+import eu.avalanche7.paradigm.storage.model.StoredServerPlaytime;
 import eu.avalanche7.paradigm.storage.repository.PlayerRepository;
 
 public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerRepository {
     public SqlPlayerRepository(SqlExecutor sql, StorageContext context) {
         super(sql, context);
         sql.query("SELECT uuid, name, first_seen_ms, last_seen_ms, playtime_ms FROM players WHERE 1 = 0", null, rs -> null);
-        sql.query("SELECT uuid, writer_id, cumulative_ms FROM player_playtime_streams WHERE 1 = 0", null, rs -> null);
+        sql.query("SELECT uuid, writer_id, cumulative_ms FROM player_playtime_legacy_streams WHERE 1 = 0", null, rs -> null);
+        sql.query("SELECT unattributed_playtime_ms FROM players WHERE 1 = 0", null, rs -> null);
+        sql.query("SELECT uuid, server_id, writer_id, cumulative_ms FROM player_server_playtime_streams WHERE 1 = 0", null, rs -> null);
         if ("mysql".equals(sql.dialectName())) {
-            boolean transactional = sql.query("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('players', 'player_playtime_streams') AND ENGINE = 'InnoDB'", null, rs -> rs.next() && rs.getInt(1) == 2);
-            if (!transactional) throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException("Player profile persistence requires InnoDB players and player_playtime_streams tables. Stop writers, back up the database, and convert both tables to InnoDB before starting Paradigm.");
+            boolean transactional = sql.query("SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('players', 'player_playtime_legacy_streams', 'player_server_playtime', 'player_server_playtime_streams') AND ENGINE = 'InnoDB'", null, rs -> rs.next() && rs.getInt(1) == 4);
+            if (!transactional) throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException("Playtime persistence requires InnoDB players, player_playtime_legacy_streams, player_server_playtime and player_server_playtime_streams tables. Stop writers, back up the database, and convert these tables to InnoDB before starting Paradigm.");
         }
     }
 
@@ -64,15 +68,46 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
                 ps -> ps.setString(1, uuid));
     }
 
+    @Override public String playtimeServerId() { return serverId(); }
+
     private StoredPlayerProfileState readState(String uuid) {
         var profile = getProfile(uuid).orElse(new StoredPlayerProfile(uuid, null, 0L, 0L, 0L));
-        var streams = sql.query("SELECT writer_id, cumulative_ms FROM player_playtime_streams WHERE uuid = ?",
+        long legacy = sql.query("SELECT unattributed_playtime_ms FROM players WHERE uuid = ?", ps -> ps.setString(1, uuid),
+                rs -> rs.next() ? rs.getLong(1) : 0L);
+        var streams = sql.query("SELECT writer_id, cumulative_ms FROM player_playtime_legacy_streams WHERE uuid = ?",
                 ps -> ps.setString(1, uuid), rs -> {
                     java.util.Map<String, Long> values = new java.util.HashMap<>();
                     while (rs.next()) values.put(rs.getString(1), rs.getLong(2));
                     return values;
                 });
-        return new StoredPlayerProfileState(profile, streams);
+        java.util.Map<String, String> scopes = new java.util.HashMap<>();
+        streams.keySet().forEach(writer -> scopes.put(writer, ""));
+        sql.query("SELECT writer_id, server_id, cumulative_ms FROM player_server_playtime_streams WHERE uuid = ?", ps -> ps.setString(1, uuid), rs -> {
+            while (rs.next()) {
+                String writer = rs.getString(1);
+                if (streams.putIfAbsent(writer, rs.getLong(3)) != null) throw new eu.avalanche7.paradigm.storage.StorageException("Playtime writer exists in both legacy and server accounting: " + writer);
+                scopes.put(writer, rs.getString(2));
+            }
+            return null;
+        });
+        var servers = sql.query("SELECT server_id, playtime_ms, first_seen_ms, last_seen_ms FROM player_server_playtime WHERE uuid = ?", ps -> ps.setString(1, uuid), rs -> {
+            java.util.Map<String, StoredServerPlaytime> values = new java.util.HashMap<>();
+            while (rs.next()) values.put(rs.getString(1), new StoredServerPlaytime(uuid, rs.getString(1), rs.getLong(2), rs.getLong(3), rs.getLong(4)));
+            return values;
+        });
+        return new StoredPlayerProfileState(profile, streams, legacy, servers, scopes);
+    }
+
+    @Override public StoredPlayerProfileState readPlaytime(String uuid) {
+        return sql.transaction(() -> readState(normalize(uuid)));
+    }
+
+    @Override public List<StoredServerPlaytime> listServerPlaytime(String server) {
+        return sql.query("SELECT uuid, playtime_ms, first_seen_ms, last_seen_ms FROM player_server_playtime WHERE server_id = ? ORDER BY playtime_ms DESC, uuid", ps -> ps.setString(1, server), rs -> {
+            List<StoredServerPlaytime> result = new ArrayList<>();
+            while (rs.next()) result.add(new StoredServerPlaytime(rs.getString(1), server, rs.getLong(2), rs.getLong(3), rs.getLong(4)));
+            return result;
+        });
     }
 
     @Override
@@ -84,7 +119,14 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
         });
     }
 
-    private void writeProfile(StoredPlayerProfile profile) {
+    private void writeProfile(StoredPlayerProfile profile) { writeProfile(profile, true); }
+
+    private void writeProfile(StoredPlayerProfile profile, boolean unscoped) {
+        if (unscoped) {
+            long old = getProfile(profile.uuid()).map(StoredPlayerProfile::playtimeMs).orElse(0L);
+            long delta = profile.playtimeMs() - old;
+            if (delta > 0) sql.update("UPDATE players SET unattributed_playtime_ms = unattributed_playtime_ms + ? WHERE uuid = ?", ps -> { ps.setLong(1, delta); ps.setString(2, profile.uuid()); });
+        }
         sql.update("UPDATE players SET name = ?, first_seen_ms = ?, last_seen_ms = ?, playtime_ms = ? WHERE uuid = ?", ps -> {
             ps.setString(1, profile.name());
             ps.setLong(2, profile.firstSeenMs());
@@ -97,7 +139,7 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
     private void writeStream(String uuid, String writer, long cumulative) {
         String suffix = "mysql".equals(sql.dialectName()) ? " ON DUPLICATE KEY UPDATE cumulative_ms = GREATEST(cumulative_ms, VALUES(cumulative_ms))"
                 : " ON CONFLICT(uuid, writer_id) DO UPDATE SET cumulative_ms = MAX(cumulative_ms, excluded.cumulative_ms)";
-        sql.update("INSERT INTO player_playtime_streams(uuid, writer_id, cumulative_ms) VALUES(?, ?, ?)" + suffix, ps -> {
+        sql.update("INSERT INTO player_playtime_legacy_streams(uuid, writer_id, cumulative_ms) VALUES(?, ?, ?)" + suffix, ps -> {
             ps.setString(1, uuid);
             ps.setString(2, writer);
             ps.setLong(3, cumulative);
@@ -115,31 +157,93 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
         });
     }
 
-    @Override
-    public void importProfileState(StoredPlayerProfileState state) {
+    private void writeServer(StoredServerPlaytime value) {
+        String suffix = "mysql".equals(sql.dialectName())
+                ? " ON DUPLICATE KEY UPDATE playtime_ms = VALUES(playtime_ms), first_seen_ms = VALUES(first_seen_ms), last_seen_ms = VALUES(last_seen_ms)"
+                : " ON CONFLICT(uuid, server_id) DO UPDATE SET playtime_ms = excluded.playtime_ms, first_seen_ms = excluded.first_seen_ms, last_seen_ms = excluded.last_seen_ms";
+        sql.update("INSERT INTO player_server_playtime(uuid, server_id, playtime_ms, first_seen_ms, last_seen_ms) VALUES(?, ?, ?, ?, ?)" + suffix, ps -> {
+            ps.setString(1, value.uuid()); ps.setString(2, value.serverId()); ps.setLong(3, value.playtimeMs()); ps.setLong(4, value.firstSeenMs()); ps.setLong(5, value.lastSeenMs());
+        });
+    }
+
+    private void writeScopedStream(String uuid, String writer, String server, long cumulative) {
+        String suffix = "mysql".equals(sql.dialectName()) ? " ON DUPLICATE KEY UPDATE cumulative_ms = GREATEST(cumulative_ms, VALUES(cumulative_ms))"
+                : " ON CONFLICT(uuid, writer_id) DO UPDATE SET cumulative_ms = MAX(cumulative_ms, excluded.cumulative_ms)";
+        sql.update("INSERT INTO player_server_playtime_streams(uuid, writer_id, server_id, cumulative_ms) VALUES(?, ?, ?, ?)" + suffix, ps -> {
+            ps.setString(1, uuid); ps.setString(2, writer); ps.setString(3, server); ps.setLong(4, cumulative);
+        });
+    }
+
+    @Override public void importProfileState(StoredPlayerProfileState state) {
         sql.transaction(() -> {
             String uuid = normalize(state.profile().uuid());
             lockPlayer(uuid);
             var existing = readState(uuid);
             PlayerProfileMutation.requireCompatibleImport(existing, state);
-            writeProfile(PlayerProfileMutation.merge(existing.profile(), state.profile(), false));
-            state.playtimeStreams().forEach((writer, value) -> writeStream(uuid, writer, value));
+            writeProfile(PlayerProfileMutation.merge(existing.profile(), state.profile(), false), false);
+            sql.update("UPDATE players SET unattributed_playtime_ms = ? WHERE uuid = ?", ps -> { ps.setLong(1, Math.max(existing.unattributedPlaytimeMs(), state.unattributedPlaytimeMs())); ps.setString(2, uuid); });
+            state.serverPlaytimes().values().forEach(this::writeServer);
+            state.playtimeStreams().forEach((writer, value) -> {
+                String scope = state.streamServers().getOrDefault(writer, "");
+                if (scope.isEmpty()) writeStream(uuid, writer, value);
+                else writeScopedStream(uuid, writer, scope, value);
+            });
         });
     }
 
-    @Override
-    public StoredPlayerProfileState recordPlaytime(StoredPlayerProfile update, String writerId, long cumulativeMs) {
-        if (cumulativeMs < 0L || writerId == null || writerId.isBlank()) throw new IllegalArgumentException("Invalid playtime counter.");
+    @Override public StoredPlayerProfileState recordPlaytime(StoredPlayerProfile update, String writerId, long cumulativeMs) {
+        return recordPlaytime(update, "", writerId, cumulativeMs);
+    }
+
+    @Override public StoredPlayerProfileState recordPlaytime(StoredPlayerProfile update, String scope, String writerId, long cumulativeMs) {
+        if (cumulativeMs < 0L || writerId == null || writerId.isBlank() || scope == null) throw new IllegalArgumentException("Invalid playtime counter.");
+        if (!scope.isEmpty() && !scope.equals(serverId())) throw new IllegalArgumentException("Playtime server identity differs from repository identity.");
         return sql.transaction(() -> {
             String uuid = normalize(update.uuid());
             lockPlayer(uuid);
             var existing = readState(uuid);
+            if (existing.playtimeStreams().containsKey(writerId) && !scope.equals(existing.streamServers().getOrDefault(writerId, "")))
+                throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException("Playtime writer reused across server identities: " + writerId);
             long recorded = existing.playtimeStreams().getOrDefault(writerId, 0L);
             long delta = Math.max(0L, cumulativeMs - recorded);
-            writeProfile(PlayerProfileMutation.merge(existing.profile(), new StoredPlayerProfile(uuid, update.name(),
-                    update.firstSeenMs(), update.lastSeenMs(), delta), true));
-            writeStream(uuid, writerId, cumulativeMs);
+            if (scope.isEmpty() && delta > 0 && LegacyPlaytimeResult.hasHistoricalImport(existing.streamServers()))
+                throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException("Pending legacy journal overlaps a completed historical import; retain journal and reconcile before retry.");
+            writeProfile(PlayerProfileMutation.merge(existing.profile(), new StoredPlayerProfile(uuid, update.name(), update.firstSeenMs(), update.lastSeenMs(), delta), true), scope.isEmpty());
+            if (scope.isEmpty()) writeStream(uuid, writerId, cumulativeMs);
+            else {
+                var old = existing.serverPlaytimes().get(scope);
+                var merged = PlayerProfileMutation.merge(old == null ? null : new StoredPlayerProfile(uuid, null, old.firstSeenMs(), old.lastSeenMs(), old.playtimeMs()),
+                        new StoredPlayerProfile(uuid, null, update.firstSeenMs(), update.lastSeenMs(), delta), true);
+                writeServer(new StoredServerPlaytime(uuid, scope, merged.playtimeMs(), merged.firstSeenMs(), merged.lastSeenMs()));
+                writeScopedStream(uuid, writerId, scope, cumulativeMs);
+            }
             return readState(uuid);
+        });
+    }
+
+    @Override public LegacyPlaytimeResult importLegacyPlaytime(String uuid, long historicalMs, long expectedLocalMs, boolean apply) {
+        String key = java.util.UUID.fromString(uuid).toString();
+        if (!key.equalsIgnoreCase(uuid) || historicalMs <= 0 || historicalMs > Integer.MAX_VALUE * 50L || historicalMs % 50L != 0)
+            throw new IllegalArgumentException("Invalid legacy UUID or tick count.");
+        return sql.transaction(() -> {
+            if (apply) lockPlayer(key);
+            var state = readState(key);
+            long local = state.localPlaytimeMs(serverId());
+            String writer = LegacyPlaytimeResult.writerId(serverId());
+            String oldScope = state.streamServers().get(LegacyPlaytimeResult.WRITER_ID);
+            boolean marked = state.playtimeStreams().containsKey(writer);
+            boolean imported = marked && serverId().equals(state.streamServers().get(writer)) || serverId().equals(oldScope);
+            String reason = imported ? null : marked || "".equals(oldScope) ? "Historical marker has an incompatible scope; reconciliation required."
+                    : state.unattributedPlaytimeMs() > 0 ? "Unattributed legacy network time overlaps world history; reconciliation required."
+                    : local != expectedLocalMs ? "Local playtime changed during statistics scan; retry while offline." : null;
+            long total = imported || reason != null ? local : Math.max(local, historicalMs);
+            if (apply && !imported && reason == null) {
+                var old = state.serverPlaytimes().get(serverId());
+                writeServer(new StoredServerPlaytime(key, serverId(), total, old != null ? old.firstSeenMs() : 0, old != null ? old.lastSeenMs() : 0));
+                writeProfile(new StoredPlayerProfile(key, state.profile().name(), state.profile().firstSeenMs(), state.profile().lastSeenMs(), Math.addExact(state.profile().playtimeMs(), total - local)), false);
+                writeScopedStream(key, writer, serverId(), total - local);
+            }
+            return new LegacyPlaytimeResult(key, state.profile().name(), historicalMs, local, total, imported, state.unattributedPlaytimeMs(), reason);
         });
     }
 

@@ -61,10 +61,11 @@ public class StorageService implements AutoCloseable {
     private final java.util.List<AutoCloseable> storageResources = new java.util.ArrayList<>();
     private final java.util.Set<CompletableFuture<?>> acknowledgedTasks = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
-    private StorageProvider activeProvider;
+    private volatile StorageProvider activeProvider;
+    private volatile StorageProvider pendingSqlProvider;
     private StorageProviderType selectedProviderType;
     private boolean fallbackActive;
-    private String fallbackReason = "";
+    private volatile String fallbackReason = "";
     private boolean fallbackDataPresent;
     private StorageTestResult lastTestResult;
     private volatile boolean closing;
@@ -124,6 +125,7 @@ public class StorageService implements AutoCloseable {
             boolean incompatible = structuralSqlFailure(t);
             if (!incompatible && Boolean.TRUE.equals(config.fallbackToJsonOnSqlFailure)) {
                 fallbackActive = true;
+                if (activeProvider != null) activeProvider.close();
                 activeProvider = jsonProvider;
                 activeProvider.initialize();
                 fallbackDataPresent = true;
@@ -132,6 +134,8 @@ public class StorageService implements AutoCloseable {
                     logger.warn("Paradigm storage: falling back to JSON provider.");
                 }
             } else {
+                if (!incompatible) pendingSqlProvider = activeProvider;
+                else if (activeProvider != null) activeProvider.close();
                 activeProvider = null;
                 if (logger != null) {
                     logger.error("Paradigm storage: SQL repositories unavailable: {}. {}", fallbackReason,
@@ -182,6 +186,10 @@ public class StorageService implements AutoCloseable {
 
     public CompletableFuture<StorageTestResult> testAsync() {
         return submitStorageTask(() -> {
+            if (pendingSqlProvider != null) {
+                try { recoverConfiguredSql(); }
+                catch (StorageException failure) { fallbackReason = failure.getMessage(); }
+            }
             StorageProvider provider = activeProvider;
             StorageTestResult result;
             if (selectedProviderType == StorageProviderType.JSON) {
@@ -303,11 +311,36 @@ public class StorageService implements AutoCloseable {
     }
 
     public String playtimeStorageIdentity() {
-        return switch (requireProvider().type()) {
+        return switch (activeProvider != null ? activeProvider.type() : selectedProviderType) {
             case JSON -> "json:" + platformConfig.getConfigDirectory().toAbsolutePath().normalize();
             case SQLITE -> "sqlite:" + Path.of(config.sqlite.path).toAbsolutePath().normalize();
             case MYSQL -> "mysql:" + config.sql.host + ":" + config.sql.port + "/" + config.sql.database;
         };
+    }
+
+    public void recoverConfiguredSql() {
+        if (pendingSqlProvider == null) return;
+        try {
+            pendingSqlProvider.initialize();
+            StorageProvider ready = pendingSqlProvider;
+            fallbackReason = "";
+            activeProvider = ready;
+            pendingSqlProvider = null;
+            if (logger != null) logger.info("Paradigm storage: configured SQL storage recovered; local playtime replay can resume.");
+        } catch (RuntimeException failure) {
+            fallbackReason = failure.getMessage() != null ? failure.getMessage() : failure.toString();
+            if (structuralSqlFailure(failure)) {
+                pendingSqlProvider.close();
+                pendingSqlProvider = null;
+            }
+            throw failure;
+        }
+    }
+
+    public String authoritativePlaytimeStorageIdentity() {
+        recoverConfiguredSql();
+        StorageProvider provider = requireProvider();
+        return provider instanceof SqlStorageProvider sql ? sql.playtimeStorageIdentity() : playtimeStorageIdentity();
     }
 
     public <T> CompletableFuture<T> submitAcknowledged(Supplier<T> work) {
@@ -496,13 +529,22 @@ public class StorageService implements AutoCloseable {
 
     public PlayerRepository players() { return requireProvider().players(); }
     public WarpRepository warps() { return requireProvider().warps(); }
-    public PermissionRepository permissions() { return requireProvider().permissions(); }
+    public PermissionRepository permissions() {
+        StorageProvider provider = activeProvider;
+        if (provider == null) provider = pendingSqlProvider;
+        if (provider == null) throw new StorageException("Authoritative permission storage is unavailable: " + fallbackReason);
+        return provider.permissions();
+    }
     public ModerationRepository moderation() { return requireProvider().moderation(); }
     public AdminStateRepository adminState() { return requireProvider().adminState(); }
     public ServerRepository servers() { return requireProvider().servers(); }
     public eu.avalanche7.paradigm.storage.repository.ManagedConfigRepository managedConfig() { return requireProvider().managedConfig(); }
     public AuditRepository audit() { return requireProvider().audit(); }
     public eu.avalanche7.paradigm.modules.tickets.TicketRepository tickets() { return requireProvider().tickets(); }
+    public eu.avalanche7.paradigm.storage.repository.DashboardLoginRepository dashboardLogins() {
+        if (!isMysqlActive()) throw new StorageException("Cross-server Dashboard login requires active shared MySQL/MariaDB storage.");
+        return requireProvider().dashboardLogins();
+    }
     public StorageContext context() { return context; }
     public StorageConfig config() { return config; }
 
@@ -515,6 +557,10 @@ public class StorageService implements AutoCloseable {
         StorageProvider provider = activeProvider;
         return provider != null && provider.type() == StorageProviderType.MYSQL;
     }
+
+    public boolean isSqlRecoveryPending() { return pendingSqlProvider != null; }
+
+    public boolean isSqlAuthoritative() { return selectedProviderType != StorageProviderType.JSON && !fallbackActive; }
 
     private StorageProvider requireProvider() {
         if (activeProvider == null) {
@@ -617,6 +663,7 @@ public class StorageService implements AutoCloseable {
                 if (activeProvider != null) {
                     activeProvider.close();
                 }
+                if (pendingSqlProvider != null) pendingSqlProvider.close();
             } catch (Exception failure) {
                 if (logger != null) {
                     logger.warn("[Paradigm] Storage shutdown: failed to close the active {} provider.",

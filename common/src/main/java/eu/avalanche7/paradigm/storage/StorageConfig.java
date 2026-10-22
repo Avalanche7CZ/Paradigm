@@ -18,7 +18,7 @@ public class StorageConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
 
     public String provider = "sqlite";
-    public Boolean fallbackToJsonOnSqlFailure = true;
+    public Boolean fallbackToJsonOnSqlFailure;
     public String networkId = "default";
     public String serverId = "default";
     public String serverName = "Default Server";
@@ -38,34 +38,19 @@ public class StorageConfig {
         }
         try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
             StorageConfig loaded = GSON.fromJson(reader, StorageConfig.class);
+            if (loaded == null) throw new IllegalArgumentException("Storage configuration is empty or null.");
             StorageConfig merged = merge(defaults, loaded).normalized(logger);
             merged.save(path, logger);
             return merged;
         } catch (IOException | RuntimeException t) {
-            Path archived = AtomicFileIO.quarantine(path, "corrupt");
-            if (logger != null) {
-                if (archived != null) {
-                    logger.warn("Paradigm storage: failed to load storage.json; archived unreadable data as {}. {}",
-                            archived.getFileName(), t.getMessage());
-                } else {
-                    logger.warn("Paradigm storage: failed to load storage.json and could not archive it. {}", t.getMessage());
-                }
-            }
-            StorageConfig normalizedDefaults = defaults.normalized(logger);
-            if (archived != null) {
-                normalizedDefaults.save(path, logger);
-            }
-            return normalizedDefaults;
+            throw new StorageException("Cannot load storage configuration; original file preserved. Restore or correct " + path + " before starting storage.", t);
         }
     }
 
     public StorageProviderType providerType(Logger logger) {
         StorageProviderType type = StorageProviderType.parse(provider);
         if (type == null) {
-            if (logger != null) {
-                logger.warn("Paradigm storage: invalid provider '{}', falling back to json.", provider);
-            }
-            return StorageProviderType.JSON;
+            throw new StorageCompatibilityException("Unknown storage provider '" + provider + "'; refusing to select a different backend.");
         }
         return type;
     }
@@ -100,11 +85,11 @@ public class StorageConfig {
     private StorageConfig normalized(Logger logger) {
         if (provider == null || provider.isBlank()) provider = "sqlite";
         if (StorageProviderType.parse(provider) == null) {
-            if (logger != null) logger.warn("Paradigm storage: invalid provider '{}', writing json fallback to storage.json.", provider);
-            provider = "json";
+            throw new StorageCompatibilityException("Unknown storage provider '" + provider + "'; refusing to select a different backend.");
         } else {
             provider = StorageProviderType.parse(provider).configValue();
         }
+        if (fallbackToJsonOnSqlFailure == null) fallbackToJsonOnSqlFailure = StorageProviderType.parse(provider) != StorageProviderType.MYSQL;
         if (networkId == null || networkId.isBlank()) networkId = "default";
         if (serverId == null || serverId.isBlank()) serverId = "default";
         if (serverName == null || serverName.isBlank()) serverName = "Default Server";

@@ -76,7 +76,7 @@ public class DashboardService implements AutoCloseable {
     }
 
     private final Services services;
-    private final DashboardAuthService authService = new DashboardAuthService();
+    private final DashboardAuthService authService;
     private final AuditService auditService;
     private final DashboardHeartbeatService heartbeatService;
     private final PermissionAdminService permissionAdminService;
@@ -92,13 +92,44 @@ public class DashboardService implements AutoCloseable {
     public DashboardService(Services services, DashboardConfig config) {
         this.services = services;
         this.config = config;
+        this.authService = new DashboardAuthService(() -> {
+            var storage = services.getStorageService();
+            if (storage != null && storage.isMysqlActive())
+                return new DashboardAuthService.SharedStorage(storage.dashboardLogins(), storage.context().serverIdentity());
+            if (this.config.centralHostServerId != null && !this.config.centralHostServerId.isBlank()
+                    || storage != null && storage.config() != null && storage.config().providerType(services.getLogger()) == eu.avalanche7.paradigm.storage.StorageProviderType.MYSQL)
+                throw new eu.avalanche7.paradigm.storage.StorageException("Shared Dashboard login storage is unavailable.");
+            return null;
+        }, principal -> principal.console() || services.getPermissionsHandler() != null && DashboardAuthorization.canAccessDashboard(
+                permission -> services.getPermissionsHandler().hasDashboardLoginPermission(principal.uuid(), permission)));
         this.auditService = services.getAuditService();
         this.heartbeatService = new DashboardHeartbeatService(services);
         this.permissionAdminService = services.getPermissionAdminService();
         this.moderationService = new ModerationService(services, auditService);
     }
 
+    public boolean usesCentralHost() {
+        String host = config.centralHostServerId;
+        return host != null && !host.isBlank()
+                && !host.equals(services.getStorageService().context().serverId());
+    }
+
+    public DashboardAuthService.IssuedToken issueLoginToken(DashboardPrincipal principal) {
+        if (usesCentralHost()) {
+            String url = config.publicBaseUrl;
+            java.net.URI uri;
+            try { uri = java.net.URI.create(url == null ? "" : url); }
+            catch (IllegalArgumentException failure) { throw new IllegalArgumentException("Configure the central Dashboard publicBaseUrl with a valid http(s) URL.", failure); }
+            if (!("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+                    || uri.getHost() == null || uri.getRawQuery() != null || uri.getRawFragment() != null || uri.getUserInfo() != null)
+                throw new IllegalArgumentException("Configure the central Dashboard publicBaseUrl with a valid http(s) URL.");
+            return authService.createSharedLoginToken(principal, config, config.centralHostServerId);
+        }
+        return authService.createLoginToken(principal, config);
+    }
+
     public synchronized boolean start() {
+        if (usesCentralHost()) return false;
         if (httpServer != null && httpServer.running()) {
             return true;
         }

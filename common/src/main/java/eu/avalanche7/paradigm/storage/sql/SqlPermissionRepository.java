@@ -16,17 +16,79 @@ import eu.avalanche7.paradigm.storage.model.StoredUserPermissionData;
 import eu.avalanche7.paradigm.storage.repository.PermissionRepository;
 
 public class SqlPermissionRepository extends SqlRepositorySupport implements PermissionRepository {
+    private final ThreadLocal<Long> writeRevision = new ThreadLocal<>();
     private final ThreadLocal<Boolean> definitionWrite = ThreadLocal.withInitial(() -> false);
     public SqlPermissionRepository(SqlExecutor sql, StorageContext context) {
         super(sql, context);
     }
 
+    private <T> T permissionTransaction(java.util.function.Supplier<T> work) {
+        if (writeRevision.get() != null) return work.get();
+        requireTransactionalTables("Permission synchronization", "permission_sync_state", "permission_user_versions",
+                "permission_definition_lock", "permission_definition_versions", "permission_groups", "permission_group_permissions",
+                "permission_group_parents", "permission_tracks", "permission_track_members", "permission_users", "permission_user_groups", "permission_user_permissions");
+        return sql.transaction(() -> {
+            sql.update("UPDATE permission_sync_state SET revision = revision WHERE id = 1", null);
+            writeRevision.set(-1L);
+            try { return work.get(); }
+            finally { writeRevision.remove(); }
+        });
+    }
+
+    private void permissionTransaction(Runnable work) {
+        permissionTransaction(() -> { work.run(); return null; });
+    }
+
+    private long advanceRevision() {
+        if (writeRevision.get() == null) throw new IllegalStateException("Permission write requires a transaction");
+        if (writeRevision.get() < 0) {
+            sql.update("UPDATE permission_sync_state SET revision = revision + 1 WHERE id = 1", null);
+            writeRevision.set(syncRevision());
+        }
+        return writeRevision.get();
+    }
+
+    private long syncRevision() {
+        return sql.query("SELECT revision FROM permission_sync_state WHERE id = 1", null, rs -> {
+            if (!rs.next()) throw new eu.avalanche7.paradigm.storage.StorageException("Permission synchronization state is missing");
+            return rs.getLong(1);
+        });
+    }
+
+    private void userChanged(String uuid) {
+        long revision = advanceRevision();
+        String suffix = "mysql".equals(sql.dialectName()) ? " ON DUPLICATE KEY UPDATE revision = VALUES(revision)"
+                : " ON CONFLICT(uuid) DO UPDATE SET revision = excluded.revision";
+        sql.update("INSERT INTO permission_user_versions(uuid, revision) VALUES(?, ?)" + suffix,
+                ps -> { ps.setString(1, normalize(uuid)); ps.setLong(2, revision); });
+    }
+
+    @Override
+    public Changes changesSince(long revision) {
+        if (revision >= 0 && syncRevision() == revision) return new Changes(revision, null, List.of());
+        return permissionTransaction(() -> {
+            long current = syncRevision();
+            long definitionsRevision = sql.query("SELECT definitions_revision FROM permission_sync_state WHERE id = 1", null,
+                    rs -> { if (!rs.next()) throw new eu.avalanche7.paradigm.storage.StorageException("Permission synchronization state is missing"); return rs.getLong(1); });
+            List<StoredUserPermissionData> users;
+            if (revision < 0) users = listUsers();
+            else {
+                var ids = sql.query("SELECT uuid FROM permission_user_versions WHERE revision > ? ORDER BY uuid",
+                        ps -> ps.setLong(1, revision), rs -> {
+                            var result = new ArrayList<String>();
+                            while (rs.next()) result.add(rs.getString(1));
+                            return result;
+                        });
+                users = new ArrayList<>();
+                for (String uuid : ids) users.add(getUser(uuid).orElse(new StoredUserPermissionData(uuid, "", List.of(), List.of())));
+            }
+            return new Changes(current, revision < 0 || definitionsRevision > revision ? definitions() : null, users);
+        });
+    }
+
     private <T> T definitionTransaction(java.util.function.Supplier<T> work) {
         if (definitionWrite.get()) return work.get();
-        requireTransactionalTables("Permission definition updates", "permission_definition_lock", "permission_definition_versions",
-                "permission_groups", "permission_group_permissions", "permission_group_parents", "permission_tracks", "permission_track_members",
-                "permission_users", "permission_user_groups", "permission_user_permissions");
-        return sql.transaction(() -> {
+        return permissionTransaction(() -> {
             sql.update("UPDATE permission_definition_lock SET id = id WHERE id = 1", null);
             boolean present = sql.query("SELECT id FROM permission_definition_lock WHERE id = 1", null, java.sql.ResultSet::next);
             if (!present) throw new eu.avalanche7.paradigm.storage.StorageException("Permission definition lock is missing");
@@ -101,6 +163,8 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
     }
 
     private void advanceDefinition(String kind, String name) {
+        long revision = advanceRevision();
+        sql.update("UPDATE permission_sync_state SET definitions_revision = ? WHERE id = 1", ps -> ps.setLong(1, revision));
         String suffix = "mysql".equals(sql.dialectName()) ? " ON DUPLICATE KEY UPDATE revision = revision + 1"
                 : " ON CONFLICT(kind, name) DO UPDATE SET revision = revision + 1";
         sql.update("INSERT INTO permission_definition_versions(kind, name, revision) VALUES(?, ?, 1)" + suffix,
@@ -176,6 +240,11 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
     public boolean deleteGroup(String groupName) {
         return definitionTransaction(() -> {
             advanceDefinition("group", groupName);
+            var affectedUsers = sql.query("SELECT DISTINCT uuid FROM permission_user_groups WHERE group_name = ?",
+                    ps -> ps.setString(1, groupName), rs -> {
+                        var ids = new ArrayList<String>(); while (rs.next()) ids.add(rs.getString(1)); return ids;
+                    });
+            affectedUsers.forEach(this::userChanged);
             var children = sql.query("SELECT group_name FROM permission_group_parents WHERE parent_name = ?", ps -> ps.setString(1, groupName), rs -> {
                 List<String> rows = new ArrayList<>(); while (rs.next()) rows.add(rs.getString(1)); return rows;
             });
@@ -392,7 +461,8 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
     public void saveUser(StoredUserPermissionData user) {
         if (user == null) return;
         String normalizedUuid = normalize(user.uuid());
-        sql.transaction(() -> {
+        permissionTransaction(() -> {
+            userChanged(normalizedUuid);
             sql.update("DELETE FROM permission_users WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid));
             sql.update("INSERT INTO permission_users(uuid, name) VALUES(?, ?)", ps -> {
                 ps.setString(1, normalizedUuid);
@@ -409,8 +479,8 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
     public void applyUserChanges(StoredUserPermissionData previous, StoredUserPermissionData desired) {
         String uuid = normalize(desired.uuid());
         if (previous != null && !uuid.equals(normalize(previous.uuid()))) throw new IllegalArgumentException("User identity changed");
-        requireTransactionalTables("User permission updates", "permission_users", "permission_user_groups", "permission_user_permissions");
-        sql.transaction(() -> {
+        permissionTransaction(() -> {
+            userChanged(uuid);
             ensurePermissionUser(uuid);
             if (previous != null) {
                 for (var group : previous.groups()) {
@@ -435,8 +505,8 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
     public boolean changeGlobalGroups(String uuid, List<GroupChange> changes, Runnable effect) {
         String key = normalize(uuid);
         if (changes == null || changes.isEmpty()) throw new IllegalArgumentException("At least one group change is required");
-        requireTransactionalTables("Group workflows", "permission_users", "permission_groups", "permission_user_groups");
-        return sql.transaction(() -> {
+        return permissionTransaction(() -> {
+            userChanged(key);
             String suffix = "mysql".equals(sql.dialectName()) ? " ON DUPLICATE KEY UPDATE uuid = VALUES(uuid)" : " ON CONFLICT(uuid) DO UPDATE SET uuid = excluded.uuid";
             sql.update("INSERT INTO permission_users(uuid, name) VALUES(?, '')" + suffix, ps -> ps.setString(1, key));
             var names = new java.util.TreeSet<String>();
@@ -467,7 +537,7 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
 
     @Override
     public void saveUserPreservingUnknownGroups(StoredUserPermissionData user, java.util.Set<String> knownGroups) {
-        sql.transaction(() -> {
+        permissionTransaction(() -> {
             String suffix = "mysql".equals(sql.dialectName()) ? " ON DUPLICATE KEY UPDATE uuid = VALUES(uuid)" : " ON CONFLICT(uuid) DO UPDATE SET uuid = excluded.uuid";
             sql.update("INSERT INTO permission_users(uuid, name) VALUES(?, '')" + suffix, ps -> ps.setString(1, normalize(user.uuid())));
             var groups = new java.util.ArrayList<>(user.groups());
@@ -482,7 +552,8 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
     @Override
     public boolean deleteUser(String uuid) {
         String normalizedUuid = normalize(uuid);
-        return sql.transaction(() -> {
+        return permissionTransaction(() -> {
+            userChanged(normalizedUuid);
             boolean changed = sql.update("DELETE FROM permission_user_groups WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid)) > 0;
             changed |= sql.update("DELETE FROM permission_user_permissions WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid)) > 0;
             changed |= sql.update("DELETE FROM permission_users WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid)) > 0;
@@ -495,7 +566,8 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
         String normalizedUuid = normalize(uuid);
         PermissionContextSet contexts = assignment.contextSet();
         String assignmentId = groupId(normalizedUuid, assignment);
-        sql.transaction(() -> {
+        permissionTransaction(() -> {
+            userChanged(normalizedUuid);
             ensurePermissionUser(normalizedUuid);
             sql.update("DELETE FROM permission_user_groups WHERE assignment_id = ?", ps -> ps.setString(1, assignmentId));
             sql.update("INSERT INTO permission_user_groups(uuid, group_name, expires_at_ms, assigned_by, assigned_at_ms, contexts, context_hash, assignment_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?)", ps -> {
@@ -514,10 +586,13 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
     @Override
     public boolean removeUserGroup(String uuid, String groupName) {
         String normalizedUuid = normalize(uuid);
-        return sql.update("DELETE FROM permission_user_groups WHERE uuid = ? AND group_name = ?", ps -> {
+        return permissionTransaction(() -> {
+            userChanged(normalizedUuid);
+            return sql.update("DELETE FROM permission_user_groups WHERE uuid = ? AND group_name = ?", ps -> {
             ps.setString(1, normalizedUuid);
             ps.setString(2, groupName);
         }) > 0;
+        });
     }
 
     @Override
@@ -525,7 +600,8 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
         String normalizedUuid = normalize(uuid);
         PermissionContextSet contexts = permission.contextSet();
         String assignmentId = permissionId("user_permission", normalizedUuid, permission);
-        sql.transaction(() -> {
+        permissionTransaction(() -> {
+            userChanged(normalizedUuid);
             ensurePermissionUser(normalizedUuid);
             sql.update("DELETE FROM permission_user_permissions WHERE assignment_id = ?", ps -> ps.setString(1, assignmentId));
             sql.update("INSERT INTO permission_user_permissions(uuid, server_id, permission, denied, expires_at_ms, contexts, context_hash, assignment_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?)", ps -> {
@@ -544,10 +620,13 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
     @Override
     public boolean removeUserPermission(String uuid, String permission) {
         String normalizedUuid = normalize(uuid);
-        return sql.update("DELETE FROM permission_user_permissions WHERE uuid = ? AND permission = ?", ps -> {
+        return permissionTransaction(() -> {
+            userChanged(normalizedUuid);
+            return sql.update("DELETE FROM permission_user_permissions WHERE uuid = ? AND permission = ?", ps -> {
             ps.setString(1, normalizedUuid);
             ps.setString(2, permission);
         }) > 0;
+        });
     }
 
     private List<String> groupParents(String groupName) {

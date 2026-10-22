@@ -54,7 +54,7 @@ public final class CommonRuntime {
         CMConfig cmConfig = new CMConfig(debugLogger, platformConfig);
         cmConfig.loadCommands();
 
-        Placeholders placeholders = new Placeholders();
+        Placeholders placeholders = new Placeholders(cmConfig);
         Placeholders.setPingResolver(platformAdapter::getPlayerPing);
         TaskScheduler taskScheduler = adoptPlatformScheduler(logger, platformAdapter, debugLogger);
         PlayerDataStore playerDataStore = new PlayerDataStore(logger, debugLogger, platformAdapter.getConfig());
@@ -164,7 +164,7 @@ public final class CommonRuntime {
             }
             boolean afk = services.getAfkService().isAfk(player);
             String tag = services.getAfkService().afkTag();
-            if (!services.getPlaytimeService().isRunning()) {
+            if (!services.getPlaytimeService().isRunning() || !services.getPlaytimeService().isPlaytimeLoaded(player.getUUID())) {
                 return Placeholders.PlayerActivity.withoutPlaytime(afk, tag);
             }
             return new Placeholders.PlayerActivity(afk, tag, services.getPlaytimeService().onlinePlaytimeMs(player));
