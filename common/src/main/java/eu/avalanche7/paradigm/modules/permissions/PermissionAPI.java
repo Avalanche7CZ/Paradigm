@@ -778,6 +778,15 @@ public class PermissionAPI {
     }
 
     public boolean assignGroup(UUID playerUuid, String groupName, long expiresAtMs, String assignedBy, PermissionContextSet contextSet) {
+        return assignGroup(playerUuid, groupName, expiresAtMs, assignedBy, contextSet, false);
+    }
+
+    /** Paid rewards need a confirmed persistent outcome before acknowledging fulfillment. */
+    public boolean assignGroupPersisted(UUID playerUuid, String groupName, long expiresAtMs, String assignedBy, PermissionContextSet contextSet) {
+        return assignGroup(playerUuid, groupName, expiresAtMs, assignedBy, contextSet, true);
+    }
+
+    private boolean assignGroup(UUID playerUuid, String groupName, long expiresAtMs, String assignedBy, PermissionContextSet contextSet, boolean persistSynchronously) {
         if (playerUuid == null) {
             return false;
         }
@@ -831,7 +840,7 @@ public class PermissionAPI {
             }
 
             user.normalize();
-            saveLocked();
+            saveLocked(persistSynchronously);
             return true;
         } finally {
             stateLock.writeLock().unlock();
@@ -2153,7 +2162,9 @@ public class PermissionAPI {
                 || !snapshot.tracks.equals(persistedState.tracks);
     }
 
-    private void saveLocked() {
+    private void saveLocked() { saveLocked(false); }
+
+    private void saveLocked(boolean persistSynchronously) {
         if (state == null) {
             return;
         }
@@ -2166,7 +2177,7 @@ public class PermissionAPI {
                 if (persistedState == null) throw new eu.avalanche7.paradigm.storage.StorageException("SQL permission baseline is unavailable; reload must succeed before changing permissions.");
                 permissionWritesPending = true;
                 BiConsumer<String, Runnable> executor = this.asyncPersistenceExecutor;
-                if (executor != null && !definitionsChanged(snapshot)) {
+                if (!persistSynchronously && executor != null && !definitionsChanged(snapshot)) {
                     executor.accept("permissions.save", () -> {
                         stateLock.writeLock().lock();
                         try {

@@ -69,6 +69,23 @@ class PermissionInstanceSyncTest {
         });
     }
 
+    @Test void paidRankWaitsForPersistentServerScopedAssignment() {
+        try (var writer = provider("gtnh"); var reader = provider("tfg-modern")) {
+            seed(writer.permissions());
+            var a = api(writer.permissions(), "gtnh");
+            a.setAsyncPersistenceExecutor((label, task) -> { throw new AssertionError("Paid assignment must not be queued"); });
+            long expiry = System.currentTimeMillis() + 86_400_000L;
+            assertTrue(a.assignGroupPersisted(user, "vip", expiry, "ArcturusTokens:paid-test", modern));
+            var b = api(reader.permissions(), "tfg-modern");
+            assertEquals(Boolean.TRUE, b.hasPermission(user, "example.vip"));
+            assertNull(a.hasPermission(user, "example.vip"));
+            assertFalse(a.assignGroupPersisted(user, "vip", expiry, "ArcturusTokens:paid-test", modern));
+            var assignment = reader.permissions().getUser(user.toString()).orElseThrow().groups().get(0);
+            assertEquals(expiry, assignment.expiresAtMs());
+            assertEquals(modern, assignment.contextSet());
+        }
+    }
+
     @Test void contextVipGrantAndRevocationPropagateWithoutReload() {
         try (var gtnh = provider("gtnh"); var tfg = provider("tfg-modern")) {
             seed(gtnh.permissions());

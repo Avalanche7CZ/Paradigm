@@ -929,6 +929,23 @@ public class PermissionsHandler {
         return changed;
     }
 
+    /** Persist a scoped assignment without touching live Minecraft state. Call from a storage worker.
+     * The caller must invoke refreshPlayerGroupEffects on the server thread after success. */
+    public boolean assignPlayerGroupPersisted(UUID playerUuid, String groupName,
+            eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet contextSet,
+            Long expiresAtMs, String assignedBy) {
+        if (!isInternalPermissionsEnabled()) return false;
+        if (storageService == null || !storageService.isSqlActive()) throw new IllegalStateException("Paid ranks require active SQL permission storage");
+        if (contextSet == null || contextSet.isEmpty()) throw new IllegalArgumentException("Explicit rank context required");
+        return internalPermissionApi.assignGroupPersisted(playerUuid, groupName, expiresAtMs != null ? expiresAtMs : 0L, assignedBy, contextSet);
+    }
+
+    /** Refresh live permission effects after a background assignment. Must run on the server thread. */
+    public void refreshPlayerGroupEffects(UUID playerUuid) {
+        if (platform != null && !platform.isServerThread()) throw new IllegalStateException("Server thread required");
+        refreshPlayerCommandTree(playerUuid);
+    }
+
     public boolean revokePlayerGroup(UUID playerUuid, String groupName) {
         if (!isInternalPermissionsEnabled()) return false;
         boolean changed = internalPermissionApi.revokeGroup(playerUuid, groupName);
