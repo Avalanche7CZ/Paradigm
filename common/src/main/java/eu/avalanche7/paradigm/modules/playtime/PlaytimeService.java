@@ -29,6 +29,7 @@ public final class PlaytimeService {
     private final String serverId;
     private volatile ScheduledFuture<?> flushTask;
     private volatile boolean running;
+    private boolean stopped;
     private boolean recoveryPending = true;
     private boolean flushRequested;
     private CompletableFuture<StoredPlayerProfileState> batchInFlight;
@@ -59,6 +60,7 @@ public final class PlaytimeService {
 
     public synchronized void start() {
         if (running || services == null || services.getTaskScheduler() == null) return;
+        stopped = false;
         running = true;
         flushTask = services.getTaskScheduler().scheduleAtFixedRateRaw(this::flushAll, flushIntervalSeconds(), flushIntervalSeconds(), TimeUnit.SECONDS);
         recoverJournal();
@@ -72,6 +74,7 @@ public final class PlaytimeService {
 
     public void stop() {
         synchronized (this) {
+            if (stopped) return;
             running = false;
             if (flushTask != null) flushTask.cancel(false);
             flushTask = null;
@@ -79,7 +82,13 @@ public final class PlaytimeService {
             sessions.values().forEach(session -> session.finish(now));
             sessions.clear();
         }
+        try {
+            journalMeasurements();
+        } catch (eu.avalanche7.paradigm.storage.StorageException failure) {
+            report("could not journal final shutdown measurements; persistence will still be attempted", failure);
+        }
         flushAllBlocking();
+        synchronized (this) { stopped = true; }
     }
 
     public boolean isRunning() { return running; }
@@ -254,33 +263,7 @@ public final class PlaytimeService {
     private void persistBatch(Map<String, StoredPlayerProfileState> results, Map<String, Counter> attempted,
                               Map<String, RuntimeException> failures) {
         failureStatus = "recovery_failed";
-        PlaytimeJournal.Data recoveredData = journal.open();
-        synchronized (this) {
-            if (recoveryPending) {
-                recoveredData.streams.forEach((writer, players) -> players.forEach((uuid, entry) -> counters.computeIfAbsent(uuid,
-                        ignored -> new Counter(entry.name(), recoveredData.streamServers.get(writer).isEmpty() ? 0L : entry.firstSeenMs(), recoveredData.streamServers.get(writer).isEmpty() ? 0L : entry.lastSeenMs()))));
-                recoveryPending = false;
-            }
-            attempted.putAll(counters);
-        }
-        var entries = new java.util.LinkedHashMap<String, PlaytimeJournal.Entry>();
-        for (var item : attempted.entrySet()) {
-            String uuid = item.getKey();
-            Counter counter = item.getValue();
-            synchronized (counter) {
-                if (counter.writerId == null) {
-                    var saved = recoveredData.players.get(uuid);
-                    counter.baseCounterMs = saved != null ? saved.cumulativeMs() : 0L;
-                    counter.writerId = recoveredData.writerId;
-                }
-                if (counter.target() > 0 || sessions.containsKey(uuid) || recoveredData.players.containsKey(uuid))
-                    entries.put(uuid, new PlaytimeJournal.Entry(counter.name, counter.firstSeenMs, counter.lastSeenMs, counter.target()));
-            }
-        }
-        journal.saveAll(entries);
-        entries.forEach((uuid, entry) -> {
-            synchronized (attempted.get(uuid)) { attempted.get(uuid).journaledMs = entry.cumulativeMs(); }
-        });
+        attempted.putAll(journalMeasurements());
         failureStatus = "sql_unavailable";
         journal.verifyTarget();
         var data = journal.open();
@@ -319,6 +302,35 @@ public final class PlaytimeService {
         }
         try { journal.compact(results); }
         catch (RuntimeException failure) { failureStatus = "recovery_failed"; throw failure; }
+    }
+
+    private synchronized Map<String, Counter> journalMeasurements() {
+        PlaytimeJournal.Data recoveredData = journal.open();
+        if (recoveryPending) {
+            recoveredData.streams.forEach((writer, players) -> players.forEach((uuid, entry) -> counters.computeIfAbsent(uuid,
+                    ignored -> new Counter(entry.name(), recoveredData.streamServers.get(writer).isEmpty() ? 0L : entry.firstSeenMs(), recoveredData.streamServers.get(writer).isEmpty() ? 0L : entry.lastSeenMs()))));
+            recoveryPending = false;
+        }
+        var attempted = new java.util.LinkedHashMap<>(counters);
+        var entries = new java.util.LinkedHashMap<String, PlaytimeJournal.Entry>();
+        for (var item : attempted.entrySet()) {
+            String uuid = item.getKey();
+            Counter counter = item.getValue();
+            synchronized (counter) {
+                if (counter.writerId == null) {
+                    var saved = recoveredData.players.get(uuid);
+                    counter.baseCounterMs = saved != null ? saved.cumulativeMs() : 0L;
+                    counter.writerId = recoveredData.writerId;
+                }
+                if (counter.target() > 0 || sessions.containsKey(uuid) || recoveredData.players.containsKey(uuid))
+                    entries.put(uuid, new PlaytimeJournal.Entry(counter.name, counter.firstSeenMs, counter.lastSeenMs, counter.target()));
+            }
+        }
+        journal.saveAll(entries);
+        entries.forEach((uuid, entry) -> {
+            synchronized (attempted.get(uuid)) { attempted.get(uuid).journaledMs = entry.cumulativeMs(); }
+        });
+        return attempted;
     }
 
     private void report(String operation, Throwable failure) {

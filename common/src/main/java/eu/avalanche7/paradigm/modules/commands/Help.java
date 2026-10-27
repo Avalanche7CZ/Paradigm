@@ -202,6 +202,11 @@ public class Help implements ParadigmModule {
                 "/clearinv [player], /ci [player]",
                 "runtime command"
         ));
+        m.put("PortableInventories", new HelpEntry(
+                "Open your own vanilla crafting table or persistent Ender Chest anywhere.",
+                "/workbench (/craft), /enderchest (/ec)",
+                "native player inventory"
+        ));
         m.put("TimeWeather", new HelpEntry(
                 "Quick world time/weather controls.",
                 "/day, /night, /sun, /rain, /thunder",

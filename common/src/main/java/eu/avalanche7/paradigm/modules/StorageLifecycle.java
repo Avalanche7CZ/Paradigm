@@ -26,9 +26,6 @@ public class StorageLifecycle implements ParadigmModule {
 
     @Override
     public void onServerStopping(Object event, Services services) {
-        services.getPermissionsHandler().stopDefinitionSync();
-        services.getManagedConfigSyncService().stop();
-        services.getServerHeartbeatPublisher().stop();
         ApiProviderRegistry.uninstall();
         CommandNodeAccessGate.uninstall();
         ParadigmAPI.setInstance(null);
@@ -36,8 +33,10 @@ public class StorageLifecycle implements ParadigmModule {
 
     @Override
     public void onServerStopped(Object event, Services services) {
-        if (services != null && services.getStorageService() != null) {
-            services.getStorageService().close();
+        if (services != null) {
+            services.shutdown();
+            onServerStopping(event, services);
+            if (services.getStorageService() != null) services.getStorageService().close();
         }
     }
 }

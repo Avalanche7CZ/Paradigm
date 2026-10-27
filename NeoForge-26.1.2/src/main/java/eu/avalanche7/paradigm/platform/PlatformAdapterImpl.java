@@ -630,6 +630,30 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public boolean openWorkbench(IPlayer player) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        var nativePlayer = mp.getHandle();
+        return nativePlayer.openMenu(new net.minecraft.world.SimpleMenuProvider(
+                (containerId, inventory, user) -> new net.minecraft.world.inventory.CraftingMenu(containerId, inventory,
+                        net.minecraft.world.inventory.ContainerLevelAccess.create(nativePlayer.level(), nativePlayer.blockPosition())) {
+                    @Override
+                    public boolean stillValid(net.minecraft.world.entity.player.Player viewer) {
+                        return viewer == nativePlayer;
+                    }
+                }, net.minecraft.network.chat.Component.translatable("container.crafting"))).isPresent();
+    }
+
+    @Override
+    public boolean openEnderChest(IPlayer player) {
+        if (!(player instanceof MinecraftPlayer mp)) return false;
+        var nativePlayer = mp.getHandle();
+        return nativePlayer.openMenu(new net.minecraft.world.SimpleMenuProvider(
+                (containerId, inventory, user) -> net.minecraft.world.inventory.ChestMenu.threeRows(
+                        containerId, inventory, nativePlayer.getEnderChestInventory()),
+                net.minecraft.network.chat.Component.translatable("container.enderchest"))).isPresent();
+    }
+
+    @Override
     public List<InventoryItem> inspectPlayerInventory(IPlayer player, boolean enderChest) {
         if (!(player instanceof MinecraftPlayer mp)) return List.of();
         net.minecraft.world.Container inventory = enderChest ? mp.getHandle().getEnderChestInventory() : mp.getHandle().getInventory();

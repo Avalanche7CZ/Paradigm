@@ -90,6 +90,10 @@ public final class ParadigmPermissions {
             def("paradigm.feed.others", OP, "Allows feeding another player.");
     public static final PermissionDefinition HEAL =
             def("paradigm.heal", OP, "Allows using /heal.");
+    public static final PermissionDefinition WORKBENCH =
+            def("paradigm.workbench", OP, "Allows opening a portable crafting table with /workbench.");
+    public static final PermissionDefinition ENDER_CHEST =
+            def("paradigm.enderchest", OP, "Allows opening your own ender chest with /enderchest.");
     public static final PermissionDefinition HEAL_OTHERS =
             def("paradigm.heal.others", OP, "Allows healing another player.");
     public static final PermissionDefinition HOME_USE =
@@ -309,7 +313,7 @@ public final class ParadigmPermissions {
             PRIVATE_MESSAGE, PRIVATE_REPLY, SOCIAL_SPY, SPAWN, SET_SPAWN, SEEN, IGNORE,
             AFK, PLAYTIME, PLAYTIME_OTHERS,
             GAMEMODE, GAMEMODE_OTHERS, FLY, FLY_OTHERS, CLEAR_INVENTORY, CLEAR_INVENTORY_OTHERS,
-            TIME, WEATHER, SPEED, SPEED_OTHERS, FEED, FEED_OTHERS, HEAL, HEAL_OTHERS,
+            TIME, WEATHER, SPEED, SPEED_OTHERS, FEED, FEED_OTHERS, HEAL, HEAL_OTHERS, WORKBENCH, ENDER_CHEST,
             HOME_USE, HOME_SET, HOME_DELETE, HOME_LIST, HOME_LIMIT_TEMPLATE, HOME_LIMIT_UNLIMITED,
             BACK, TPA, TPA_HERE, TPA_ACCEPT, TPA_DENY, TPA_CANCEL,
             WARP_USE, WARP_WILDCARD, WARP_SET, WARP_DELETE, WARP_LIST, WARP_INFO,

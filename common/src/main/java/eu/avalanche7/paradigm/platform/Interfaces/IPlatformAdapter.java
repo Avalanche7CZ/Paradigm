@@ -119,6 +119,8 @@ public interface IPlatformAdapter {
     Boolean toggleFlight(IPlayer player);
     boolean setPlayerSpeed(IPlayer player, float walkSpeed, float flySpeed, double movementBaseValue);
     boolean clearPlayerInventory(IPlayer player);
+    boolean openWorkbench(IPlayer player);
+    boolean openEnderChest(IPlayer player);
     boolean setPlayerInvulnerable(IPlayer player, boolean enabled);
     boolean setPlayerVanished(IPlayer player, boolean enabled);
 

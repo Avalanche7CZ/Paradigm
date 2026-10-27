@@ -128,7 +128,7 @@ public class TaskScheduler {
     }
 
     private void syncExecute(Runnable task) {
-        if (task == null) return;
+        if (task == null || !acceptingTasks) return;
 
         Consumer<Runnable> exec = this.mainThreadExecutor;
         if (exec != null) {
@@ -155,7 +155,7 @@ public class TaskScheduler {
     }
 
     private void runSafely(Runnable task, String context) {
-        if (task == null) return;
+        if (task == null || !acceptingTasks) return;
         try {
             task.run();
         } catch (RuntimeException failure) {

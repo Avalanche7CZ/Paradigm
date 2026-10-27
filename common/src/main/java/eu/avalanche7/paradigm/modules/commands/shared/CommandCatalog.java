@@ -54,6 +54,8 @@ public final class CommandCatalog {
             entry("speed", true, false, true, "speed"),
             entry("feed", true, false, true, "feed"),
             entry("heal", true, false, true, "heal"),
+            entry("workbench", true, false, true, "workbench", "craft"),
+            entry("enderchest", true, false, true, "enderchest", "ec"),
             entry("socialspy", true, false, true, "socialspy"),
             entry("gamemode", true, false, true, "gamemode"),
             entry("gmc", true, false, true, "gmc"),
@@ -148,6 +150,7 @@ public final class CommandCatalog {
         own(modules, "Speed", "speed");
         own(modules, "Feed", "feed");
         own(modules, "Heal", "heal");
+        own(modules, "PortableInventories", "workbench", "enderchest");
         own(modules, "Gamemode", "gamemode", "gmc", "creative", "gms", "survival", "gma", "adventure", "gmsp", "spectator");
         own(modules, "Fly", "fly");
         own(modules, "ClearInventory", "clearinv");

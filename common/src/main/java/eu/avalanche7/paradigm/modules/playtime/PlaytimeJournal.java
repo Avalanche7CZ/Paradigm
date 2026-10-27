@@ -129,7 +129,11 @@ final class PlaytimeJournal implements AutoCloseable {
                 if (state.playtimeStreams().getOrDefault(stream.getKey(), 0L) != saved
                         || state.playtimeStreams().containsKey(stream.getKey())
                         && !current.streamServers.get(stream.getKey()).equals(state.streamServers().getOrDefault(stream.getKey(), "")))
-                    throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException("Playtime storage target changed; pending journal requires an explicit, quiesced migration.");
+                    throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException("Playtime storage target changed; pending journal requires an explicit, quiesced migration."
+                            + " Journal=" + path + "; server=" + serverId + "; writer=" + stream.getKey() + "; player=" + player.getKey()
+                            + "; journal watermark=" + saved + "; target watermark=" + state.playtimeStreams().getOrDefault(stream.getKey(), 0L)
+                            + ". Original identity and pending streams are retained; no replay into the changed target was performed."
+                            + " Stop writers and back up the journal and both storage targets before reconciliation; see README playtime recovery instructions.");
                 evidence |= saved > 0L;
             }
             if (!evidence) throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException("Cannot prove the legacy journal belongs to this storage target; explicit reconciliation required.");

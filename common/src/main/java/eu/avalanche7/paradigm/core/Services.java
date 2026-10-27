@@ -154,6 +154,10 @@ public class Services {
         synchronized (moduleActivationLock) {
             stopping = true;
         }
+        if (permissionsHandlerInstance != null) permissionsHandlerInstance.stopDefinitionSync();
+        if (managedConfigSyncService != null) managedConfigSyncService.stop();
+        if (serverHeartbeatPublisher != null) serverHeartbeatPublisher.stop();
+        if (taskSchedulerInstance != null) taskSchedulerInstance.onServerStopping();
     }
 
     public void enableModule(ParadigmModule module) {
@@ -238,6 +242,11 @@ public class Services {
 
     public void shutdown() {
         beginStopping();
+        java.util.List<ParadigmModule> remaining;
+        synchronized (moduleActivationLock) {
+            remaining = java.util.List.copyOf(enabledModules);
+        }
+        for (ParadigmModule module : remaining) stopModule(module, null);
         PlayerInputService input = this.playerInputService;
         if (input != null) {
             input.shutdown();
@@ -248,7 +257,7 @@ public class Services {
                 punishments.stop();
             } catch (RuntimeException failure) {
                 if (logger != null) {
-                    logger.warn("[Paradigm] Shutdown: failed to stop the punishment cache refresher; scheduler shutdown will continue.",
+                    logger.warn("[Paradigm] Shutdown: failed to stop the punishment cache refresher; shutdown cleanup will continue.",
                             failure);
                 }
             }
@@ -272,9 +281,6 @@ public class Services {
                     logger.warn("[Paradigm] Shutdown: failed to stop the AFK watcher.", failure);
                 }
             }
-        }
-        if (this.taskSchedulerInstance != null) {
-            this.taskSchedulerInstance.onServerStopping();
         }
     }
 

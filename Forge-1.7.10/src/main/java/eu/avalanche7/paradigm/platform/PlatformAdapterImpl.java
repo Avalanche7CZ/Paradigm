@@ -782,6 +782,32 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public boolean openWorkbench(IPlayer player) {
+        if (player == null || !(player.getOriginalPlayer() instanceof EntityPlayerMP nativePlayer)) return false;
+        if (nativePlayer.openContainer != nativePlayer.inventoryContainer) nativePlayer.closeScreen();
+        var menu = new net.minecraft.inventory.ContainerWorkbench(nativePlayer.inventory, nativePlayer.worldObj, 0, 0, 0) {
+            @Override
+            public boolean canInteractWith(net.minecraft.entity.player.EntityPlayer user) {
+                return user == nativePlayer;
+            }
+        };
+        nativePlayer.getNextWindowId();
+        nativePlayer.playerNetServerHandler.sendPacket(new net.minecraft.network.play.server.S2DPacketOpenWindow(
+                nativePlayer.currentWindowId, 1, "Crafting", 9, true));
+        nativePlayer.openContainer = menu;
+        menu.windowId = nativePlayer.currentWindowId;
+        menu.addCraftingToCrafters(nativePlayer);
+        return true;
+    }
+
+    @Override
+    public boolean openEnderChest(IPlayer player) {
+        if (player == null || !(player.getOriginalPlayer() instanceof EntityPlayerMP nativePlayer)) return false;
+        nativePlayer.displayGUIChest(nativePlayer.getInventoryEnderChest());
+        return true;
+    }
+
+    @Override
     public List<InventoryItem> inspectPlayerInventory(IPlayer player, boolean enderChest) {
         EntityPlayerMP handle = operationPlayer(player);
         if (handle == null) {

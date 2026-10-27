@@ -23,6 +23,7 @@ import eu.avalanche7.paradigm.modules.commands.HealCommand;
 import eu.avalanche7.paradigm.modules.commands.Help;
 import eu.avalanche7.paradigm.modules.commands.HomeCommand;
 import eu.avalanche7.paradigm.modules.commands.IgnoreCommand;
+import eu.avalanche7.paradigm.modules.commands.PortableInventoryCommands;
 import eu.avalanche7.paradigm.modules.commands.Reload;
 import eu.avalanche7.paradigm.modules.commands.RtpCommand;
 import eu.avalanche7.paradigm.modules.commands.SeenCommand;
@@ -112,6 +113,7 @@ public final class ParadigmModules {
         modules.add(new SpeedCommand());
         modules.add(new FeedCommand());
         modules.add(new HealCommand());
+        modules.add(new PortableInventoryCommands());
     }
 
     private static void moderationCommands(List<ParadigmModule> modules) {

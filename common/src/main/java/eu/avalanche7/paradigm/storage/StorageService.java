@@ -270,7 +270,7 @@ public class StorageService implements AutoCloseable {
             }
         }).whenComplete((result, throwable) -> {
             Throwable failure = throwable != null
-                    ? (throwable.getCause() != null ? throwable.getCause() : throwable)
+                    ? (throwable instanceof java.util.concurrent.CompletionException && throwable.getCause() != null ? throwable.getCause() : throwable)
                     : null;
             if (failure != null) {
                 if (logger != null) {
@@ -378,7 +378,7 @@ public class StorageService implements AutoCloseable {
             }
             return null;
         }).exceptionally(failure -> {
-            Throwable reported = failure.getCause() != null ? failure.getCause() : failure;
+            Throwable reported = failure instanceof java.util.concurrent.CompletionException && failure.getCause() != null ? failure.getCause() : failure;
             if (logger != null) {
                 logger.warn("Paradigm storage: operation '{}' could not be submitted: {}",
                         safeOperation(operation), reported.getMessage(), reported);
@@ -391,25 +391,7 @@ public class StorageService implements AutoCloseable {
     }
 
     private <T> CompletableFuture<T> submitStorageTask(Supplier<T> task) {
-        try {
-            return CompletableFuture.supplyAsync(task, executor);
-        } catch (RejectedExecutionException rejected) {
-            synchronized (lifecycleLock) {
-                if (closed) {
-                    return CompletableFuture.failedFuture(
-                            new StorageException("Storage service is closed.", rejected));
-                }
-                if (!closing) {
-                    return CompletableFuture.failedFuture(
-                            new StorageException("Storage service is not accepting new work.", rejected));
-                }
-                try {
-                    return CompletableFuture.completedFuture(task.get());
-                } catch (Throwable failure) {
-                    return CompletableFuture.failedFuture(failure);
-                }
-            }
-        }
+        return submitAcknowledged(task);
     }
 
     private static String safeOperation(String operation) {
