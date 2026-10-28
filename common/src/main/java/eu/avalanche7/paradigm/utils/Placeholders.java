@@ -16,11 +16,34 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
 public class Placeholders {
 
+    private static final Pattern PRESENTATION_TAG = Pattern.compile("<(?:\"[^\"]*\"|'[^']*'|[^'\">])*>");
+
+    public static String presentationName(String template, String display) {
+        var tags = PRESENTATION_TAG.matcher(template);
+        StringBuilder result = new StringBuilder();
+        int cursor = 0;
+        while (tags.find()) {
+            result.append(presentationText(template.substring(cursor, tags.start()), display));
+            result.append(tags.group());
+            cursor = tags.end();
+        }
+        return result.append(presentationText(template.substring(cursor), display)).toString();
+    }
+
+    private static String presentationText(String text, String display) {
+        return text.replace("{player_name}", display).replace("{player}", display).replace("{display_name}", display);
+    }
+
     private static final Pattern CUSTOM_COOLDOWN = Pattern.compile("\\{custom_cooldown(_seconds)?:([^{}]+)}");
     private final CMConfig customCommands;
     private final LongSupplier clock;
     private Boolean luckPermsClassPresent = null;
     private static volatile Function<IPlayer, PermissionMeta> permissionMetaResolver;
+    private static volatile Function<Object, IPlayer> playerAdapter;
+    private static volatile Function<IPlayer, String> nicknameResolver;
+    public static void setNicknameResolver(Function<IPlayer, String> resolver) { nicknameResolver = resolver; }
+
+    public static void setPlayerAdapter(Function<Object, IPlayer> adapter) { playerAdapter = adapter; }
     private static volatile ToIntFunction<IPlayer> pingResolver;
     private static volatile Function<IPlayer, PlayerActivity> activityResolver;
 
@@ -76,6 +99,10 @@ public class Placeholders {
 
         if (player != null) {
             String name = player.getName();
+            String nickname = nicknameResolver != null && (text.contains("{display_name}") || text.contains("{nickname}")) ? nicknameResolver.apply(player) : "";
+            if (nickname == null) nickname = "";
+            replacedText = replacedText.replace("{display_name}", nickname.isEmpty() ? name : nickname)
+                    .replace("{real_name}", name).replace("{nickname}", nickname);
             String uuidStr = player.getUUID();
 
             replacedText = replacedText.replace("{player}", safe(name));
@@ -102,7 +129,7 @@ public class Placeholders {
             }
             replacedText = replaceActivityPlaceholders(replacedText, player);
 
-            Object luckPerms = resolveLuckPerms();
+            Object luckPerms = permissionMetaResolver == null ? resolveLuckPerms() : null;
             if (luckPerms != null) {
                 replacedText = replaceLuckPermsPlaceholders(replacedText, player.getOriginalPlayer(), luckPerms);
             } else {
@@ -111,6 +138,7 @@ public class Placeholders {
             return resolveExternal(replaceCustomCooldowns(replacedText, uuidStr), uuidStr);
         }
 
+        replacedText = replacedText.replace("{display_name}", "").replace("{nickname}", "").replace("{real_name}", "");
         replacedText = replacedText.replace("{player}", "");
         replacedText = replacedText.replace("{player_name}", "");
         replacedText = replacedText.replace("{player_uuid}", "");
@@ -130,6 +158,8 @@ public class Placeholders {
         if (player instanceof IPlayer ip) {
             return replacePlaceholders(text, ip);
         }
+        Function<Object, IPlayer> adapter = playerAdapter;
+        if (player != null && adapter != null) return replacePlaceholders(text, adapter.apply(player));
 
         String replacedText = text;
 
@@ -187,14 +217,15 @@ public class Placeholders {
             replacedText = stripRuntimePlaceholders(replacedText);
             replacedText = stripActivityPlaceholders(replacedText);
 
-            Object luckPerms = resolveLuckPerms();
+            Object luckPerms = permissionMetaResolver == null ? resolveLuckPerms() : null;
             if (luckPerms != null) {
                 replacedText = replaceLuckPermsPlaceholders(replacedText, player, luckPerms);
             } else {
                 replacedText = replaceInternalPermissionPlaceholders(replacedText, null);
             }
         } else {
-            replacedText = replacedText.replace("{player}", "");
+            replacedText = replacedText.replace("{display_name}", "").replace("{nickname}", "").replace("{real_name}", "");
+        replacedText = replacedText.replace("{player}", "");
             replacedText = replacedText.replace("{player_name}", "");
             replacedText = replacedText.replace("{player_uuid}", "");
             replacedText = replacedText.replace("{player_level}", "");

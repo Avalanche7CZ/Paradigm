@@ -10,6 +10,10 @@ import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
 import eu.avalanche7.paradigm.storage.model.StoredPlayerProfileState;
 
 public interface PlayerRepository {
+    default java.util.Map<String, String> nicknames() { return java.util.Map.of(); }
+    default String nickname(String uuid) { return nicknames().getOrDefault(uuid, ""); }
+    default void setNickname(String uuid, String nickname) { throw new UnsupportedOperationException("Nicknames are unsupported by this provider."); }
+
     List<StoredPlayerProfile> listProfiles();
     Optional<StoredPlayerProfile> getProfile(String uuid);
     void upsertProfile(StoredPlayerProfile profile);

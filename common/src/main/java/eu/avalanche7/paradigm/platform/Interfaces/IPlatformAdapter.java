@@ -155,6 +155,8 @@ public interface IPlatformAdapter {
         return false;
     }
 
+    default boolean supportsPlayerListNicknames() { return true; }
+
     default boolean setPlayerListDisplayName(IPlayer player, @Nullable IComponent displayName) {
         return false;
     }

@@ -712,10 +712,14 @@ public class PermissionAPI {
             }
 
             String safeValue = value != null ? value : "";
+            if (normalizedField.equals("chatmessageformat") && !safeValue.isBlank() && !safeValue.contains("{message}")) return false;
+            if (normalizedField.equals("chatnameformat") && !safeValue.isBlank() && !safeValue.contains("{player_name}") && !safeValue.contains("{player}")) return false;
             switch (normalizedField) {
                 case "description" -> entry.description = safeValue;
                 case "prefix" -> entry.prefix = safeValue;
                 case "suffix" -> entry.suffix = safeValue;
+                case "chatnameformat" -> entry.chatNameFormat = safeValue;
+                case "chatmessageformat" -> entry.chatMessageFormat = safeValue;
                 case "weight" -> {
                     try {
                         entry.weight = Integer.parseInt(safeValue.trim());
@@ -766,7 +770,7 @@ public class PermissionAPI {
                 storedGroups.removeIf(group -> group.groupName().equals(change.group()) && group.contextSet().isEmpty() && group.expiresAtMs() == null);
                 if (change.add()) storedGroups.add(new StoredUserPermissionData.GroupAssignment(change.group(), null, "", 0L));
             }
-            persistedUsers.put(uuid.toString(), new StoredUserPermissionData(baseline.uuid(), baseline.name(), storedGroups, baseline.permissions()));
+            persistedUsers.put(uuid.toString(), new StoredUserPermissionData(baseline.uuid(), baseline.name(), storedGroups, baseline.permissions(), baseline.displayGroup()));
             acceptedState = copyState(state);
             stateVersion.incrementAndGet();
             return true;
@@ -1133,7 +1137,7 @@ public class PermissionAPI {
                     entry.suffix != null ? entry.suffix : "",
                     entry.weight,
                     permissionAssignments(PermissionAssignment.Kind.GROUP_PERMISSION, normalized, normalized, entry.permissions, entry.contextualPermissions),
-                    entry.inherits != null ? List.copyOf(entry.inherits) : List.of()
+                    entry.inherits != null ? List.copyOf(entry.inherits) : List.of(), entry.chatNameFormat, entry.chatMessageFormat
             );
         } finally {
             stateLock.readLock().unlock();
@@ -1229,13 +1233,19 @@ public class PermissionAPI {
         }
 
         try {
-            return resolveMeta(UUID.fromString(player.getUUID()));
+            PermissionContextResolver resolver = this.contextResolver;
+            return resolveMeta(UUID.fromString(player.getUUID()), resolver != null ? resolver.resolve(player) : PermissionContextSet.empty());
         } catch (Exception ignored) {
             return null;
         }
     }
 
     public PermissionMeta resolveMeta(UUID playerUuid) {
+        PermissionContextResolver resolver = this.contextResolver;
+        return resolveMeta(playerUuid, resolver != null ? resolver.currentServer() : PermissionContextSet.empty());
+    }
+
+    public PermissionMeta resolveMeta(UUID playerUuid, PermissionContextSet currentContext) {
         if (playerUuid == null) {
             return null;
         }
@@ -1245,8 +1255,6 @@ public class PermissionAPI {
             PermissionDataStore.PermissionState snapshot = this.state;
             String normalizedUuid = playerUuid.toString().toLowerCase(Locale.ROOT);
             PermissionDataStore.UserEntry user = snapshot.users.get(normalizedUuid);
-            PermissionContextResolver resolver = this.contextResolver;
-            PermissionContextSet currentContext = resolver != null ? resolver.currentServer() : PermissionContextSet.empty();
             List<String> groupNames = resolvePlayerGroups(snapshot, normalizedUuid, user, currentContext);
             if (groupNames.isEmpty()) {
                 return null;
@@ -1266,7 +1274,7 @@ public class PermissionAPI {
 
                 resolvedGroups.add(groupName);
                 int weight = group.weight;
-                if (primary == null || weight > bestWeight) {
+                if (primary == null || weight > bestWeight || weight == bestWeight && groupName.compareTo(primary) < 0) {
                     primary = groupName;
                     bestWeight = weight;
                     prefix = group.prefix != null ? group.prefix : "";
@@ -1278,10 +1286,60 @@ public class PermissionAPI {
                 return null;
             }
 
-            return new PermissionMeta(primary, prefix, suffix, List.copyOf(resolvedGroups));
+            if (user != null && activeDisplayGroups(snapshot, normalizedUuid, user, currentContext).contains(user.displayGroup)) {
+                primary = user.displayGroup;
+                PermissionDataStore.GroupEntry selected = snapshot.groups.get(primary);
+                prefix = selected.prefix;
+                suffix = selected.suffix;
+            }
+            PermissionDataStore.GroupEntry selected = snapshot.groups.get(primary);
+            return new PermissionMeta(primary, prefix, suffix, List.copyOf(resolvedGroups), selected.chatNameFormat, selected.chatMessageFormat, selected.weight);
         } finally {
             stateLock.readLock().unlock();
         }
+    }
+
+    private List<String> activeDisplayGroups(PermissionDataStore.PermissionState snapshot, String uuid,
+                                            PermissionDataStore.UserEntry user, PermissionContextSet contexts) {
+        if (user == null) return List.of();
+        return resolvePlayerGroups(snapshot, uuid, user, contexts, true, false).stream()
+                .filter(snapshot.groups::containsKey).sorted().toList();
+    }
+
+    public List<String> availableDisplayGroups(IPlayer player) {
+        if (player == null) return List.of();
+        UUID uuid = UUID.fromString(player.getUUID());
+        PermissionContextResolver resolver = this.contextResolver;
+        return availableDisplayGroups(uuid, resolver != null ? resolver.resolve(player) : PermissionContextSet.empty());
+    }
+
+    public List<String> availableDisplayGroups(UUID uuid, PermissionContextSet contexts) {
+        stateLock.readLock().lock();
+        try { return activeDisplayGroups(state, uuid.toString(), state.users.get(uuid.toString()), contexts); }
+        finally { stateLock.readLock().unlock(); }
+    }
+
+    public String displayGroupPreference(UUID uuid) {
+        stateLock.readLock().lock();
+        try {
+            var user = state.users.get(uuid.toString());
+            return user != null && user.displayGroup != null ? user.displayGroup : "";
+        } finally { stateLock.readLock().unlock(); }
+    }
+
+    public boolean setDisplayGroup(UUID uuid, String group, PermissionContextSet contexts) {
+        if (uuid == null || group == null) return false;
+        String selected = group.trim().toLowerCase(Locale.ROOT);
+        if (selected.equals("auto")) selected = "";
+        stateLock.writeLock().lock();
+        try {
+            var user = state.users.get(uuid.toString());
+            if (!selected.isEmpty() && !activeDisplayGroups(state, uuid.toString(), user, contexts).contains(selected)) return false;
+            user = state.users.computeIfAbsent(uuid.toString(), ignored -> new PermissionDataStore.UserEntry());
+            user.displayGroup = selected;
+            saveLocked(true);
+            return true;
+        } finally { stateLock.writeLock().unlock(); }
     }
 
     public Boolean hasPermission(UUID playerUuid, String permissionNode) {
@@ -1404,10 +1462,16 @@ public class PermissionAPI {
 
     private List<String> resolvePlayerGroups(PermissionDataStore.PermissionState snapshot, String normalizedUuid, PermissionDataStore.UserEntry user,
                                                 PermissionContextSet currentContext, boolean localTemporaryGroups) {
+        return resolvePlayerGroups(snapshot, normalizedUuid, user, currentContext, localTemporaryGroups, true);
+    }
+
+    private List<String> resolvePlayerGroups(PermissionDataStore.PermissionState snapshot, String normalizedUuid,
+                                            PermissionDataStore.UserEntry user, PermissionContextSet currentContext,
+                                            boolean localTemporaryGroups, boolean includeDefault) {
         Map<String, Long> groups = new LinkedHashMap<>();
         long now = System.currentTimeMillis();
 
-        if (snapshot.defaultGroup != null && !snapshot.defaultGroup.isBlank()) {
+        if (includeDefault && snapshot.defaultGroup != null && !snapshot.defaultGroup.isBlank()) {
             groups.put(snapshot.defaultGroup.trim().toLowerCase(Locale.ROOT), Long.MAX_VALUE);
         }
 
@@ -1636,10 +1700,18 @@ public class PermissionAPI {
     private record RuleDecision(boolean allowed, int contextSpecificity, int specificity, int sourceRank, String rule, String sourceType, String sourceName) {
     }
 
-    public record PermissionMeta(String primaryGroup, String prefix, String suffix, List<String> groups) {
+    public record PermissionMeta(String primaryGroup, String prefix, String suffix, List<String> groups,
+                                 String chatNameFormat, String chatMessageFormat, int weight) {
+        public PermissionMeta(String primaryGroup, String prefix, String suffix, List<String> groups) {
+            this(primaryGroup, prefix, suffix, groups, "", "", 0);
+        }
     }
 
-    public record GroupInfo(String name, String description, String prefix, String suffix, int weight, List<PermissionAssignment> assignments, List<String> inherits) {
+    public record GroupInfo(String name, String description, String prefix, String suffix, int weight, List<PermissionAssignment> assignments, List<String> inherits, String chatNameFormat, String chatMessageFormat) {
+        public GroupInfo(String name, String description, String prefix, String suffix, int weight,
+                         List<PermissionAssignment> assignments, List<String> inherits) {
+            this(name, description, prefix, suffix, weight, assignments, inherits, "", "");
+        }
     }
 
     public record TemporaryGroupInfo(String group, long expiresAtMs, long assignedAtMs, String assignedBy) {
@@ -1815,6 +1887,7 @@ public class PermissionAPI {
     private PermissionDataStore.UserEntry loadUser(StoredUserPermissionData userData) {
         long now = System.currentTimeMillis();
         PermissionDataStore.UserEntry entry = new PermissionDataStore.UserEntry();
+        entry.displayGroup = userData.displayGroup();
         for (StoredUserPermissionData.GroupAssignment group : userData.groups()) {
             if (group == null) {
                 continue;
@@ -1861,6 +1934,8 @@ public class PermissionAPI {
             entry.prefix = group.prefix() != null ? group.prefix() : "";
             entry.suffix = group.suffix() != null ? group.suffix() : "";
             entry.weight = group.weight();
+            entry.chatNameFormat = group.chatNameFormat();
+            entry.chatMessageFormat = group.chatMessageFormat();
             entry.inherits = new ArrayList<>();
             for (String parent : group.parents()) {
                 String normalizedParent = normalizeGroupName(parent);
@@ -2062,7 +2137,7 @@ public class PermissionAPI {
             return new StoredPermissionNode(node.permission(), node.denied(), node.expiresAtMs(), node.serverId(), node.contextSet(),
                     PermissionAssignmentId.ensure(node.assignmentId(), "group_permission", name, node.permission(), node.denied(), node.contextSet(), node.expiresAtMs(), ""));
         });
-        return new StoredPermissionGroup(name, entry.description, entry.prefix, entry.suffix, entry.weight, entry.inherits, permissions);
+        return new StoredPermissionGroup(name, entry.description, entry.prefix, entry.suffix, entry.weight, entry.inherits, permissions, entry.chatNameFormat, entry.chatMessageFormat);
     }
 
     private StoredUserPermissionData toStoredUser(String uuid, PermissionDataStore.UserEntry entry, Set<String> removedGroups) {
@@ -2116,7 +2191,7 @@ public class PermissionAPI {
                             && old.contextSet().equals(permission.contextSet()) && java.util.Objects.equals(old.expiresAtMs(), permission.expiresAtMs()))
                     .findFirst().orElse(permission));
         }
-        return new StoredUserPermissionData(uuid, previous != null ? previous.name() : "", groups, permissions);
+        return new StoredUserPermissionData(uuid, previous != null ? previous.name() : "", groups, permissions, entry.displayGroup);
     }
 
     private static String normalizeUuid(String uuid) {
@@ -2190,7 +2265,8 @@ public class PermissionAPI {
                     saveStateToRepository(repository, snapshot);
                 }
             } else {
-                dataStore.save(snapshot);
+                if (persistSynchronously) dataStore.saveOrThrow(snapshot);
+                else dataStore.save(snapshot);
             }
             acceptedState = copyState(state);
         } catch (eu.avalanche7.paradigm.storage.StorageConflictException failure) {
@@ -2221,6 +2297,8 @@ public class PermissionAPI {
                 groupCopy.prefix = group.prefix;
                 groupCopy.suffix = group.suffix;
                 groupCopy.weight = group.weight;
+                groupCopy.chatNameFormat = group.chatNameFormat;
+                groupCopy.chatMessageFormat = group.chatMessageFormat;
                 groupCopy.permissions = group.permissions != null ? new ArrayList<>(group.permissions) : new ArrayList<>();
                 groupCopy.contextualPermissions = group.contextualPermissions != null ? copyRules(group.contextualPermissions) : new ArrayList<>();
                 groupCopy.inherits = group.inherits != null ? new ArrayList<>(group.inherits) : new ArrayList<>();
@@ -2234,6 +2312,7 @@ public class PermissionAPI {
             if (user != null) {
                 userCopy.permissions = user.permissions != null ? new ArrayList<>(user.permissions) : new ArrayList<>();
                 userCopy.contextualPermissions = user.contextualPermissions != null ? copyRules(user.contextualPermissions) : new ArrayList<>();
+                userCopy.displayGroup = user.displayGroup;
                 userCopy.groups = user.groups != null ? new ArrayList<>(user.groups) : new ArrayList<>();
                 userCopy.contextualGroups = user.contextualGroups != null ? copyGroups(user.contextualGroups) : new ArrayList<>();
             }

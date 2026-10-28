@@ -50,7 +50,7 @@ public class JsonPermissionRepository implements PermissionRepository {
         for (PermissionDataStore.PermissionRuleEntry permission : entry.contextualPermissions) {
             permissions.add(toNode(permission));
         }
-        return Optional.of(new StoredPermissionGroup(key, entry.description, entry.prefix, entry.suffix, entry.weight, entry.inherits, permissions));
+        return Optional.of(new StoredPermissionGroup(key, entry.description, entry.prefix, entry.suffix, entry.weight, entry.inherits, permissions, entry.chatNameFormat, entry.chatMessageFormat));
     }
 
     @Override
@@ -62,6 +62,8 @@ public class JsonPermissionRepository implements PermissionRepository {
         entry.prefix = group.prefix() != null ? group.prefix() : "";
         entry.suffix = group.suffix() != null ? group.suffix() : "";
         entry.weight = group.weight();
+        entry.chatNameFormat = group.chatNameFormat();
+        entry.chatMessageFormat = group.chatMessageFormat();
         entry.inherits = new ArrayList<>(group.parents());
         for (StoredPermissionNode node : group.permissions()) {
             if (node.contextSet().isEmpty() && node.expiresAtMs() == null) {
@@ -254,7 +256,7 @@ public class JsonPermissionRepository implements PermissionRepository {
                 permissions.add(toNode(permission));
             }
         }
-        return Optional.of(new StoredUserPermissionData(key, "", groups, permissions));
+        return Optional.of(new StoredUserPermissionData(key, "", groups, permissions, entry.displayGroup));
     }
 
     @Override
@@ -263,6 +265,7 @@ public class JsonPermissionRepository implements PermissionRepository {
         String userKey = normalize(user.uuid());
         PermissionDataStore.PermissionState state = permissionStore.load();
         PermissionDataStore.UserEntry entry = new PermissionDataStore.UserEntry();
+        entry.displayGroup = user.displayGroup();
 
         if (playerDataStore != null) {
             for (PlayerDataStore.TemporaryGroupEntry temp : playerDataStore.getTemporaryGroups(userKey)) {

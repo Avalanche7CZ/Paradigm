@@ -835,6 +835,8 @@ public class DashboardService implements AutoCloseable {
                 row.put("description", group.description());
                 row.put("prefix", group.prefix());
                 row.put("suffix", group.suffix());
+                row.put("chatNameFormat", group.chatNameFormat());
+                row.put("chatMessageFormat", group.chatMessageFormat());
                 row.put("parents", group.parents());
                 row.put("weight", group.weight());
                 row.put("permissionCount", group.permissions().size());
@@ -860,6 +862,8 @@ public class DashboardService implements AutoCloseable {
             row.put("description", group.description());
             row.put("prefix", group.prefix());
             row.put("suffix", group.suffix());
+                row.put("chatNameFormat", group.chatNameFormat());
+                row.put("chatMessageFormat", group.chatMessageFormat());
             row.put("weight", group.weight());
             row.put("parents", group.parents());
             row.put("permissions", group.permissions());
@@ -963,6 +967,8 @@ public class DashboardService implements AutoCloseable {
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("uuid", uuid.toString());
             data.put("info", permissionUserInfo(info));
+            data.put("displayGroup", services.getPermissionsHandler().displayGroupPreference(uuid));
+            data.put("availableDisplayGroups", services.getPermissionsHandler().availableDisplayGroups(uuid));
             return (Object) Map.of("user", data);
         }, executor);
     }
@@ -1089,7 +1095,7 @@ public class DashboardService implements AutoCloseable {
             String uuid = profile != null ? profile.uuid() : online != null ? online.uuid() : validUuid(q) ? q : "";
             String name = profile != null ? profile.name() : online != null ? online.name() : q;
             List<Map<String, Object>> punishments = services.getPunishmentService().history(uuid, 1, 100).stream().map(this::punishmentDto).toList();
-            return (Object) Map.of("player", Map.of("uuid", uuid, "name", name), "punishments", punishments, "warnings", List.of());
+            return (Object) Map.of("player", Map.of("uuid", uuid, "name", name, "nickname", services.getNicknameService().nickname(uuid)), "punishments", punishments, "warnings", List.of());
         }, executor);
     }
 

@@ -33,12 +33,42 @@ public final class PermissionCommands {
 
     public static ICommandBuilder register(ICommandBuilder root, IPlatformAdapter platform, Services services) {
         return root
+                .then(buildDisplayBranch(platform, services))
                 .then(buildHomeBranch(platform, services))
                 .then(buildPermissionBranch(platform, services))
                 .then(buildGroupBranch(platform, services))
                 .then(buildTrackBranch(platform, services))
                 .then(buildRankBranch(platform, services, "promote"))
                 .then(buildRankBranch(platform, services, "demote"));
+    }
+
+    private static ICommandBuilder buildDisplayBranch(IPlatformAdapter platform, Services services) {
+        return platform.createCommandBuilder().literal("rank")
+                .then(platform.createCommandBuilder().literal("display")
+                        .requires(source -> source.isPlayer() && services.getPermissionsHandler().hasPermission(source.getPlayer(), "paradigm.rank.display", 0))
+                        .then(platform.createCommandBuilder().argument("group", ICommandBuilder.ArgumentType.WORD)
+                                .suggests((context, input) -> {
+                                    IPlayer player = context.getSource().getPlayer();
+                                    if (player == null) return List.of();
+                                    List<String> choices = new ArrayList<>(services.getPermissionsHandler().availableDisplayGroups(player));
+                                    choices.add("auto");
+                                    return choices.stream().filter(value -> value.startsWith(input.toLowerCase(Locale.ROOT))).toList();
+                                })
+                                .executes(context -> {
+                                    IPlayer player = context.getSource().getPlayer();
+                                    var handler = services.getPermissionsHandler();
+                                    if (player == null || !handler.hasPermission(player, "paradigm.rank.display", 0)) return 0;
+                                    boolean changed;
+                                    try {
+                                        changed = handler.setDisplayGroup(UUID.fromString(player.getUUID()), context.getStringArgument("group"));
+                                    } catch (eu.avalanche7.paradigm.storage.StorageException failure) {
+                                        platform.sendFailure(context.getSource(), platform.createLiteralComponent("Could not persist the display preference. Check the server log."));
+                                        return 0;
+                                    }
+                                    platform.sendSuccess(context.getSource(), platform.createLiteralComponent(changed
+                                            ? "Display group updated." : "Choose an active directly assigned group, or auto."), false);
+                                    return changed ? 1 : 0;
+                                })));
     }
 
     private static ICommandBuilder buildTrackBranch(IPlatformAdapter platform, Services services) {

@@ -2,14 +2,8 @@ package eu.avalanche7.paradigm.modules.tab;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import java.util.function.LongSupplier;
-
-import net.luckperms.api.LuckPerms;
-import net.luckperms.api.LuckPermsProvider;
-import net.luckperms.api.model.group.Group;
-import net.luckperms.api.model.user.User;
 
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.permissions.PermissionAPI;
@@ -33,13 +27,14 @@ public final class TablistMetadataResolver implements TablistMetadataProvider {
     };
 
     public TablistMetadataResolver(Services services) {
-        this(
-                () -> services.getPermissionsHandler().isInternalPermissionsEnabled(),
-                player -> resolveInternal(services.getPermissionsHandler(), player),
-                TablistMetadataResolver::resolveLuckPerms,
-                () -> services.getPermissionsHandler().permissionsStateVersion(),
-                System::currentTimeMillis
-        );
+        this(services.getPermissionsHandler());
+    }
+
+    TablistMetadataResolver(PermissionsHandler handler) {
+        this(handler::isInternalPermissionsEnabled,
+                player -> resolveInternal(handler, player),
+                player -> resolveExternal(handler, player),
+                handler::permissionsStateVersion, System::currentTimeMillis);
     }
 
     TablistMetadataResolver(BooleanSupplier internalEnabled, TablistMetadataProvider internal,
@@ -65,7 +60,7 @@ public final class TablistMetadataResolver implements TablistMetadataProvider {
 
         if (uuid != null) {
             CacheEntry cached = cache.get(uuid);
-            if (cached != null && cached.internalSource == internalSource && now - cached.timestamp < CACHE_TTL_MILLIS
+            if (!internalSource && cached != null && cached.internalSource == internalSource && now - cached.timestamp < CACHE_TTL_MILLIS
                     && (!internalSource || cached.stateVersion == internalStateVersion.getAsLong())) {
                 return cached.metadata;
             }
@@ -96,24 +91,16 @@ public final class TablistMetadataResolver implements TablistMetadataProvider {
     }
 
     private static TablistMetadata resolveInternal(PermissionsHandler handler, IPlayer player) {
-        PermissionAPI.PermissionMeta meta = handler.resolvePlayerMetadata(player);
-        if (meta == null) return TablistMetadata.EMPTY;
-        PermissionAPI.GroupInfo group = handler.getPermissionGroupInfo(meta.primaryGroup());
-        return new TablistMetadata(meta.primaryGroup(), meta.prefix(), meta.suffix(),
-                group != null ? group.weight() : 0, TablistMetadata.Source.PARADIGM);
+        return resolveMetadata(handler, player, TablistMetadata.Source.PARADIGM);
     }
 
-    private static TablistMetadata resolveLuckPerms(IPlayer player) {
-        if (player.getUUID() == null) return TablistMetadata.EMPTY;
-        LuckPerms api = LuckPermsProvider.get();
-        User user = api.getUserManager().getUser(UUID.fromString(player.getUUID()));
-        if (user == null) return TablistMetadata.EMPTY;
-        String primary = user.getPrimaryGroup();
-        Group group = api.getGroupManager().getGroup(primary);
-        int weight = group != null ? group.getWeight().orElse(0) : 0;
-        var metadata = user.getCachedData().getMetaData();
-        return new TablistMetadata(primary, metadata.getPrefix(), metadata.getSuffix(), weight,
-                TablistMetadata.Source.LUCKPERMS);
+    private static TablistMetadata resolveExternal(PermissionsHandler handler, IPlayer player) {
+        return resolveMetadata(handler, player, TablistMetadata.Source.LUCKPERMS);
+    }
+
+    private static TablistMetadata resolveMetadata(PermissionsHandler handler, IPlayer player, TablistMetadata.Source source) {
+        PermissionAPI.PermissionMeta meta = handler.resolvePlayerMetadata(player);
+        return meta == null ? TablistMetadata.EMPTY : new TablistMetadata(meta.primaryGroup(), meta.prefix(), meta.suffix(), meta.weight(), source);
     }
 
     private record CacheEntry(TablistMetadata metadata, boolean internalSource, long stateVersion, long timestamp) {

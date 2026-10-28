@@ -165,6 +165,12 @@ export function Moderation() {
           });
           return (
             <>
+              {string(object(data.player).nickname) && (
+                <p>
+                  Account: {string(object(data.player).name)} · Nickname:{' '}
+                  {string(object(data.player).nickname)} · UUID: {string(object(data.player).uuid)}
+                </p>
+              )}
               <Card>
                 <Rows
                   rows={history.slice((page - 1) * 25, page * 25)}

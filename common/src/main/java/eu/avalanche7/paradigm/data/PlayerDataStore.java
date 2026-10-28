@@ -293,6 +293,39 @@ public class PlayerDataStore {
         }
     }
 
+    public Map<String, String> nicknames() {
+        synchronized (lock) {
+            Map<String, String> result = new LinkedHashMap<>();
+            for (var entry : listPlayerEntries()) if (entry.nickname != null) result.put(entry.uuid, entry.nickname);
+            return result;
+        }
+    }
+
+    public String nickname(String uuid) {
+        synchronized (lock) {
+            var entry = getPlayerEntry(uuid);
+            if (entry == null || entry.nickname == null) return "";
+            for (var known : listPlayerEntries()) if (entry.nickname.equalsIgnoreCase(known.name)) return "";
+            return entry.nickname;
+        }
+    }
+
+    public void setNickname(String uuid, String nickname) {
+        synchronized (lock) {
+            for (var known : listPlayerEntries()) {
+                if (nickname != null && (nickname.equalsIgnoreCase(known.name)
+                        || !uuid.equals(known.uuid) && nickname.equalsIgnoreCase(known.nickname)))
+                    throw new IllegalArgumentException("That nickname conflicts with a known account name or nickname.");
+            }
+            var entry = getOrCreateEntryByUuidLocked(uuid, "");
+            String previous = entry.nickname;
+            entry.nickname = nickname;
+            try {
+                if (!saveEntryLocked(entry)) throw new StorageException("Nickname storage is unavailable.");
+            } catch (RuntimeException failure) { entry.nickname = previous; throw failure; }
+        }
+    }
+
     public List<PlayerEntry> listPlayerEntries() {
         synchronized (lock) {
             migrateLegacyIfNeededLocked();
@@ -694,6 +727,7 @@ public class PlayerDataStore {
     public static class PlayerEntry {
         private String uuid;
         private String name;
+        private String nickname;
         private Map<String, HomeEntry> homes = new LinkedHashMap<>();
         private StoredLocation lastLocation;
         private long firstSeenMs;
@@ -908,6 +942,7 @@ public class PlayerDataStore {
 
     public static class HomeEntry {
         private String name;
+        private String nickname;
         private StoredLocation location;
 
         public HomeEntry() {

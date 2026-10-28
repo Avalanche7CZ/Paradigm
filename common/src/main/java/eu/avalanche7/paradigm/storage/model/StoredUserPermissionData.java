@@ -8,9 +8,15 @@ public record StoredUserPermissionData(
         String uuid,
         String name,
         List<GroupAssignment> groups,
-        List<StoredPermissionNode> permissions
+        List<StoredPermissionNode> permissions,
+        String displayGroup
 ) {
+    public StoredUserPermissionData(String uuid, String name, List<GroupAssignment> groups, List<StoredPermissionNode> permissions) {
+        this(uuid, name, groups, permissions, "");
+    }
+
     public StoredUserPermissionData {
+        displayGroup = displayGroup != null ? displayGroup : "";
         groups = groups != null ? List.copyOf(groups) : List.of();
         permissions = permissions != null ? List.copyOf(permissions) : List.of();
     }

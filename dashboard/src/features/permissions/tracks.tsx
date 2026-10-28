@@ -62,7 +62,9 @@ export function TrackEditor({ track, groups }: { track: Obj; groups: Group[] }) 
         </div>
       </header>
       <p class="help">
-        Promotion follows this order. Changes are staged individually; positions start at 1.
+        A track is a promotion path through existing groups, from lowest to highest. Track order
+        does not grant permissions or inheritance. Configure inherited permissions in each group.
+        Changes are staged individually; positions start at 1.
       </p>
       {preview.error && (
         <p role="alert" class="text-error">

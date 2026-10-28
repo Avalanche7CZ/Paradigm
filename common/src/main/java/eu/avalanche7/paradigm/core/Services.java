@@ -127,6 +127,14 @@ public class Services {
         this.storageServiceInstance = storageService;
         this.commandToggleStoreInstance = commandToggleStore;
         this.platformAdapter = platformAdapter;
+        Placeholders.setNicknameResolver(player -> storageServiceInstance != null ? getNicknameService().nickname(player.getUUID()) : "");
+    }
+
+    private volatile eu.avalanche7.paradigm.modules.nick.NicknameService nicknameService;
+    public synchronized eu.avalanche7.paradigm.modules.nick.NicknameService getNicknameService() {
+        if (nicknameService == null) nicknameService = new eu.avalanche7.paradigm.modules.nick.NicknameService(
+                () -> getStorageService().players(), () -> getPlatformAdapter() != null ? getPlatformAdapter().getOnlinePlayers() : java.util.List.of());
+        return nicknameService;
     }
 
     private volatile eu.avalanche7.paradigm.modules.vanish.VanishService vanishService;

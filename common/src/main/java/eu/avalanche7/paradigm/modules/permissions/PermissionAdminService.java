@@ -112,6 +112,10 @@ public class PermissionAdminService {
                             ? validPermission(permission) && handler.removePermissionFromPlayer(uuid, permission, contexts)
                             : handler.removePermissionFromPlayerById(uuid, assignmentId));
                 }
+                case "user_display_group" -> {
+                    UUID uuid = resolveUuid(safe.user);
+                    yield uuid != null && handler.setDisplayGroup(uuid, safe.group);
+                }
                 case "user_group_add" -> {
                     UUID uuid = resolveUuid(safe.user);
                     yield uuid != null && validGroup(group) && handler.assignPlayerGroup(uuid, group, contexts, expiresAtMs, actor != null ? actor.name() : "dashboard");
@@ -165,7 +169,7 @@ public class PermissionAdminService {
         boolean changed = false;
         for (Map.Entry<String, String> entry : metadata.entrySet()) {
             String field = text(entry.getKey()).toLowerCase(java.util.Locale.ROOT);
-            if (!Set.of("weight", "prefix", "suffix", "description").contains(field)) {
+            if (!Set.of("weight", "prefix", "suffix", "description", "chatnameformat", "chatmessageformat").contains(field)) {
                 throw new IllegalArgumentException("Unsupported group metadata field.");
             }
             String value = entry.getValue() != null ? entry.getValue() : "";

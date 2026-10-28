@@ -32,6 +32,31 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
         }
     }
 
+    @Override public java.util.Map<String, String> nicknames() {
+        return sql.query("SELECT uuid, nickname FROM players WHERE nickname IS NOT NULL", null, rs -> {
+            var result = new java.util.LinkedHashMap<String, String>();
+            while (rs.next()) result.put(rs.getString(1), rs.getString(2));
+            return result;
+        });
+    }
+
+    @Override public String nickname(String uuid) {
+        return sql.query("SELECT p.nickname FROM players p WHERE p.uuid = ? AND p.nickname IS NOT NULL AND NOT EXISTS (SELECT 1 FROM players real_player WHERE LOWER(real_player.name) = p.nickname_key)",
+                ps -> ps.setString(1, normalize(uuid)), rs -> rs.next() ? rs.getString(1) : "");
+    }
+
+    @Override public void setNickname(String uuid, String nickname) {
+        sql.transaction(() -> {
+            lockPlayer(normalize(uuid));
+            if (nickname != null && sql.query("SELECT uuid FROM players WHERE LOWER(name) = ? OR (nickname_key = ? AND uuid <> ?)", ps -> {
+                ps.setString(1, nickname.toLowerCase(Locale.ROOT)); ps.setString(2, nickname.toLowerCase(Locale.ROOT)); ps.setString(3, normalize(uuid));
+            }, ResultSet::next)) throw new IllegalArgumentException("That nickname conflicts with a known account name or nickname.");
+            sql.update("UPDATE players SET nickname = ?, nickname_key = ? WHERE uuid = ?", ps -> {
+                ps.setString(1, nickname); ps.setString(2, nickname != null ? nickname.toLowerCase(Locale.ROOT) : null); ps.setString(3, normalize(uuid));
+            });
+        });
+    }
+
     @Override
     public List<StoredPlayerProfile> listProfiles() {
         return sql.query("SELECT uuid, name, first_seen_ms, last_seen_ms, playtime_ms FROM players ORDER BY uuid", null, rs -> {

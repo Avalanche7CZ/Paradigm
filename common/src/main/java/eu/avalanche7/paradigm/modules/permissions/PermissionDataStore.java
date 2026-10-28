@@ -77,17 +77,20 @@ public class PermissionDataStore {
     }
 
     public void save(PermissionState state) {
-        Path path = resolvePath();
-        if (path == null || state == null) {
-            return;
+        try {
+            saveOrThrow(state);
+        } catch (eu.avalanche7.paradigm.storage.StorageException failure) {
+            if (logger != null) logger.warn("Paradigm: Failed to save permissions.json: {}", failure.getMessage());
         }
+    }
 
+    public void saveOrThrow(PermissionState state) {
+        Path path = resolvePath();
+        if (path == null || state == null) return;
         try {
             AtomicFileIO.writeUtf8Atomic(path, writer -> gson.toJson(state, writer));
-        } catch (Exception e) {
-            if (logger != null) {
-                logger.warn("Paradigm: Failed to save permissions.json: {}", e.getMessage());
-            }
+        } catch (java.io.IOException failure) {
+            throw new eu.avalanche7.paradigm.storage.StorageException("Failed to save permissions.json", failure);
         }
     }
 
@@ -265,12 +268,16 @@ public class PermissionDataStore {
         public String prefix = "";
         public String suffix = "";
         public int weight = 0;
+        public String chatNameFormat = "";
+        public String chatMessageFormat = "";
         @SerializedName(value = "perms", alternate = {"permissions"})
         public List<String> permissions = new ArrayList<>();
         public List<PermissionRuleEntry> contextualPermissions = new ArrayList<>();
         public List<String> inherits = new ArrayList<>();
 
         public void normalize() {
+            chatNameFormat = chatNameFormat != null ? chatNameFormat : "";
+            chatMessageFormat = chatMessageFormat != null ? chatMessageFormat : "";
             if (description == null) {
                 description = "";
             }
@@ -297,6 +304,7 @@ public class PermissionDataStore {
     }
 
     public static class UserEntry {
+        public String displayGroup = "";
         @SerializedName(value = "perms", alternate = {"permissions"})
         public List<String> permissions = new ArrayList<>();
         public List<PermissionRuleEntry> contextualPermissions = new ArrayList<>();
@@ -304,6 +312,7 @@ public class PermissionDataStore {
         public List<GroupAssignmentEntry> contextualGroups = new ArrayList<>();
 
         public void normalize() {
+            displayGroup = displayGroup != null ? displayGroup.trim().toLowerCase(Locale.ROOT) : "";
             if (permissions == null) {
                 permissions = new ArrayList<>();
             }

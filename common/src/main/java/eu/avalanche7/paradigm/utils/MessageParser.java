@@ -58,6 +58,10 @@ public class MessageParser {
         return parseTagBasedMessage(rawMessage, player, baseStyle, ComponentSlots.none());
     }
 
+    public IComponent parseNested(String rawMessage, IPlayer player, Object baseStyle, ComponentSlots slots) {
+        return parseTagBasedMessage(rawMessage, player, baseStyle, slots);
+    }
+
     private IComponent parseTagBasedMessage(String rawMessage, IPlayer player, Object baseStyle, ComponentSlots slots) {
         String processedMessage = platformAdapter.replacePlaceholders(rawMessage, player);
         processedMessage = convertLegacyToNewFormat(processedMessage);

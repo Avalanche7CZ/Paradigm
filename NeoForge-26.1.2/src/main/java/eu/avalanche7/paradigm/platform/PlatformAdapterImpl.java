@@ -1209,7 +1209,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public boolean setPlayerListOrder(IPlayer player, int order) {
         if (!(player instanceof MinecraftPlayer mp) || server == null) return false;
-        ((ITablistPlayerAccess) mp.getHandle()).paradigm$setTablistOrder(order);
+        ((ITablistPlayerAccess) mp.getHandle()).paradigm$setTablistOrder(-order);
         server.getPlayerList().broadcastAll(new net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket(
                 java.util.EnumSet.of(net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Action.UPDATE_LIST_ORDER), java.util.List.of(mp.getHandle())));
         return true;

@@ -35,7 +35,8 @@ final class LuckPermsPublicApiBridge {
         groups.add(user.getPrimaryGroup());
         user.getInheritedGroups(user.getQueryOptions()).forEach(group -> groups.add(group.getName()));
         groups.removeIf(value -> value == null || value.isBlank());
+        var primary = api.getGroupManager().getGroup(user.getPrimaryGroup());
         return new PermissionAPI.PermissionMeta(user.getPrimaryGroup(), metadata.getPrefix(), metadata.getSuffix(),
-                List.copyOf(groups));
+                List.copyOf(groups), "", "", primary != null ? primary.getWeight().orElse(0) : 0);
     }
 }

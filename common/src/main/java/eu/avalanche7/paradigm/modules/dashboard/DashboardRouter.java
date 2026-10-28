@@ -255,6 +255,7 @@ public class DashboardRouter {
                 if ("POST".equals(method) && "/api/permissions/group/parent/remove".equals(path)) return permissions.mutate(ctx, "group_parent_remove");
                 if ("POST".equals(method) && "/api/permissions/user/permission/add".equals(path)) return permissions.mutate(ctx, "user_permission_add");
                 if ("POST".equals(method) && "/api/permissions/user/permission/remove".equals(path)) return permissions.mutate(ctx, "user_permission_remove");
+                if ("POST".equals(method) && "/api/permissions/user/display".equals(path)) return permissions.mutate(ctx, "user_display_group");
                 if ("POST".equals(method) && "/api/permissions/user/group/add".equals(path)) return permissions.mutate(ctx, "user_group_add");
                 if ("POST".equals(method) && "/api/permissions/user/group/remove".equals(path)) return permissions.mutate(ctx, "user_group_remove");
                 if ("POST".equals(method) && path.startsWith("/api/permissions/track/")) {

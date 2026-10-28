@@ -205,6 +205,8 @@ export function metadataPreview(initial: Obj, id: string, changes: Change[]) {
     description: string(initial.description),
     prefix: string(initial.prefix),
     suffix: string(initial.suffix),
+    chatNameFormat: string(initial.chatNameFormat),
+    chatMessageFormat: string(initial.chatMessageFormat),
     weight: String(Number(initial.weight) || 0),
   };
   for (const change of changes) {

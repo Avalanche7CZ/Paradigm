@@ -12,6 +12,13 @@ public final class ParadigmPermissions {
     private static final int EVERYONE = 0;
     private static final int EXPLICIT = PermissionDefinition.NO_VANILLA_FALLBACK;
 
+    public static final PermissionDefinition NICK = def("paradigm.nick", EVERYONE, "Set your own plain text nickname.");
+    public static final PermissionDefinition NICK_OTHERS = def("paradigm.nick.others", OP, "Manage other players' nicknames.");
+    public static final PermissionDefinition NICK_LOOKUP = def("paradigm.nick.lookup", OP, "Look up real identities behind nicknames.");
+
+    public static final PermissionDefinition RANK_DISPLAY =
+            def("paradigm.rank.display", EVERYONE, "Choose an active assigned group for presentation only.");
+
     public static final String HOME_LIMIT_PREFIX = "paradigm.home.limit.";
 
     public static final PermissionDefinition STAFF_CHAT =
@@ -308,7 +315,7 @@ public final class ParadigmPermissions {
 
     private static final List<PermissionDefinition> ALL = List.of(
             STAFF_CHAT, MENTION_EVERYONE, MENTION_PLAYER, RESTART_MANAGE, BROADCAST, GROUP_CHAT,
-            RELOAD, COMMAND_TOGGLE, HOLOGRAM_MANAGE, MENU_MANAGE, MENU_OPEN_OTHERS, STORAGE_MANAGE, TABLIST_MANAGE,
+            NICK, NICK_OTHERS, NICK_LOOKUP, RANK_DISPLAY, RELOAD, COMMAND_TOGGLE, HOLOGRAM_MANAGE, MENU_MANAGE, MENU_OPEN_OTHERS, STORAGE_MANAGE, TABLIST_MANAGE,
             GROUP_MANAGE, DISCORD_MANAGE,
             PRIVATE_MESSAGE, PRIVATE_REPLY, SOCIAL_SPY, SPAWN, SET_SPAWN, SEEN, IGNORE,
             AFK, PLAYTIME, PLAYTIME_OTHERS,

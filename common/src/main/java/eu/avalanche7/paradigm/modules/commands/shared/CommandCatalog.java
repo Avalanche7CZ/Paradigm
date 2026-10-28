@@ -98,6 +98,8 @@ public final class CommandCatalog {
             entry("enchant", true, false, true, "enchant"),
             entry("sudo", true, false, true, "sudo"),
             entry("near", true, false, true, "near"),
+            entry("nick", true, false, true, "nick"),
+            entry("realname", true, false, true, "realname"),
             entry("whois", true, false, true, "whois"),
             entry("top", true, false, true, "top"),
             entry("jump", true, false, true, "jump"),
@@ -171,6 +173,7 @@ public final class CommandCatalog {
         own(modules, "Sudo", "sudo");
         own(modules, "Near", "near");
         own(modules, "Whois", "whois");
+        own(modules, "Nickname", "nick", "realname");
         own(modules, "MovementUtility", "top", "jump");
         own(modules, "Tpa", "tpa", "tpahere", "tpaccept", "tpdeny", "tpcancel");
         own(modules, "Warp", "warp", "warps", "setwarp", "delwarp", "warpinfo");

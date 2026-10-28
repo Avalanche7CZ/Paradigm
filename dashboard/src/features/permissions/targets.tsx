@@ -192,6 +192,7 @@ export function TargetEditor({
                     Assign group
                   </button>
                 </div>
+                <DisplayGroup key={`display:${id}:${revision}`} id={id} row={row} />
                 <AssignmentTable
                   key={`membership:${id}:${revision}`}
                   rows={memberships}
@@ -232,6 +233,46 @@ export function TargetEditor({
     </AsyncBoundary>
   );
 }
+function DisplayGroup({ id, row }: { id: string; row: Obj }) {
+  const flow = useWorkflow();
+  const staged = flow.changes
+    .filter((c) => c.route === 'user/display' && c.body.user === id)
+    .at(-1);
+  const selected = staged ? string(staged.body.group) : string(row.displayGroup) || 'auto';
+  const available = array(row.availableDisplayGroups).map(string);
+  return (
+    <label class="field">
+      <span>Displayed group</span>
+      <select
+        value={selected}
+        disabled={!flow.editable}
+        onChange={(e) =>
+          flow.stage([
+            {
+              label: `Set displayed group for ${id} to ${e.currentTarget.value}`,
+              route: 'user/display',
+              body: { user: id, group: e.currentTarget.value },
+            },
+          ])
+        }
+      >
+        <option value="auto">Automatic (highest weight)</option>
+        {selected !== 'auto' && !available.includes(selected) && (
+          <option value={selected}>{selected} (unavailable; automatic fallback)</option>
+        )}
+        {available.map((g) => (
+          <option value={g}>{g}</option>
+        ))}
+      </select>
+      <small class="help">
+        Presentation only. Select an active directly assigned group or use automatic highest weight.
+        Ties use group name order. Unavailable selections fall back automatically. Online players
+        use their current world; offline players use server context.
+      </small>
+    </label>
+  );
+}
+
 function Inheritance({
   id,
   parents,
@@ -256,6 +297,10 @@ function Inheritance({
     <>
       <div class="permission-section-heading">
         <h3>Parent groups</h3>
+        <p class="help">
+          Inheritance grants permissions from parent groups. Promotion tracks do not create
+          inheritance.
+        </p>
         <div class="actions">
           <select
             aria-label="Parent group"
@@ -446,6 +491,18 @@ function Metadata({ id, initial }: { id: string; initial: Obj }) {
       setError('Weight must be a 32-bit whole number.');
       return;
     }
+    if (
+      values.chatNameFormat.trim() &&
+      !values.chatNameFormat.includes('{player_name}') &&
+      !values.chatNameFormat.includes('{player}')
+    ) {
+      setError('The username override must contain {player_name} or {player}.');
+      return;
+    }
+    if (values.chatMessageFormat.trim() && !values.chatMessageFormat.includes('{message}')) {
+      setError('The message override must contain {message}.');
+      return;
+    }
     if (Object.values(values).some((v) => v.length > 512)) {
       setError('Metadata values are limited to 512 characters.');
       return;
@@ -498,6 +555,11 @@ function Metadata({ id, initial }: { id: string; initial: Obj }) {
             />
           </label>
         </div>
+        <p class="help">
+          A group is a rank with permissions, weight, prefix, suffix and inheritance. Higher weight
+          wins automatic display selection and tablist sorting where supported. Equal weights use
+          group name order. A manual displayed-group choice affects presentation only.
+        </p>
         <div class="permission-format-fields">
           <FormatEditor
             label="Prefix (raw formatting)"
@@ -510,6 +572,22 @@ function Metadata({ id, initial }: { id: string; initial: Obj }) {
             change={(v) => change('suffix', v)}
           />
         </div>
+        <FormatEditor
+          label="Chat username override (empty uses global format; include {player_name})"
+          value={values.chatNameFormat}
+          change={(v) => change('chatNameFormat', v)}
+        />
+        <FormatPreview
+          text={values.chatNameFormat
+            .replaceAll('{player_name}', 'Player')
+            .replaceAll('{player}', 'Player')}
+        />
+        <FormatEditor
+          label="Chat message override (empty uses global format; include {message})"
+          value={values.chatMessageFormat}
+          change={(v) => change('chatMessageFormat', v)}
+        />
+        <FormatPreview text={values.chatMessageFormat.replaceAll('{message}', 'Example message')} />
         <h3>Combined formatting preview</h3>
         <FormatPreview text={`${values.prefix}Player${values.suffix}`} />
         <p class="help">

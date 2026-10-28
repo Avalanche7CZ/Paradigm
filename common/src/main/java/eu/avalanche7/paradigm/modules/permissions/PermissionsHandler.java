@@ -31,6 +31,7 @@ public class PermissionsHandler {
     private final CMConfig cmConfig;
     private final DebugLogger debugLogger;
     private final IPlatformAdapter platform;
+    private final PermissionContextResolver permissionContextResolver;
     private final StorageService storageService;
     private final Set<UUID> discoveryWarmedUsers = ConcurrentHashMap.newKeySet();
     private final PermissionAPI internalPermissionApi;
@@ -203,10 +204,12 @@ public class PermissionsHandler {
             this.internalPermissionApi.setPermissionRepository(storageService.permissions());
             this.internalPermissionApi.setAsyncPersistenceExecutor(storageService::runStorageAsync);
         }
-        this.internalPermissionApi.setContextResolver(new PermissionContextResolver(() ->
-                storageService != null && storageService.context() != null ? storageService.context().serverIdentity() : null));
+        this.permissionContextResolver = new PermissionContextResolver(() ->
+                storageService != null && storageService.context() != null ? storageService.context().serverIdentity() : null);
+        this.internalPermissionApi.setContextResolver(permissionContextResolver);
         this.permissionNodeRegistry = new PermissionNodeRegistry(logger, debugLogger, platform != null ? platform.getConfig() : null);
         Placeholders.setPermissionMetaResolver(this::resolvePermissionMeta);
+        Placeholders.setPlayerAdapter(platform != null ? platform::wrapPlayer : null);
     }
 
     public void initialize() {
@@ -794,10 +797,7 @@ public class PermissionsHandler {
     }
 
     private Placeholders.PermissionMeta resolvePermissionMeta(IPlayer player) {
-        if (!isInternalPermissionsEnabled()) {
-            return null;
-        }
-        PermissionAPI.PermissionMeta meta = internalPermissionApi.resolveMeta(player);
+        PermissionAPI.PermissionMeta meta = resolvePlayerMetadata(player);
         if (meta == null) {
             return null;
         }
@@ -810,8 +810,26 @@ public class PermissionsHandler {
     }
 
     public PermissionAPI.PermissionMeta resolvePlayerMetadata(IPlayer player) {
-        if (!isInternalPermissionsEnabled()) return null;
-        return internalPermissionApi.resolveMeta(player);
+        if (player == null) return null;
+        if (isInternalPermissionsEnabled()) return internalPermissionApi.resolveMeta(player);
+        return resolvePlayerMetadata(UUID.fromString(player.getUUID()));
+    }
+
+    public java.util.List<String> availableDisplayGroups(IPlayer player) {
+        return isInternalPermissionsEnabled() ? internalPermissionApi.availableDisplayGroups(player) : java.util.List.of();
+    }
+
+    public java.util.List<String> availableDisplayGroups(UUID uuid) {
+        IPlayer online = platform != null ? platform.getPlayerByUuid(uuid.toString()) : null;
+        return online != null ? availableDisplayGroups(online) : internalPermissionApi.availableDisplayGroups(uuid, permissionContextResolver.currentServer());
+    }
+
+    public String displayGroupPreference(UUID uuid) { return internalPermissionApi.displayGroupPreference(uuid); }
+
+    public boolean setDisplayGroup(UUID uuid, String group) {
+        if (!isInternalPermissionsEnabled()) return false;
+        IPlayer online = platform != null ? platform.getPlayerByUuid(uuid.toString()) : null;
+        return internalPermissionApi.setDisplayGroup(uuid, group, online != null ? permissionContextResolver.resolve(online) : permissionContextResolver.currentServer());
     }
 
     public long permissionsStateVersion() {
@@ -820,7 +838,10 @@ public class PermissionsHandler {
 
     public PermissionAPI.PermissionMeta resolvePlayerMetadata(UUID playerUuid) {
         if (playerUuid == null) return null;
-        if (isInternalPermissionsEnabled()) return internalPermissionApi.resolveMeta(playerUuid);
+        if (isInternalPermissionsEnabled()) {
+            IPlayer online = platform != null ? platform.getPlayerByUuid(playerUuid.toString()) : null;
+            return online != null ? internalPermissionApi.resolveMeta(online) : internalPermissionApi.resolveMeta(playerUuid);
+        }
         if (!isLuckPermsAvailable()) return null;
         try {
             return LuckPermsPublicApiBridge.metadata(playerUuid);

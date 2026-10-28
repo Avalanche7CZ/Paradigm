@@ -1083,6 +1083,9 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public boolean supportsPlayerListNicknames() { return false; }
+
+    @Override
     public boolean setPlayerListDisplayName(IPlayer player, IComponent displayName) {
         EntityPlayerMP handle = operationPlayer(player);
         if (handle == null || visuals == null || Thread.currentThread() != serverThread) return false;

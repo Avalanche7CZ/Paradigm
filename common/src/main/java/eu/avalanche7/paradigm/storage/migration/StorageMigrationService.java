@@ -105,6 +105,9 @@ public class StorageMigrationService {
                         () -> target.players().addIgnoredPlayer(profile.uuid(), ignored));
             }
         }
+        source.players().nicknames().forEach((uuid, nickname) -> transfer(counter, "nickname " + uuid,
+                () -> target.players().nicknames().containsKey(uuid),
+                () -> target.players().setNickname(uuid, nickname)));
     }
 
     private void copyWarps(StorageProvider source, StorageProvider target, Counter counter) {

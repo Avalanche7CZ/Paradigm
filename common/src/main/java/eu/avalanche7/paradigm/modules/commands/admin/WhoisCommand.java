@@ -36,6 +36,8 @@ public class WhoisCommand extends AbstractAdminCommand {
             return 0;
         }
         send(source, "admin.whois_header", "Whois: {player}", "{player}", target.getName());
+        String nickname = services.getNicknameService().nickname(target.getUUID());
+        if (!nickname.isEmpty()) send(source, "admin.whois_nickname", "Nickname: {nickname}", "{nickname}", nickname);
         send(source, "admin.whois_uuid", "UUID: {uuid}", "{uuid}", target.getUUID() != null ? target.getUUID() : "unknown");
         send(source, "admin.whois_world", "World: {world}", "{world}", target.getWorldId() != null ? target.getWorldId() : "unknown");
         send(source, "admin.whois_pos", "Position: {x}, {y}, {z}",

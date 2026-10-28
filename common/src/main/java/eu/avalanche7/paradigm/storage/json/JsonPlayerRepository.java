@@ -26,6 +26,10 @@ public class JsonPlayerRepository implements PlayerRepository {
         this.serverId = serverId;
     }
 
+    @Override public java.util.Map<String, String> nicknames() { return store.nicknames(); }
+    @Override public String nickname(String uuid) { return store.nickname(uuid); }
+    @Override public void setNickname(String uuid, String nickname) { store.setNickname(uuid, nickname); }
+
     @Override public String playtimeServerId() { return serverId; }
 
     @Override public StoredPlayerProfileState recordPlaytime(StoredPlayerProfile update, String server, String writer, long cumulative) {

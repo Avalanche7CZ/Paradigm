@@ -135,6 +135,7 @@ public final class ParadigmModules {
         modules.add(new SudoCommand());
         modules.add(new NearCommand());
         modules.add(new WhoisCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.admin.NicknameCommands());
         modules.add(new MovementUtilityCommand());
         modules.add(new TicketsModule());
         modules.add(new LocalDashboardModule());

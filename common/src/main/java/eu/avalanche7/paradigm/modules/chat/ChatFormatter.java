@@ -3,10 +3,12 @@ package eu.avalanche7.paradigm.modules.chat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BiPredicate;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.permissions.PermissionAPI;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
@@ -24,10 +26,19 @@ public final class ChatFormatter {
     private final Supplier<IPlatformAdapter> platformSupplier;
     private final BiPredicate<IPlayer, String> permissions;
     private volatile Template template;
+    private Function<IPlayer, PermissionAPI.PermissionMeta> metadata = player -> null;
 
     public ChatFormatter(Services services) {
         this(services::getChatConfig, services::getMessageParser, services::getPlatformAdapter,
                 (player, permission) -> services.getPermissionsHandler().hasPermission(player, permission));
+        metadata = services.getPermissionsHandler()::resolvePlayerMetadata;
+    }
+
+    ChatFormatter(Supplier<ChatConfigHandler.Config> configSupplier, Supplier<MessageParser> parserSupplier,
+                  Supplier<IPlatformAdapter> platformSupplier, BiPredicate<IPlayer, String> permissions,
+                  Function<IPlayer, PermissionAPI.PermissionMeta> metadata) {
+        this(configSupplier, parserSupplier, platformSupplier, permissions);
+        this.metadata = metadata;
     }
 
     ChatFormatter(Supplier<ChatConfigHandler.Config> configSupplier, Supplier<MessageParser> parserSupplier,
@@ -51,25 +62,34 @@ public final class ChatFormatter {
         Template compiled = template(config);
         MessageParser parser = parserSupplier.get();
 
-        ComponentSlots slots = ComponentSlots.none();
-        if (sender != null && compiled.interactive()) {
-            ComponentSlot name = style -> renderName(sender, style, compiled);
-            slots = ComponentSlots.builder()
-                    .add(NAME_TOKEN, name)
-                    .add(SHORT_NAME_TOKEN, name)
-                    .build();
+        var meta = metadata.apply(sender);
+        String nameFormat = meta != null ? meta.chatNameFormat() : "";
+        String messageFormat = meta != null ? meta.chatMessageFormat() : "";
+        if (nameFormat == null || nameFormat.isBlank()) nameFormat = compiled.nameFormat();
+        final String selectedNameFormat = nameFormat;
+        ComponentSlots.Builder builder = ComponentSlots.builder();
+        if (sender != null) {
+            ComponentSlot name = style -> renderName(sender, style, compiled, selectedNameFormat);
+            builder.add(NAME_TOKEN, name).add(SHORT_NAME_TOKEN, name).add("{display_name}", name);
         }
 
-        String marked = slots.mark(chatFormat);
-        String withMessage = marked.replace("{message}", escapeTags(message));
-        return parser.parseMessage(withMessage, sender, slots);
+        ComponentSlot literalMessage = style -> parser.parseNested(escapeTags(message), sender, style);
+        if (messageFormat != null && !messageFormat.isBlank()) {
+            final String selectedMessageFormat = messageFormat;
+            ComponentSlots messageSlots = ComponentSlots.builder().add("{message}", literalMessage).build();
+            builder.add("{message}", style -> parser.parseNested(messageSlots.mark(selectedMessageFormat), sender, style, messageSlots));
+        } else {
+            builder.add("{message}", literalMessage);
+        }
+        ComponentSlots slots = builder.build();
+        return parser.parseMessage(slots.mark(chatFormat), sender, slots);
     }
 
     static String escapeTags(String message) {
         return ComponentSlots.strip(message).replace("\\", "\\\\").replace("<", "\\<");
     }
 
-    private IComponent renderName(IPlayer sender, Object surroundingStyle, Template compiled) {
+    private IComponent renderName(IPlayer sender, Object surroundingStyle, Template compiled, String nameFormat) {
         IPlatformAdapter platform = platformSupplier.get();
         MessageParser parser = parserSupplier.get();
         Object style = surroundingStyle;
@@ -86,7 +106,7 @@ public final class ChatFormatter {
             style = platform.createStyleWithClickEvent(style, click.type().platformAction(), command);
         }
 
-        return parser.parseNested(compiled.nameFormat(), sender, style);
+        return parser.parseNested(eu.avalanche7.paradigm.utils.Placeholders.presentationName(nameFormat, platform.replacePlaceholders("{display_name}", sender)), sender, style);
     }
 
     private IComponent renderHover(List<String> lines, IPlayer sender, MessageParser parser, IPlatformAdapter platform) {

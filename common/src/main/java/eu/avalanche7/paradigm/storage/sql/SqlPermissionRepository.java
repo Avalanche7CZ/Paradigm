@@ -180,6 +180,8 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
         if (first == null || second == null) return first == second;
         return first.name().equals(second.name()) && java.util.Objects.equals(first.description(), second.description())
                 && java.util.Objects.equals(first.prefix(), second.prefix()) && java.util.Objects.equals(first.suffix(), second.suffix())
+                && java.util.Objects.equals(first.chatNameFormat(), second.chatNameFormat())
+                && java.util.Objects.equals(first.chatMessageFormat(), second.chatMessageFormat())
                 && first.weight() == second.weight() && new java.util.HashSet<>(first.parents()).equals(new java.util.HashSet<>(second.parents()))
                 && new java.util.HashSet<>(first.permissions()).equals(new java.util.HashSet<>(second.permissions()));
     }
@@ -211,7 +213,7 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
                     rs.getString("suffix"),
                     rs.getInt("weight"),
                     groupParents(name),
-                    groupPermissions(name, includeExpired)
+                    groupPermissions(name, includeExpired), rs.getString("chat_name_format"), rs.getString("chat_message_format")
             ));
         });
     }
@@ -224,12 +226,14 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
             sql.update("DELETE FROM permission_group_parents WHERE group_name = ?", ps -> ps.setString(1, group.name()));
             sql.update("DELETE FROM permission_group_permissions WHERE group_name = ?", ps -> ps.setString(1, group.name()));
             sql.update("DELETE FROM permission_groups WHERE name = ?", ps -> ps.setString(1, group.name()));
-            sql.update("INSERT INTO permission_groups(name, description, prefix, suffix, weight) VALUES(?, ?, ?, ?, ?)", ps -> {
+            sql.update("INSERT INTO permission_groups(name, description, prefix, suffix, weight, chat_name_format, chat_message_format) VALUES(?, ?, ?, ?, ?, ?, ?)", ps -> {
                 ps.setString(1, group.name());
                 ps.setString(2, group.description());
                 ps.setString(3, group.prefix());
                 ps.setString(4, group.suffix());
                 ps.setInt(5, group.weight());
+                ps.setString(6, group.chatNameFormat());
+                ps.setString(7, group.chatMessageFormat());
             });
             for (String parent : group.parents()) addGroupParent(group.name(), parent);
             for (StoredPermissionNode node : group.permissions()) addGroupPermission(group.name(), node);
@@ -422,10 +426,11 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
     @Override
     public Optional<StoredUserPermissionData> getUser(String uuid) {
         String normalizedUuid = normalize(uuid);
-        String[] storedName = new String[1];
-        boolean exists = sql.query("SELECT name FROM permission_users WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid), rs -> {
+        String[] storedName = new String[2];
+        boolean exists = sql.query("SELECT name, display_group FROM permission_users WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid), rs -> {
             if (!rs.next()) return false;
             storedName[0] = rs.getString("name");
+            storedName[1] = rs.getString("display_group");
             return true;
         });
         if (!exists) {
@@ -454,7 +459,7 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
             }
             return result;
         });
-        return Optional.of(new StoredUserPermissionData(normalizedUuid, storedName[0] != null ? storedName[0] : "", groups, permissions));
+        return Optional.of(new StoredUserPermissionData(normalizedUuid, storedName[0] != null ? storedName[0] : "", groups, permissions, storedName[1]));
     }
 
     @Override
@@ -464,9 +469,10 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
         permissionTransaction(() -> {
             userChanged(normalizedUuid);
             sql.update("DELETE FROM permission_users WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid));
-            sql.update("INSERT INTO permission_users(uuid, name) VALUES(?, ?)", ps -> {
+            sql.update("INSERT INTO permission_users(uuid, name, display_group) VALUES(?, ?, ?)", ps -> {
                 ps.setString(1, normalizedUuid);
                 ps.setString(2, user.name());
+                ps.setString(3, user.displayGroup());
             });
             sql.update("DELETE FROM permission_user_groups WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid));
             sql.update("DELETE FROM permission_user_permissions WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid));
@@ -482,6 +488,9 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
         permissionTransaction(() -> {
             userChanged(uuid);
             ensurePermissionUser(uuid);
+            if (previous == null || !java.util.Objects.equals(previous.displayGroup(), desired.displayGroup()))
+                sql.update("UPDATE permission_users SET display_group = ? WHERE uuid = ?",
+                        ps -> { ps.setString(1, desired.displayGroup()); ps.setString(2, uuid); });
             if (previous != null) {
                 for (var group : previous.groups()) {
                     if (!desired.groups().contains(group)) sql.update("DELETE FROM permission_user_groups WHERE uuid = ? AND assignment_id = ?",
@@ -545,7 +554,7 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
             for (var existing : getUser(user.uuid()).orElseThrow().groups())
                 if (existing.contextSet().isEmpty() && existing.expiresAtMs() == null && !knownGroups.contains(existing.groupName()) && !desired.contains(existing.groupName()))
                     groups.add(existing);
-            saveUser(new StoredUserPermissionData(user.uuid(), user.name(), groups, user.permissions()));
+            saveUser(new StoredUserPermissionData(user.uuid(), user.name(), groups, user.permissions(), user.displayGroup()));
         });
     }
 
