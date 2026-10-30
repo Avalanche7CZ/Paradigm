@@ -121,7 +121,7 @@ public class PermissionDataStore {
         }
 
         public void normalize() {
-            if (defaultGroup == null || defaultGroup.isBlank()) {
+            if (defaultGroup == null) {
                 defaultGroup = "default";
             }
             defaultGroup = defaultGroup.trim().toLowerCase(Locale.ROOT);
@@ -178,15 +178,6 @@ public class PermissionDataStore {
                 normalizedTracks.put(track, members);
             }
             tracks = normalizedTracks;
-
-            String defaultKey = defaultGroup.toLowerCase(Locale.ROOT);
-            if (!groups.containsKey(defaultKey)) {
-                groups.put(defaultKey, createBuiltInDefaultGroupEntry());
-            }
-
-            if (!groups.containsKey("admin")) {
-                groups.put("admin", createBuiltInAdminGroupEntry());
-            }
         }
 
         private static GroupEntry createBuiltInDefaultGroupEntry() {

@@ -19,10 +19,24 @@ public abstract class MenuNetworkMixin {
 
     @Inject(method = "processClickWindow", at = @At("HEAD"), cancellable = true)
     private void paradigm$transaction(C0EPacketClickWindow packet, CallbackInfo callback) {
+        if (playerEntity.openContainer instanceof ParadigmMenuContainer preview && preview.inventoryPreview()
+                && preview.windowId == packet.func_149548_c()) {
+            preview.blockPreviewClick(packet.func_149547_f());
+            callback.cancel();
+            return;
+        }
         if (playerEntity.openContainer instanceof ParadigmMenuContainer menu
                 && menu.windowId == packet.func_149548_c() && menu.isPlayerNotUsingContainer(playerEntity)
                 && !menu.acceptTransaction(packet.func_149547_f())) {
             playerEntity.playerNetServerHandler.sendPacket(new S32PacketConfirmTransaction(menu.windowId, packet.func_149547_f(), false));
+            callback.cancel();
+        }
+    }
+
+    @Inject(method = "processCreativeInventoryAction", at = @At("HEAD"), cancellable = true)
+    private void paradigm$creative(net.minecraft.network.play.client.C10PacketCreativeInventoryAction packet, CallbackInfo callback) {
+        if (playerEntity.openContainer instanceof ParadigmMenuContainer preview && preview.inventoryPreview()) {
+            preview.syncPreview();
             callback.cancel();
         }
     }

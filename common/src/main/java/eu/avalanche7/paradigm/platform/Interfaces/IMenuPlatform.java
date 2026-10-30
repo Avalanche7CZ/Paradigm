@@ -37,6 +37,9 @@ public interface IMenuPlatform {
     }
 
     interface Handle {
+        /** Copy live native inventory stacks into this read-only menu. Server thread only. */
+        default boolean refreshInventory(IPlayer target, boolean enderChest) { return false; }
+
         void setItem(int slot, @Nullable ItemSpec spec);
 
         void setItems(Map<Integer, ItemSpec> items);

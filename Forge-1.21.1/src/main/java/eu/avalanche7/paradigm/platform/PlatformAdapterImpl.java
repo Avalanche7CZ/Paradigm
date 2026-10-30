@@ -1239,9 +1239,24 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public boolean setPlayerListDisplayName(IPlayer player, @Nullable IComponent value) {
-        if (!(player instanceof MinecraftPlayer mp)) return false;
+        if (!(player instanceof MinecraftPlayer mp) || server == null) return false;
         ((ITablistPlayerAccess) mp.getHandle()).paradigm$setTablistDisplayName(value instanceof MinecraftComponent c ? c.getHandle() : null);
-        mp.getHandle().refreshTabListName();
+        server.getPlayerList().broadcastAll(new net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket(
+                java.util.EnumSet.of(net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Action.UPDATE_DISPLAY_NAME), java.util.List.of(mp.getHandle())));
+        return true;
+    }
+
+    @Override public boolean setPlayerListOrder(List<IPlayer> sortedPlayers) {
+        return eu.avalanche7.paradigm.modules.tab.Tablist.applyTeamOrder(this, sortedPlayers);
+    }
+    @Override public boolean hasPlayerListTeam(IPlayer player) { return player instanceof MinecraftPlayer mp && mp.getHandle().getTeam() != null; }
+    @Override public boolean sendPlayerListOrderTeam(IPlayer viewer, String name, String subject, boolean create) {
+        if (!(viewer instanceof MinecraftPlayer mp) || server == null) return false;
+        var team = new net.minecraft.world.scores.PlayerTeam(new net.minecraft.world.scores.Scoreboard(), name);
+        team.getPlayers().add(subject);
+        mp.getHandle().connection.send(create
+                ? net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket.createAddOrModifyPacket(team, true)
+                : net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket.createRemovePacket(team));
         return true;
     }
 

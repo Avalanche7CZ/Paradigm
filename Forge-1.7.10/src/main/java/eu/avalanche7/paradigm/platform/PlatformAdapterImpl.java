@@ -1093,8 +1093,20 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public boolean setPlayerListOrder(List<IPlayer> sortedPlayers) {
+        if (visuals == null || Thread.currentThread() != serverThread) return false;
+        var players = new java.util.ArrayList<EntityPlayerMP>();
+        for (IPlayer player : sortedPlayers) {
+            EntityPlayerMP handle = operationPlayer(player);
+            if (handle == null) return false;
+            players.add(handle);
+        }
+        return visuals.tablist().order(players);
+    }
+
+    @Override
     public void resetPlayerListState(IPlayer player) {
-        executeOnServerThread(() -> { if (visuals != null && operationPlayer(player) != null) visuals.tablist().reset(operationPlayer(player)); });
+        executeOnServerThread(() -> { if (visuals != null && operationPlayer(player) != null) { visuals.tablist().reset(operationPlayer(player)); visuals.tablist().resetOrder(); } });
     }
 
     public void playerRespawned(EntityPlayerMP replacement) {

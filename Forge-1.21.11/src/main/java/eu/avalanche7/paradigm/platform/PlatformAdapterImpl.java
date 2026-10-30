@@ -1319,9 +1319,10 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public boolean setPlayerListDisplayName(IPlayer player, @Nullable IComponent value) {
-        if (!(player instanceof MinecraftPlayer mp)) return false;
+        if (!(player instanceof MinecraftPlayer mp) || server == null) return false;
         ((ITablistPlayerAccess) mp.getHandle()).paradigm$setTablistDisplayName(value instanceof MinecraftComponent c ? c.getHandle() : null);
-        mp.getHandle().refreshTabListName();
+        server.getPlayerList().broadcastAll(new net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket(
+                java.util.EnumSet.of(net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket.Action.UPDATE_DISPLAY_NAME), java.util.List.of(mp.getHandle())));
         return true;
     }
 

@@ -1214,6 +1214,20 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         return true;
     }
 
+    @Override public boolean setPlayerListOrder(List<IPlayer> sortedPlayers) {
+        return eu.avalanche7.paradigm.modules.tab.Tablist.applyTeamOrder(this, sortedPlayers);
+    }
+    @Override public boolean hasPlayerListTeam(IPlayer player) { return player instanceof MinecraftPlayer mp && mp.getHandle().getScoreboardTeam() != null; }
+    @Override public boolean sendPlayerListOrderTeam(IPlayer viewer, String name, String subject, boolean create) {
+        if (!(viewer instanceof MinecraftPlayer mp) || server == null) return false;
+        var team = new net.minecraft.scoreboard.Team(new net.minecraft.scoreboard.Scoreboard(), name);
+        team.getPlayerList().add(subject);
+        mp.getHandle().networkHandler.sendPacket(create
+                ? net.minecraft.network.packet.s2c.play.TeamS2CPacket.updateTeam(team, true)
+                : net.minecraft.network.packet.s2c.play.TeamS2CPacket.updateRemovedTeam(team));
+        return true;
+    }
+
     @Override public boolean setPlayerListOrder(IPlayer player, int order) { return false; }
     @Override public int getPlayerPing(IPlayer player) { return player instanceof MinecraftPlayer mp ? Math.max(0, mp.getHandle().pingMilliseconds) : 0; }
     @Override public int getMaxPlayers() { return server != null ? server.getPlayerManager().getMaxPlayerCount() : 0; }

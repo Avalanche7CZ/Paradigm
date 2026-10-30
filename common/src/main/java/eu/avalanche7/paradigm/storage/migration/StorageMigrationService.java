@@ -196,6 +196,7 @@ public class StorageMigrationService {
     }
 
     private void copyPermissions(StorageProvider source, StorageProvider target, Counter counter) {
+        boolean existingDefinitions = !target.permissions().listGroups().isEmpty();
         for (StoredPermissionGroup group : source.permissions().listGroups()) {
             if (group == null || group.name() == null || group.name().isBlank()) {
                 counter.skipped++;
@@ -207,6 +208,8 @@ public class StorageMigrationService {
                 counter.permissionGroups++;
             }
         }
+        transfer(counter, "default permission group", () -> existingDefinitions,
+                () -> target.permissions().setDefaultGroup(source.permissions().definitions().defaultGroup()));
         for (StoredPermissionTrack track : source.permissions().listTracks()) {
             if (track == null || track.name() == null || track.name().isBlank()) {
                 counter.skipped++;

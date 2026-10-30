@@ -14,6 +14,7 @@ import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.nbt.NBTTagList;
 import net.minecraft.nbt.NBTTagString;
 
+import eu.avalanche7.paradigm.modules.commands.admin.InventoryInspectionLayout;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IMenuPlatform;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
@@ -34,6 +35,8 @@ public final class MinecraftMenuPlatform implements IMenuPlatform {
         apply(inventory, items);
         restoreWindowCounter(nativePlayer);
         nativePlayer.displayGUIChest(inventory);
+        if (!(nativePlayer.openContainer instanceof net.minecraft.inventory.ContainerChest chest)
+                || chest.getLowerChestInventory() != inventory) return null;
         lastWindowIds.put(nativePlayer.getUniqueID(), nativePlayer.currentWindowId);
         ParadigmMenuContainer menu = new ParadigmMenuContainer(nativePlayer, inventory, listener,
                 () -> open.remove(nativePlayer.getUniqueID()));
@@ -42,6 +45,23 @@ public final class MinecraftMenuPlatform implements IMenuPlatform {
         open.put(nativePlayer.getUniqueID(), menu);
         menu.addCraftingToCrafters(nativePlayer);
         return new Handle() {
+            @Override public boolean refreshInventory(IPlayer target, boolean enderChest) {
+                if (!isOpen() || !(target.getOriginalPlayer() instanceof EntityPlayerMP nativeTarget)) return false;
+                menu.setInventoryPreview();
+                for (int slot = 0; slot < size; slot++) {
+                    int source = InventoryInspectionLayout.sourceSlot(slot, enderChest, false);
+                    if (source < 0) continue;
+                    ItemStack original = enderChest ? nativeTarget.getInventoryEnderChest().getStackInSlot(source)
+                            : nativeTarget.inventory.getStackInSlot(source);
+                    ItemStack copy = original != null ? original.copy() : null;
+                    if (!ItemStack.areItemStacksEqual(inventory.getStackInSlot(slot), copy)) {
+                        inventory.setInventorySlotContents(slot, copy);
+                        if (copy != null) copy.stackSize = original.stackSize;
+                    }
+                }
+                menu.detectAndSendChanges();
+                return true;
+            }
             @Override public void setItem(int slot, ItemSpec spec) {
                 adapter.executeOnServerThread(() -> {
                     if (isOpen() && slot >= 0 && slot < size) {

@@ -165,6 +165,10 @@ public interface IPlatformAdapter {
         return false;
     }
 
+    default boolean setPlayerListOrder(List<IPlayer> sortedPlayers) { return false; }
+    default boolean hasPlayerListTeam(IPlayer player) { return true; }
+    default boolean sendPlayerListOrderTeam(IPlayer viewer, String team, String subject, boolean create) { return false; }
+
     default int getPlayerPing(IPlayer player) {
         return 0;
     }

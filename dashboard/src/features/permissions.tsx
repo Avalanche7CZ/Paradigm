@@ -169,9 +169,11 @@ export function Permissions() {
           if (result.applied !== true)
             throw new Error(string(result.message) || 'The backend did not apply this operation.');
           applied++;
-          if (change.route === 'track/rename')
+          if (change.route === 'track/rename' || change.route === 'group/rename')
             setSelected((current) =>
-              current === change.body.track ? string(change.body.target) : current,
+              current === (change.body.track || change.body.group)
+                ? string(change.body.target)
+                : current,
             );
           if (change.route === 'track/delete' || change.route === 'group/delete')
             setSelected((current) =>

@@ -34,6 +34,8 @@ public final class Tablist implements ParadigmModule {
     private volatile ScheduledFuture<?> pendingImmediateRefresh;
     private TablistMetadataProvider resolver;
     private boolean active;
+    private final TablistTeamOrder teamOrder = new TablistTeamOrder();
+    private boolean orderApplied;
 
     public Tablist() {
         this.metadataProvider = null;
@@ -98,6 +100,7 @@ public final class Tablist implements ParadigmModule {
                 String uuid = player != null ? player.getUUID() : null;
                 if (uuid != null) {
                     snapshots.remove(uuid);
+                    teamOrder.disconnected(uuid);
                     if (resolver instanceof TablistMetadataResolver r) r.invalidate(uuid);
                 }
                 scheduleRefresh(0);
@@ -113,6 +116,17 @@ public final class Tablist implements ParadigmModule {
         } else {
             stop(true);
         }
+    }
+
+    public static boolean applyTeamOrder(eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter platform, List<IPlayer> sorted) {
+        Tablist instance = current;
+        return instance != null && instance.active && instance.teamOrder.apply(sorted, platform,
+                (viewer, subject) -> instance.services.getVanishService().canSee(viewer, subject));
+    }
+
+    public static void observeSortingTeam(IPlayer viewer, String team, int mode, java.util.Collection<String> members) {
+        Tablist instance = current;
+        if (instance != null && instance.services != null) instance.teamOrder.observe(instance.services.getPlatformAdapter(), viewer, team, mode, members);
     }
 
     public static Tablist current() {
@@ -138,6 +152,9 @@ public final class Tablist implements ParadigmModule {
             online.add(entry.uuid());
             apply(entry, config.resolve(entry.worldId()), orders.getOrDefault(entry.uuid(), 0), (int) players.stream().filter(target -> services.getVanishService().canSee(entry.player(), target)).count());
         }
+        boolean batchApplied = services.getPlatformAdapter().setPlayerListOrder(sorted.stream().map(TablistEntry::player).toList());
+        orderApplied = batchApplied || sorted.stream().allMatch(entry -> snapshots.get(entry.uuid()) != null
+                && snapshots.get(entry.uuid()).order() == orders.get(entry.uuid()));
         snapshots.keySet().removeIf(uuid -> !online.contains(uuid));
     }
 
@@ -183,6 +200,7 @@ public final class Tablist implements ParadigmModule {
         resolver = null;
         snapshots.clear();
         if (resetPlayers && services != null) {
+            teamOrder.clear(services.getPlatformAdapter(), services.getPlatformAdapter().getOnlinePlayers());
             for (IPlayer player : services.getPlatformAdapter().getOnlinePlayers()) {
                 services.getPlatformAdapter().resetPlayerListState(player);
             }
@@ -225,6 +243,7 @@ public final class Tablist implements ParadigmModule {
 
     private int status(ICommandSource source, Services services) {
         TablistConfigHandler.Config config = TablistConfigHandler.getConfig();
+        send(source, services, "tablist.status.order_applied", "Last ordering update fully applied: {state}", "{state}", String.valueOf(orderApplied));
         send(source, services, "tablist.status.enabled", "Enabled: {state}", "{state}", String.valueOf(active));
         send(source, services, "tablist.status.viewers", "Online viewers: {count}", "{count}", String.valueOf(onlineViewerCount()));
         send(source, services, "tablist.status.overrides", "Configured world overrides: {count}",
@@ -276,6 +295,11 @@ public final class Tablist implements ParadigmModule {
         String header = TablistPlaceholderResolver.expand(String.join("\n", config.header()), entry, onlineCount, maxPlayers, identity, false);
         String footer = TablistPlaceholderResolver.expand(String.join("\n", config.footer()), entry, onlineCount, maxPlayers, identity, false);
         String name = TablistPlaceholderResolver.expand(config.playerFormat(), entry, onlineCount, maxPlayers, identity, config.showPing());
+        String prefixColor = services.getMessageParser().trailingColor(entry.metadata().prefix(), entry.player());
+        if (prefixColor != null) {
+            name = eu.avalanche7.paradigm.utils.Placeholders.presentationName(name,
+                    "<color:" + prefixColor + ">{player_name}</color>");
+        }
         if (services.getPlatformAdapter().supportsPlayerListNicknames()) {
             name = eu.avalanche7.paradigm.utils.Placeholders.presentationName(name, services.getNicknameService().displayName(entry.player()));
         } else {

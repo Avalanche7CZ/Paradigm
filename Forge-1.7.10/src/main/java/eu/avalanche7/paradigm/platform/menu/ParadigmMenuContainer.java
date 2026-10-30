@@ -19,6 +19,7 @@ public final class ParadigmMenuContainer extends ContainerChest {
     private boolean hasTransaction;
     private short lastTransaction;
     private boolean closed;
+    private boolean inventoryPreview;
     private int pendingSlot = -1;
     private IMenuPlatform.ClickKind pendingKind = IMenuPlatform.ClickKind.OTHER;
 
@@ -31,6 +32,19 @@ public final class ParadigmMenuContainer extends ContainerChest {
     }
 
     public EntityPlayerMP owner() { return owner; }
+    public void setInventoryPreview() { inventoryPreview = true; }
+    public boolean inventoryPreview() { return inventoryPreview; }
+
+    public void syncPreview() {
+        owner.sendContainerToPlayer(this);
+        owner.playerNetServerHandler.sendPacket(new S2FPacketSetSlot(-1, -1, owner.inventory.getItemStack()));
+    }
+
+    public void blockPreviewClick(short transaction) {
+        acceptTransaction(transaction);
+        owner.playerNetServerHandler.sendPacket(new net.minecraft.network.play.server.S32PacketConfirmTransaction(windowId, transaction, true));
+        syncPreview();
+    }
     public boolean active(EntityPlayer player) { return !closed && player == owner && player.openContainer == this; }
 
     public boolean acceptTransaction(short transaction) {
@@ -47,7 +61,7 @@ public final class ParadigmMenuContainer extends ContainerChest {
         if (!active(player)) return null;
         resync(slot, mode);
         IMenuPlatform.ClickKind kind = mapClick(mode, button);
-        if (slot >= 0 && slot < menuSlots && kind != IMenuPlatform.ClickKind.OTHER && kind != IMenuPlatform.ClickKind.DRAG) {
+        if (!inventoryPreview && slot >= 0 && slot < menuSlots && kind != IMenuPlatform.ClickKind.OTHER && kind != IMenuPlatform.ClickKind.DRAG) {
             pendingSlot = slot;
             pendingKind = kind;
         }

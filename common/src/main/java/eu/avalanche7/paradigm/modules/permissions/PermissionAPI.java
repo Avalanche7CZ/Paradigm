@@ -461,6 +461,67 @@ public class PermissionAPI {
         }
     }
 
+    public boolean renameGroup(String groupName, String targetName) {
+        String source = normalizeGroupName(groupName);
+        String target = normalizeGroupName(targetName);
+        if (source == null || target == null || source.equals(target)) return false;
+        stateLock.writeLock().lock();
+        try {
+            if (!state.groups.containsKey(source) || state.groups.containsKey(target)) return false;
+            if (permissionRepository != null) {
+                saveLocked(true);
+                boolean changed = permissionRepository.renameGroup(source, target, groupVersions.getOrDefault(source, 0L));
+                if (changed) reload();
+                return changed;
+            }
+            migrateTemporaryGroupAssignments(source);
+            var moved = state.groups.remove(source);
+            for (String rule : new ArrayList<>(moved.permissions)) {
+                boolean denied = rule.startsWith("-");
+                String node = denied ? rule.substring(1) : rule;
+                String id = PermissionAssignmentId.deterministic("GROUP_PERMISSION", source, node, denied, PermissionContextSet.empty(), null, "legacy");
+                moved.contextualPermissions.add(new PermissionDataStore.PermissionRuleEntry(id, node, denied, PermissionContextSet.empty(), null));
+            }
+            moved.permissions.clear();
+            state.groups.put(target, moved);
+            if (source.equals(state.defaultGroup)) state.defaultGroup = target;
+            for (var group : state.groups.values()) group.inherits.replaceAll(parent -> source.equals(parent) ? target : parent);
+            for (var track : state.tracks.values()) track.replaceAll(group -> source.equals(group) ? target : group);
+            for (var entry : state.users.entrySet()) {
+                var user = entry.getValue();
+                if (user.groups.remove(source)) {
+                    String id = PermissionAssignmentId.deterministic("USER_GROUP", entry.getKey(), source, false, PermissionContextSet.empty(), null, "legacy");
+                    user.contextualGroups.add(new PermissionDataStore.GroupAssignmentEntry(id, target, PermissionContextSet.empty(), null, 0L, "legacy"));
+                }
+                for (var assignment : user.contextualGroups) if (source.equals(assignment.group)) assignment.group = target;
+                if (source.equals(user.displayGroup)) user.displayGroup = target;
+            }
+            saveLocked(true);
+            return true;
+        } finally { stateLock.writeLock().unlock(); }
+    }
+
+    private void migrateTemporaryGroupAssignments(String group) {
+        if (permissionRepository != null || playerDataStore == null) return;
+        var affected = new ArrayList<String>();
+        for (var player : playerDataStore.listPlayerEntries()) {
+            String uuid = player.getUuid();
+            for (var temp : player.getTempGroups()) {
+                if (!group.equals(temp.getGroup())) continue;
+                var user = state.users.computeIfAbsent(uuid, ignored -> new PermissionDataStore.UserEntry());
+                user.normalize();
+                String author = temp.getAssignedBy() != null ? temp.getAssignedBy() : "";
+                String id = PermissionAssignmentId.deterministic("USER_GROUP", uuid, group, false, PermissionContextSet.empty(), temp.getExpiresAtMs(), author + "@" + temp.getAssignedAtMs());
+                if (user.contextualGroups.stream().noneMatch(existing -> id.equals(existing.assignmentId)))
+                    user.contextualGroups.add(new PermissionDataStore.GroupAssignmentEntry(id, group, PermissionContextSet.empty(), temp.getExpiresAtMs(), temp.getAssignedAtMs(), author));
+                affected.add(uuid);
+            }
+        }
+        if (affected.isEmpty()) return;
+        saveLocked(true);
+        for (String uuid : affected) playerDataStore.removeTemporaryGroup(uuid, group);
+    }
+
     public boolean deleteGroup(String groupName) {
         String normalized = normalizeGroupName(groupName);
         if (normalized == null) {
@@ -469,18 +530,13 @@ public class PermissionAPI {
 
         stateLock.writeLock().lock();
         try {
-            String defaultGroup = normalizeGroupName(state.defaultGroup);
-            if (normalized.equals(defaultGroup)) {
-                return false;
-            }
-            if ("admin".equals(normalized)) {
-                return false;
-            }
             if (!state.groups.containsKey(normalized)) {
                 return false;
             }
 
+            migrateTemporaryGroupAssignments(normalized);
             state.groups.remove(normalized);
+            if (normalized.equals(state.defaultGroup)) state.defaultGroup = "";
 
             for (PermissionDataStore.GroupEntry group : state.groups.values()) {
                 if (group != null && group.inherits != null) {
@@ -491,6 +547,7 @@ public class PermissionAPI {
                 if (user == null) {
                     continue;
                 }
+                if (normalized.equals(user.displayGroup)) user.displayGroup = "";
                 if (user.groups != null) {
                     user.groups.removeIf(g -> normalized.equals(normalizeGroupName(g)));
                 }
@@ -501,7 +558,7 @@ public class PermissionAPI {
             for (List<String> track : state.tracks.values()) {
                 if (track != null) track.removeIf(member -> normalized.equals(normalizeGroupName(member)));
             }
-            saveLocked();
+            saveLocked(true);
             if (playerDataStore != null && permissionRepository == null) {
                 for (PlayerDataStore.PlayerEntry player : playerDataStore.listPlayerEntries()) {
                     if (player != null && player.getUuid() != null) {
@@ -590,7 +647,9 @@ public class PermissionAPI {
                 if (entry.permissions == null) {
                     entry.permissions = new ArrayList<>();
                 }
-                if (entry.permissions.contains(rule)) {
+                if (entry.permissions.contains(rule) || entry.contextualPermissions.stream().anyMatch(existing ->
+                        (existing.denied ? "-" : "").concat(existing.permission).equals(rule)
+                                && existing.contextSet().isEmpty() && existing.expiresAtMs == null)) {
                     return false;
                 }
                 entry.permissions.add(rule);
@@ -971,7 +1030,9 @@ public class PermissionAPI {
                 if (user.permissions == null) {
                     user.permissions = new ArrayList<>();
                 }
-                if (user.permissions.contains(rule)) {
+                if (user.permissions.contains(rule) || user.contextualPermissions.stream().anyMatch(existing ->
+                        (existing.denied ? "-" : "").concat(existing.permission).equals(rule)
+                                && existing.contextSet().isEmpty() && existing.expiresAtMs == null)) {
                     return false;
                 }
                 user.permissions.add(rule);
@@ -1471,7 +1532,7 @@ public class PermissionAPI {
         Map<String, Long> groups = new LinkedHashMap<>();
         long now = System.currentTimeMillis();
 
-        if (includeDefault && snapshot.defaultGroup != null && !snapshot.defaultGroup.isBlank()) {
+        if (includeDefault && snapshot.groups.containsKey(snapshot.defaultGroup) && snapshot.defaultGroup != null && !snapshot.defaultGroup.isBlank()) {
             groups.put(snapshot.defaultGroup.trim().toLowerCase(Locale.ROOT), Long.MAX_VALUE);
         }
 
@@ -1830,9 +1891,11 @@ public class PermissionAPI {
                 if (temp == null || temp.getGroup() == null) continue;
                 String group = normalizeGroupName(temp.getGroup());
                 if (group == null) continue;
+                String id = PermissionAssignmentId.deterministic("USER_GROUP", uuid, group, false, PermissionContextSet.empty(), temp.getExpiresAtMs(),
+                        (temp.getAssignedBy() != null ? temp.getAssignedBy() : "") + "@" + temp.getAssignedAtMs());
+                if (result.stream().anyMatch(assignment -> id.equals(assignment.id()))) continue;
                 result.add(new PermissionAssignment(
-                        PermissionAssignmentId.deterministic("USER_GROUP", uuid, group, false, PermissionContextSet.empty(), temp.getExpiresAtMs(),
-                                (temp.getAssignedBy() != null ? temp.getAssignedBy() : "") + "@" + temp.getAssignedAtMs()),
+                        id,
                         PermissionAssignment.Kind.USER_GROUP, uuid, uuid, group, false, PermissionContextSet.empty(), temp.getExpiresAtMs(), false,
                         temp.getAssignedBy() != null ? temp.getAssignedBy() : ""));
             }
@@ -1896,7 +1959,9 @@ public class PermissionAPI {
             if (groupName == null) {
                 continue;
             }
-            if (!group.contextSet().isEmpty()) {
+            if (group.assignmentId() != null && (group.expiresAtMs() == null || group.expiresAtMs() > now)) {
+                entry.contextualGroups.add(new PermissionDataStore.GroupAssignmentEntry(group.assignmentId(), groupName, group.contextSet(), group.expiresAtMs(), group.assignedAtMs(), group.assignedBy()));
+            } else if (!group.contextSet().isEmpty()) {
                 if (group.expiresAtMs() == null || group.expiresAtMs() > now) {
                     entry.contextualGroups.add(new PermissionDataStore.GroupAssignmentEntry(group.assignmentId(), groupName, group.contextSet(), group.expiresAtMs(), group.assignedAtMs(), group.assignedBy()));
                 }
@@ -1908,7 +1973,7 @@ public class PermissionAPI {
         }
         for (StoredPermissionNode node : userData.permissions()) {
             String rule = nodeToRule(node);
-            if (rule != null && node.contextSet().isEmpty() && node.expiresAtMs() == null && !entry.permissions.contains(rule)) {
+            if (rule != null && node.assignmentId() == null && node.contextSet().isEmpty() && node.expiresAtMs() == null && !entry.permissions.contains(rule)) {
                 entry.permissions.add(rule);
             } else if (rule != null && (node.expiresAtMs() == null || node.expiresAtMs() > now)) {
                 boolean denied = rule.startsWith("-");
@@ -1921,6 +1986,7 @@ public class PermissionAPI {
     }
 
     private static void loadDefinitions(PermissionDataStore.PermissionState loaded, PermissionRepository.Definitions definitions) {
+        loaded.defaultGroup = definitions.defaultGroup();
         for (StoredPermissionGroup group : definitions.groups()) {
             if (group == null) {
                 continue;
@@ -1946,7 +2012,7 @@ public class PermissionAPI {
             entry.permissions = new ArrayList<>();
             for (StoredPermissionNode node : group.permissions()) {
                 String rule = nodeToRule(node);
-                if (rule != null && node.contextSet().isEmpty() && node.expiresAtMs() == null && !entry.permissions.contains(rule)) {
+                if (rule != null && node.assignmentId() == null && node.contextSet().isEmpty() && node.expiresAtMs() == null && !entry.permissions.contains(rule)) {
                     entry.permissions.add(rule);
                 } else if (rule != null) {
                     boolean denied = rule.startsWith("-");
@@ -2022,6 +2088,7 @@ public class PermissionAPI {
         var tracks = new LinkedHashMap<String, StoredPermissionTrack>();
         for (var track : definitions.tracks()) tracks.put(track.name(), track);
         if (groups.equals(persistedGroups) && tracks.equals(persistedTracks)
+                && java.util.Objects.equals(definitions.defaultGroup(), persistedState.defaultGroup)
                 && definitions.versions().groups().equals(groupVersions)
                 && definitions.versions().tracks().equals(trackVersions)) return false;
 
@@ -2031,6 +2098,7 @@ public class PermissionAPI {
         refreshed.normalize();
         for (var target : List.of(state, acceptedState, persistedState)) {
             var copy = copyState(refreshed);
+            target.defaultGroup = copy.defaultGroup;
             target.groups = copy.groups;
             target.tracks = copy.tracks;
         }

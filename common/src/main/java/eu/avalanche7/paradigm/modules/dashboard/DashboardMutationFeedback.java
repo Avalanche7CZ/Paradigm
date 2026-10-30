@@ -237,6 +237,7 @@ public final class DashboardMutationFeedback {
         switch (action) {
             case "group_create" -> changes.add(add("group:" + group));
             case "group_delete" -> changes.add(remove("group:" + group));
+            case "group_rename" -> changes.add(pair("group name", group, safe(request.target)));
             case "group_update" -> {
                 Map<String, Object> beforeGroup = extractGroup(beforeGroupSnapshot);
                 if (request.metadata != null) {

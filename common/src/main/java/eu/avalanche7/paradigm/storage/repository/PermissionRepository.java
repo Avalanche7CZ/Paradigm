@@ -26,7 +26,8 @@ public interface PermissionRepository {
     record DefinitionVersions(java.util.Map<String, Long> groups, java.util.Map<String, Long> tracks) {
         public DefinitionVersions { groups = java.util.Map.copyOf(groups); tracks = java.util.Map.copyOf(tracks); }
     }
-    record Definitions(List<StoredPermissionGroup> groups, List<StoredPermissionTrack> tracks, DefinitionVersions versions) {
+    record Definitions(List<StoredPermissionGroup> groups, List<StoredPermissionTrack> tracks, DefinitionVersions versions, String defaultGroup) {
+        public Definitions(List<StoredPermissionGroup> groups, List<StoredPermissionTrack> tracks, DefinitionVersions versions) { this(groups, tracks, versions, "default"); }
         public Definitions(List<StoredPermissionGroup> groups, List<StoredPermissionTrack> tracks) { this(groups, tracks, new DefinitionVersions(java.util.Map.of(), java.util.Map.of())); }
         public Definitions { groups = List.copyOf(groups); tracks = List.copyOf(tracks); }
     }
@@ -58,7 +59,13 @@ public interface PermissionRepository {
     List<StoredPermissionGroup> listGroups();
     Optional<StoredPermissionGroup> getGroup(String groupName);
     void saveGroup(StoredPermissionGroup group);
+    default void setDefaultGroup(String group) {
+        if (!"default".equals(group)) throw new UnsupportedOperationException("Default group metadata is unavailable on this storage provider");
+    }
     boolean deleteGroup(String groupName);
+    default boolean renameGroup(String source, String target, long expectedVersion) {
+        throw new UnsupportedOperationException("Atomic group rename is unavailable on this storage provider");
+    }
 
     default List<StoredPermissionTrack> listTracks() { return List.of(); }
     default Optional<StoredPermissionTrack> getTrack(String trackName) { return Optional.empty(); }

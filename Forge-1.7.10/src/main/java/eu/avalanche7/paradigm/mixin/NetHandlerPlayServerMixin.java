@@ -38,6 +38,7 @@ public abstract class NetHandlerPlayServerMixin {
                 if (!visuals.vanish().listed(item.paradigm$name(), playerEntity)) callback.cancel();
                 else paradigm$listed.add(item.paradigm$name());
             } else if (!paradigm$listed.remove(item.paradigm$name())) callback.cancel();
+            if (!callback.isCancelled()) visuals.tablist().listPacketSent(playerEntity, item.paradigm$name(), item.paradigm$online());
         }
     }
 

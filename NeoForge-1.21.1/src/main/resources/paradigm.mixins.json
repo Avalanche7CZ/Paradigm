@@ -4,6 +4,7 @@
   "package": "eu.avalanche7.paradigm.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "InventoryPreviewMixin",
     "DisplayAccessor",
     "TextDisplayAccessor",
     "InteractionAccessor",

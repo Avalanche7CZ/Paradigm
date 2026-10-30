@@ -239,6 +239,22 @@ public final class PermissionCommands {
                     return 1;
                 });
 
+        ICommandBuilder rename = platform.createCommandBuilder().literal("rename")
+                .then(platform.createCommandBuilder().argument("group", ICommandBuilder.ArgumentType.WORD)
+                        .suggests((context, input) -> services.getPermissionsHandler().listPermissionGroups())
+                        .then(platform.createCommandBuilder().argument("target", ICommandBuilder.ArgumentType.WORD)
+                                .executes(context -> {
+                                    var request = request("group_rename", context.getStringArgument("group"), null, null, null, false, PermissionContextSet.empty(), null);
+                                    request.target = context.getStringArgument("target");
+                                    var result = mutate(context.getSource(), services, request);
+                                    if (!result.applied()) {
+                                        platform.sendFailure(context.getSource(), platform.createLiteralComponent(result.message()));
+                                        return 0;
+                                    }
+                                    platform.sendSuccess(context.getSource(), platform.createLiteralComponent("Group renamed to " + request.target + "."), false);
+                                    return 1;
+                                })));
+
         ICommandBuilder list = platform.createCommandBuilder()
                 .literal("list")
                 .executes(context -> {
@@ -332,7 +348,7 @@ public final class PermissionCommands {
                         .suggests((context, input) -> services.getPermissionsHandler().listPermissionGroups())
                         .executes(context -> showGroupTracks(context.getSource(), platform, services, context.getStringArgument("group"))));
 
-        return root.then(list).then(add).then(remove).then(info).then(parent).then(groupPermissions)
+        return root.then(list).then(add).then(remove).then(rename).then(info).then(parent).then(groupPermissions)
                 .then(setWeight).then(setPrefix).then(setSuffix).then(setDescription).then(showTracks).then(buildUserBranch(platform, services));
     }
 

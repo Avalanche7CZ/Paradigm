@@ -28,6 +28,39 @@ public final class LegacyTablistController {
     private final Map<UUID, Set<String>> dirtyMembers = new HashMap<>();
     private final ThreadLocal<Boolean> sending = new ThreadLocal<>();
     private long sequence;
+    private final Map<UUID, List<String>> listed = new HashMap<>();
+    private final Map<UUID, Set<String>> rebuilding = new HashMap<>();
+
+    public synchronized void listPacketSent(EntityPlayerMP viewer, String name, boolean online) {
+        List<String> entries = listed.computeIfAbsent(viewer.getUniqueID(), ignored -> new java.util.ArrayList<>());
+        if (!online) entries.remove(name);
+        else if (!entries.contains(name)) entries.add(name);
+    }
+
+    public synchronized boolean order(List<EntityPlayerMP> sorted) {
+        boolean applied = true;
+        for (EntityPlayerMP viewer : players()) {
+            List<String> current = listed.computeIfAbsent(viewer.getUniqueID(), ignored -> new java.util.ArrayList<>());
+            Set<String> pending = rebuilding.getOrDefault(viewer.getUniqueID(), Set.of());
+            List<EntityPlayerMP> visible = sorted.stream().filter(player -> vanish.listed(player.getCommandSenderName(), viewer)).toList();
+            List<String> desired = visible.stream().map(EntityPlayerMP::getCommandSenderName).toList();
+            if (desired.stream().anyMatch(name -> !current.contains(name) && !pending.contains(name))) { applied = false; continue; }
+            List<String> actual = current.stream().filter(desired::contains).toList();
+            if (actual.equals(desired)) { rebuilding.remove(viewer.getUniqueID()); continue; }
+            rebuilding.put(viewer.getUniqueID(), new HashSet<>(desired));
+            for (EntityPlayerMP player : visible) {
+                String name = player.getCommandSenderName();
+                if (current.contains(name)) viewer.playerNetServerHandler.sendPacket(new net.minecraft.network.play.server.S38PacketPlayerListItem(name, false, player.ping));
+            }
+            for (EntityPlayerMP player : visible) viewer.playerNetServerHandler.sendPacket(new net.minecraft.network.play.server.S38PacketPlayerListItem(player.getCommandSenderName(), true, player.ping));
+            if (current.stream().filter(desired::contains).toList().equals(desired)) rebuilding.remove(viewer.getUniqueID());
+            else applied = false;
+        }
+        return applied;
+    }
+
+    public synchronized void resetOrder() { if (!listed.isEmpty()) order(players()); }
+
 
     public LegacyTablistController(MinecraftServer server, LegacyVanishController vanish) { this.server = server; this.vanish = vanish; }
 
@@ -166,6 +199,8 @@ public final class LegacyTablistController {
 
     public synchronized void disconnected(EntityPlayerMP player) {
         reset(player);
+        listed.remove(player.getUniqueID());
+        rebuilding.remove(player.getUniqueID());
         sent.remove(player.getUniqueID());
         foreignTeams.remove(player.getUniqueID());
         dirtyMembers.remove(player.getUniqueID());
@@ -180,6 +215,8 @@ public final class LegacyTablistController {
 
     public synchronized void clear() {
         for (EntityPlayerMP player : players()) reset(player);
+        listed.clear();
+        rebuilding.clear();
         teams.clear();
         sent.clear();
         foreignTeams.clear();

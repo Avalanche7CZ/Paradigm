@@ -323,6 +323,7 @@ public class SqlMigrationRunner implements MigrationRunner {
                 case 22 -> "permission_sync";
                 case 23 -> "permission_presentation";
                 case 24 -> "nicknames";
+                case 25 -> "permission_default_group";
                 default -> "migration";
             } + ".sql";
             String sql = resourceText(resource);

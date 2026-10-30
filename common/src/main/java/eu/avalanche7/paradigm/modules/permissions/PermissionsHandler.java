@@ -867,6 +867,10 @@ public class PermissionsHandler {
         return internalPermissionApi.createGroup(groupName);
     }
 
+    public boolean renamePermissionGroup(String source, String target) {
+        return isInternalPermissionsEnabled() && internalPermissionApi.renameGroup(source, target);
+    }
+
     public boolean deletePermissionGroup(String groupName) {
         if (!isInternalPermissionsEnabled()) return false;
         return internalPermissionApi.deleteGroup(groupName);

@@ -87,7 +87,7 @@ public final class TablistConfigHandler extends BaseConfigHandler<TablistConfigH
         ), "Formatted lines displayed below the player list.");
         public ConfigEntry<String> playerFormat = new ConfigEntry<>(
                 "{prefix}<color:white>{player_name}</color>{suffix}",
-                "Formatted player name shown in the tablist."
+                "Formatted player name shown in the tablist. Active trailing group prefix colors override the name color; without an active group color, this format supplies the default."
         );
         public ConfigEntry<List<String>> sorting = new ConfigEntry<>(List.of(
                 "GROUP_WEIGHT_DESC", "PLAYER_NAME_ASC"

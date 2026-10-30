@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import eu.avalanche7.paradigm.modules.commands.admin.InventoryInspectionLayout;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IMenuPlatform;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
@@ -64,6 +65,15 @@ public final class MinecraftMenuPlatform implements IMenuPlatform {
         }
         open.put(serverPlayer.getUuid(), handler);
         return new ScreenHandle(serverPlayer, handler, inventory);
+    }
+
+    public static boolean blockInventoryEdit(ServerPlayerEntity player) {
+        if (player.currentScreenHandler instanceof ParadigmScreenHandler preview && preview.inventoryPreview) {
+            player.playerScreenHandler.syncState();
+            preview.syncState();
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -182,6 +192,33 @@ public final class MinecraftMenuPlatform implements IMenuPlatform {
         }
 
         @Override
+        public boolean refreshInventory(IPlayer target, boolean enderChest) {
+            if (!isOpen() || !(target.getOriginalPlayer() instanceof ServerPlayerEntity nativeTarget)) return false;
+            handler.inventoryPreview = true;
+            for (int slot = 0; slot < inventory.size(); slot++) {
+                int source = InventoryInspectionLayout.sourceSlot(slot, enderChest, true);
+                if (source < 0) continue;
+                ItemStack original = enderChest ? nativeTarget.getEnderChestInventory().getStack(source)
+                        : source < 36 ? nativeTarget.getInventory().getStack(source)
+                        : nativeTarget.getEquippedStack(switch (source) {
+                            case 36 -> net.minecraft.entity.EquipmentSlot.FEET;
+                            case 37 -> net.minecraft.entity.EquipmentSlot.LEGS;
+                            case 38 -> net.minecraft.entity.EquipmentSlot.CHEST;
+                            case 39 -> net.minecraft.entity.EquipmentSlot.HEAD;
+                            default -> net.minecraft.entity.EquipmentSlot.OFFHAND;
+                        });
+                ItemStack copy = original.copy();
+                if (!ItemStack.areEqual(inventory.getStack(slot), copy)) {
+                    inventory.setStack(slot, copy);
+                    // Chest storage may cap counts; the preview must preserve the source.
+                    copy.setCount(original.getCount());
+                }
+            }
+            handler.sendContentUpdates();
+            return true;
+        }
+
+        @Override
         public void setItem(int slot, ItemSpec spec) {
             if (slot < 0 || slot >= inventory.size() || !isOpen()) {
                 return;
@@ -203,18 +240,23 @@ public final class MinecraftMenuPlatform implements IMenuPlatform {
         public void setTitle(IComponent title) {
         }
 
+        private boolean ownsWindow() {
+            return player.currentScreenHandler == handler && (!handler.inventoryPreview || ((net.minecraft.server.world.ServerWorld) player.getEntityWorld()).getServer().getPlayerManager().getPlayer(player.getUuid()) == player);
+        }
+
         @Override
         public void close() {
+            boolean owned = ownsWindow();
             handler.detach();
             open.remove(player.getUuid(), handler);
-            if (player.currentScreenHandler == handler) {
+            if (owned) {
                 player.closeHandledScreen();
             }
         }
 
         @Override
         public boolean isOpen() {
-            return !handler.isDetached() && player.currentScreenHandler == handler;
+            return !handler.isDetached() && ownsWindow();
         }
     }
 
@@ -222,6 +264,7 @@ public final class MinecraftMenuPlatform implements IMenuPlatform {
         private final ClickListener listener;
         private final int menuSlots;
         private boolean detached;
+        private boolean inventoryPreview;
 
         private ParadigmScreenHandler(ScreenHandlerType<GenericContainerScreenHandler> type, int syncId,
                 PlayerInventory playerInventory, SimpleInventory inventory, int rows, ClickListener listener) {
@@ -243,10 +286,10 @@ public final class MinecraftMenuPlatform implements IMenuPlatform {
             if (detached || !(player instanceof ServerPlayerEntity serverPlayer)) {
                 return;
             }
-            setCursorStack(ItemStack.EMPTY);
+            if (inventoryPreview) serverPlayer.playerScreenHandler.syncState();
             syncState();
             serverPlayer.currentScreenHandler.sendContentUpdates();
-            if (slotIndex >= 0 && slotIndex < menuSlots && listener != null) {
+            if (!inventoryPreview && slotIndex >= 0 && slotIndex < menuSlots && listener != null) {
                 listener.onSlotActivated(new MinecraftPlayer(serverPlayer), slotIndex, mapClick(actionType, button));
             }
         }

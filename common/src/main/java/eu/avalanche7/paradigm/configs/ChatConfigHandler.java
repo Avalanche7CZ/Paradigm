@@ -116,7 +116,7 @@ public class ChatConfigHandler extends BaseConfigHandler<ChatConfigHandler.Confi
         );
         public ConfigEntry<String> customChatFormat = new ConfigEntry<>(
                 "{prefix}<color:aqua>{player_name}</color> <color:dark_gray>»</color> <color:white>{message}</color>",
-                "Custom chat message format. Supports TAG formatting and placeholders: {player_name}, {player_uuid}, {player_level}, {player_prefix}, {player_suffix}, {player_group}, {player_groups}, {prefix}, {suffix}, {group}, {player_health}, {max_player_health}, {player_world}, {player_dimension}, {player_ping}. Use {message} for the chat text. Note: to preserve colors from permission prefix/suffix, do not wrap {prefix}/{suffix} in an outer color tag."
+                "Custom chat message format. Supports TAG formatting and placeholders: {player_name}, {player_uuid}, {player_level}, {player_prefix}, {player_suffix}, {player_group}, {player_groups}, {prefix}, {suffix}, {group}, {player_health}, {max_player_health}, {player_world}, {player_dimension}, {player_ping}. Use {message} for the chat text. Active trailing group prefix colors override the name color; trailing suffix colors override the message color, even when {suffix} is omitted. Explicit group chatNameFormat/chatMessageFormat take priority. Reset or closed color tags fall back to this format. To preserve colors on prefix/suffix text itself, do not wrap {prefix}/{suffix} in an outer color tag."
         );
         public ConfigEntry<Boolean> enablePlayerNameHover = new ConfigEntry<>(
                 true,

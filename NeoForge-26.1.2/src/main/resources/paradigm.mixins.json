@@ -4,6 +4,7 @@
   "package": "eu.avalanche7.paradigm.mixin",
   "compatibilityLevel": "JAVA_25",
   "mixins": [
+    "InventoryPreviewMixin",
     "FoodDataAccessor",
     "DisplayAccessor",
     "TextDisplayAccessor",

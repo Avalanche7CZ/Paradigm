@@ -44,12 +44,19 @@ public class FormattingParser {
     }
 
     public IComponent parse(String rawMessage, IPlayer player, Object baseStyle, ComponentSlots slots) {
+        return parseWithResult(rawMessage, player, baseStyle, slots).component();
+    }
+
+    public record ParseResult(IComponent component, String trailingColor) {
+    }
+
+    public ParseResult parseWithResult(String rawMessage, IPlayer player, Object baseStyle, ComponentSlots slots) {
         if (rawMessage == null || rawMessage.isEmpty()) {
             IComponent empty = platformAdapter.createComponentFromLiteral("");
             if (baseStyle != null) {
                 empty.setStyle(baseStyle);
             }
-            return empty;
+            return new ParseResult(empty, null);
         }
 
         String processedMessage = placeholders != null
@@ -130,10 +137,11 @@ public class FormattingParser {
             }
         }
 
+        String trailingColor = context.getCurrentColor();
         while (!tagStack.isEmpty()) {
             tagStack.pop().tag.close(context);
         }
-        return rootComponent;
+        return new ParseResult(rootComponent, trailingColor);
     }
 
     private void appendText(IComponent parent, String text, FormattingContext context) {

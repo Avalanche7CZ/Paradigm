@@ -12,6 +12,7 @@
   ],
   "client": [],
   "server": [
+    "InventoryPreviewMixin",
     "PlayerListMixin",
     "ServerStatusMixin",
     "ServerPlayerTablistMixin",

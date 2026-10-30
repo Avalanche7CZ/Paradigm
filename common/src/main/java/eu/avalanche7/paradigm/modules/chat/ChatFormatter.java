@@ -65,7 +65,18 @@ public final class ChatFormatter {
         var meta = metadata.apply(sender);
         String nameFormat = meta != null ? meta.chatNameFormat() : "";
         String messageFormat = meta != null ? meta.chatMessageFormat() : "";
-        if (nameFormat == null || nameFormat.isBlank()) nameFormat = compiled.nameFormat();
+        if (nameFormat == null || nameFormat.isBlank()) {
+            nameFormat = compiled.nameFormat();
+            String color = affixColor(meta != null ? meta.prefix() : null, sender, parser);
+            if (color != null) {
+                nameFormat = eu.avalanche7.paradigm.utils.Placeholders.presentationName(nameFormat,
+                        "<color:" + color + ">" + NAME_TOKEN + "</color>");
+            }
+        }
+        if (messageFormat == null || messageFormat.isBlank()) {
+            String color = affixColor(meta != null ? meta.suffix() : null, sender, parser);
+            if (color != null) messageFormat = "<color:" + color + ">{message}</color>";
+        }
         final String selectedNameFormat = nameFormat;
         ComponentSlots.Builder builder = ComponentSlots.builder();
         if (sender != null) {
@@ -87,6 +98,11 @@ public final class ChatFormatter {
 
     static String escapeTags(String message) {
         return ComponentSlots.strip(message).replace("\\", "\\\\").replace("<", "\\<");
+    }
+
+    private String affixColor(String affix, IPlayer sender, MessageParser parser) {
+        if (affix == null || affix.isEmpty()) return null;
+        return parser.trailingColor(affix, sender);
     }
 
     private IComponent renderName(IPlayer sender, Object surroundingStyle, Template compiled, String nameFormat) {

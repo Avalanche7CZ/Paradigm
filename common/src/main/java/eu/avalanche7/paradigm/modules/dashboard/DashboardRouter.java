@@ -247,6 +247,7 @@ public class DashboardRouter {
                 if ("GET".equals(method) && "/api/permissions/effective".equals(path)) return permissions.effective(ctx);
                 if ("POST".equals(method) && "/api/permissions/migrate/luckperms".equals(path)) return permissions.migrateLuckPerms(ctx);
                 if ("POST".equals(method) && "/api/permissions/group/create".equals(path)) return permissions.mutate(ctx, "group_create");
+                if ("POST".equals(method) && "/api/permissions/group/rename".equals(path)) return permissions.mutate(ctx, "group_rename");
                 if ("POST".equals(method) && "/api/permissions/group/delete".equals(path)) return permissions.mutate(ctx, "group_delete");
                 if ("POST".equals(method) && "/api/permissions/group/update".equals(path)) return permissions.mutate(ctx, "group_update");
                 if ("POST".equals(method) && "/api/permissions/group/permission/add".equals(path)) return permissions.mutate(ctx, "group_permission_add");

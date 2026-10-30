@@ -1059,7 +1059,7 @@ public class DashboardService implements AutoCloseable {
         assignment.put("kind", kind);
         assignment.put("owner", owner);
         assignment.put("target", target);
-        assignment.put("id", PermissionAssignmentId.ensure(node.contextSet().isEmpty() && node.expiresAtMs() == null ? null : node.assignmentId(), kind.replace(' ', '_').toUpperCase(java.util.Locale.ROOT), target, node.permission(), node.denied(),
+        assignment.put("id", PermissionAssignmentId.ensure(node.assignmentId(), kind.replace(' ', '_').toUpperCase(java.util.Locale.ROOT), target, node.permission(), node.denied(),
                 node.contextSet(), node.expiresAtMs(), "legacy"));
         assignment.put("node", node.permission());
         assignment.put("denied", node.denied());

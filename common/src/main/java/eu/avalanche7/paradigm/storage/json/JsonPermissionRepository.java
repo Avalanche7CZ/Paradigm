@@ -27,6 +27,19 @@ public class JsonPermissionRepository implements PermissionRepository {
     }
 
     @Override
+    public Definitions definitions() {
+        return new Definitions(listGroups(), listTracks(), new DefinitionVersions(java.util.Map.of(), java.util.Map.of()), permissionStore.load().defaultGroup);
+    }
+
+    @Override
+    public void setDefaultGroup(String group) {
+        var state = permissionStore.load();
+        if (!group.isEmpty() && !state.groups.containsKey(group)) throw new IllegalArgumentException("Default group was not found");
+        state.defaultGroup = group;
+        permissionStore.saveOrThrow(state);
+    }
+
+    @Override
     public List<StoredPermissionGroup> listGroups() {
         PermissionDataStore.PermissionState state = permissionStore.load();
         List<StoredPermissionGroup> result = new ArrayList<>();
@@ -66,7 +79,7 @@ public class JsonPermissionRepository implements PermissionRepository {
         entry.chatMessageFormat = group.chatMessageFormat();
         entry.inherits = new ArrayList<>(group.parents());
         for (StoredPermissionNode node : group.permissions()) {
-            if (node.contextSet().isEmpty() && node.expiresAtMs() == null) {
+            if (node.assignmentId() == null && node.contextSet().isEmpty() && node.expiresAtMs() == null) {
                 entry.permissions.add(fromNode(node));
             } else {
                 entry.contextualPermissions.add(new PermissionDataStore.PermissionRuleEntry(node.assignmentId(), node.permission(), node.denied(), node.contextSet(), node.expiresAtMs()));
@@ -84,6 +97,7 @@ public class JsonPermissionRepository implements PermissionRepository {
         if (key == null) return false;
         PermissionDataStore.PermissionState state = permissionStore.load();
         boolean changed = state.groups.remove(key) != null;
+        if (key.equals(state.defaultGroup)) state.defaultGroup = "";
 
         for (PermissionDataStore.GroupEntry group : state.groups.values()) {
             if (group != null && group.inherits != null) {
@@ -92,6 +106,7 @@ public class JsonPermissionRepository implements PermissionRepository {
         }
         for (PermissionDataStore.UserEntry user : state.users.values()) {
             if (user == null) continue;
+            if (key.equals(user.displayGroup)) user.displayGroup = "";
             if (user.groups != null) {
                 changed |= user.groups.removeIf(group -> key.equals(normalize(group)));
             }
@@ -274,16 +289,16 @@ public class JsonPermissionRepository implements PermissionRepository {
         }
 
         for (StoredUserPermissionData.GroupAssignment group : user.groups()) {
-            if (group.contextSet().isEmpty() && group.expiresAtMs() == null) {
+            if (group.assignmentId() == null && group.contextSet().isEmpty() && group.expiresAtMs() == null) {
                 entry.groups.add(group.groupName());
-            } else if (group.contextSet().isEmpty() && group.expiresAtMs() != null && playerDataStore != null) {
+            } else if (group.assignmentId() == null && group.contextSet().isEmpty() && group.expiresAtMs() != null && playerDataStore != null) {
                 playerDataStore.setTemporaryGroup(userKey, group.groupName(), group.expiresAtMs(), group.assignedAtMs(), group.assignedBy());
             } else {
                 entry.contextualGroups.add(new PermissionDataStore.GroupAssignmentEntry(group.assignmentId(), group.groupName(), group.contextSet(), group.expiresAtMs(), group.assignedAtMs(), group.assignedBy()));
             }
         }
         for (StoredPermissionNode node : user.permissions()) {
-            if (node.contextSet().isEmpty() && node.expiresAtMs() == null) {
+            if (node.assignmentId() == null && node.contextSet().isEmpty() && node.expiresAtMs() == null) {
                 entry.permissions.add(fromNode(node));
             } else {
                 entry.contextualPermissions.add(new PermissionDataStore.PermissionRuleEntry(node.assignmentId(), node.permission(), node.denied(), node.contextSet(), node.expiresAtMs()));

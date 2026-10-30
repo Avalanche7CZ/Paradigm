@@ -117,5 +117,29 @@ it('projects only remaining metadata operations over persisted fields', () => {
         body: { group: 'member', metadata: { prefix: 'new' } },
       },
     ]),
-  ).toEqual({ description: 'saved', prefix: 'new', suffix: '', weight: '10' });
+  ).toEqual({
+    description: 'saved',
+    prefix: 'new',
+    suffix: '',
+    weight: '10',
+    chatNameFormat: '',
+    chatMessageFormat: '',
+  });
+});
+
+it('stages and unstages optional group chat formats over saved metadata', () => {
+  const initial = { chatNameFormat: '<bold>{player_name}</bold>' };
+  const changes = [
+    {
+      key: 'style',
+      label: 'style',
+      route: 'group/update',
+      body: { group: 'vip', metadata: { chatMessageFormat: '<color:red>{message}</color>' } },
+    },
+  ];
+  expect(metadataPreview(initial, 'vip', changes).chatMessageFormat).toBe(
+    '<color:red>{message}</color>',
+  );
+  expect(metadataPreview(initial, 'vip', []).chatMessageFormat).toBe('');
+  expect(metadataPreview(initial, 'vip', []).chatNameFormat).toBe('<bold>{player_name}</bold>');
 });

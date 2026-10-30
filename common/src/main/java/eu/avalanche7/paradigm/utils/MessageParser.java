@@ -68,7 +68,18 @@ public class MessageParser {
         return formattingParser.parse(processedMessage, player, baseStyle, slots);
     }
 
+    public String trailingColor(String text, IPlayer player) {
+        if (text == null || text.isEmpty()) return null;
+        String processed = platformAdapter.replacePlaceholders(text, player);
+        return formattingParser.parseWithResult(convertLegacyToNewFormat(processed, false), player,
+                null, ComponentSlots.none()).trailingColor();
+    }
+
     private String convertLegacyToNewFormat(String text) {
+        return convertLegacyToNewFormat(text, true);
+    }
+
+    private String convertLegacyToNewFormat(String text, boolean closeAtEnd) {
         final char literalAmpersand = '\uE000';
         StringBuilder protectedText = new StringBuilder(text.length());
         for (int index = 0; index < text.length(); index++) {
@@ -149,7 +160,7 @@ public class MessageParser {
         if (hasItalic) closeTags.append("</italic>");
         if (hasBold) closeTags.append("</bold>");
         if (hasColor) closeTags.append("</color>");
-        result.append(closeTags);
+        if (closeAtEnd) result.append(closeTags);
 
         return result.toString();
     }

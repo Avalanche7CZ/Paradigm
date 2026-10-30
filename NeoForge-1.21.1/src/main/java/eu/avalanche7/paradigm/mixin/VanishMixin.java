@@ -71,6 +71,17 @@ public final class VanishMixin {
         @Unique private final java.util.Set<java.util.UUID> paradigm$listed = java.util.concurrent.ConcurrentHashMap.newKeySet();
         @ModifyVariable(method = "send(Lnet/minecraft/network/protocol/Packet;)V", at = @At("HEAD"), argsOnly = true)
         private Packet<?> paradigm$filter(Packet<?> packet) {
+            if ((Object) this instanceof ServerGamePacketListenerImpl handler) {
+                var services = ParadigmAPI.getServices();
+                var viewer = handler.player;
+                if (services != null && packet instanceof net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket team) {
+                    int mode = team.getTeamAction() == net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket.Action.ADD ? 0
+                            : team.getTeamAction() == net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket.Action.REMOVE ? 1
+                            : team.getPlayerAction() == net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket.Action.ADD ? 3
+                            : team.getPlayerAction() == net.minecraft.network.protocol.game.ClientboundSetPlayerTeamPacket.Action.REMOVE ? 4 : 2;
+                    eu.avalanche7.paradigm.modules.tab.Tablist.observeSortingTeam(services.getPlatformAdapter().wrapPlayer(viewer), team.getName(), mode, team.getPlayers());
+                }
+            }
             return (Object) this instanceof ServerGamePacketListenerImpl handler ? VanishPackets.filter(packet, handler.player, paradigm$listed) : packet;
         }
     }

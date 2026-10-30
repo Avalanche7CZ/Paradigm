@@ -138,6 +138,17 @@ tasks.named('test', Test).configure {
     }
 }
 
+tasks.named('test', Test).configure { exclude '**/PortableInventoryTest.class' }
+tasks.register('portableInventoryTest', Test) {
+    useJUnitPlatform()
+    dependsOn tasks.named('testClasses')
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/PortableInventoryTest.class'
+    shouldRunAfter tasks.named('test')
+}
+tasks.named('check').configure { dependsOn tasks.named('portableInventoryTest') }
+
 tasks.named('processResources', ProcessResources).configure {
     inputs.property('mod_version', project.version)
     filesMatching('mcmod.info') {

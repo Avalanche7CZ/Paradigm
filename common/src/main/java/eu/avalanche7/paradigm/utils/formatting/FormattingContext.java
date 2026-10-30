@@ -11,6 +11,8 @@ public class FormattingContext {
     private final IPlayer player;
     private final Object baseStyle;
     private Object currentStyle;
+    private String currentColor;
+    private final Stack<String> colorStack = new Stack<>();
     private int nestingLevel;
     private FormattingParser parser;
     private ComponentSlots slots = ComponentSlots.none();
@@ -26,6 +28,7 @@ public class FormattingContext {
         this.nestingLevel = 0;
         this.componentStack.push(rootComponent);
         this.styleStack.push(baseStyle);
+        this.colorStack.push(null);
     }
 
     public IComponent getRootComponent() {
@@ -61,15 +64,26 @@ public class FormattingContext {
     }
 
     public void pushStyle(Object style) {
+        colorStack.push(currentColor);
         styleStack.push(style);
         this.currentStyle = style;
         this.nestingLevel++;
+    }
+
+    public String getCurrentColor() {
+        return currentColor;
+    }
+
+    public void pushColorStyle(Object style, String color) {
+        pushStyle(style);
+        currentColor = color;
     }
 
     public void popStyle() {
         if (nestingLevel > 0 && styleStack.size() > 1) {
             this.nestingLevel--;
             styleStack.pop();
+            currentColor = colorStack.pop();
             this.currentStyle = styleStack.isEmpty() ? baseStyle : styleStack.peek();
         }
     }
@@ -80,6 +94,9 @@ public class FormattingContext {
 
     public void resetStyle() {
         this.currentStyle = baseStyle;
+        this.currentColor = null;
+        this.colorStack.clear();
+        this.colorStack.push(null);
         this.nestingLevel = 0;
         this.styleStack.clear();
         this.styleStack.push(baseStyle);

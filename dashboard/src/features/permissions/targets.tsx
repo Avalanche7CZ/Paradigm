@@ -5,7 +5,7 @@ import { array, number, object, string, type Json, type Obj } from '../../core/t
 import { Badge, Empty, Pager, Tabs } from '../../components/ui';
 import { FormatEditor, FormatPreview } from '../../components/formatting';
 import { AssignmentEditor, AssignmentTable } from './assignments';
-import { ContextChips, ContextEditor, ExpiryEditor, expiryBody } from './controls';
+import { ContextChips, ContextEditor, ExpiryEditor, Popup, expiryBody } from './controls';
 import {
   assignment,
   expiryLabel,
@@ -39,6 +39,9 @@ export function TargetEditor({
   const w = useWorkspace();
   const flow = useWorkflow();
   const [section, setSection] = useState('permissions');
+  const [renaming, setRenaming] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [renameError, setRenameError] = useState('');
   const [editing, setEditing] = useState<{ membership: boolean; row?: Assignment }>();
   const detail = useResource<Json>(
     (signal) =>
@@ -112,23 +115,94 @@ export function TargetEditor({
                 )}
               </div>
               {kind === 'group' && (
-                <button
-                  class="danger"
-                  disabled={!flow.editable}
-                  onClick={() =>
-                    flow.stage([
-                      {
-                        label: `Delete group ${id} (also removes memberships, inheritance links and track entries)`,
-                        route: 'group/delete',
-                        body: { group: id },
-                      },
-                    ])
-                  }
-                >
-                  Delete group
-                </button>
+                <>
+                  <button
+                    disabled={!flow.editable}
+                    onClick={() => {
+                      setNewGroupName(id);
+                      setRenameError('');
+                      setRenaming(true);
+                      flow.open(true);
+                    }}
+                  >
+                    Rename group
+                  </button>
+                  <button
+                    class="danger"
+                    disabled={!flow.editable}
+                    onClick={() =>
+                      flow.stage([
+                        {
+                          label: `Delete group ${id} (also removes memberships, inheritance links and track entries)`,
+                          route: 'group/delete',
+                          body: { group: id },
+                        },
+                      ])
+                    }
+                  >
+                    Delete group
+                  </button>
+                </>
               )}
             </header>
+            {renaming && kind === 'group' && (
+              <Popup
+                title="Rename group"
+                close={() => {
+                  setRenaming(false);
+                  flow.open(false);
+                }}
+              >
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const target = newGroupName.trim().toLowerCase();
+                    if (!subjectValid(target)) {
+                      setRenameError('Use a valid group name, at most 64 characters.');
+                      return;
+                    }
+                    if (target === id || groups.some((group) => group.name === target)) {
+                      setRenameError('Choose a name that is not already in use.');
+                      return;
+                    }
+                    if (
+                      flow.stage([
+                        {
+                          label: `Rename group ${id} → ${target}`,
+                          route: 'group/rename',
+                          body: { group: id, target },
+                        },
+                      ])
+                    ) {
+                      setRenaming(false);
+                      flow.open(false);
+                    }
+                  }}
+                >
+                  <label class="field">
+                    <span>New group name</span>
+                    <input
+                      autoFocus
+                      required
+                      value={newGroupName}
+                      onInput={(e) => setNewGroupName(e.currentTarget.value)}
+                    />
+                  </label>
+                  <p class="help">
+                    Keeps permissions, memberships, inheritance, tracks and display-group
+                    selections. Renaming the default group also updates its default role.
+                  </p>
+                  {renameError && (
+                    <p role="alert" class="text-error">
+                      {renameError}
+                    </p>
+                  )}
+                  <button class="primary" disabled={!flow.editable}>
+                    Stage rename
+                  </button>
+                </form>
+              </Popup>
+            )}
             <Tabs
               label={`${kind} editor sections`}
               values={tabs.map((value) => ({

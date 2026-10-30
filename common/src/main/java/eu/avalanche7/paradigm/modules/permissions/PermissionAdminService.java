@@ -76,6 +76,13 @@ public class PermissionAdminService {
             return trackResult;
         }
 
+        if ("group_rename".equals(action)) {
+            String target = text(safe.target).toLowerCase(java.util.Locale.ROOT);
+            if (!validGroup(group) || !validGroup(target)) return result(false, "invalid_group_name", "A valid group name is required.", false);
+            if (services.getPermissionsHandler().getPermissionGroupInfo(group) == null) return result(false, "group_not_found", "Group was not found.", false);
+            if (services.getPermissionsHandler().getPermissionGroupInfo(target) != null) return result(false, "group_exists", "A group with the target name already exists.", false);
+        }
+
         boolean denied = Boolean.TRUE.equals(safe.denied) || permission.startsWith("-");
         if (permission.startsWith("-")) {
             permission = permission.substring(1);
@@ -95,6 +102,7 @@ public class PermissionAdminService {
             changed = switch (action) {
                 case "group_create" -> validGroup(group) && handler.createPermissionGroup(group);
                 case "group_delete" -> validGroup(group) && Boolean.TRUE.equals(safe.confirmed) && handler.deletePermissionGroup(group);
+                case "group_rename" -> validGroup(group) && validGroup(text(safe.target)) && handler.renamePermissionGroup(group, text(safe.target));
                 case "group_update" -> validGroup(group) && updateGroupMetadata(handler, group, safe.metadata);
                 case "group_permission_add" -> validGroup(group) && validPermission(permission) && handler.addPermissionToGroup(group, permission, denied, contexts, expiresAtMs);
                 case "group_permission_remove" -> validGroup(group) && (assignmentId.isBlank()

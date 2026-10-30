@@ -25,7 +25,7 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
     private <T> T permissionTransaction(java.util.function.Supplier<T> work) {
         if (writeRevision.get() != null) return work.get();
         requireTransactionalTables("Permission synchronization", "permission_sync_state", "permission_user_versions",
-                "permission_definition_lock", "permission_definition_versions", "permission_groups", "permission_group_permissions",
+                "permission_definition_lock", "permission_definition_versions", "permission_settings", "permission_groups", "permission_group_permissions",
                 "permission_group_parents", "permission_tracks", "permission_track_members", "permission_users", "permission_user_groups", "permission_user_permissions");
         return sql.transaction(() -> {
             sql.update("UPDATE permission_sync_state SET revision = revision WHERE id = 1", null);
@@ -110,7 +110,9 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
                 while (rs.next()) getGroup(rs.getString(1), true).ifPresent(rows::add);
                 return rows;
             });
-            return new Definitions(groups, listTracks(), definitionVersions());
+            String defaultGroup = sql.query("SELECT default_group FROM permission_settings WHERE id = 1", null,
+                    rs -> { if (!rs.next()) throw new eu.avalanche7.paradigm.storage.StorageException("Permission settings are missing"); return rs.getString(1); });
+            return new Definitions(groups, listTracks(), definitionVersions(), defaultGroup);
         });
     }
 
@@ -118,7 +120,10 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
     public void initializeDefaultGroups(List<StoredPermissionGroup> groups) {
         definitionTransaction(() -> {
             boolean present = sql.query("SELECT name FROM permission_groups LIMIT 1", null, java.sql.ResultSet::next);
-            if (!present) groups.forEach(this::saveGroup);
+            boolean initialized = sql.query("SELECT name FROM permission_definition_versions WHERE kind = 'group' LIMIT 1", null, java.sql.ResultSet::next);
+            boolean defaultConfigured = sql.query("SELECT default_group FROM permission_settings WHERE id = 1", null,
+                    rs -> rs.next() && "default".equals(rs.getString(1)));
+            if (!present && !initialized && defaultConfigured) groups.forEach(this::saveGroup);
         });
     }
 
@@ -244,8 +249,8 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
     public boolean deleteGroup(String groupName) {
         return definitionTransaction(() -> {
             advanceDefinition("group", groupName);
-            var affectedUsers = sql.query("SELECT DISTINCT uuid FROM permission_user_groups WHERE group_name = ?",
-                    ps -> ps.setString(1, groupName), rs -> {
+            var affectedUsers = sql.query("SELECT uuid FROM permission_user_groups WHERE group_name = ? UNION SELECT uuid FROM permission_users WHERE display_group = ?",
+                    ps -> { ps.setString(1, groupName); ps.setString(2, groupName); }, rs -> {
                         var ids = new ArrayList<String>(); while (rs.next()) ids.add(rs.getString(1)); return ids;
                     });
             affectedUsers.forEach(this::userChanged);
@@ -264,7 +269,47 @@ public class SqlPermissionRepository extends SqlRepositorySupport implements Per
             sql.update("DELETE FROM permission_group_permissions WHERE group_name = ?", ps -> ps.setString(1, groupName));
             sql.update("DELETE FROM permission_user_groups WHERE group_name = ?", ps -> ps.setString(1, groupName));
             sql.update("DELETE FROM permission_track_members WHERE group_name = ?", ps -> ps.setString(1, groupName));
+            sql.update("UPDATE permission_settings SET default_group = '' WHERE id = 1 AND default_group = ?", ps -> ps.setString(1, groupName));
+            sql.update("UPDATE permission_users SET display_group = '' WHERE display_group = ?", ps -> ps.setString(1, groupName));
             return sql.update("DELETE FROM permission_groups WHERE name = ?", ps -> ps.setString(1, groupName)) > 0;
+        });
+    }
+
+    @Override
+    public void setDefaultGroup(String group) {
+        definitionTransaction(() -> {
+            if (!group.isEmpty()) requireGroup(group);
+            sql.update("UPDATE permission_settings SET default_group = ? WHERE id = 1", ps -> ps.setString(1, group));
+            long revision = advanceRevision();
+            sql.update("UPDATE permission_sync_state SET definitions_revision = ? WHERE id = 1", ps -> ps.setLong(1, revision));
+        });
+    }
+
+    @Override
+    public boolean renameGroup(String source, String target, long expectedVersion) {
+        return definitionTransaction(() -> {
+            if (expectedVersion != definitionVersion("group", source))
+                throw new eu.avalanche7.paradigm.storage.StorageConflictException("Group changed on another server; reload before renaming.");
+            if (getGroup(source, true).isEmpty() || getGroup(target, true).isPresent()) return false;
+            var users = sql.query("SELECT uuid FROM permission_users WHERE display_group = ? UNION SELECT uuid FROM permission_user_groups WHERE group_name = ?",
+                    ps -> { ps.setString(1, source); ps.setString(2, source); }, rs -> { var result = new ArrayList<String>(); while (rs.next()) result.add(rs.getString(1)); return result; });
+            var children = sql.query("SELECT group_name FROM permission_group_parents WHERE parent_name = ?", ps -> ps.setString(1, source),
+                    rs -> { var result = new ArrayList<String>(); while (rs.next()) result.add(rs.getString(1)); return result; });
+            var tracks = sql.query("SELECT track_name FROM permission_track_members WHERE group_name = ?", ps -> ps.setString(1, source),
+                    rs -> { var result = new ArrayList<String>(); while (rs.next()) result.add(rs.getString(1)); return result; });
+            sql.update("INSERT INTO permission_groups(name, description, prefix, suffix, weight, chat_name_format, chat_message_format) SELECT ?, description, prefix, suffix, weight, chat_name_format, chat_message_format FROM permission_groups WHERE name = ?",
+                    ps -> { ps.setString(1, target); ps.setString(2, source); });
+            for (String table : List.of("permission_group_permissions", "permission_group_parents", "permission_user_groups", "permission_track_members"))
+                sql.update("UPDATE " + table + " SET group_name = ? WHERE group_name = ?", ps -> { ps.setString(1, target); ps.setString(2, source); });
+            sql.update("UPDATE permission_group_parents SET parent_name = ? WHERE parent_name = ?", ps -> { ps.setString(1, target); ps.setString(2, source); });
+            sql.update("UPDATE permission_users SET display_group = ? WHERE display_group = ?", ps -> { ps.setString(1, target); ps.setString(2, source); });
+            sql.update("UPDATE permission_settings SET default_group = ? WHERE id = 1 AND default_group = ?", ps -> { ps.setString(1, target); ps.setString(2, source); });
+            sql.update("DELETE FROM permission_groups WHERE name = ?", ps -> ps.setString(1, source));
+            advanceDefinition("group", source); advanceDefinition("group", target);
+            children.forEach(child -> advanceDefinition("group", child));
+            tracks.forEach(track -> advanceDefinition("track", track));
+            users.forEach(this::userChanged);
+            return true;
         });
     }
 

@@ -487,3 +487,31 @@ test('member search uses paginated backend results', async ({ page }) => {
   await page.getByLabel('Search group members').fill('Remote');
   await expect.poll(() => searches.at(-1)).toBe('Remote');
 });
+
+test('group rename is staged with the original identifier and applied through review', async ({ page }) => {
+  const writes = await setup(page);
+  await chooseGroup(page);
+  await page.getByRole('button', { name: 'Rename group', exact: true }).click();
+  await page.getByLabel('New group name', { exact: true }).fill('members');
+  await page.getByRole('button', { name: 'Stage rename', exact: true }).click();
+  expect(writes).toHaveLength(0);
+  await review(page);
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0]).toMatchObject({ route: '/api/permissions/group/rename', body: { group: 'default', target: 'members' } });
+});
+
+test('group rename rejects a known collision before staging', async ({ page }) => {
+  const writes = await setup(page);
+  await chooseGroup(page);
+  await page.getByRole('button', { name: 'Rename group', exact: true }).click();
+  await page.getByLabel('New group name', { exact: true }).fill('staff');
+  await page.getByRole('button', { name: 'Stage rename', exact: true }).click();
+  await expect(page.getByRole('alert')).toHaveText('Choose a name that is not already in use.');
+  expect(writes).toHaveLength(0);
+});
+
+test('read-only group editor cannot open rename', async ({ page }) => {
+  await setup(page, { readonly: true });
+  await chooseGroup(page);
+  await expect(page.getByRole('button', { name: 'Rename group', exact: true })).toBeDisabled();
+});

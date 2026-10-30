@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import eu.avalanche7.paradigm.modules.commands.admin.InventoryInspectionLayout;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IMenuPlatform;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
@@ -65,6 +66,15 @@ public final class MinecraftMenuPlatform implements IMenuPlatform {
         }
         open.put(serverPlayer.getUUID(), menu);
         return new MenuHandle(serverPlayer, menu, container);
+    }
+
+    public static boolean blockInventoryEdit(ServerPlayer player) {
+        if (player.containerMenu instanceof ParadigmChestMenu preview && preview.inventoryPreview) {
+            player.inventoryMenu.sendAllDataToRemote();
+            preview.sendAllDataToRemote();
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -186,6 +196,33 @@ public final class MinecraftMenuPlatform implements IMenuPlatform {
         }
 
         @Override
+        public boolean refreshInventory(IPlayer target, boolean enderChest) {
+            if (!isOpen() || !(target.getOriginalPlayer() instanceof ServerPlayer nativeTarget)) return false;
+            menu.inventoryPreview = true;
+            for (int slot = 0; slot < container.getContainerSize(); slot++) {
+                int source = InventoryInspectionLayout.sourceSlot(slot, enderChest, true);
+                if (source < 0) continue;
+                ItemStack original = enderChest ? nativeTarget.getEnderChestInventory().getItem(source)
+                        : source < 36 ? nativeTarget.getInventory().getItem(source)
+                        : nativeTarget.getItemBySlot(switch (source) {
+                            case 36 -> net.minecraft.world.entity.EquipmentSlot.FEET;
+                            case 37 -> net.minecraft.world.entity.EquipmentSlot.LEGS;
+                            case 38 -> net.minecraft.world.entity.EquipmentSlot.CHEST;
+                            case 39 -> net.minecraft.world.entity.EquipmentSlot.HEAD;
+                            default -> net.minecraft.world.entity.EquipmentSlot.OFFHAND;
+                        });
+                ItemStack copy = original.copy();
+                if (!ItemStack.matches(container.getItem(slot), copy)) {
+                    container.setItem(slot, copy);
+                    // Chest storage may cap counts; the preview must preserve the source.
+                    copy.setCount(original.getCount());
+                }
+            }
+            menu.broadcastChanges();
+            return true;
+        }
+
+        @Override
         public void setItem(int slot, ItemSpec spec) {
             if (slot < 0 || slot >= container.getContainerSize() || !isOpen()) {
                 return;
@@ -207,18 +244,23 @@ public final class MinecraftMenuPlatform implements IMenuPlatform {
         public void setTitle(IComponent title) {
         }
 
+        private boolean ownsWindow() {
+            return player.containerMenu == menu && (!menu.inventoryPreview || player.level().getServer().getPlayerList().getPlayer(player.getUUID()) == player);
+        }
+
         @Override
         public void close() {
+            boolean owned = ownsWindow();
             menu.detach();
             open.remove(player.getUUID(), menu);
-            if (player.containerMenu == menu) {
+            if (owned) {
                 player.closeContainer();
             }
         }
 
         @Override
         public boolean isOpen() {
-            return !menu.isDetached() && player.containerMenu == menu;
+            return !menu.isDetached() && ownsWindow();
         }
     }
 
@@ -226,6 +268,7 @@ public final class MinecraftMenuPlatform implements IMenuPlatform {
         private final ClickListener listener;
         private final int menuSlots;
         private boolean detached;
+        private boolean inventoryPreview;
 
         private ParadigmChestMenu(MenuType<ChestMenu> type, int containerId, Inventory inventory,
                 SimpleContainer container, int rows, ClickListener listener) {
@@ -247,10 +290,10 @@ public final class MinecraftMenuPlatform implements IMenuPlatform {
             if (detached || !(player instanceof ServerPlayer serverPlayer)) {
                 return;
             }
-            setCarried(ItemStack.EMPTY);
+            if (inventoryPreview) serverPlayer.inventoryMenu.sendAllDataToRemote();
             sendAllDataToRemote();
             broadcastChanges();
-            if (slotId >= 0 && slotId < menuSlots && listener != null) {
+            if (!inventoryPreview && slotId >= 0 && slotId < menuSlots && listener != null) {
                 listener.onSlotActivated(new MinecraftPlayer(serverPlayer), slotId, mapClick(clickType, button));
             }
         }
