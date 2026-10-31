@@ -647,7 +647,7 @@ function Metadata({ id, initial }: { id: string; initial: Obj }) {
           />
         </div>
         <FormatEditor
-          label="Chat username override (empty uses global format; include {player_name})"
+          label="Chat and TAB username override (empty uses global formats; include {player_name})"
           value={values.chatNameFormat}
           change={(v) => change('chatNameFormat', v)}
         />

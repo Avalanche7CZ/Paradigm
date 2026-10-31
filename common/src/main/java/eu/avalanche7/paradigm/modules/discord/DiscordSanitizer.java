@@ -39,13 +39,16 @@ public final class DiscordSanitizer {
     }
 
     public static String forDiscord(String value) {
+        return truncate(escapeMarkdown(forDiscordPlain(value)), MAX_DISCORD_CONTENT_LENGTH);
+    }
+
+    public static String forDiscordPlain(String value) {
         if (value == null || value.isEmpty()) {
             return "";
         }
         String result = ComponentSlots.strip(value);
         result = SECTION_CODE.matcher(result).replaceAll("");
         result = collapseWhitespace(result);
-        result = escapeMarkdown(result);
         result = defuseMassMentions(result);
         return truncate(result, MAX_DISCORD_CONTENT_LENGTH);
     }

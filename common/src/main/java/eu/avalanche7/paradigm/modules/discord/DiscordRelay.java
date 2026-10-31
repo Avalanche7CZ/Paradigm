@@ -43,8 +43,8 @@ public final class DiscordRelay implements ParadigmEvents.Listener {
 
     private static final String ANSI_ESC = "\u001b";
     private static final String ANSI_RESET = ANSI_ESC + "[0m";
-    private static final Pattern MARKDOWN_BOLD = Pattern.compile("\\*\\*(.+?)\\*\\*");
-    private static final Pattern MARKDOWN_ITALIC = Pattern.compile("(?<!_)_(?!_)(.+?)(?<!_)_(?!_)");
+    private static final Pattern MARKDOWN_BOLD = Pattern.compile("(?<!\\\\)\\*\\*(.+?)(?<!\\\\)\\*\\*");
+    private static final Pattern MARKDOWN_ITALIC = Pattern.compile("(?<![\\\\\\w_])_(?!_)(.+?)(?<![\\\\_])_(?![\\w_])");
 
     private static final Set<String> SENSITIVE_COMMANDS = Set.of(
             "login", "log", "l", "register", "reg", "passwd", "password", "changepassword", "changepass",
@@ -131,7 +131,17 @@ public final class DiscordRelay implements ParadigmEvents.Listener {
     private static String toAnsiSafe(String text) {
         String result = MARKDOWN_BOLD.matcher(text)
                 .replaceAll(ANSI_ESC + "[1m$1" + ANSI_ESC + "[22m");
-        return MARKDOWN_ITALIC.matcher(result).replaceAll("$1");
+        result = MARKDOWN_ITALIC.matcher(result).replaceAll("$1");
+        StringBuilder literal = new StringBuilder(result.length());
+        for (int index = 0; index < result.length(); index++) {
+            char current = result.charAt(index);
+            if (current == '\\' && index + 1 < result.length() && "\\*_~`|>".indexOf(result.charAt(index + 1)) >= 0) {
+                current = result.charAt(++index);
+            }
+            literal.append(current);
+        }
+        // Code blocks display escapes literally; prevent player text from closing the fence.
+        return literal.toString().replace("```", "`\u200B``");
     }
 
     void relayAdvancement(IPlayer player, String advancementName, String advancementDescription) {
@@ -287,7 +297,7 @@ public final class DiscordRelay implements ParadigmEvents.Listener {
                 .replace("%uuid%", uuid)
                 .replace("%randomUUID%", java.util.UUID.randomUUID().toString())
                 : "";
-        return new DiscordIdentity(DiscordSanitizer.forDiscord(name), avatar);
+        return new DiscordIdentity(DiscordSanitizer.forDiscordPlain(name), avatar);
     }
 
     String renderChatForDiscord(DiscordConfigHandler.Config config, IPlayer player, String rawMessage) {

@@ -100,7 +100,7 @@ public final class TablistMetadataResolver implements TablistMetadataProvider {
 
     private static TablistMetadata resolveMetadata(PermissionsHandler handler, IPlayer player, TablistMetadata.Source source) {
         PermissionAPI.PermissionMeta meta = handler.resolvePlayerMetadata(player);
-        return meta == null ? TablistMetadata.EMPTY : new TablistMetadata(meta.primaryGroup(), meta.prefix(), meta.suffix(), meta.weight(), source);
+        return meta == null ? TablistMetadata.EMPTY : new TablistMetadata(meta.primaryGroup(), meta.prefix(), meta.suffix(), meta.weight(), source, meta.chatNameFormat());
     }
 
     private record CacheEntry(TablistMetadata metadata, boolean internalSource, long stateVersion, long timestamp) {

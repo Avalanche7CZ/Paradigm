@@ -22,11 +22,70 @@ const colors: Record<string, string> = {
   yellow: '#ffff55',
   white: '#ffffff',
 };
+const tagName = (tag: string) => (tag === 'gr' ? 'gradient' : tag);
+const gradientColor = (value: string) => {
+  const name = value.trim().toLowerCase().replace(/[- ]/g, '_');
+  const aliases: Record<string, string> = {
+    darkblue: 'dark_blue',
+    darkgreen: 'dark_green',
+    darkaqua: 'dark_aqua',
+    darkred: 'dark_red',
+    darkpurple: 'dark_purple',
+    lightpurple: 'light_purple',
+    darkgray: 'dark_gray',
+    lightgray: 'gray',
+    grey: 'gray',
+    dark_grey: 'dark_gray',
+    orange: 'gold',
+    pink: 'light_purple',
+    magenta: 'light_purple',
+    cyan: 'aqua',
+    dark_cyan: 'dark_aqua',
+  };
+  return (
+    colors[aliases[name] || name] ||
+    (/^#?[0-9a-f]{6}$/.test(name) ? `#${name.replace('#', '')}` : '#ffffff')
+  );
+};
 export function previewSegments(raw: string): { segments: Segment[]; unsupported: string[] } {
   const segments: Segment[] = [];
   const unsupported = new Set<string>();
   let style: JSX.CSSProperties = {};
-  const stack: { tag: string; style: JSX.CSSProperties }[] = [];
+  const stack: { tag: string; style: JSX.CSSProperties; from: number; gradient?: string[] }[] = [];
+  const close = () => {
+    const frame = stack.pop()!;
+    const gradient = frame.gradient;
+    if (gradient) {
+      const content = segments
+        .splice(frame.from)
+        .flatMap((segment) =>
+          Array.from(segment.text, (text) => ({ text, style: { ...segment.style } })),
+        );
+      if (gradient.length >= 2) {
+        content.forEach((segment, index) => {
+          const position = (index / Math.max(1, content.length - 1)) * (gradient.length - 1);
+          const before = Math.floor(position),
+            after = Math.min(before + 1, gradient.length - 1);
+          const start = parseInt(gradient[before].slice(1), 16),
+            end = parseInt(gradient[after].slice(1), 16);
+          const channels = [16, 8, 0].map((shift) => {
+            const a = (start >> shift) & 255,
+              b = (end >> shift) & 255;
+            return Math.floor(a + (b - a) * (position - before))
+              .toString(16)
+              .padStart(2, '0');
+          });
+          segment.style.color = `#${channels.join('')}`;
+          segments.push(segment);
+        });
+      }
+    }
+    style = frame.style;
+  };
+  const reset = () => {
+    style = {};
+    for (const frame of stack) frame.style = {};
+  };
   const append = (text: string) => {
     if (text) segments.push({ text, style: { ...style } });
   };
@@ -35,7 +94,7 @@ export function previewSegments(raw: string): { segments: Segment[]; unsupported
       const code = token[1].toLowerCase();
       const color = Object.values(colors)['0123456789abcdef'.indexOf(code)];
       if (color) style = { color };
-      else if (code === 'r') style = {};
+      else if (code === 'r') reset();
       else if (code === 'l') style.fontWeight = 700;
       else if (code === 'o') style.fontStyle = 'italic';
       else if (code === 'n') style.textDecoration = 'underline';
@@ -49,10 +108,9 @@ export function previewSegments(raw: string): { segments: Segment[]; unsupported
     }
     const tag = token.slice(1, -1).toLowerCase();
     if (tag.startsWith('/')) {
-      const idx = stack.map((v) => v.tag).lastIndexOf(tag.slice(1));
+      const idx = stack.map((v) => v.tag).lastIndexOf(tagName(tag.slice(1)));
       if (idx >= 0) {
-        style = stack[idx].style;
-        stack.splice(idx);
+        while (stack.length > idx) close();
       } else {
         unsupported.add(tag);
         append(token);
@@ -68,12 +126,24 @@ export function previewSegments(raw: string): { segments: Segment[]; unsupported
           ? tag
           : '');
     if (tag === 'reset') {
-      style = {};
-      stack.length = 0;
+      reset();
       continue;
     }
     if (tag === 'newline' || tag === 'br') {
       append('\n');
+      continue;
+    }
+    const [name, ...arguments_] = tag.split(':');
+    if (tagName(name) === 'gradient') {
+      stack.push({
+        tag: 'gradient',
+        style: { ...style },
+        from: segments.length,
+        gradient:
+          arguments_.length && arguments_.join(':')
+            ? arguments_.map(gradientColor)
+            : ['#ff0000', '#00ff00', '#0000ff'],
+      });
       continue;
     }
     if (color) next.color = color;
@@ -86,9 +156,14 @@ export function previewSegments(raw: string): { segments: Segment[]; unsupported
       append(token);
       continue;
     }
-    stack.push({ tag: tag.startsWith('color:') ? 'color' : tag, style: { ...style } });
+    stack.push({
+      tag: tag.startsWith('color:') ? 'color' : tag,
+      style: { ...style },
+      from: segments.length,
+    });
     style = next;
   }
+  while (stack.length) close();
   return { segments, unsupported: [...unsupported] };
 }
 export function FormatPreview({ text }: { text: string }) {
@@ -104,8 +179,8 @@ export function FormatPreview({ text }: { text: string }) {
         ))}
       </div>
       <p class="muted">
-        Approximation of colors, basic styles and line breaks. Placeholders remain literal.
-        Minecraft fonts, click/hover events, gradients and platform rendering require an in-game
+        Approximation of colors, gradients, basic styles and line breaks. Placeholders remain
+        literal. Minecraft fonts, click/hover events and platform rendering require an in-game
         check.
       </p>
       {unsupported.length > 0 && (

@@ -295,11 +295,9 @@ public final class Tablist implements ParadigmModule {
         String header = TablistPlaceholderResolver.expand(String.join("\n", config.header()), entry, onlineCount, maxPlayers, identity, false);
         String footer = TablistPlaceholderResolver.expand(String.join("\n", config.footer()), entry, onlineCount, maxPlayers, identity, false);
         String name = TablistPlaceholderResolver.expand(config.playerFormat(), entry, onlineCount, maxPlayers, identity, config.showPing());
-        String prefixColor = services.getMessageParser().trailingColor(entry.metadata().prefix(), entry.player());
-        if (prefixColor != null) {
-            name = eu.avalanche7.paradigm.utils.Placeholders.presentationName(name,
-                    "<color:" + prefixColor + ">{player_name}</color>");
-        }
+        String nameFormat = entry.metadata().nameFormat();
+        String prefixColor = nameFormat.isBlank() ? services.getMessageParser().trailingColor(entry.metadata().prefix(), entry.player()) : null;
+        name = TablistPlaceholderResolver.applyNameFormat(name, nameFormat, prefixColor);
         if (services.getPlatformAdapter().supportsPlayerListNicknames()) {
             name = eu.avalanche7.paradigm.utils.Placeholders.presentationName(name, services.getNicknameService().displayName(entry.player()));
         } else {

@@ -6,6 +6,15 @@ public final class TablistPlaceholderResolver {
     private TablistPlaceholderResolver() {
     }
 
+    static String applyNameFormat(String template, String groupFormat, String prefixColor) {
+        String format = groupFormat;
+        if (format == null || format.isBlank()) {
+            if (prefixColor == null) return template;
+            format = "<color:" + prefixColor + ">{player_name}</color>";
+        }
+        return eu.avalanche7.paradigm.utils.Placeholders.presentationName(template, format);
+    }
+
     public static String expand(String input, TablistEntry entry, int onlineCount, int maxPlayers,
                                 ServerIdentity identity, boolean includePing) {
         String value = input != null ? input : "";
