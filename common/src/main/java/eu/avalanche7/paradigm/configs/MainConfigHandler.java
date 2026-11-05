@@ -203,6 +203,7 @@ public class MainConfigHandler extends BaseConfigHandler<MainConfigHandler.Confi
                 true,
                 "Enable or disable /feed command."
         );
+        public ConfigEntry<Boolean> tpCommandEnable = new ConfigEntry<>(true, "Enable or disable /tp command.");
         public ConfigEntry<Boolean> healCommandEnable = new ConfigEntry<>(
                 true,
                 "Enable or disable /heal command."

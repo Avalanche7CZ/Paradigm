@@ -99,6 +99,7 @@ public final class ParadigmModules {
         modules.add(new Menus());
         modules.add(new HomeCommand());
         modules.add(new TpaCommand());
+        modules.add(new eu.avalanche7.paradigm.modules.commands.TpCommand());
         modules.add(new WarpCommand());
         modules.add(new SpawnCommand());
         modules.add(new RtpCommand());

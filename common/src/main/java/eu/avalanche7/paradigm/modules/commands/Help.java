@@ -149,9 +149,11 @@ public class Help implements ParadigmModule {
         ));
         m.put("Home", new HelpEntry(
                 "Homes and back teleport commands.",
-                "/sethome [name], /home [name], /delhome <name>, /homes, /back",
+                "/sethome [name], /home [player:][name], /delhome <name>, /homes, /back",
                 "paradigm/playerdata/*.json"
         ));
+        m.put("Tp", new HelpEntry("Direct player teleportation.",
+                "/tp [player] <x> <y> <z> [yaw pitch], /tp [player] <destination>", "main.json: tpCommandEnable; commands.json: tp"));
         m.put("Tpa", new HelpEntry(
                 "Player teleport requests.",
                 "/tpa <player>, /tpahere <player>, /tpaccept [player], /tpdeny [player], /tpcancel [player]",

@@ -250,6 +250,10 @@
     "error_send": "Zprávu se nepodařilo odeslat. Zkus to prosím později."
   },
   "home": {
+    "other_denied": "Nemáš oprávnění navštěvovat domovy jiných hráčů.",
+    "other_usage": "Použití: /home <hráč>:<domov> nebo /home <hráč>:",
+    "other_player_missing": "Tento hráč nemá uložený profil.",
+    "other_list": "Domovy hráče {player}: {homes}",
     "location_unavailable": "Teď nejde načíst tvoje pozice.",
     "sethome_success": "Home {home} byl nastaven.",
     "home_not_found": "Home {home} nebyl nalezen.",
@@ -267,6 +271,13 @@
     "error_save": "Home se nepodařilo uložit. Zkus to prosím později.",
     "error_load": "Data homes se nepodařilo načíst. Zkus to prosím později.",
     "error_delete": "Home se nepodařilo smazat. Zkus to prosím později."
+  },
+  "tp": {
+    "usage": "Použití: /tp [hráč] <x> <y> <z> [yaw pitch] nebo /tp [hráč] <cíl>.",
+    "denied": "K této teleportaci nemáš oprávnění.",
+    "player_missing": "Je vyžadován jeden online hráč.",
+    "failed": "Teleportace selhala.",
+    "success": "Teleportace proběhla úspěšně."
   },
   "tpa": {
     "player_not_found": "Tento hráč není online.",

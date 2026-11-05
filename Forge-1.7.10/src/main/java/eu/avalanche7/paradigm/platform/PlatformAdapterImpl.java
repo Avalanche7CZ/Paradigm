@@ -82,6 +82,8 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     private final Set<ForgeCommand> ownedCommands = new LinkedHashSet<>();
     private final Map<ForgeCommand, List<Object>> hybridCommandWrappers = new LinkedHashMap<>();
     private final Map<Object, Runnable> commandContributors = new LinkedHashMap<>();
+    private record HybridRootClaim(Map<String, Object> commands, Object displaced) { }
+    private final Map<String, HybridRootClaim> displacedHybridRoots = new LinkedHashMap<>();
     private final Map<String, ICommand> displacedCommands = new LinkedHashMap<>();
     private Object registeringContributor;
     private final Set<EntityPlayerMP> invulnerablePlayers = Collections.newSetFromMap(new WeakHashMap<>());
@@ -140,6 +142,7 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
         for (ForgeCommand command : new ArrayList<>(hybridCommandWrappers.keySet())) {
             restoreHybridCommandPermissions(command);
         }
+        for (String root : new ArrayList<>(displacedHybridRoots.keySet())) restoreHybridPrimaryRoot(root);
         menuPlatform.stopped();
         hologramPlatform.clear();
         if (visuals != null) visuals.clear();
@@ -1308,6 +1311,15 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public IPlayer resolveTeleportPlayer(ICommandSource source, String token) {
+        try {
+            return new MinecraftPlayer(net.minecraft.command.CommandBase.getPlayer((net.minecraft.command.ICommandSender) source.getOriginalSource(), token));
+        } catch (net.minecraft.command.CommandException invalid) {
+            return null;
+        }
+    }
+
+    @Override
     public void registerCommand(ICommandBuilder builder) {
         if (server == null || !(server.getCommandManager() instanceof CommandHandler manager)) {
             throw new IllegalStateException("Native command manager is not available");
@@ -1320,11 +1332,19 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
         if (commandToggles != null && entry != null && !commandToggles.isEnabled(entry.id())) {
             return;
         }
+        Map<String, Object> primaryCommands = hybridPrimaryCommands();
+        Object primary = primaryCommands == null ? null : primaryCommands.get(name);
+        if (primary != null && CommandPriority.isManagedRoot(name) && !CommandPriority.shouldOwnRoot(name)) {
+            if (commandCollisions.add(name)) LOGGER.warn("Paradigm command /{} was not registered: Bukkit root already owned by {}",
+                    name, primary.getClass().getName());
+            return;
+        }
         ICommand occupied = (ICommand) manager.getCommands().get(name);
         Object contributor = registeringContributor == null ? this : registeringContributor;
         if (occupied instanceof ForgeCommand own && own.ownedBy(this)) {
             commandCollisions.remove(name);
             own.addRoot(root, contributor);
+            claimHybridPrimaryRoot(name, primaryCommands);
             return;
         }
         if (occupied != null) {
@@ -1348,6 +1368,46 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
         relaxHybridCommandPermissions(command);
         commandCollisions.remove(name);
         ownedCommands.add(command);
+        claimHybridPrimaryRoot(name, primaryCommands);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> hybridPrimaryCommands() {
+        try {
+            Object craftServer = Class.forName("org.bukkit.Bukkit").getMethod("getServer").invoke(null);
+            if (craftServer == null) return null;
+            Object commandMap = craftServer.getClass().getMethod("getCommandMap").invoke(craftServer);
+            Class<?> type = commandMap.getClass();
+            while (type != null) {
+                try {
+                    var field = type.getDeclaredField("knownCommands");
+                    field.setAccessible(true);
+                    return (Map<String, Object>) field.get(commandMap);
+                } catch (NoSuchFieldException inherited) {
+                    type = type.getSuperclass();
+                }
+            }
+            throw new NoSuchFieldException("SimpleCommandMap.knownCommands");
+        } catch (ClassNotFoundException | NoSuchMethodException unavailable) {
+            return null;
+        } catch (ReflectiveOperationException | SecurityException | LinkageError failure) {
+            throw new IllegalStateException("Could not inspect Crucible's primary Bukkit command map", failure);
+        }
+    }
+
+    private void claimHybridPrimaryRoot(String root, Map<String, Object> commands) {
+        if (commands == null || !CommandPriority.shouldOwnRoot(root)) return;
+        Object displaced = commands.get(root);
+        if (displaced == null) return;
+        displacedHybridRoots.putIfAbsent(root, new HybridRootClaim(commands, displaced));
+        commands.remove(root, displaced);
+        LOGGER.warn("Paradigm command /{} takes priority over Bukkit command {} because forceCommandPriorityEnable is enabled",
+                root, displaced.getClass().getName());
+    }
+
+    private void restoreHybridPrimaryRoot(String root) {
+        HybridRootClaim claim = displacedHybridRoots.remove(root);
+        if (claim != null) claim.commands().putIfAbsent(root, claim.displaced());
     }
 
     private void relaxHybridCommandPermissions(ForgeCommand command) {
@@ -1504,6 +1564,7 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
 
     private void removeNativeCommand(CommandHandler manager, String root, ForgeCommand command) {
         restoreHybridCommandPermissions(command);
+        restoreHybridPrimaryRoot(root);
         boolean removed = manager.getCommands().remove(root, command);
         nativeCommandSet(manager).remove(command);
         ICommand displaced = displacedCommands.remove(root);

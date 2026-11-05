@@ -1,5 +1,6 @@
 package eu.avalanche7.paradigm.modules.commands;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +29,11 @@ public class HomeCommand implements ParadigmModule {
     private static final int HOMES_PER_CHAT_LINE = 6;
     private static final long HOME_SUGGESTION_REFRESH_MS = 10_000L;
     private static final Pattern SAFE_NAME = Pattern.compile("[A-Za-z0-9_-]{1,32}");
+
+    private record OtherHomes(String owner, List<StoredHome> homes) { }
+    private record OtherSuggestions(String owner, List<String> names, long loadedAt) { }
+    private final Map<String, OtherSuggestions> otherSuggestions = new ConcurrentHashMap<>();
+    private final Set<String> otherSuggestionsInFlight = ConcurrentHashMap.newKeySet();
 
     private Services services;
     private IPlatformAdapter platform;
@@ -67,6 +73,8 @@ public class HomeCommand implements ParadigmModule {
 
     @Override
     public void onServerStopping(Object event, Services services) {
+        otherSuggestions.clear();
+        otherSuggestionsInFlight.clear();
         homeSuggestionCache.clear();
         homeSuggestionCacheUpdatedAt.clear();
         homeSuggestionRefreshInFlight.clear();
@@ -108,6 +116,8 @@ public class HomeCommand implements ParadigmModule {
                     return;
                 }
                 String uuid = player.getUUID();
+                otherSuggestions.remove(uuid);
+                otherSuggestionsInFlight.remove(uuid);
                 homeSuggestionCache.remove(uuid);
                 homeSuggestionCacheUpdatedAt.remove(uuid);
                 homeSuggestionRefreshInFlight.remove(uuid);
@@ -175,7 +185,7 @@ public class HomeCommand implements ParadigmModule {
                         .executes(ctx -> executeBack(ctx.getSource().getPlayer())))
                 .then(platform.createCommandBuilder()
                         .argument("name", ICommandBuilder.ArgumentType.WORD)
-                        .suggests((c, input) -> homeSuggestions(c.getSource().getPlayer()))
+                        .suggests((c, input) -> teleportHomeSuggestions(c.getSource().getPlayer(), input))
                         .executes(ctx -> canUseHome(ctx.getSource().getPlayer())
                                 ? executeHome(ctx.getSource().getPlayer(), ctx.getStringArgument("name"))
                                 : 0));
@@ -184,6 +194,7 @@ public class HomeCommand implements ParadigmModule {
 
     private boolean canUseHome(IPlayer player) {
         return player != null
+                && isEnabled(services)
                 && services.getCommandToggleStore().isEnabled("home")
                 && services.getPermissionsHandler().hasPermission(player, ParadigmPermissions.HOME_USE);
     }
@@ -306,6 +317,8 @@ public class HomeCommand implements ParadigmModule {
     private int executeHome(IPlayer player, String homeName) {
         if (player == null) return 0;
 
+        if (homeName != null && homeName.contains(":")) return executeOtherHome(player, homeName);
+
         String normalized = normalizeInputName(homeName, "home");
         if (normalized == null) {
             send(player, "home.invalid_name", "Invalid home name. Use letters, numbers, _ or -.");
@@ -325,6 +338,96 @@ public class HomeCommand implements ParadigmModule {
                             canUseHome(fresh) ? teleportHome(fresh, normalized, destination) : 0);
                 },
                 "home.error_load");
+    }
+
+    private boolean canVisitOtherHomes(IPlayer player) {
+        return canUseHome(player) && services.getPermissionsHandler().hasPermission(player, ParadigmPermissions.HOME_OTHERS);
+    }
+
+    private String ownerName(String argument) {
+        int colon = argument.indexOf(':');
+        if (colon < 1 || argument.indexOf(':', colon + 1) >= 0) return null;
+        String owner = argument.substring(0, colon);
+        return owner.matches("[A-Za-z0-9_]{1,16}") ? owner : null;
+    }
+
+    private OtherHomes loadOtherHomes(String owner, String onlineUuid) {
+        String uuid = onlineUuid != null ? onlineUuid : services.getPlayerProfileService().findByNameOrUuid(owner)
+                .map(profile -> profile.uuid()).orElse(null);
+        if (uuid == null) return null;
+        return new OtherHomes(owner, services.getStorageService().players().listHomes(uuid).stream()
+                .filter(home -> home != null && home.location() != null && home.name() != null)
+                .sorted(Comparator.comparing(StoredHome::name, String.CASE_INSENSITIVE_ORDER)).toList());
+    }
+
+    private int executeOtherHome(IPlayer player, String argument) {
+        if (!canVisitOtherHomes(player)) {
+            send(player, "home.other_denied", "You do not have permission to visit other players' homes.");
+            return 0;
+        }
+        String owner = ownerName(argument);
+        String name = argument.substring(argument.indexOf(':') + 1);
+        if (owner == null || (!name.isEmpty() && !SAFE_NAME.matcher(name).matches())) {
+            send(player, "home.other_usage", "Usage: /home <player>:<home> or /home <player>:");
+            return 0;
+        }
+        IPlayer online = platform.getPlayerByName(owner);
+        String onlineUuid = online != null ? online.getUUID() : null;
+        return StorageCommandSupport.runForPlayer(services, player, "home.other_load", () -> loadOtherHomes(owner, onlineUuid),
+                (current, result) -> {
+                    if (!canVisitOtherHomes(current)) return;
+                    if (result == null) {
+                        send(current, "home.other_player_missing", "That player has no stored profile.");
+                    } else if (name.isEmpty()) {
+                        sendWithPlaceholders(current, "home.other_list", "Homes of {player}: {homes}",
+                                "{player}", owner, "{homes}", result.homes().isEmpty() ? "-"
+                                        : String.join(", ", result.homes().stream().map(StoredHome::name).map(HomeCommand::safe).toList()));
+                    } else {
+                        StoredHome home = result.homes().stream().filter(value -> name.equalsIgnoreCase(value.name())).findFirst().orElse(null);
+                        if (home == null) {
+                            send(current, "home.home_not_found", "Home {home} was not found.", "{home}", name);
+                            return;
+                        }
+                        CommandCooldowns.run(services, current, "home", fresh -> canVisitOtherHomes(fresh)
+                                ? teleportHome(fresh, owner + ":" + home.name(), toDataLocation(home.location())) : 0);
+                    }
+                }, "home.error_load");
+    }
+
+    private List<String> teleportHomeSuggestions(IPlayer player, String input) {
+        if (!canUseHome(player)) return List.of();
+        List<String> names = new ArrayList<>(homeSuggestions(player));
+        if (!canVisitOtherHomes(player)) return names;
+        String argument = input == null ? "" : input;
+        if (!argument.contains(":")) {
+            platform.getVisiblePlayerNames(player).forEach(name -> names.add(name + ":"));
+            return names;
+        }
+        String owner = ownerName(argument);
+        if (owner == null) return List.of();
+        String actor = player.getUUID();
+        if (actor == null) return List.of();
+        OtherSuggestions cached = otherSuggestions.get(actor);
+        boolean matching = cached != null && owner.equalsIgnoreCase(cached.owner());
+        if ((!matching || System.currentTimeMillis() - cached.loadedAt() >= HOME_SUGGESTION_REFRESH_MS)
+                && otherSuggestionsInFlight.add(actor)) {
+            IPlayer online = platform.getPlayerByName(owner);
+            String onlineUuid = online != null ? online.getUUID() : null;
+            services.getStorageService().runAsync("home.other_suggestions", () -> loadOtherHomes(owner, onlineUuid), services.getTaskScheduler(), result -> {
+                otherSuggestionsInFlight.remove(actor);
+                IPlayer current = platform.getPlayerByUuid(actor);
+                if (canVisitOtherHomes(current)) {
+                    otherSuggestions.put(actor, new OtherSuggestions(owner, result == null ? List.of() : result.homes().stream()
+                            .map(StoredHome::name).filter(name -> SAFE_NAME.matcher(name).matches()).toList(), System.currentTimeMillis()));
+                }
+            }, failure -> {
+                otherSuggestionsInFlight.remove(actor);
+                if (services.getDebugLogger() != null) services.getDebugLogger().debugLog("Home suggestions failed: " + failure);
+            });
+            cached = otherSuggestions.get(actor);
+            matching = cached != null && owner.equalsIgnoreCase(cached.owner());
+        }
+        return matching ? cached.names().stream().map(name -> owner + ":" + name).toList() : List.of();
     }
 
     private int teleportHome(IPlayer player, String normalized, PlayerDataStore.StoredLocation destination) {

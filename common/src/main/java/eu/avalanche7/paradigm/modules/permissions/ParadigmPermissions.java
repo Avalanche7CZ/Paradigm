@@ -95,6 +95,9 @@ public final class ParadigmPermissions {
             def("paradigm.feed", OP, "Allows using /feed.");
     public static final PermissionDefinition FEED_OTHERS =
             def("paradigm.feed.others", OP, "Allows feeding another player.");
+    public static final PermissionDefinition TP = def("paradigm.tp", OP, "Allows teleporting yourself to coordinates.");
+    public static final PermissionDefinition TP_PLAYER = def("paradigm.tp.player", OP, "Allows teleporting yourself to a player.");
+    public static final PermissionDefinition TP_OTHERS = def("paradigm.tp.others", OP, "Allows teleporting other players.");
     public static final PermissionDefinition HEAL =
             def("paradigm.heal", OP, "Allows using /heal.");
     public static final PermissionDefinition WORKBENCH =
@@ -103,6 +106,8 @@ public final class ParadigmPermissions {
             def("paradigm.enderchest", OP, "Allows opening your own ender chest with /enderchest.");
     public static final PermissionDefinition HEAL_OTHERS =
             def("paradigm.heal.others", OP, "Allows healing another player.");
+    public static final PermissionDefinition HOME_OTHERS =
+            def("paradigm.home.others", OP, "Allows listing and visiting other players homes.");
     public static final PermissionDefinition HOME_USE =
             def("paradigm.home", EVERYONE, "Allows teleporting to home with /home.");
     public static final PermissionDefinition HOME_SET =
@@ -320,8 +325,8 @@ public final class ParadigmPermissions {
             PRIVATE_MESSAGE, PRIVATE_REPLY, SOCIAL_SPY, SPAWN, SET_SPAWN, SEEN, IGNORE,
             AFK, PLAYTIME, PLAYTIME_OTHERS,
             GAMEMODE, GAMEMODE_OTHERS, FLY, FLY_OTHERS, CLEAR_INVENTORY, CLEAR_INVENTORY_OTHERS,
-            TIME, WEATHER, SPEED, SPEED_OTHERS, FEED, FEED_OTHERS, HEAL, HEAL_OTHERS, WORKBENCH, ENDER_CHEST,
-            HOME_USE, HOME_SET, HOME_DELETE, HOME_LIST, HOME_LIMIT_TEMPLATE, HOME_LIMIT_UNLIMITED,
+            TIME, WEATHER, SPEED, SPEED_OTHERS, FEED, FEED_OTHERS, HEAL, HEAL_OTHERS, TP, TP_PLAYER, TP_OTHERS, WORKBENCH, ENDER_CHEST,
+            HOME_USE, HOME_OTHERS, HOME_SET, HOME_DELETE, HOME_LIST, HOME_LIMIT_TEMPLATE, HOME_LIMIT_UNLIMITED,
             BACK, TPA, TPA_HERE, TPA_ACCEPT, TPA_DENY, TPA_CANCEL,
             WARP_USE, WARP_WILDCARD, WARP_SET, WARP_DELETE, WARP_LIST, WARP_INFO,
             KICK, BAN, TEMP_BAN, IP_BAN, MUTE, TEMP_MUTE, WARN, JAIL, JAIL_MANAGE,

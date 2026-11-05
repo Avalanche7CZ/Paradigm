@@ -250,6 +250,10 @@
     "error_send": "Could not send your message. Please try again later."
   },
   "home": {
+    "other_denied": "You do not have permission to visit other players' homes.",
+    "other_usage": "Usage: /home <player>:<home> or /home <player>:",
+    "other_player_missing": "That player has no stored profile.",
+    "other_list": "Homes of {player}: {homes}",
     "location_unavailable": "Unable to read your location right now.",
     "sethome_success": "Home {home} has been set.",
     "home_not_found": "Home {home} was not found.",
@@ -267,6 +271,13 @@
     "error_save": "Could not save your home. Please try again later.",
     "error_load": "Could not load your home data. Please try again later.",
     "error_delete": "Could not delete your home. Please try again later."
+  },
+  "tp": {
+    "usage": "Usage: /tp [player] <x> <y> <z> [yaw pitch] or /tp [player] <destination>.",
+    "denied": "You do not have permission for this teleport.",
+    "player_missing": "A single online player is required.",
+    "failed": "Teleport failed.",
+    "success": "Teleported successfully."
   },
   "tpa": {
     "player_not_found": "That player is not online.",

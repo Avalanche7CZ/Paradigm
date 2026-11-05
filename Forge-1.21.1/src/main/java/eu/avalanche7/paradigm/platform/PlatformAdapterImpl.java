@@ -608,6 +608,18 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public eu.avalanche7.paradigm.platform.Interfaces.IPlayer resolveTeleportPlayer(eu.avalanche7.paradigm.platform.Interfaces.ICommandSource source, String token) {
+        try {
+            var reader = new com.mojang.brigadier.StringReader(token);
+            var selector = new net.minecraft.commands.arguments.selector.EntitySelectorParser(reader, true).parse();
+            if (reader.canRead()) return null;
+            return new MinecraftPlayer(selector.findSinglePlayer((net.minecraft.commands.CommandSourceStack) source.getOriginalSource()));
+        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException invalid) {
+            return null;
+        }
+    }
+
+    @Override
     public void registerCommand(eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder builder) {
         Object built = builder != null ? builder.build() : null;
         if (!(built instanceof LiteralArgumentBuilder<?> lit)) {

@@ -24,6 +24,10 @@ public interface IPlatformAdapter {
     void setMinecraftServer(Object server);
     List<IPlayer> getOnlinePlayers();
     @Nullable IPlayer getPlayerByName(String name);
+
+    default IPlayer resolveTeleportPlayer(ICommandSource source, String token) {
+        return token.startsWith("@") ? null : getPlayerByName(token);
+    }
     @Nullable IPlayer getPlayerByUuid(String uuid);
     String getPlayerName(IPlayer player);
     IComponent getPlayerDisplayName(IPlayer player);

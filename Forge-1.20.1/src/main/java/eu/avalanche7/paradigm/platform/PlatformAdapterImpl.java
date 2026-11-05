@@ -614,6 +614,18 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public IPlayer resolveTeleportPlayer(ICommandSource source, String token) {
+        try {
+            var reader = new com.mojang.brigadier.StringReader(token);
+            var selector = new net.minecraft.commands.arguments.selector.EntitySelectorParser(reader).parse();
+            if (reader.canRead()) return null;
+            return new MinecraftPlayer(selector.findSinglePlayer((net.minecraft.commands.CommandSourceStack) source.getOriginalSource()));
+        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException invalid) {
+            return null;
+        }
+    }
+
+    @Override
     public void registerCommand(ICommandBuilder builder) {
         Object built = builder != null ? builder.build() : null;
         if (!(built instanceof com.mojang.brigadier.builder.LiteralArgumentBuilder<?> lit)) {

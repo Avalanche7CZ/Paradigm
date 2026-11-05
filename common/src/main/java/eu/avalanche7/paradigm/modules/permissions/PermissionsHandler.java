@@ -69,8 +69,12 @@ public class PermissionsHandler {
     public static final String SPEED_OTHERS_PERMISSION = ParadigmPermissions.SPEED_OTHERS.node();
     public static final String FEED_PERMISSION = ParadigmPermissions.FEED.node();
     public static final String FEED_OTHERS_PERMISSION = ParadigmPermissions.FEED_OTHERS.node();
+    public static final String TP_PERMISSION = ParadigmPermissions.TP.node();
+    public static final String TP_PLAYER_PERMISSION = ParadigmPermissions.TP_PLAYER.node();
+    public static final String TP_OTHERS_PERMISSION = ParadigmPermissions.TP_OTHERS.node();
     public static final String HEAL_PERMISSION = ParadigmPermissions.HEAL.node();
     public static final String HEAL_OTHERS_PERMISSION = ParadigmPermissions.HEAL_OTHERS.node();
+    public static final String HOME_OTHERS_PERMISSION = ParadigmPermissions.HOME_OTHERS.node();
     public static final String HOME_USE_PERMISSION = ParadigmPermissions.HOME_USE.node();
     public static final String HOME_SET_PERMISSION = ParadigmPermissions.HOME_SET.node();
     public static final String HOME_DEL_PERMISSION = ParadigmPermissions.HOME_DELETE.node();
@@ -144,8 +148,12 @@ public class PermissionsHandler {
     public static final int SPEED_OTHERS_PERMISSION_LEVEL = ParadigmPermissions.SPEED_OTHERS.fallbackLevel();
     public static final int FEED_PERMISSION_LEVEL = ParadigmPermissions.FEED.fallbackLevel();
     public static final int FEED_OTHERS_PERMISSION_LEVEL = ParadigmPermissions.FEED_OTHERS.fallbackLevel();
+    public static final int TP_PERMISSION_LEVEL = ParadigmPermissions.TP.fallbackLevel();
+    public static final int TP_PLAYER_PERMISSION_LEVEL = ParadigmPermissions.TP_PLAYER.fallbackLevel();
+    public static final int TP_OTHERS_PERMISSION_LEVEL = ParadigmPermissions.TP_OTHERS.fallbackLevel();
     public static final int HEAL_PERMISSION_LEVEL = ParadigmPermissions.HEAL.fallbackLevel();
     public static final int HEAL_OTHERS_PERMISSION_LEVEL = ParadigmPermissions.HEAL_OTHERS.fallbackLevel();
+    public static final int HOME_OTHERS_PERMISSION_LEVEL = ParadigmPermissions.HOME_OTHERS.fallbackLevel();
     public static final int HOME_USE_PERMISSION_LEVEL = ParadigmPermissions.HOME_USE.fallbackLevel();
     public static final int HOME_SET_PERMISSION_LEVEL = ParadigmPermissions.HOME_SET.fallbackLevel();
     public static final int HOME_DEL_PERMISSION_LEVEL = ParadigmPermissions.HOME_DELETE.fallbackLevel();
