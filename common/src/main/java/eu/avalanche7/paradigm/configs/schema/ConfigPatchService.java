@@ -105,7 +105,7 @@ public class ConfigPatchService {
                     if (dashboard == null) dashboard = DashboardConfig.read(services.getPlatformAdapter().getConfig());
                     applyDashboard(dashboard, name, value);
                 } else {
-                    var candidate = candidates.computeIfAbsent(section, entry -> entry.handler().edit());
+                    var candidate = candidates.computeIfAbsent(section, entry -> entry.handler().edit(currentValue -> validateFile(entry, currentValue)));
                     update(section, candidate.value(), name, value);
                 }
                 accepted.computeIfAbsent(section, entry -> new LinkedHashMap<>()).put(key, field.reloadBehavior());
@@ -129,7 +129,7 @@ public class ConfigPatchService {
                 } else {
                     var candidate = candidates.get(section);
                     boolean liveChanged = runtime.save(section, candidate, publications);
-                    if (liveChanged && entry.getValue().containsValue(ConfigReloadBehavior.LIVE)) changed.add(section);
+                    if (liveChanged) changed.add(section);
                 }
                 DashboardConfig savedDashboard = dashboard;
                 entry.getValue().forEach((key, behavior) -> {

@@ -88,23 +88,35 @@ public class CommandToggleStore {
             return ToggleResult.protectedCommand(canonical);
         }
 
-        Map<String, Boolean> candidate = listStates();
+        Map<String, Boolean> candidate = readReload();
         candidate.put(canonical, enabled);
         save(candidate);
+        recordSaved(candidate);
         publish(candidate);
         return ToggleResult.success(canonical, enabled);
     }
 
     public Map<String, Boolean> readReload() {
+        return overlaySavedStates(loadPersistedStates(true));
+    }
+
+    public Map<String, Boolean> reviewedStates() {
+        return overlaySavedStates(persistedStates);
+    }
+
+    private Map<String, Boolean> overlaySavedStates(Map<String, Boolean> saved) {
         Map<String, Boolean> candidate = listStates();
-        loadPersistedStates(true).forEach((id, enabled) -> {
+        saved.forEach((id, enabled) -> {
             if (candidate.containsKey(id)) candidate.put(id, isProtected(id) || enabled);
         });
         return candidate;
     }
 
+    public void recordSaved(Map<String, Boolean> candidate) {
+        persistedStates = Map.copyOf(candidate);
+    }
+
     public synchronized void publish(Map<String, Boolean> candidate) {
-        persistedStates = new LinkedHashMap<>(candidate);
         commandStates.putAll(candidate);
     }
 

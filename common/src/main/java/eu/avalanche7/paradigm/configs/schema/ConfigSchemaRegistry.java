@@ -133,7 +133,7 @@ public class ConfigSchemaRegistry {
     }
 
     private void addChatFields(List<ConfigField> fields) {
-        ChatConfigHandler.Config current = ChatConfigHandler.getConfig();
+        ChatConfigHandler.Config current = ChatConfigHandler.handler().reviewed();
         ChatConfigHandler.Config defaults = new ChatConfigHandler.Config();
         addConfigEntries(fields, "chat", "chat", ChatConfigHandler.Config.class, current, defaults, "chat.json");
 
@@ -171,20 +171,20 @@ public class ConfigSchemaRegistry {
     }
 
     private void addMentionFields(List<ConfigField> fields) {
-        MentionConfigHandler.Config current = MentionConfigHandler.getConfig();
+        MentionConfigHandler.Config current = MentionConfigHandler.handler().reviewed();
         MentionConfigHandler.Config defaults = new MentionConfigHandler.Config();
         addConfigEntries(fields, "mentions", "chat", MentionConfigHandler.Config.class, current, defaults, "mentions.json");
     }
 
     private void addAnnouncementFields(List<ConfigField> fields) {
-        AnnouncementsConfigHandler.Config current = AnnouncementsConfigHandler.getConfig();
+        AnnouncementsConfigHandler.Config current = AnnouncementsConfigHandler.handler().reviewed();
         AnnouncementsConfigHandler.Config defaults = new AnnouncementsConfigHandler.Config();
         addConfigEntries(fields, "announcements", "announcements", AnnouncementsConfigHandler.Config.class, current, defaults,
                 "announcements.json");
     }
 
     private void addRestartFields(List<ConfigField> fields) {
-        RestartConfigHandler.Config current = RestartConfigHandler.getConfig();
+        RestartConfigHandler.Config current = RestartConfigHandler.handler().reviewed();
         RestartConfigHandler.Config defaults = new RestartConfigHandler.Config();
         addConfigEntries(fields, "restart", "restart", RestartConfigHandler.Config.class, current, defaults,
                 "restarts.json");
@@ -209,7 +209,7 @@ public class ConfigSchemaRegistry {
     }
 
     private void addMotdFields(List<ConfigField> fields) {
-        MOTDConfigHandler.Config current = MOTDConfigHandler.getConfig();
+        MOTDConfigHandler.Config current = MOTDConfigHandler.handler().reviewed();
         MOTDConfigHandler.Config defaults = new MOTDConfigHandler.Config();
         fields.add(stringListField("motd.motdLines", "motd", "Join MOTD Lines",
                 "Message sent to players after joining. Empty lines are preserved.", current.motdLines, defaults.motdLines,
@@ -251,7 +251,7 @@ public class ConfigSchemaRegistry {
     }
 
     private void addTablistFields(List<ConfigField> fields) {
-        TablistConfigHandler.Config current = TablistConfigHandler.getConfig();
+        TablistConfigHandler.Config current = TablistConfigHandler.handler().reviewed();
         TablistConfigHandler.Config defaults = new TablistConfigHandler.Config();
         addConfigEntries(fields, "tablist", "tablist", TablistConfigHandler.Config.class, current, defaults,
                 "tablist.json");
@@ -276,7 +276,7 @@ public class ConfigSchemaRegistry {
         if (!DiscordConfigHandler.isInitialized()) {
             return;
         }
-        DiscordConfigHandler.Config current = DiscordConfigHandler.getConfig();
+        DiscordConfigHandler.Config current = DiscordConfigHandler.handler().reviewed();
         DiscordConfigHandler.Config defaults = new DiscordConfigHandler.Config();
         addConfigEntries(fields, "discord", "discord", DiscordConfigHandler.Config.class, current, defaults,
                 "discord.json");
@@ -308,7 +308,7 @@ public class ConfigSchemaRegistry {
     }
 
     private void addModerationFields(List<ConfigField> fields) {
-        ModerationConfigHandler.Config current = ModerationConfigHandler.getConfig();
+        ModerationConfigHandler.Config current = ModerationConfigHandler.handler().reviewed();
         ModerationConfigHandler.Config defaults = new ModerationConfigHandler.Config();
         addConfigEntries(fields, "moderation", "moderation", ModerationConfigHandler.Config.class, current, defaults,
                 "moderation-settings.json");
@@ -322,7 +322,7 @@ public class ConfigSchemaRegistry {
         if (!AfkConfigHandler.isInitialized()) {
             return;
         }
-        AfkConfigHandler.Config current = AfkConfigHandler.getConfig();
+        AfkConfigHandler.Config current = AfkConfigHandler.handler().reviewed();
         AfkConfigHandler.Config defaults = new AfkConfigHandler.Config();
         addConfigEntries(fields, "afk", "afk", AfkConfigHandler.Config.class, current, defaults,
                 "afk.json");
@@ -346,7 +346,7 @@ public class ConfigSchemaRegistry {
         if (services == null || services.getCommandToggleStore() == null) {
             return;
         }
-        for (Map.Entry<String, Boolean> entry : services.getCommandToggleStore().listStates().entrySet()) {
+        for (Map.Entry<String, Boolean> entry : services.getCommandToggleStore().reviewedStates().entrySet()) {
             boolean protectedCommand = services.getCommandToggleStore().isProtected(entry.getKey());
             fields.add(new ConfigField(
                     "commands." + entry.getKey(),

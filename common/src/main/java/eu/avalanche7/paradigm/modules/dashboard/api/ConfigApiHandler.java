@@ -125,9 +125,15 @@ public class ConfigApiHandler {
                 "rejected", String.valueOf(result.rejected().size())
         );
         if (!result.ok()) {
-            dashboard.audit().dashboard(ctx.principal(), AuditActionType.CONFIG_PATCH, AuditResult.FAILED, "Config patch rejected.", details);
+            boolean savedPending = !result.accepted().isEmpty()
+                    && result.rejected().stream().anyMatch(error -> "<runtime>".equals(error.key()));
+            String message = savedPending ? "Settings were saved and are pending local application."
+                    : "One or more config fields were rejected.";
+            dashboard.audit().dashboard(ctx.principal(), AuditActionType.CONFIG_PATCH, AuditResult.FAILED,
+                    savedPending ? message : "Config patch rejected.", details);
             String code = result.rejected().stream().anyMatch(error -> "<revision>".equals(error.key())) ? "stale_revision" : "validation_failed";
-            return DashboardResponse.json(409, new DashboardResponse.ApiEnvelope(false, result, new DashboardResponse.ApiError(code, "One or more config fields were rejected."), result.warnings()));
+            return DashboardResponse.json(409, new DashboardResponse.ApiEnvelope(false, result,
+                    new DashboardResponse.ApiError(code, message), result.warnings()));
         }
         dashboard.audit().dashboard(ctx.principal(), AuditActionType.CONFIG_PATCH, AuditResult.SUCCESS, result.pending().isEmpty() ? "Config patch applied." : "Config patch saved with pending settings.", details);
         for (String key : result.accepted()) {

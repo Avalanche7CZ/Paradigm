@@ -72,18 +72,23 @@ public class JsonWarpRepository implements WarpRepository {
         }
         eu.avalanche7.paradigm.configs.schema.ConfigPatchService.serialized(() -> {
             var handler = MainConfigHandler.handler();
-            MainConfigHandler.Config candidate = handler.editableCopy();
-            candidate.spawnWorld.value = location.worldId();
-            candidate.spawnX.value = location.x();
-            candidate.spawnY.value = location.y();
-            candidate.spawnZ.value = location.z();
-            candidate.spawnYaw.value = location.yaw();
-            candidate.spawnPitch.value = location.pitch();
-            handler.save(candidate);
-            handler.publish(handler.forRuntime(candidate));
-            handler.recordSaved(candidate);
+            var candidate = handler.edit();
+            MainConfigHandler.Config active = handler.copy(handler.active());
+            setSpawn(candidate.value(), location);
+            setSpawn(active, location);
+            candidate.save();
+            handler.publish(active);
             return null;
         });
+    }
+
+    private static void setSpawn(MainConfigHandler.Config config, StoredLocation location) {
+        config.spawnWorld.value = location.worldId();
+        config.spawnX.value = location.x();
+        config.spawnY.value = location.y();
+        config.spawnZ.value = location.z();
+        config.spawnYaw.value = location.yaw();
+        config.spawnPitch.value = location.pitch();
     }
 
     private StoredWarp fromEntry(WarpStore.WarpEntry entry) {

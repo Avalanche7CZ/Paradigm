@@ -38,23 +38,12 @@ public class MainConfigHandler extends BaseConfigHandler<MainConfigHandler.Confi
         return INSTANCE.config;
     }
 
-    private volatile Config reviewed;
-
     public static void persistConfig() {
-        if (INSTANCE != null && INSTANCE.config != null) INSTANCE.save(INSTANCE.editableCopy());
-    }
-
-    @Override
-    public Config editableCopy() {
-        Config candidate = copy(active());
-        Config saved = reviewed;
-        if (saved != null) copyRestartSettings(saved, candidate);
-        return candidate;
-    }
-
-    public Config reviewed() {
-        Config saved = reviewed;
-        return saved == null ? active() : saved;
+        if (INSTANCE != null && INSTANCE.config != null) {
+            var candidate = INSTANCE.edit();
+            candidate.value().telemetryServerId.value = INSTANCE.active().telemetryServerId.value;
+            candidate.save();
+        }
     }
 
     @Override
@@ -66,10 +55,6 @@ public class MainConfigHandler extends BaseConfigHandler<MainConfigHandler.Confi
 
     public boolean hasPendingRestart(Config candidate) {
         return !settings(candidate).equals(settings(forRuntime(candidate)));
-    }
-
-    public void recordSaved(Config candidate) {
-        reviewed = candidate;
     }
 
     private static void copyRestartSettings(Config source, Config target) {

@@ -66,3 +66,5 @@ ForgeAnnoucements-1.0.0/plugin.yml
 !/dashboard/tests/login.test.tsx
 
 !/common/src/test/java/eu/avalanche7/paradigm/platform/VanishTrackingDimensionTest.java
+
+!/common/src/test/java/eu/avalanche7/paradigm/configs/schema/ConfigurationApplyTest.java

@@ -5,6 +5,7 @@ import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.function.Consumer;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -25,6 +26,7 @@ public abstract class BaseConfigHandler<T> {
     protected final String configFileName;
     protected JsonValidator jsonValidator;
     protected volatile T config;
+    private volatile T savedSettings;
 
     protected BaseConfigHandler(Logger logger, IConfig platformConfig, String configFileName) {
         this.logger = logger;
@@ -87,21 +89,39 @@ public abstract class BaseConfigHandler<T> {
         return configFileName;
     }
 
+    public T reviewed() {
+        T saved = savedSettings;
+        return saved == null ? active() : saved;
+    }
+
+    private void recordSaved(T value) {
+        savedSettings = copy(value);
+    }
+
     public T editableCopy() {
-        return copy(active());
+        return copy(reviewed());
     }
 
     public T forRuntime(T candidate) {
         return candidate;
     }
 
-    public record Candidate<T>(BaseConfigHandler<T> handler, T value) {
+    public record Candidate<T>(BaseConfigHandler<T> handler, T value, JsonElement previousSettings) {
         public void save() {
             handler.save(value);
+            recordSaved();
         }
 
-        public boolean changed() {
-            return !handler.settings(handler.active()).equals(handler.settings(value));
+        public void recordSaved() {
+            handler.recordSaved(value);
+        }
+
+        public boolean differsFromDisk() {
+            return !previousSettings.equals(handler.settings(value));
+        }
+
+        public boolean differsFromRuntime() {
+            return !handler.settings(handler.active()).equals(handler.settings(handler.forRuntime(value)));
         }
 
         public Runnable publication() {
@@ -111,11 +131,18 @@ public abstract class BaseConfigHandler<T> {
     }
 
     public Candidate<T> edit() {
-        return new Candidate<>(this, editableCopy());
+        return edit(ignored -> {});
+    }
+
+    public Candidate<T> edit(Consumer<? super T> validate) {
+        T candidate = Files.notExists(getConfigPath()) ? editableCopy() : read();
+        validate.accept(candidate);
+        return new Candidate<>(this, candidate, settings(candidate));
     }
 
     public Candidate<T> loadCandidate() {
-        return new Candidate<>(this, read());
+        T candidate = read();
+        return new Candidate<>(this, candidate, settings(candidate));
     }
 
     public T load() {

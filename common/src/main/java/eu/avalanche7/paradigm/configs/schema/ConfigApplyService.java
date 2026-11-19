@@ -8,6 +8,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
@@ -32,10 +34,19 @@ import eu.avalanche7.paradigm.utils.ServerStatusIconCache;
 
 public final class ConfigApplyService {
     private final Services services;
+    private final Executor toggleExecutor;
+    private final Executor handoffTimeout;
+    private CompletableFuture<ConfigValidationResult> toggleTail = CompletableFuture.completedFuture(null);
     private final Set<ConfigSection> failedEffects = EnumSet.noneOf(ConfigSection.class);
 
     public ConfigApplyService(Services services) {
+        this(services, ForkJoinPool.commonPool(), CompletableFuture.delayedExecutor(15, TimeUnit.SECONDS));
+    }
+
+    ConfigApplyService(Services services, Executor toggleExecutor, Executor handoffTimeout) {
         this.services = services;
+        this.toggleExecutor = toggleExecutor;
+        this.handoffTimeout = handoffTimeout;
     }
 
     public CompletableFuture<ConfigValidationResult> reload(Collection<ConfigSection> sections) {
@@ -72,6 +83,7 @@ public final class ConfigApplyService {
                     case COMMANDS -> {
                         var store = services.getCommandToggleStore();
                         var candidate = store.readReload();
+                        store.recordSaved(candidate);
                         publications.put(section, () -> store.publish(candidate));
                     }
                     case COOLDOWNS -> {
@@ -97,7 +109,10 @@ public final class ConfigApplyService {
                     default -> {
                         var candidate = section.handler().loadCandidate();
                         ConfigPatchService.validateFile(section, candidate.value());
-                        if (stage(section, candidate, publications)) {
+                        candidate.recordSaved();
+                        publications.put(section, candidate.publication());
+                        if (section == ConfigSection.MAIN
+                                && MainConfigHandler.handler().hasPendingRestart((MainConfigHandler.Config) candidate.value())) {
                             result.pending(section.key(), ConfigReloadBehavior.RESTART_REQUIRED);
                             result.warn(section.key() + " contains changes that require a server restart.");
                         }
@@ -111,8 +126,8 @@ public final class ConfigApplyService {
         return result;
     }
 
-    public CompletableFuture<ConfigValidationResult> setCommandToggle(String command, boolean enabled) {
-        return CompletableFuture.supplyAsync(() -> ConfigPatchService.serialized(() -> {
+    public synchronized CompletableFuture<ConfigValidationResult> setCommandToggle(String command, boolean enabled) {
+        toggleTail = toggleTail.handleAsync((previous, failure) -> ConfigPatchService.serialized(() -> {
             requireRunning();
             var result = new ConfigValidationResult();
             var publications = new EnumMap<ConfigSection, Runnable>(ConfigSection.class);
@@ -123,7 +138,8 @@ public final class ConfigApplyService {
             });
             apply(publications, effects, result);
             return result;
-        }));
+        }), toggleExecutor);
+        return toggleTail.copy();
     }
 
     public ConfigValidationResult saveDiscordToken(String token) {
@@ -133,7 +149,7 @@ public final class ConfigApplyService {
             var publications = new EnumMap<ConfigSection, Runnable>(ConfigSection.class);
             var effects = EnumSet.noneOf(ConfigSection.class);
             attempt(ConfigSection.DISCORD, result, () -> {
-                var candidate = DiscordConfigHandler.handler().edit();
+                var candidate = DiscordConfigHandler.handler().edit(value -> ConfigPatchService.validateFile(ConfigSection.DISCORD, value));
                 candidate.value().botToken.value = token;
                 if (save(ConfigSection.DISCORD, candidate, publications)) effects.add(ConfigSection.DISCORD);
                 result.accept("discord.botToken");
@@ -148,45 +164,21 @@ public final class ConfigApplyService {
             var timings = (CooldownConfigHandler.Config) candidate.value();
             return CooldownConfigHandler.saveTimings(timings);
         }
-        boolean changed = candidate.changed();
-        if (section == ConfigSection.MAIN) {
-            var main = MainConfigHandler.handler();
-            var value = (MainConfigHandler.Config) candidate.value();
-            if (!main.settings(value).equals(main.settings(main.reviewed()))) {
-                candidate.save();
-                stage(section, candidate, publications);
-            }
-            return !main.settings(main.active()).equals(main.settings(main.forRuntime(value)));
-        }
-        if (changed) {
-            candidate.save();
-            stage(section, candidate, publications);
-        }
-        return changed;
-    }
-
-    private boolean stage(ConfigSection section, BaseConfigHandler.Candidate<?> candidate, Map<ConfigSection, Runnable> publications) {
-        var publish = candidate.publication();
-        if (section != ConfigSection.MAIN) {
-            publications.put(section, publish);
-            return false;
-        }
-        var main = MainConfigHandler.handler();
-        var saved = (MainConfigHandler.Config) candidate.value();
-        publications.put(section, () -> {
-            publish.run();
-            main.recordSaved(saved);
-        });
-        return main.hasPendingRestart(saved);
+        if (candidate.differsFromDisk()) candidate.save();
+        else candidate.recordSaved();
+        if (!candidate.differsFromRuntime()) return false;
+        publications.put(section, candidate.publication());
+        return true;
     }
 
     boolean saveCommandToggles(Map<String, Boolean> changes, Map<ConfigSection, Runnable> publications) {
         var store = services.getCommandToggleStore();
-        var before = store.listStates();
+        var before = store.readReload();
         var candidate = new java.util.LinkedHashMap<>(before);
         candidate.putAll(changes);
-        if (candidate.equals(before)) return false;
-        store.save(candidate);
+        if (!candidate.equals(before)) store.save(candidate);
+        store.recordSaved(candidate);
+        if (candidate.equals(store.listStates())) return false;
         publications.put(ConfigSection.COMMANDS, () -> store.publish(candidate));
         return true;
     }
@@ -219,6 +211,12 @@ public final class ConfigApplyService {
             }).join();
         } catch (CompletionException failure) {
             result.reject("<runtime>", message(failure));
+            if (!explicitReload && !publications.isEmpty()) {
+                for (ConfigSection section : publications.keySet()) {
+                    result.pending(section.key(), ConfigReloadBehavior.RELOAD_REQUIRED);
+                }
+                result.warn("Settings were saved and are pending local application.");
+            }
             failedEffects.addAll(effects);
             return;
         }
@@ -365,7 +363,7 @@ public final class ConfigApplyService {
     public <T> CompletableFuture<T> onServer(Supplier<T> action) {
         var result = new CompletableFuture<T>();
         var pending = new AtomicBoolean(true);
-        CompletableFuture.delayedExecutor(15, TimeUnit.SECONDS).execute(() -> {
+        handoffTimeout.execute(() -> {
             if (pending.compareAndSet(true, false)) {
                 result.completeExceptionally(new IllegalStateException("Minecraft server did not accept the settings update."));
             }
