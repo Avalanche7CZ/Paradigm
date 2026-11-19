@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Delayed;
@@ -28,6 +29,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,6 +40,7 @@ import org.slf4j.LoggerFactory;
 import eu.avalanche7.paradigm.ParadigmAPI;
 import eu.avalanche7.paradigm.configs.BaseConfigHandler;
 import eu.avalanche7.paradigm.configs.ConfigSection;
+import eu.avalanche7.paradigm.configs.CooldownConfigHandler;
 import eu.avalanche7.paradigm.configs.DiscordConfigHandler;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.configs.TablistConfigHandler;
@@ -234,6 +238,55 @@ class ConfigurationApplyTest {
     }
 
     @Test
+    void patchWithOldRevisionPreservesHeaderEditedOnDisk() throws Exception {
+        var patch = patch("tablist.header", List.of("Dashboard header"));
+        var originalHeader = TablistConfigHandler.getConfig().header.value;
+        Path file = root.resolve("paradigm/tablist.json");
+        var json = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
+        json.getAsJsonObject("header").getAsJsonArray("value").set(0, new JsonPrimitive("Manual header"));
+        Files.writeString(file, json.toString());
+
+        var result = finish(CompletableFuture.supplyAsync(() -> dashboard.patchService().apply(patch)));
+
+        assertTabDiskConflict(result);
+        assertEquals(patch.revision(), result.newRevision());
+        assertEquals(json.toString(), Files.readString(file));
+        assertEquals(originalHeader, TablistConfigHandler.getConfig().header.value);
+    }
+
+    @Test
+    void headerPatchCannotActivateAnExternalTabEditUntilExplicitReload() throws Exception {
+        assertTab(false);
+        var patch = patch("tablist.header", List.of("Dashboard header"));
+        Path file = root.resolve("paradigm/tablist.json");
+        var json = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
+        json.getAsJsonObject("enabled").addProperty("value", true);
+        Files.writeString(file, json.toString());
+
+        var result = finish(CompletableFuture.supplyAsync(() -> dashboard.patchService().apply(patch)));
+
+        assertTabDiskConflict(result);
+        assertTab(false);
+        assertEquals(json.toString(), Files.readString(file));
+
+        var reload = finish(services.getConfigApplyService().reload(Set.of(ConfigSection.TABLIST)));
+        assertTrue(reload.locallyApplied(), reload.rejected().toString());
+        assertTab(true);
+
+        var freshPatch = patch("tablist.header", List.of("Dashboard header"));
+        assertNotEquals(patch.revision(), freshPatch.revision());
+        Files.writeString(file, "\n" + json + "\n");
+        var saved = finish(CompletableFuture.supplyAsync(() -> dashboard.patchService().apply(freshPatch)));
+        assertTrue(saved.ok(), saved.rejected().toString());
+        assertTrue(saved.locallyApplied());
+        assertTab(true);
+        assertEquals(List.of("Dashboard header"), TablistConfigHandler.getConfig().header.value);
+        var disk = TablistConfigHandler.handler().read();
+        assertTrue(disk.enabled.value);
+        assertEquals(List.of("Dashboard header"), disk.header.value);
+    }
+
+    @Test
     void sameSavedValueRetriesPublicationWithoutRewritingTheFile() throws Exception {
         timeOutPatch(patch("tablist.enabled", true));
         Path file = root.resolve("paradigm/tablist.json");
@@ -246,6 +299,49 @@ class ConfigurationApplyTest {
         assertEquals(savedAt, Files.getLastModifiedTime(file));
         assertTrue(TablistConfigHandler.handler().read().enabled.value);
         assertTab(true);
+    }
+
+    @Test
+    void commandPatchPreservesExternalTogglesUntilReload() throws Exception {
+        var patch = patch("commands.fly", true);
+        Path file = root.resolve("paradigm/commands.json");
+        var json = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
+        json.getAsJsonObject("commands").addProperty("fly", false);
+        Files.writeString(file, json.toString());
+
+        var result = finish(CompletableFuture.supplyAsync(() -> dashboard.patchService().apply(patch)));
+
+        assertTrue(result.accepted().isEmpty());
+        assertEquals("commands.fly", result.rejected().get(0).key());
+        assertTrue(result.rejected().get(0).reason().startsWith("commands.json changed on disk."));
+        assertEquals(json.toString(), Files.readString(file));
+        assertTrue(services.getCommandToggleStore().isEnabled("fly"));
+    }
+
+    @Test
+    void cooldownPatchChecksTimingSettingsWithoutComparingPlayerUsage() throws Exception {
+        var player = UUID.randomUUID();
+        CooldownConfigHandler.setLastUsage(player, "home", 1L);
+        CooldownConfigHandler.setLastUsage(player, "home", 2L);
+        var patch = patch("cooldowns.cooldown.home", 10);
+
+        var saved = finish(CompletableFuture.supplyAsync(() -> dashboard.patchService().apply(patch)));
+        assertTrue(saved.ok(), saved.rejected().toString());
+        assertEquals(10, CooldownConfigHandler.getCommandCooldownSeconds("home"));
+        assertEquals(2L, CooldownConfigHandler.getLastUsage(player, "home"));
+
+        var followUp = patch("cooldowns.cooldown.home", 20);
+        Path file = root.resolve("paradigm/cooldowns.json");
+        var json = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
+        json.getAsJsonObject("commandWarmupSeconds").addProperty("home", 5);
+        Files.writeString(file, json.toString());
+
+        var result = finish(CompletableFuture.supplyAsync(() -> dashboard.patchService().apply(followUp)));
+        assertTrue(result.accepted().isEmpty());
+        assertTrue(result.rejected().get(0).reason().startsWith("cooldowns.json changed on disk."));
+        assertEquals(json.toString(), Files.readString(file));
+        assertEquals(10, CooldownConfigHandler.getCommandCooldownSeconds("home"));
+        assertEquals(0, CooldownConfigHandler.getCommandWarmupSeconds("home"));
     }
 
     @Test
@@ -465,6 +561,15 @@ class ConfigurationApplyTest {
         assertTrue(result.ok(), result.rejected().toString());
         assertEquals(List.of("discord"), result.applied());
         assertSame(before, connection.get(discord));
+    }
+
+    private void assertTabDiskConflict(ConfigValidationResult result) {
+        assertFalse(result.ok());
+        assertTrue(result.accepted().isEmpty());
+        assertTrue(result.applied().isEmpty());
+        assertEquals("tablist.header", result.rejected().get(0).key());
+        assertEquals("tablist.json changed on disk. Reload TAB, then refresh the editor and retry.",
+                result.rejected().get(0).reason());
     }
 
     private void assertTab(boolean enabled) {

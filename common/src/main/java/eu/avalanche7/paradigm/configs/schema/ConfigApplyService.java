@@ -133,7 +133,8 @@ public final class ConfigApplyService {
             var publications = new EnumMap<ConfigSection, Runnable>(ConfigSection.class);
             var effects = EnumSet.noneOf(ConfigSection.class);
             attempt(ConfigSection.COMMANDS, result, () -> {
-                if (saveCommandToggles(Map.of(command, enabled), publications)) effects.add(ConfigSection.COMMANDS);
+                var before = services.getCommandToggleStore().readReload();
+                if (saveCommandToggles(before, Map.of(command, enabled), publications)) effects.add(ConfigSection.COMMANDS);
                 result.accept("commands." + command);
             });
             apply(publications, effects, result);
@@ -171,9 +172,8 @@ public final class ConfigApplyService {
         return true;
     }
 
-    boolean saveCommandToggles(Map<String, Boolean> changes, Map<ConfigSection, Runnable> publications) {
+    boolean saveCommandToggles(Map<String, Boolean> before, Map<String, Boolean> changes, Map<ConfigSection, Runnable> publications) {
         var store = services.getCommandToggleStore();
-        var before = store.readReload();
         var candidate = new java.util.LinkedHashMap<>(before);
         candidate.putAll(changes);
         if (!candidate.equals(before)) store.save(candidate);

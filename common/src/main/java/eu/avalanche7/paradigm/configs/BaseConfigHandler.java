@@ -140,6 +140,20 @@ public abstract class BaseConfigHandler<T> {
         return new Candidate<>(this, candidate, settings(candidate));
     }
 
+    public Candidate<T> editForPatch(String reloadName, Consumer<? super T> validate) {
+        T candidate = read();
+        validate.accept(candidate);
+        if (!samePatchSettings(candidate, reviewed())) {
+            throw new IllegalArgumentException(configFileName + " changed on disk. Reload " + reloadName
+                    + ", then refresh the editor and retry.");
+        }
+        return new Candidate<>(this, candidate, settings(candidate));
+    }
+
+    protected boolean samePatchSettings(T disk, T saved) {
+        return settings(disk).equals(settings(saved));
+    }
+
     public Candidate<T> loadCandidate() {
         T candidate = read();
         return new Candidate<>(this, candidate, settings(candidate));

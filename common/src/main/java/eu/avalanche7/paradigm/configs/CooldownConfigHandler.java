@@ -79,8 +79,7 @@ public class CooldownConfigHandler extends BaseConfigHandler<CooldownConfigHandl
     public static boolean saveTimings(Config candidate) {
         synchronized (SAVE_LOCK) {
             Config active = getConfig();
-            if (active.commandCooldownSeconds.equals(candidate.commandCooldownSeconds)
-                    && active.commandWarmupSeconds.equals(candidate.commandWarmupSeconds)) return false;
+            if (INSTANCE.samePatchSettings(candidate, active)) return false;
             candidate.cooldowns = active.cooldowns;
             INSTANCE.save(candidate);
             INSTANCE.publish(candidate);
@@ -125,6 +124,12 @@ public class CooldownConfigHandler extends BaseConfigHandler<CooldownConfigHandl
 
     public static CooldownConfigHandler handler() {
         return INSTANCE;
+    }
+
+    @Override
+    protected boolean samePatchSettings(Config disk, Config saved) {
+        return disk.commandCooldownSeconds.equals(saved.commandCooldownSeconds)
+                && disk.commandWarmupSeconds.equals(saved.commandWarmupSeconds);
     }
 
     @Override

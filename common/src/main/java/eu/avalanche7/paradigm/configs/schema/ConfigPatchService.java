@@ -80,6 +80,7 @@ public class ConfigPatchService {
         var candidates = new EnumMap<ConfigSection, BaseConfigHandler.Candidate<?>>(ConfigSection.class);
         var accepted = new EnumMap<ConfigSection, Map<String, ConfigReloadBehavior>>(ConfigSection.class);
         Map<String, Boolean> commands = new LinkedHashMap<>();
+        Map<String, Boolean> commandsOnDisk = null;
         DashboardConfig dashboard = null;
 
         for (ConfigPatchOperation op : patch.operations()) {
@@ -100,12 +101,20 @@ public class ConfigPatchService {
                     if (!((Boolean) value) && store.isProtected(name)) {
                         throw new IllegalArgumentException("Protected command cannot be disabled.");
                     }
+                    if (commandsOnDisk == null) {
+                        var onDisk = store.readReload();
+                        if (!onDisk.equals(store.reviewedStates())) {
+                            throw new IllegalArgumentException("commands.json changed on disk. Run /paradigm command reload, then refresh the editor and retry.");
+                        }
+                        commandsOnDisk = onDisk;
+                    }
                     commands.put(name, (Boolean) value);
                 } else if (section == ConfigSection.DASHBOARD) {
                     if (dashboard == null) dashboard = DashboardConfig.read(services.getPlatformAdapter().getConfig());
                     applyDashboard(dashboard, name, value);
                 } else {
-                    var candidate = candidates.computeIfAbsent(section, entry -> entry.handler().edit(currentValue -> validateFile(entry, currentValue)));
+                    var candidate = candidates.computeIfAbsent(section, entry -> entry.handler().editForPatch(
+                            entry == ConfigSection.TABLIST ? "TAB" : entry.name(), currentValue -> validateFile(entry, currentValue)));
                     update(section, candidate.value(), name, value);
                 }
                 accepted.computeIfAbsent(section, entry -> new LinkedHashMap<>()).put(key, field.reloadBehavior());
@@ -123,7 +132,7 @@ public class ConfigPatchService {
             ConfigSection section = entry.getKey();
             try {
                 if (section == ConfigSection.COMMANDS) {
-                    if (runtime.saveCommandToggles(commands, publications)) changed.add(section);
+                    if (runtime.saveCommandToggles(commandsOnDisk, commands, publications)) changed.add(section);
                 } else if (section == ConfigSection.DASHBOARD) {
                     DashboardConfig.save(services.getPlatformAdapter().getConfig(), dashboard);
                 } else {
