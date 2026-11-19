@@ -17,7 +17,6 @@ import java.util.function.Supplier;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonParseException;
 import org.slf4j.Logger;
 
 public final class HologramStore {
@@ -62,9 +61,23 @@ public final class HologramStore {
         }
     }
 
-    public void reload() {
+    private long mutationRevision;
+
+    record ReloadCandidate(long revision, HologramService.Config config) {}
+
+    ReloadCandidate prepareReload() {
+        long revision;
         synchronized (lock) {
-            config = load();
+            revision = mutationRevision;
+        }
+        return new ReloadCandidate(revision, read());
+    }
+
+    void applyReload(ReloadCandidate candidate) {
+        synchronized (lock) {
+            if (mutationRevision != candidate.revision()) throw new IllegalStateException("Holograms changed during reload. Retry the reload.");
+            config = candidate.config();
+            mutationRevision++;
         }
     }
 
@@ -179,32 +192,33 @@ public final class HologramStore {
     }
 
     private HologramService.Config load() {
-        Path path = pathSupplier.get();
-        if (!Files.exists(path)) {
-            HologramService.Config defaults = new HologramService.Config();
-            normalize(defaults);
-            write(defaults);
-            return defaults;
-        }
-        try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
-            HologramService.Config loaded = gson.fromJson(reader, HologramService.Config.class);
-            if (loaded == null) {
-                loaded = new HologramService.Config();
-            }
-            normalize(loaded);
-            write(loaded);
-            return loaded;
-        } catch (IOException | JsonParseException | IllegalArgumentException | IllegalStateException failure) {
-            if (logger != null) {
-                logger.error("Paradigm: failed to load holograms.json; keeping holograms disabled for safety.", failure);
-            }
+        try {
+            var candidate = read();
+            write(candidate);
+            return candidate;
+        } catch (RuntimeException failure) {
+            if (logger != null) logger.error("Paradigm: failed to load holograms.json; starting with holograms disabled.", failure);
             HologramService.Config safe = new HologramService.Config();
             safe.enabled = false;
             return safe;
         }
     }
 
+    private HologramService.Config read() {
+        Path path = pathSupplier.get();
+        if (Files.notExists(path)) return new HologramService.Config();
+        try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+            HologramService.Config candidate = gson.fromJson(reader, HologramService.Config.class);
+            if (candidate == null) throw new IllegalArgumentException("Expected a hologram configuration object.");
+            normalize(candidate);
+            return candidate;
+        } catch (IOException | RuntimeException failure) {
+            throw new IllegalArgumentException("Could not read holograms.json: " + failure.getMessage(), failure);
+        }
+    }
+
     private void save() {
+        mutationRevision++;
         normalize(config);
         write(config);
     }

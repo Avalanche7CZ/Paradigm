@@ -347,10 +347,19 @@ function ConfigEditor({
     )
       return;
     try {
-      await w.mutate(() =>
-        w.api.request('/api/config/apply', { page: page.id }, undefined, w.hostId),
-      );
-      w.notify('Reload request completed.');
+      await w.mutate(async () => {
+        const outcome = await w.api.request<{ status: string; message: string }>(
+          '/api/config/apply',
+          { page: page.id },
+          undefined,
+          w.hostId,
+        );
+        setMessage(outcome.message);
+        w.notify(outcome.message);
+        if (outcome.status !== 'pending') {
+          setSnapshot(await w.api.request<Snapshot>('/api/config/snapshot'));
+        }
+      });
     } catch (error) {
       w.notify(String(error), true);
     }

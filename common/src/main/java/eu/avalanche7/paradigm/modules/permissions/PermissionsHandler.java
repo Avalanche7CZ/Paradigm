@@ -227,9 +227,7 @@ public class PermissionsHandler {
     }
 
     public void refreshInternalPermissions() {
-        if (isInternalPermissionsEnabled()) {
-            internalPermissionApi.initialize();
-        }
+        if (isInternalPermissionsEnabled()) internalPermissionApi.reloadFromStore();
     }
 
     public synchronized void startDefinitionSync(TaskScheduler scheduler) {
@@ -296,8 +294,8 @@ public class PermissionsHandler {
             } else {
                 logger.warn("Paradigm: Failed to register permissions with LuckPerms: {}", e.getMessage());
             }
-        } catch (Exception e) {
-            logger.warn("Paradigm: Failed to register permissions with LuckPerms: {}", e.getMessage());
+        } catch (Exception | LinkageError failure) {
+            logger.warn("Paradigm: Failed to register permissions with LuckPerms: {}", failure.getMessage());
         }
     }
 

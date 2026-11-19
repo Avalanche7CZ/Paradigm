@@ -77,13 +77,6 @@ public class DiscordModule implements ParadigmModule {
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
     }
 
-    public void reload() {
-        eu.avalanche7.paradigm.configs.DiscordConfigHandler.reload();
-        if (services != null) {
-            services.getDiscordService().reload();
-        }
-    }
-
     public ICommandBuilder buildCommandBranch(IPlatformAdapter platform, Services services) {
         ICommandBuilder root = platform.createCommandBuilder()
                 .literal("discord")

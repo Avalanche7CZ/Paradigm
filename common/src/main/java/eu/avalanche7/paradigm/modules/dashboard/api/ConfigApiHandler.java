@@ -13,6 +13,7 @@ import eu.avalanche7.paradigm.configs.schema.ConfigCategory;
 import eu.avalanche7.paradigm.configs.schema.ConfigField;
 import eu.avalanche7.paradigm.configs.schema.ConfigPatch;
 import eu.avalanche7.paradigm.configs.schema.ConfigPatchOperation;
+import eu.avalanche7.paradigm.configs.schema.ConfigPatchService;
 import eu.avalanche7.paradigm.configs.schema.ConfigSnapshot;
 import eu.avalanche7.paradigm.configs.schema.ConfigValidationResult;
 import eu.avalanche7.paradigm.modules.audit.AuditActionType;
@@ -52,7 +53,7 @@ public class ConfigApiHandler {
     }
 
     public DashboardResponse patch(DashboardRequestContext ctx) {
-        return eu.avalanche7.paradigm.configs.schema.ConfigPatchService.serialized(() -> patchLocked(ctx));
+        return ConfigPatchService.serialized(() -> patchLocked(ctx));
     }
 
     private DashboardResponse patchLocked(DashboardRequestContext ctx) {
@@ -84,7 +85,7 @@ public class ConfigApiHandler {
 
         Set<String> touchedCategories = new LinkedHashSet<>();
         for (ConfigPatchOperation op : patch.operations()) {
-            ConfigField field = op != null ? fieldsByKey.get(op.key()) : null;
+            ConfigField field = op != null ? fieldsByKey.get(ConfigPatchService.normalizeKey(op.key())) : null;
             if (field != null) {
                 touchedCategories.add(field.category());
             }
@@ -101,7 +102,7 @@ public class ConfigApiHandler {
         List<ConfigPatchOperation> unmanagedOps = new ArrayList<>();
         List<ConfigPatchOperation> managedOps = new ArrayList<>();
         for (ConfigPatchOperation op : patch.operations()) {
-            ConfigField field = op != null ? fieldsByKey.get(op.key()) : null;
+            ConfigField field = op != null ? fieldsByKey.get(ConfigPatchService.normalizeKey(op.key())) : null;
             if (field != null && dashboard.isManagedLocally(field.category())) {
                 managedOps.add(op);
             } else {
@@ -128,7 +129,7 @@ public class ConfigApiHandler {
             String code = result.rejected().stream().anyMatch(error -> "<revision>".equals(error.key())) ? "stale_revision" : "validation_failed";
             return DashboardResponse.json(409, new DashboardResponse.ApiEnvelope(false, result, new DashboardResponse.ApiError(code, "One or more config fields were rejected."), result.warnings()));
         }
-        dashboard.audit().dashboard(ctx.principal(), AuditActionType.CONFIG_PATCH, AuditResult.SUCCESS, "Config patch applied.", details);
+        dashboard.audit().dashboard(ctx.principal(), AuditActionType.CONFIG_PATCH, AuditResult.SUCCESS, result.pending().isEmpty() ? "Config patch applied." : "Config patch saved with pending settings.", details);
         for (String key : result.accepted()) {
             if (key != null && key.startsWith("commands.")) {
                 dashboard.audit().dashboard(ctx.principal(), AuditActionType.COMMAND_TOGGLE, AuditResult.SUCCESS, "Command toggle changed.", Map.of("field", key));
@@ -156,8 +157,16 @@ public class ConfigApiHandler {
             if (failure.getCause() instanceof SecurityException) return DashboardResponse.apiError(403, "permission_denied", "Permission denied.");
             throw failure;
         }
-        dashboard.audit().dashboard(ctx.principal(), AuditActionType.CONFIG_PATCH, AuditResult.SUCCESS,
-                "Dashboard config reload applied.", java.util.Map.of("page", page != null ? page : ""));
+        if (result instanceof Map<?, ?> outcome && "failed".equals(outcome.get("status"))) {
+            dashboard.audit().dashboard(ctx.principal(), AuditActionType.CONFIG_PATCH, AuditResult.FAILED,
+                    "Dashboard config reload failed.", Map.of("page", page));
+            return DashboardResponse.json(409, new DashboardResponse.ApiEnvelope(false, result,
+                    new DashboardResponse.ApiError("apply_failed", String.valueOf(outcome.get("message"))), List.of()));
+        }
+        if (!(result instanceof Map<?, ?> outcome) || !"pending".equals(outcome.get("status"))) {
+            dashboard.audit().dashboard(ctx.principal(), AuditActionType.CONFIG_PATCH, AuditResult.SUCCESS,
+                    "Dashboard config reload completed.", Map.of("page", page));
+        }
         return DashboardResponse.apiOk(result);
     }
 
@@ -168,6 +177,8 @@ public class ConfigApiHandler {
         for (ConfigValidationResult.FieldError error : source.rejected()) {
             target.reject(error.key(), error.reason());
         }
+        source.pending().forEach(target::pending);
+        source.applied().forEach(target::applied);
         for (String warning : source.warnings()) {
             target.warn(warning);
         }

@@ -106,6 +106,11 @@ public final class Holograms implements ParadigmModule {
                 .executes(ctx -> action(ctx.getSource(), () -> moveHere(ctx.getSource(), ctx.getStringArgument("id"))))));
         root.then(builder().literal("teleport").then(idArgument()
                 .executes(ctx -> action(ctx.getSource(), () -> teleport(ctx.getSource(), ctx.getStringArgument("id"))))));
+        root.then(builder().literal("reload").executes(ctx -> {
+            eu.avalanche7.paradigm.modules.commands.Reload.runReload(ctx.getSource(), services,
+                    java.util.Set.of(eu.avalanche7.paradigm.configs.ConfigSection.HOLOGRAMS));
+            return 1;
+        }));
         root.then(builder().literal("refresh")
                 .executes(ctx -> action(ctx.getSource(), () -> {
                     holograms.refresh(null);

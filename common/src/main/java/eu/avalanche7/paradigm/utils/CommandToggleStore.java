@@ -37,7 +37,7 @@ public class CommandToggleStore {
         this.logger = new LoggerLike(logger);
         this.debugLogger = debugLogger;
         this.config = config;
-        this.persistedStates = loadPersistedStates();
+        this.persistedStates = loadPersistedStates(false);
     }
 
     public synchronized void registerCommand(String commandId, boolean defaultEnabled, boolean protectedCommand, String... commandAliases) {
@@ -46,7 +46,7 @@ public class CommandToggleStore {
             return;
         }
 
-        boolean enabled = persistedStates.getOrDefault(canonical, defaultEnabled);
+        boolean enabled = protectedCommand || persistedStates.getOrDefault(canonical, defaultEnabled);
         Boolean previous = commandStates.putIfAbsent(canonical, enabled);
         registeredCommands.add(canonical);
         if (protectedCommand) {
@@ -63,7 +63,11 @@ public class CommandToggleStore {
         }
 
         if (previous == null && !persistedStates.containsKey(canonical)) {
-            save();
+            try {
+                save(listStates());
+            } catch (RuntimeException failure) {
+                logger.warn("Paradigm: Failed to save commands.json: {}", failure.getMessage());
+            }
         }
     }
 
@@ -84,26 +88,24 @@ public class CommandToggleStore {
             return ToggleResult.protectedCommand(canonical);
         }
 
-        commandStates.put(canonical, enabled);
-        save();
+        Map<String, Boolean> candidate = listStates();
+        candidate.put(canonical, enabled);
+        save(candidate);
+        publish(candidate);
         return ToggleResult.success(canonical, enabled);
     }
 
-    public synchronized void reload() {
-        persistedStates = loadPersistedStates();
+    public Map<String, Boolean> readReload() {
+        Map<String, Boolean> candidate = listStates();
+        loadPersistedStates(true).forEach((id, enabled) -> {
+            if (candidate.containsKey(id)) candidate.put(id, isProtected(id) || enabled);
+        });
+        return candidate;
+    }
 
-        for (String commandId : new ArrayList<>(commandStates.keySet())) {
-            if (!registeredCommands.contains(commandId)) {
-                commandStates.remove(commandId);
-            }
-        }
-
-        for (String commandId : registeredCommands) {
-            boolean enabled = persistedStates.getOrDefault(commandId, commandStates.getOrDefault(commandId, true));
-            commandStates.put(commandId, enabled);
-        }
-
-        save();
+    public synchronized void publish(Map<String, Boolean> candidate) {
+        persistedStates = new LinkedHashMap<>(candidate);
+        commandStates.putAll(candidate);
     }
 
     public Map<String, Boolean> listStates() {
@@ -131,48 +133,47 @@ public class CommandToggleStore {
         return canonical != null && protectedCommands.contains(canonical);
     }
 
-    private synchronized void save() {
+    public synchronized void save(Map<String, Boolean> candidate) {
         Path path = resolvePath();
-        if (path == null) {
-            return;
-        }
+        if (path == null) throw new IllegalStateException("Command toggle storage is unavailable.");
 
         CommandToggleState state = new CommandToggleState();
-        state.commands = new LinkedHashMap<>(listStates());
+        state.commands = new LinkedHashMap<>(candidate);
 
         try {
             AtomicFileIO.writeUtf8Atomic(path, writer -> gson.toJson(state, writer));
-        } catch (Exception e) {
-            logger.warn("Paradigm: Failed to save commands.json: {}", e.getMessage());
+        } catch (java.io.IOException failure) {
+            throw new IllegalStateException("Could not save commands.json", failure);
         }
     }
 
-    private Map<String, Boolean> loadPersistedStates() {
+    private Map<String, Boolean> loadPersistedStates(boolean strict) {
         Path path = resolvePath();
-        if (path == null || !Files.exists(path)) {
-            return new LinkedHashMap<>();
-        }
+        if (path == null || Files.notExists(path)) return new LinkedHashMap<>();
 
         try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
-            CommandToggleState loaded = gson.fromJson(reader, CommandToggleState.class);
-            if (loaded == null || loaded.commands == null) {
-                return new LinkedHashMap<>();
-            }
+            var json = com.google.gson.JsonParser.parseReader(reader);
+            if (!json.isJsonObject()) throw new IllegalArgumentException("Expected a command toggle object.");
+            var commands = json.getAsJsonObject().get("commands");
+            if (commands == null) return new LinkedHashMap<>();
 
             Map<String, Boolean> normalized = new LinkedHashMap<>();
-            for (Map.Entry<String, Boolean> entry : loaded.commands.entrySet()) {
+            for (var entry : commands.getAsJsonObject().entrySet()) {
                 String canonical = normalize(entry.getKey());
-                if (canonical != null) {
-                    normalized.put(canonical, Boolean.TRUE.equals(entry.getValue()));
+                var value = entry.getValue();
+                if (!value.isJsonPrimitive() || !value.getAsJsonPrimitive().isBoolean()) {
+                    throw new IllegalArgumentException("Invalid command toggle for " + entry.getKey());
                 }
+                if (canonical != null) normalized.put(canonical, value.getAsBoolean());
             }
             return normalized;
-        } catch (Exception e) {
+        } catch (java.io.IOException | RuntimeException failure) {
+            if (strict) throw new IllegalArgumentException("Could not read commands.json: " + failure.getMessage(), failure);
             Path archived = AtomicFileIO.quarantine(path, "corrupt");
             if (archived != null) {
                 logger.warn("Paradigm: Failed to load commands.json; archived unreadable data as {}", archived.getFileName());
             } else {
-                logger.warn("Paradigm: Failed to load commands.json and could not archive it: {}", e.getMessage());
+                logger.warn("Paradigm: Failed to load commands.json and could not archive it: {}", failure.getMessage());
             }
             return new LinkedHashMap<>();
         }

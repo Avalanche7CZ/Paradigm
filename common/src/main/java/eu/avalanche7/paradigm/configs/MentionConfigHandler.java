@@ -11,7 +11,6 @@ public class MentionConfigHandler extends BaseConfigHandler<MentionConfigHandler
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ParadigmConstants.MOD_ID);
     private static MentionConfigHandler INSTANCE;
-    private Config config;
 
     private MentionConfigHandler(IConfig platformConfig) {
         super(LOGGER, platformConfig, "mentions.json");
@@ -36,16 +35,14 @@ public class MentionConfigHandler extends BaseConfigHandler<MentionConfigHandler
         return INSTANCE.config;
     }
 
-    public static void reload() {
-        if (INSTANCE != null) {
-            INSTANCE.config = INSTANCE.load();
-        }
-    }
-
     public static void persistConfig() {
         if (INSTANCE != null && INSTANCE.config != null) {
             INSTANCE.save(INSTANCE.config);
         }
+    }
+
+    public static MentionConfigHandler handler() {
+        return INSTANCE;
     }
 
     @Override

@@ -2,35 +2,34 @@ package eu.avalanche7.paradigm.configs.schema;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
-import eu.avalanche7.paradigm.configs.AfkConfigHandler;
-import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
+import eu.avalanche7.paradigm.configs.BaseConfigHandler;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.configs.ConfigEntry;
+import eu.avalanche7.paradigm.configs.ConfigSection;
 import eu.avalanche7.paradigm.configs.CooldownConfigHandler;
 import eu.avalanche7.paradigm.configs.DiscordConfigHandler;
 import eu.avalanche7.paradigm.configs.MOTDConfigHandler;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
-import eu.avalanche7.paradigm.configs.MentionConfigHandler;
 import eu.avalanche7.paradigm.configs.ModerationConfigHandler;
 import eu.avalanche7.paradigm.configs.RestartConfigHandler;
 import eu.avalanche7.paradigm.configs.TablistConfigHandler;
-import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.chat.PlayerNameClickAction;
-import eu.avalanche7.paradigm.modules.commands.Reload;
 import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardConfig;
-import eu.avalanche7.paradigm.modules.tab.Tablist;
 
 public class ConfigPatchService {
     private static final Pattern HEX_COLOR = Pattern.compile("#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})");
@@ -61,6 +60,7 @@ public class ConfigPatchService {
     }
 
     private ConfigValidationResult applyLocked(ConfigPatch patch) {
+        services.getConfigApplyService().requireRunning();
         ConfigValidationResult result = new ConfigValidationResult();
         ConfigSnapshot current = registry.snapshot();
         if (patch == null || patch.operations() == null) {
@@ -74,26 +74,13 @@ public class ConfigPatchService {
             return result;
         }
 
-        Map<ParadigmModule, Boolean> moduleStatesBefore = Reload.snapshotModuleStates(services);
         Map<String, ConfigField> fields = new HashMap<>();
-        java.util.Set<String> changedCommands = new java.util.HashSet<>();
-        for (ConfigField field : current.fields()) {
-            fields.put(field.key(), field);
-        }
-
-        boolean mainChanged = false;
-        boolean chatChanged = false;
-        boolean mentionsChanged = false;
-        boolean announcementsChanged = false;
-        boolean restartChanged = false;
-        boolean motdChanged = false;
-        boolean dashboardChanged = false;
-        boolean moderationChanged = false;
-        boolean commandsChanged = false;
-        boolean cooldownsChanged = false;
-        boolean tablistChanged = false;
-        boolean discordChanged = false;
-        boolean afkChanged = false;
+        for (ConfigField field : current.fields()) fields.put(field.key(), field);
+        ConfigApplyService runtime = services.getConfigApplyService();
+        var candidates = new EnumMap<ConfigSection, BaseConfigHandler.Candidate<?>>(ConfigSection.class);
+        var accepted = new EnumMap<ConfigSection, Map<String, ConfigReloadBehavior>>(ConfigSection.class);
+        Map<String, Boolean> commands = new LinkedHashMap<>();
+        DashboardConfig dashboard = null;
 
         for (ConfigPatchOperation op : patch.operations()) {
             String key = op != null ? normalizeKey(op.key()) : null;
@@ -102,156 +89,167 @@ public class ConfigPatchService {
                 result.reject(key != null ? key : "<unknown>", "Unknown config field.");
                 continue;
             }
-            if (!field.editable()) {
-                result.reject(key, "Field is read-only.");
-                continue;
-            }
-
             try {
                 Object value = validateValue(field, op.value());
-                if (key.startsWith("main.")) {
-                    applyConfigEntry(MainConfigHandler.Config.class, MainConfigHandler.getConfig(), key.substring("main.".length()), value);
-                    mainChanged = true;
-                    result.accept(key);
-                } else if (key.startsWith("chat.")) {
-                    applyChat(key.substring("chat.".length()), value);
-                    chatChanged = true;
-                    result.accept(key);
-                } else if (key.startsWith("mentions.")) {
-                    applyConfigEntry(MentionConfigHandler.Config.class, MentionConfigHandler.getConfig(), key.substring("mentions.".length()), value);
-                    mentionsChanged = true;
-                    result.accept(key);
-                } else if (key.startsWith("announcements.")) {
-                    applyConfigEntry(AnnouncementsConfigHandler.Config.class, AnnouncementsConfigHandler.getConfig(), key.substring("announcements.".length()), value);
-                    announcementsChanged = true;
-                    result.accept(key);
-                } else if (key.startsWith("restart.")) {
-                    applyRestart(key.substring("restart.".length()), value);
-                    restartChanged = true;
-                    result.accept(key);
-                } else if (key.startsWith("motd.")) {
-                    applyMotd(key.substring("motd.".length()), value);
-                    motdChanged = true;
-                    result.accept(key);
-                } else if (key.startsWith("moderation.")) {
-                    applyModeration(key.substring("moderation.".length()), value);
-                    moderationChanged = true;
-                    result.accept(key);
-                } else if (key.startsWith("afk.")) {
-                    applyConfigEntry(AfkConfigHandler.Config.class, AfkConfigHandler.getConfig(), key.substring("afk.".length()), value);
-                    afkChanged = true;
-                    result.accept(key);
-                } else if (key.startsWith("dashboard.")) {
-                    applyDashboard(key.substring("dashboard.".length()), value);
-                    dashboardChanged = true;
-                    result.accept(key);
-                } else if (key.startsWith("tablist.")) {
-                    applyTablist(key.substring("tablist.".length()), value);
-                    tablistChanged = true;
-                    result.accept(key);
-                } else if (key.startsWith("discord.")) {
-                    applyDiscord(key.substring("discord.".length()), value);
-                    discordChanged = true;
-                    result.accept(key);
-                } else if (key.startsWith("commands.")) {
-                    String commandId = key.substring("commands.".length());
-                    applyCommand(commandId, value, result, key);
-                    changedCommands.add(commandId);
-                    commandsChanged = true;
-                } else if (key.startsWith("cooldowns.cooldown.")) {
-                    applyCooldown(key.substring("cooldowns.cooldown.".length()), value, true);
-                    cooldownsChanged = true;
-                    result.accept(key);
-                } else if (key.startsWith("cooldowns.warmup.")) {
-                    applyCooldown(key.substring("cooldowns.warmup.".length()), value, false);
-                    cooldownsChanged = true;
-                    result.accept(key);
+                int separator = key.indexOf('.');
+                ConfigSection section = ConfigSection.forName(key.substring(0, separator));
+                String name = key.substring(separator + 1);
+                if (value == null && section != ConfigSection.MOTD) value = field.defaultValue().value();
+                if (section == ConfigSection.COMMANDS) {
+                    var store = services.getCommandToggleStore();
+                    if (!((Boolean) value) && store.isProtected(name)) {
+                        throw new IllegalArgumentException("Protected command cannot be disabled.");
+                    }
+                    commands.put(name, (Boolean) value);
+                } else if (section == ConfigSection.DASHBOARD) {
+                    if (dashboard == null) dashboard = DashboardConfig.read(services.getPlatformAdapter().getConfig());
+                    applyDashboard(dashboard, name, value);
                 } else {
-                    result.reject(key, "Unsupported field.");
+                    var candidate = candidates.computeIfAbsent(section, entry -> entry.handler().edit());
+                    update(section, candidate.value(), name, value);
                 }
-            } catch (IllegalArgumentException e) {
-                result.reject(key, e.getMessage());
-            } catch (Throwable t) {
-                result.reject(key, "Failed to apply field.");
-                if (services != null && services.getLogger() != null) {
-                    services.getLogger().warn("Paradigm Dashboard: failed to apply config field {}: {}", key, t.toString());
-                }
+                accepted.computeIfAbsent(section, entry -> new LinkedHashMap<>()).put(key, field.reloadBehavior());
+            } catch (IllegalArgumentException failure) {
+                result.reject(key, failure.getMessage());
+            } catch (ReflectiveOperationException | RuntimeException failure) {
+                result.reject(key, "Failed to prepare field.");
+                if (services.getLogger() != null) services.getLogger().warn("Failed to prepare config field {}", key, failure);
             }
         }
 
-        if (afkChanged) {
-            AfkConfigHandler.persistConfig();
-        }
-        if (mainChanged || afkChanged || announcementsChanged || restartChanged) {
-            boolean restartAfk = afkChanged;
-            boolean rescheduleAnnouncements = mainChanged || announcementsChanged;
-            boolean rescheduleRestart = mainChanged || restartChanged;
-            scheduleServerThread(() -> {
-                Reload.refreshModuleStates(services, moduleStatesBefore);
-                if (rescheduleAnnouncements) Reload.rescheduleAnnouncements();
-                if (rescheduleRestart) Reload.rescheduleRestart(services);
-                if (restartAfk) {
-                    services.getAfkService().restart();
+        var publications = new EnumMap<ConfigSection, Runnable>(ConfigSection.class);
+        var changed = EnumSet.noneOf(ConfigSection.class);
+        for (var entry : accepted.entrySet()) {
+            ConfigSection section = entry.getKey();
+            try {
+                if (section == ConfigSection.COMMANDS) {
+                    if (runtime.saveCommandToggles(commands, publications)) changed.add(section);
+                } else if (section == ConfigSection.DASHBOARD) {
+                    DashboardConfig.save(services.getPlatformAdapter().getConfig(), dashboard);
+                } else {
+                    var candidate = candidates.get(section);
+                    boolean liveChanged = runtime.save(section, candidate, publications);
+                    if (liveChanged && entry.getValue().containsValue(ConfigReloadBehavior.LIVE)) changed.add(section);
                 }
-            });
+                DashboardConfig savedDashboard = dashboard;
+                entry.getValue().forEach((key, behavior) -> {
+                    result.accept(key);
+                    if (behavior != ConfigReloadBehavior.LIVE
+                            && isPending(section, key, candidates.get(section), savedDashboard)) {
+                        result.pending(key, behavior);
+                        result.warn(key + (behavior == ConfigReloadBehavior.RESTART_REQUIRED
+                                ? " was saved. A server restart is required to activate it."
+                                : " was saved. Use Apply Reload to activate it."));
+                    }
+                });
+            } catch (RuntimeException failure) {
+                entry.getValue().keySet().forEach(key -> result.reject(key, "Could not save settings: " + failure.getMessage()));
+            }
         }
-        if (mainChanged) {
-            MainConfigHandler.persistConfig();
-            result.warn("Main config changes were saved. Some effects may require a reload or restart.");
-        }
-        if (chatChanged) {
-            ChatConfigHandler.persistConfig();
-            result.warn("Chat config changes were saved. Some effects may require a reload.");
-        }
-        if (mentionsChanged) {
-            MentionConfigHandler.persistConfig();
-            result.warn("Mention config changes were saved. Some effects may require a reload.");
-        }
-        if (announcementsChanged) {
-            AnnouncementsConfigHandler.persistConfig();
-            result.warn("Announcement config changes were saved. Some effects may require a reload.");
-        }
-        if (restartChanged) {
-            RestartConfigHandler.persistConfig();
-            result.warn("Restart config changes were saved. Some effects may require a reload.");
-        }
-        if (motdChanged) {
-            MOTDConfigHandler.persistConfig();
-            result.warn("MOTD config changes were saved. Some effects may require a reload.");
-        }
-        if (moderationChanged) {
-            ModerationConfigHandler.persistConfig();
-            services.getPunishmentService().refreshAsync();
-            result.warn("Moderation settings were saved and apply immediately.");
-        }
-        if (afkChanged) {
-            result.warn("AFK settings were saved and applied.");
-        }
-        if (dashboardChanged) {
-            result.warn("Dashboard config changes were saved. Use Apply Reload to activate bind/session changes.");
-        }
-        if (commandsChanged) {
-            scheduleServerThread(() -> Reload.refreshCommandStates(services, changedCommands));
-        }
-        if (cooldownsChanged) {
-            CooldownConfigHandler.persistConfig();
-        }
-        if (discordChanged) {
-            DiscordConfigHandler.persistConfig();
-            scheduleServerThread(() -> services.getDiscordService().reload());
-            result.warn("Discord settings were saved and the connection was restarted.");
-        }
-        if (tablistChanged) {
-            TablistConfigHandler.persistConfig();
-            scheduleServerThread(() -> {
-                Tablist tablist = Tablist.current();
-                if (tablist != null) tablist.reload();
-            });
-            result.warn("Tablist settings were saved and applied.");
-        }
-
+        runtime.apply(publications, changed, result);
         result.newRevision(registry.snapshot().revision());
         return result;
+    }
+
+    private boolean isPending(ConfigSection section, String key, BaseConfigHandler.Candidate<?> candidate, DashboardConfig dashboard) {
+        String name = key.substring(key.indexOf('.') + 1);
+        Gson gson = new Gson();
+        if (section == ConfigSection.MAIN) {
+            var main = MainConfigHandler.handler();
+            var value = (MainConfigHandler.Config) candidate.value();
+            return !Objects.equals(main.settings(main.active()).getAsJsonObject().get(name),
+                    main.settings(value).getAsJsonObject().get(name));
+        }
+        var module = eu.avalanche7.paradigm.modules.dashboard.LocalDashboardModule.current();
+        DashboardConfig active = module != null && module.dashboard() != null ? module.dashboard().config() : new DashboardConfig();
+        return !Objects.equals(gson.toJsonTree(active).getAsJsonObject().get(name),
+                gson.toJsonTree(dashboard).getAsJsonObject().get(name));
+    }
+
+    private void update(ConfigSection section, Object config, String field, Object value) throws ReflectiveOperationException {
+        if (value == null && section != ConfigSection.MOTD) {
+            throw new IllegalArgumentException("Value is required.");
+        }
+        switch (section) {
+            case MAIN -> {
+                if ("defaultLanguage".equals(field)) validateLanguage((String) value);
+                applyConfigEntry(config.getClass(), config, field, value);
+            }
+            case CHAT -> applyChat((ChatConfigHandler.Config) config, field, value);
+            case RESTART -> applyRestart((RestartConfigHandler.Config) config, field, value);
+            case MOTD -> applyMotd((MOTDConfigHandler.Config) config, field, value);
+            case MODERATION -> applyModeration((ModerationConfigHandler.Config) config, field, value);
+            case TABLIST -> applyTablist((TablistConfigHandler.Config) config, field, value);
+            case DISCORD -> applyDiscord((DiscordConfigHandler.Config) config, field, value);
+            case COOLDOWNS -> {
+                boolean cooldown = field.startsWith("cooldown.");
+                applyCooldown((CooldownConfigHandler.Config) config, field.substring(field.indexOf('.') + 1), value, cooldown);
+            }
+            default -> applyConfigEntry(config.getClass(), config, field, value);
+        }
+    }
+
+    static void validateFile(ConfigSection section, Object value) {
+        switch (section) {
+            case MAIN -> validateLanguage(((MainConfigHandler.Config) value).defaultLanguage.value);
+            case TABLIST -> {
+                var tab = (TablistConfigHandler.Config) value;
+                if (tab.refreshInterval.value < 1 || tab.refreshInterval.value > 3600) {
+                    throw new IllegalArgumentException("Tablist refresh interval must be between 1 and 3600 seconds.");
+                }
+                validateTabSorting(tab.sorting.value);
+                tab.perWorldOverrides.forEach(ConfigPatchService::validateWorldOverride);
+            }
+            case RESTART -> {
+                var restart = (RestartConfigHandler.Config) value;
+                String type = restart.restartType.value;
+                if (!"fixed".equalsIgnoreCase(type) && !"realtime".equalsIgnoreCase(type)) {
+                    throw new IllegalArgumentException("Restart type must be fixed or realtime.");
+                }
+                double interval = restart.restartInterval.value;
+                if ("fixed".equalsIgnoreCase(type) && (!Double.isFinite(interval) || interval <= 0)) {
+                    throw new IllegalArgumentException("Fixed restart interval must be greater than zero.");
+                }
+                if ("realtime".equalsIgnoreCase(type)) validateRestartTimes(restart.realTimeInterval.value);
+                if (restart.timerBroadcast.value.stream().anyMatch(time -> time == null || time < 0)) {
+                    throw new IllegalArgumentException("Restart warning thresholds must be nonnegative.");
+                }
+            }
+            case MODERATION -> {
+                var moderation = (ModerationConfigHandler.Config) value;
+                if (moderation.warnEscalationRules.value.stream().anyMatch(Objects::isNull)) {
+                    throw new IllegalArgumentException("Warn escalation rules cannot be null.");
+                }
+                parseEscalationRules(ConfigSchemaRegistry.encodeEscalationRules(moderation.warnEscalationRules.value));
+            }
+            case DISCORD -> {
+                var discord = (DiscordConfigHandler.Config) value;
+                discord.consoleLogIgnoredPatterns.value.forEach(Pattern::compile);
+            }
+            default -> {}
+        }
+    }
+
+    private static void validateLanguage(String language) {
+        if (!language.matches("[A-Za-z0-9_-]{1,32}")) throw new IllegalArgumentException("Invalid language code.");
+    }
+
+    private static void validateWorldOverride(String world, TablistConfigHandler.WorldOverride override) {
+        if (world.isBlank() || override == null
+                || override.header != null && override.header.stream().anyMatch(Objects::isNull)
+                || override.footer != null && override.footer.stream().anyMatch(Objects::isNull)) {
+            throw new IllegalArgumentException("Invalid tablist world override.");
+        }
+    }
+
+    private static void validateTabSorting(List<String> rules) {
+        var seen = new java.util.HashSet<String>();
+        for (String rule : rules) {
+            if (rule == null || eu.avalanche7.paradigm.modules.tab.TablistSortRule.parse(rule) == null
+                    || !seen.add(rule.toUpperCase(Locale.ROOT))) {
+                throw new IllegalArgumentException("Tablist sorting rules must be supported and unique.");
+            }
+        }
     }
 
     static Object validateValue(ConfigField field, Object rawValue) {
@@ -284,19 +282,19 @@ public class ConfigPatchService {
         };
     }
 
-    private void applyRestart(String fieldName, Object value) throws Exception {
+    private void applyRestart(RestartConfigHandler.Config config, String fieldName, Object value) throws ReflectiveOperationException {
         if ("restartInterval".equals(fieldName)) {
             double hours = ((Number) value).doubleValue();
             if (!Double.isFinite(hours) || hours <= 0.0) throw new IllegalArgumentException("Fixed restart interval must be greater than zero.");
-            RestartConfigHandler.getConfig().restartInterval.value = hours;
+            config.restartInterval.value = hours;
             return;
         }
         if ("realTimeInterval".equals(fieldName)) {
-            RestartConfigHandler.getConfig().realTimeInterval.value = validateRestartTimes(stringList(value));
+            config.realTimeInterval.value = validateRestartTimes(stringList(value));
             return;
         }
         if ("timerBroadcast".equals(fieldName)) {
-            RestartConfigHandler.getConfig().timerBroadcast.value = parseRestartThresholds(stringList(value));
+            config.timerBroadcast.value = parseRestartThresholds(stringList(value));
             return;
         }
         if ("preRestartCommands".equals(fieldName)) {
@@ -313,18 +311,18 @@ public class ConfigPatchService {
                 }
                 commands.add(new RestartConfigHandler.PreRestartCommand(seconds, command));
             }
-            RestartConfigHandler.getConfig().preRestartCommands.value = commands;
+            config.preRestartCommands.value = commands;
             return;
         }
-        applyConfigEntry(RestartConfigHandler.Config.class, RestartConfigHandler.getConfig(), fieldName, value);
+        applyConfigEntry(RestartConfigHandler.Config.class, config, fieldName, value);
     }
 
-    private void applyModeration(String fieldName, Object value) throws Exception {
+    private void applyModeration(ModerationConfigHandler.Config config, String fieldName, Object value) throws ReflectiveOperationException {
         if ("warnEscalationRules".equals(fieldName)) {
-            ModerationConfigHandler.getConfig().warnEscalationRules.value = parseEscalationRules(stringList(value));
+            config.warnEscalationRules.value = parseEscalationRules(stringList(value));
             return;
         }
-        applyConfigEntry(ModerationConfigHandler.Config.class, ModerationConfigHandler.getConfig(), fieldName, value);
+        applyConfigEntry(ModerationConfigHandler.Config.class, config, fieldName, value);
     }
 
     static List<ModerationConfigHandler.EscalationRule> parseEscalationRules(List<String> rows) {
@@ -370,8 +368,7 @@ public class ConfigPatchService {
         return rules;
     }
 
-    private void applyChat(String fieldName, Object value) throws Exception {
-        ChatConfigHandler.Config config = ChatConfigHandler.getConfig();
+    private void applyChat(ChatConfigHandler.Config config, String fieldName, Object value) throws ReflectiveOperationException {
         if ("playerNameHoverVariants".equals(fieldName)) {
             config.playerNameHoverVariants.value = parseHoverVariants(stringList(value));
             return;
@@ -443,8 +440,7 @@ public class ConfigPatchService {
         return variants;
     }
 
-    private void applyTablist(String fieldName, Object value) throws Exception {
-        TablistConfigHandler.Config config = TablistConfigHandler.getConfig();
+    private void applyTablist(TablistConfigHandler.Config config, String fieldName, Object value) throws ReflectiveOperationException {
         if ("perWorldOverrides".equals(fieldName)) {
             Map<String, TablistConfigHandler.WorldOverride> overrides = new java.util.LinkedHashMap<>();
             Gson gson = new Gson();
@@ -464,6 +460,7 @@ public class ConfigPatchService {
                 if (row.has("footer") && !row.get("footer").isJsonNull()) override.footer = gson.fromJson(row.get("footer"), new com.google.gson.reflect.TypeToken<List<String>>() { }.getType());
                 if (row.has("playerFormat") && !row.get("playerFormat").isJsonNull()) override.playerFormat = row.get("playerFormat").getAsString();
                 if (row.has("showPing") && !row.get("showPing").isJsonNull()) override.showPing = row.get("showPing").getAsBoolean();
+                validateWorldOverride(world, override);
                 overrides.put(world, override);
             }
             config.perWorldOverrides = overrides;
@@ -471,12 +468,7 @@ public class ConfigPatchService {
         }
         if ("sorting".equals(fieldName)) {
             List<String> rules = stringList(value);
-            java.util.Set<String> seen = new java.util.HashSet<>();
-            for (String rule : rules) {
-                if (eu.avalanche7.paradigm.modules.tab.TablistSortRule.parse(rule) == null || !seen.add(rule.toUpperCase(Locale.ROOT))) {
-                    throw new IllegalArgumentException("Tablist sorting rules must be supported and unique.");
-                }
-            }
+            validateTabSorting(rules);
             config.sorting.value = rules.stream().map(rule -> rule.toUpperCase(Locale.ROOT)).toList();
             return;
         }
@@ -511,11 +503,10 @@ public class ConfigPatchService {
         return result;
     }
 
-    private void applyDiscord(String fieldName, Object value) throws Exception {
+    private void applyDiscord(DiscordConfigHandler.Config config, String fieldName, Object value) throws ReflectiveOperationException {
         if ("botToken".equals(fieldName)) {
             throw new IllegalArgumentException("The Discord bot token cannot be set through a config patch.");
         }
-        DiscordConfigHandler.Config config = DiscordConfigHandler.getConfig();
         switch (fieldName) {
             case "guildId", "chatChannelId", "moderationChannelId", "notificationChannelId",
                     "serverChannelId", "deathsChannelId", "advancementsChannelId", "commandLogChannelId",
@@ -532,6 +523,11 @@ public class ConfigPatchService {
                     requireRange(fieldName, value, 0, 10_000));
             case "countdownAnnounceSeconds" -> applyConfigEntry(DiscordConfigHandler.Config.class, config, fieldName,
                     requireRange(fieldName, value, 0, 86_400));
+            case "consoleLogIgnoredPatterns" -> {
+                var patterns = stringList(value);
+                patterns.forEach(Pattern::compile);
+                config.consoleLogIgnoredPatterns.value = patterns;
+            }
             case "consoleLogMinimumLevel" -> applyConfigEntry(DiscordConfigHandler.Config.class, config, fieldName,
                     validateLogLevel(value));
             case "consoleLogFlushSeconds" -> applyConfigEntry(DiscordConfigHandler.Config.class, config, fieldName,
@@ -579,8 +575,7 @@ public class ConfigPatchService {
         return number;
     }
 
-    private void applyDashboard(String fieldName, Object value) {
-        DashboardConfig config = DashboardConfig.load(services.getPlatformAdapter().getConfig(), services.getLogger());
+    private void applyDashboard(DashboardConfig config, String fieldName, Object value) {
         switch (fieldName) {
             case "enabled" -> config.enabled = (Boolean) value;
             case "requireLogin" -> config.requireLogin = (Boolean) value;
@@ -608,33 +603,23 @@ public class ConfigPatchService {
             }
             default -> throw new IllegalArgumentException("Unsupported dashboard config field.");
         }
-        DashboardConfig.save(services.getPlatformAdapter().getConfig(), config);
     }
 
-    private void applyCommand(String commandId, Object value, ConfigValidationResult result, String key) {
-        boolean enabled = (Boolean) value;
-        var toggleResult = services.getCommandToggleStore().setEnabled(commandId, enabled);
-        if (!toggleResult.ok()) {
-            throw new IllegalArgumentException("protected".equals(toggleResult.reason()) ? "Protected command cannot be disabled." : "Unknown command.");
-        }
-        result.accept(key);
-    }
-
-    private void applyCooldown(String commandId, Object value, boolean cooldown) {
+    private void applyCooldown(CooldownConfigHandler.Config config, String commandId, Object value, boolean cooldown) {
         int seconds = (Integer) value;
         String normalized = normalizeCommand(commandId);
         if (normalized == null) {
             throw new IllegalArgumentException("Invalid command id.");
         }
         if (cooldown) {
-            CooldownConfigHandler.getConfig().commandCooldownSeconds.put(normalized, seconds);
+            config.commandCooldownSeconds.put(normalized, seconds);
         } else {
-            CooldownConfigHandler.getConfig().commandWarmupSeconds.put(normalized, seconds);
+            config.commandWarmupSeconds.put(normalized, seconds);
         }
     }
 
     @SuppressWarnings("unchecked")
-    private static void applyConfigEntry(Class<?> configClass, Object config, String fieldName, Object value) throws Exception {
+    private static void applyConfigEntry(Class<?> configClass, Object config, String fieldName, Object value) throws ReflectiveOperationException {
         Field field = configClass.getDeclaredField(fieldName);
         field.setAccessible(true);
         Object entryObj = field.get(config);
@@ -645,8 +630,7 @@ public class ConfigPatchService {
     }
 
     @SuppressWarnings("unchecked")
-    private void applyMotd(String fieldName, Object value) {
-        MOTDConfigHandler.Config config = MOTDConfigHandler.getConfig();
+    private void applyMotd(MOTDConfigHandler.Config config, String fieldName, Object value) {
         switch (fieldName) {
             case "motdLines" -> config.motdLines = stringList(value);
             case "iconEnabled" -> config.iconEnabled.value = (Boolean) value;
@@ -690,14 +674,6 @@ public class ConfigPatchService {
         return first;
     }
 
-    private void scheduleServerThread(Runnable runnable) {
-        if (services != null && services.getTaskScheduler() != null) {
-            services.getTaskScheduler().schedule(runnable, 0L, TimeUnit.MILLISECONDS);
-        } else if (runnable != null) {
-            runnable.run();
-        }
-    }
-
     private static boolean requireBoolean(Object value) {
         if (value instanceof Boolean b) {
             return b;
@@ -711,7 +687,7 @@ public class ConfigPatchService {
     private static int requireInteger(Object value) {
         if (value instanceof Number n) {
             double d = n.doubleValue();
-            if (Math.rint(d) != d) {
+            if (!Double.isFinite(d) || Math.rint(d) != d || d < Integer.MIN_VALUE || d > Integer.MAX_VALUE) {
                 throw new IllegalArgumentException("Expected integer value.");
             }
             return n.intValue();
@@ -854,7 +830,7 @@ public class ConfigPatchService {
         return value instanceof List<?> list ? (List<String>) list : List.of();
     }
 
-    private static String normalizeKey(String key) {
+    public static String normalizeKey(String key) {
         return key != null ? key.trim() : null;
     }
 

@@ -68,6 +68,16 @@ public final class HologramApiHandler {
         Request mutationRequest = request;
 
         try {
+            if ("reload".equals(action)) {
+                var result = dashboard.services().getConfigApplyService().reload(
+                        java.util.Set.of(eu.avalanche7.paradigm.configs.ConfigSection.HOLOGRAMS),
+                        () -> dashboard.requireMutationPermission(context.principal(),
+                                eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions.HOLOGRAM_MANAGE)).join();
+                if (!result.ok()) throw new IllegalArgumentException(result.rejected().get(0).reason());
+                dashboard.audit().dashboard(context.principal(), AuditActionType.HOLOGRAM_CHANGE, AuditResult.SUCCESS,
+                        "Hologram configuration reloaded.", Map.of("action", action));
+                return DashboardResponse.apiOk(Map.of("config", service().snapshot(), "status", "applied"));
+            }
             HologramMutation mutation = onServerThread(() -> {
                 dashboard.requireMutationPermission(context.principal(), eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions.HOLOGRAM_MANAGE);
                 HologramService.Config before = service().snapshot();
@@ -78,6 +88,9 @@ public final class HologramApiHandler {
                     "Hologram " + action + " completed.", auditDetails(action, mutationRequest));
             notifyMutation(context, action, mutationRequest, mutation.before());
             return DashboardResponse.apiOk(Map.of("config", mutation.after()));
+        } catch (java.util.concurrent.CompletionException exception) {
+            if (exception.getCause() instanceof SecurityException) return DashboardResponse.apiError(403, "permission_denied", "Permission denied.");
+            return DashboardResponse.apiError(503, "apply_failed", eu.avalanche7.paradigm.configs.schema.ConfigApplyService.message(exception));
         } catch (SecurityException exception) {
             return DashboardResponse.apiError(403, "permission_denied", "Permission denied.");
         } catch (ServerThreadUnavailableException exception) {

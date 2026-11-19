@@ -14,7 +14,6 @@ public final class TicketsConfigHandler extends BaseConfigHandler<TicketsConfigH
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ParadigmConstants.MOD_ID);
     private static TicketsConfigHandler instance;
-    private Config config;
 
     private TicketsConfigHandler(IConfig platformConfig) {
         super(LOGGER, platformConfig, "tickets.json");
@@ -45,12 +44,12 @@ public final class TicketsConfigHandler extends BaseConfigHandler<TicketsConfigH
         return instance != null ? instance.config : null;
     }
 
-    public static void reload() {
-        if (instance != null) instance.config = instance.load();
-    }
-
     public static void persistConfig() {
         if (instance != null && instance.config != null) instance.save(instance.config);
+    }
+
+    public static TicketsConfigHandler handler() {
+        return instance;
     }
 
     @Override

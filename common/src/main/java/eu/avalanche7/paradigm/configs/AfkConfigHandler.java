@@ -11,7 +11,6 @@ public final class AfkConfigHandler extends BaseConfigHandler<AfkConfigHandler.C
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ParadigmConstants.MOD_ID);
     private static AfkConfigHandler instance;
-    private Config config;
 
     private AfkConfigHandler(IConfig platformConfig) {
         super(LOGGER, platformConfig, "afk.json");
@@ -38,12 +37,12 @@ public final class AfkConfigHandler extends BaseConfigHandler<AfkConfigHandler.C
         return instance.config;
     }
 
-    public static void reload() {
-        if (instance != null) instance.config = instance.load();
-    }
-
     public static void persistConfig() {
         if (instance != null && instance.config != null) instance.save(instance.config);
+    }
+
+    public static AfkConfigHandler handler() {
+        return instance;
     }
 
     @Override

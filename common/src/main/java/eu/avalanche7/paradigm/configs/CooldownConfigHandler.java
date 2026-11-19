@@ -20,7 +20,6 @@ public class CooldownConfigHandler extends BaseConfigHandler<CooldownConfigHandl
     private static final long SAVE_INTERVAL_MS = 30_000L;
     private static final Object SAVE_LOCK = new Object();
     private static CooldownConfigHandler INSTANCE;
-    private Config config;
     private long lastSaveAtMs = 0L;
     private int pendingChanges = 0;
 
@@ -77,6 +76,23 @@ public class CooldownConfigHandler extends BaseConfigHandler<CooldownConfigHandl
         return Math.max(0, INSTANCE.config.commandWarmupSeconds.getOrDefault(normalize(commandName), 0));
     }
 
+    public static boolean saveTimings(Config candidate) {
+        synchronized (SAVE_LOCK) {
+            Config active = getConfig();
+            if (active.commandCooldownSeconds.equals(candidate.commandCooldownSeconds)
+                    && active.commandWarmupSeconds.equals(candidate.commandWarmupSeconds)) return false;
+            candidate.cooldowns = active.cooldowns;
+            INSTANCE.save(candidate);
+            INSTANCE.publish(candidate);
+            return true;
+        }
+    }
+
+    public static void publishTimings(Config candidate) {
+        candidate.cooldowns = getConfig().cooldowns;
+        INSTANCE.publish(candidate);
+    }
+
     public static void saveCooldowns() {
         if (INSTANCE != null) {
             persistConfig();
@@ -105,6 +121,10 @@ public class CooldownConfigHandler extends BaseConfigHandler<CooldownConfigHandl
         this.save(this.config);
         this.lastSaveAtMs = System.currentTimeMillis();
         this.pendingChanges = 0;
+    }
+
+    public static CooldownConfigHandler handler() {
+        return INSTANCE;
     }
 
     @Override

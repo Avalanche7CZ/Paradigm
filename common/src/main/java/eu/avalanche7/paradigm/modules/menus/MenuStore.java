@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -24,7 +25,11 @@ public final class MenuStore {
     public static final int MAX_MENUS = 500;
     public static final String EXTENSION = ".json";
 
-    public record LoadResult(List<MenuDefinition> definitions, List<String> errors) {
+    public record LoadResult(Map<Path, MenuDefinition> files, List<String> errors) {
+        public List<MenuDefinition> definitions() {
+            return List.copyOf(files.values());
+        }
+
         public boolean hasErrors() {
             return !errors.isEmpty();
         }
@@ -33,6 +38,7 @@ public final class MenuStore {
     private final Gson gson = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
     private final Object lock = new Object();
     private final Supplier<Path> directorySupplier;
+    private volatile Map<Path, MenuDefinition> lastGoodFiles = Map.of();
 
     public MenuStore(Supplier<Path> directorySupplier) {
         this.directorySupplier = directorySupplier;
@@ -43,9 +49,10 @@ public final class MenuStore {
     }
 
     public LoadResult loadAll() {
-        List<MenuDefinition> definitions = new ArrayList<>();
+        Map<Path, MenuDefinition> definitions = new java.util.LinkedHashMap<>();
         List<String> errors = new ArrayList<>();
         Path directory = directory();
+        var previous = lastGoodFiles;
 
         synchronized (lock) {
             if (!Files.isDirectory(directory)) {
@@ -54,7 +61,7 @@ public final class MenuStore {
                 } catch (IOException failure) {
                     errors.add("Could not create menus directory: " + failure.getMessage());
                 }
-                return new LoadResult(definitions, errors);
+                return new LoadResult(errors.isEmpty() ? definitions : previous, errors);
             }
 
             List<Path> files = new ArrayList<>();
@@ -65,7 +72,7 @@ public final class MenuStore {
                         .forEach(files::add);
             } catch (IOException failure) {
                 errors.add("Could not read menus directory: " + failure.getMessage());
-                return new LoadResult(definitions, errors);
+                return new LoadResult(previous, errors);
             }
 
             Set<String> seen = new HashSet<>();
@@ -80,13 +87,16 @@ public final class MenuStore {
                     definition = gson.fromJson(reader, MenuDefinition.class);
                 } catch (JsonParseException malformed) {
                     errors.add(fileName + ": malformed JSON (" + rootMessage(malformed) + ")");
+                    keepLastGood(file, previous, definitions, seen);
                     continue;
                 } catch (IOException failure) {
                     errors.add(fileName + ": could not be read (" + failure.getMessage() + ")");
+                    keepLastGood(file, previous, definitions, seen);
                     continue;
                 }
                 if (definition == null) {
                     errors.add(fileName + ": file is empty.");
+                    keepLastGood(file, previous, definitions, seen);
                     continue;
                 }
                 if (definition.id == null || definition.id.isBlank()) {
@@ -96,16 +106,28 @@ public final class MenuStore {
                     definition.normalize();
                 } catch (RuntimeException invalid) {
                     errors.add(fileName + ": " + invalid.getMessage());
+                    keepLastGood(file, previous, definitions, seen);
                     continue;
                 }
                 if (!seen.add(definition.id)) {
                     errors.add(fileName + ": duplicate menu id '" + definition.id + "' (skipped).");
+                    keepLastGood(file, previous, definitions, seen);
                     continue;
                 }
-                definitions.add(definition);
+                definitions.put(file, definition);
             }
         }
-        return new LoadResult(definitions, errors);
+        return new LoadResult(java.util.Collections.unmodifiableMap(definitions), List.copyOf(errors));
+    }
+
+    void recordReload(LoadResult result) {
+        lastGoodFiles = result.files();
+    }
+
+    private static void keepLastGood(Path file, Map<Path, MenuDefinition> previous,
+            Map<Path, MenuDefinition> candidate, Set<String> seen) {
+        MenuDefinition definition = previous.get(file);
+        if (definition != null && seen.add(definition.id)) candidate.put(file, definition);
     }
 
     public MenuDefinition read(String id) {

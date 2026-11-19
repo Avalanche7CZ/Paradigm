@@ -12,7 +12,6 @@ import eu.avalanche7.paradigm.utils.DebugLogger;
 public final class ModerationConfigHandler extends BaseConfigHandler<ModerationConfigHandler.Config> {
     private static final Logger LOGGER = LoggerFactory.getLogger(ParadigmConstants.MOD_ID);
     private static ModerationConfigHandler instance;
-    private Config config;
 
     private ModerationConfigHandler(IConfig platformConfig) { super(LOGGER, platformConfig, "moderation-settings.json"); }
 
@@ -29,8 +28,11 @@ public final class ModerationConfigHandler extends BaseConfigHandler<ModerationC
         return instance.config;
     }
 
-    public static void reload() { if (instance != null) instance.config = instance.load(); }
     public static void persistConfig() { if (instance != null) instance.save(instance.config); }
+
+    public static ModerationConfigHandler handler() {
+        return instance;
+    }
 
     @Override protected Config createDefaultConfig() { return new Config(); }
     @Override protected Class<Config> getConfigClass() { return Config.class; }

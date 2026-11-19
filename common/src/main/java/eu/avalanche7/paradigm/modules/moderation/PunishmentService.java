@@ -371,6 +371,11 @@ public final class PunishmentService {
         }
     }
 
+    public void refreshForConfig() {
+        if (!started.get() || services.isStopping()) throw new IllegalStateException("Punishment cache is unavailable.");
+        refreshNow();
+    }
+
     public void refreshAsync() {
         if (!refreshRunning.compareAndSet(false, true)) return;
         services.getStorageService().runStorageAsync("moderation.cache-refresh", () -> {

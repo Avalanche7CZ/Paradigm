@@ -13,7 +13,6 @@ public class AnnouncementsConfigHandler extends BaseConfigHandler<AnnouncementsC
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ParadigmConstants.MOD_ID);
     private static AnnouncementsConfigHandler INSTANCE;
-    private Config config;
 
     private AnnouncementsConfigHandler(IConfig platformConfig) {
         super(LOGGER, platformConfig, "announcements.json");
@@ -38,16 +37,14 @@ public class AnnouncementsConfigHandler extends BaseConfigHandler<AnnouncementsC
         return INSTANCE.config;
     }
 
-    public static void reload() {
-        if (INSTANCE != null) {
-            INSTANCE.config = INSTANCE.load();
-        }
-    }
-
     public static void persistConfig() {
         if (INSTANCE != null && INSTANCE.config != null) {
             INSTANCE.save(INSTANCE.config);
         }
+    }
+
+    public static AnnouncementsConfigHandler handler() {
+        return INSTANCE;
     }
 
     @Override

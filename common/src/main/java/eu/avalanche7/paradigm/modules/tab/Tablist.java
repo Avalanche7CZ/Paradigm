@@ -108,8 +108,7 @@ public final class Tablist implements ParadigmModule {
         }
     }
 
-    public void reload() {
-        TablistConfigHandler.reload();
+    public void applySettings() {
         if (isEnabled(services)) {
             stop(false);
             start();
@@ -264,8 +263,8 @@ public final class Tablist implements ParadigmModule {
     }
 
     private int reloadCommand(ICommandSource source, Services services) {
-        reload();
-        send(source, services, "tablist.reload.done", "Tablist config reloaded.");
+        eu.avalanche7.paradigm.modules.commands.Reload.runReload(source, services,
+                java.util.Set.of(eu.avalanche7.paradigm.configs.ConfigSection.TABLIST));
         return 1;
     }
 

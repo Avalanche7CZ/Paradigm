@@ -106,12 +106,27 @@ public final class MenuApiHandler {
         Request mutationRequest = request;
 
         try {
-            List<String> problems = onServerThread(() -> {
-                dashboard.requireMutationPermission(context.principal(), eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions.MENU_MANAGE);
-                return apply(action, mutationRequest);
-            });
-            dashboard.audit().dashboard(context.principal(), AuditActionType.MENU_CHANGE, AuditResult.SUCCESS,
-                    "Menu " + action + " completed.",
+            var services = dashboard.services();
+            List<String> problems;
+            if ("reload".equals(action)) {
+                var result = services.getConfigApplyService().reload(
+                        java.util.Set.of(eu.avalanche7.paradigm.configs.ConfigSection.MENUS),
+                        () -> dashboard.requireMutationPermission(context.principal(),
+                                eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions.MENU_MANAGE)).join();
+                problems = result.rejected().stream().map(error -> error.reason()).toList();
+            } else {
+                onServerThread(() -> {
+                    dashboard.requireMutationPermission(context.principal(), eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions.MENU_MANAGE);
+                    return null;
+                });
+                var result = eu.avalanche7.paradigm.configs.schema.ConfigPatchService.serialized(() -> {
+                    apply(action, mutationRequest);
+                    return services.getConfigApplyService().reloadNow(java.util.Set.of(eu.avalanche7.paradigm.configs.ConfigSection.MENUS));
+                });
+                problems = result.rejected().stream().map(error -> error.reason()).toList();
+            }
+            dashboard.audit().dashboard(context.principal(), AuditActionType.MENU_CHANGE, problems.isEmpty() ? AuditResult.SUCCESS : AuditResult.FAILED,
+                    "Menu " + action + (problems.isEmpty() ? " applied." : " completed with problems."),
                     Map.of("action", action, "menu", mutationRequest.id != null ? mutationRequest.id : ""));
             DashboardMutationFeedback.notify(dashboard.services(), context.principal(), context.header("X-Paradigm-Locale"),
                     DashboardMutationFeedback.Area.MENUS,
@@ -119,7 +134,11 @@ public final class MenuApiHandler {
                             (mutationRequest.id != null ? mutationRequest.id : "menu") + " " + action)));
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("problems", problems);
+            payload.put("status", problems.isEmpty() ? "applied" : "failed");
             return DashboardResponse.apiOk(payload);
+        } catch (java.util.concurrent.CompletionException exception) {
+            if (exception.getCause() instanceof SecurityException) return DashboardResponse.apiError(403, "permission_denied", "Permission denied.");
+            return DashboardResponse.apiError(503, "apply_failed", eu.avalanche7.paradigm.configs.schema.ConfigApplyService.message(exception));
         } catch (SecurityException exception) {
             return DashboardResponse.apiError(403, "permission_denied", "Permission denied.");
         } catch (ServerThreadUnavailableException exception) {
@@ -132,7 +151,7 @@ public final class MenuApiHandler {
         }
     }
 
-    private List<String> apply(String action, Request request) {
+    private void apply(String action, Request request) {
         Menus module = module();
         if (module == null) {
             throw new IllegalStateException("The menu engine is not loaded.");
@@ -169,11 +188,8 @@ public final class MenuApiHandler {
                     throw new IllegalArgumentException("Menu '" + id + "' has no configuration file.");
                 }
             }
-            case "reload" -> {
-            }
             default -> throw new IllegalArgumentException("Unknown menu operation: " + action);
         }
-        return module.reload();
     }
 
     private MenuDefinition parse(Request request, Menus module) {

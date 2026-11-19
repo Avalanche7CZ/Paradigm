@@ -45,7 +45,8 @@ public final class PermissionCommands {
     private static ICommandBuilder buildDisplayBranch(IPlatformAdapter platform, Services services) {
         return platform.createCommandBuilder().literal("rank")
                 .then(platform.createCommandBuilder().literal("display")
-                        .requires(source -> source.isPlayer() && services.getPermissionsHandler().hasPermission(source.getPlayer(), "paradigm.rank.display", 0))
+                        .requires(source -> services.getPermissionsHandler().isInternalPermissionsEnabled()
+                                && source.isPlayer() && services.getPermissionsHandler().hasPermission(source.getPlayer(), "paradigm.rank.display", 0))
                         .then(platform.createCommandBuilder().argument("group", ICommandBuilder.ArgumentType.WORD)
                                 .suggests((context, input) -> {
                                     IPlayer player = context.getSource().getPlayer();
@@ -1003,7 +1004,7 @@ public final class PermissionCommands {
     }
 
     private static boolean hasGroupManagePermission(ICommandSource source, Services services) {
-        if (source == null) return false;
+        if (source == null || !services.getPermissionsHandler().isInternalPermissionsEnabled()) return false;
         if (source.isConsole() || source.hasPermissionLevel(2)) return true;
         IPlayer player = source.getPlayer();
         return player != null && services.getPermissionsHandler().hasPermission(

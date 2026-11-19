@@ -1,9 +1,12 @@
 package eu.avalanche7.paradigm.configs;
 
+import java.lang.reflect.Field;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import eu.avalanche7.paradigm.ParadigmConstants;
+import eu.avalanche7.paradigm.configs.schema.ConfigReloadBehavior;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 
@@ -11,7 +14,6 @@ public class MainConfigHandler extends BaseConfigHandler<MainConfigHandler.Confi
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ParadigmConstants.MOD_ID);
     private static MainConfigHandler INSTANCE;
-    private Config config;
 
     private MainConfigHandler(IConfig platformConfig) {
         super(LOGGER, platformConfig, "main.json");
@@ -36,16 +38,53 @@ public class MainConfigHandler extends BaseConfigHandler<MainConfigHandler.Confi
         return INSTANCE.config;
     }
 
-    public static void reload() {
-        if (INSTANCE != null) {
-            INSTANCE.config = INSTANCE.load();
+    private volatile Config reviewed;
+
+    public static void persistConfig() {
+        if (INSTANCE != null && INSTANCE.config != null) INSTANCE.save(INSTANCE.editableCopy());
+    }
+
+    @Override
+    public Config editableCopy() {
+        Config candidate = copy(active());
+        Config saved = reviewed;
+        if (saved != null) copyRestartSettings(saved, candidate);
+        return candidate;
+    }
+
+    public Config reviewed() {
+        Config saved = reviewed;
+        return saved == null ? active() : saved;
+    }
+
+    @Override
+    public Config forRuntime(Config candidate) {
+        Config runtime = copy(candidate);
+        copyRestartSettings(active(), runtime);
+        return runtime;
+    }
+
+    public boolean hasPendingRestart(Config candidate) {
+        return !settings(candidate).equals(settings(forRuntime(candidate)));
+    }
+
+    public void recordSaved(Config candidate) {
+        reviewed = candidate;
+    }
+
+    private static void copyRestartSettings(Config source, Config target) {
+        for (Field field : Config.class.getFields()) {
+            if (ConfigSection.behavior("main." + field.getName()) != ConfigReloadBehavior.RESTART_REQUIRED) continue;
+            try {
+                field.set(target, field.get(source));
+            } catch (IllegalAccessException failure) {
+                throw new IllegalStateException(failure);
+            }
         }
     }
 
-    public static void persistConfig() {
-        if (INSTANCE != null && INSTANCE.config != null) {
-            INSTANCE.save(INSTANCE.config);
-        }
+    public static MainConfigHandler handler() {
+        return INSTANCE;
     }
 
     @Override

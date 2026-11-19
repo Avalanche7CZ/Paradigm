@@ -59,15 +59,21 @@ public final class Menus implements ParadigmModule {
     }
 
     public List<String> reload() {
+        return applySettings(readSettings());
+    }
+
+    public MenuStore.LoadResult readSettings() {
+        if (store == null || menuService == null) throw new IllegalStateException("Menus are unavailable.");
+        return store.loadAll();
+    }
+
+    public List<String> applySettings(MenuStore.LoadResult result) {
         List<String> problems = new ArrayList<>();
-        if (store == null || menuService == null) {
-            return problems;
-        }
-        MenuStore.LoadResult result = store.loadAll();
         problems.addAll(result.errors());
         menuService.registry().replaceConfigDefinitions(result.definitions());
         problems.addAll(menuService.validateReferences());
         menuService.onReload();
+        store.recordReload(result);
 
         lastErrors.clear();
         lastErrors.addAll(problems);
@@ -179,15 +185,8 @@ public final class Menus implements ParadigmModule {
     }
 
     private int reloadCommand(ICommandSource source) {
-        List<String> problems = reload();
-        if (problems.isEmpty()) {
-            success(source, "&aReloaded " + menuService.registry().size() + " menu(s).");
-            return 1;
-        }
-        failure(source, "&eReloaded with " + problems.size() + " problem(s):");
-        for (String problem : problems) {
-            failure(source, "&7- &c" + problem);
-        }
+        eu.avalanche7.paradigm.modules.commands.Reload.runReload(source, services,
+                java.util.Set.of(eu.avalanche7.paradigm.configs.ConfigSection.MENUS));
         return 1;
     }
 

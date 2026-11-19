@@ -70,14 +70,20 @@ public class JsonWarpRepository implements WarpRepository {
         if (location == null || location.worldId() == null || location.worldId().isBlank()) {
             return;
         }
-        MainConfigHandler.Config config = MainConfigHandler.getConfig();
-        config.spawnWorld.value = location.worldId();
-        config.spawnX.value = location.x();
-        config.spawnY.value = location.y();
-        config.spawnZ.value = location.z();
-        config.spawnYaw.value = location.yaw();
-        config.spawnPitch.value = location.pitch();
-        MainConfigHandler.persistConfig();
+        eu.avalanche7.paradigm.configs.schema.ConfigPatchService.serialized(() -> {
+            var handler = MainConfigHandler.handler();
+            MainConfigHandler.Config candidate = handler.editableCopy();
+            candidate.spawnWorld.value = location.worldId();
+            candidate.spawnX.value = location.x();
+            candidate.spawnY.value = location.y();
+            candidate.spawnZ.value = location.z();
+            candidate.spawnYaw.value = location.yaw();
+            candidate.spawnPitch.value = location.pitch();
+            handler.save(candidate);
+            handler.publish(handler.forRuntime(candidate));
+            handler.recordSaved(candidate);
+            return null;
+        });
     }
 
     private StoredWarp fromEntry(WarpStore.WarpEntry entry) {

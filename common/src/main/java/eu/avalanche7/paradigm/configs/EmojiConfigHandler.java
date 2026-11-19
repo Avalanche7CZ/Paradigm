@@ -13,7 +13,6 @@ public class EmojiConfigHandler extends BaseConfigHandler<EmojiConfigHandler.Con
 
     private static final Logger LOGGER = LoggerFactory.getLogger("paradigm");
     private static EmojiConfigHandler INSTANCE;
-    private Config config;
 
     private EmojiConfigHandler(IConfig platformConfig) {
         super(LOGGER, platformConfig, "emojis.json");
@@ -70,6 +69,10 @@ public class EmojiConfigHandler extends BaseConfigHandler<EmojiConfigHandler.Con
         if (INSTANCE != null && INSTANCE.config != null) {
             INSTANCE.save(INSTANCE.config);
         }
+    }
+
+    public static EmojiConfigHandler handler() {
+        return INSTANCE;
     }
 
     @Override

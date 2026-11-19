@@ -94,9 +94,14 @@ public final class HologramService {
         if (platform != null) platform.removeUnknownOwnedLines(Set.of());
     }
 
-    public void reload() {
+    public Runnable prepareReload() {
+        var candidate = store.prepareReload();
+        return () -> applyReload(candidate);
+    }
+
+    private void applyReload(HologramStore.ReloadCandidate candidate) {
         synchronized (lock) {
-            store.reload();
+            store.applyReload(candidate);
             rebuildIndexLocked();
         }
         if (renderer != null) renderer.clearTemplateCache();

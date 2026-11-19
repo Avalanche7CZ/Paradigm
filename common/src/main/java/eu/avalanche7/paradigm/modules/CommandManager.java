@@ -14,7 +14,6 @@ import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandContext;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
-import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.utils.CommandPriority;
@@ -24,6 +23,7 @@ public class CommandManager implements ParadigmModule {
     private static final String NAME = "CustomCommands";
     private Services services;
     private IPlatformAdapter platform;
+    private volatile int registeredCommandCount;
     private final Set<String> registeredCustomRoots = new LinkedHashSet<>();
 
     @Override
@@ -46,22 +46,15 @@ public class CommandManager implements ParadigmModule {
 
     @Override
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
-        bind(services);
-        unregisterRegisteredCustomCommands();
-        registerLoadedCustomCommands();
+        registerReloadedCommandsInternal(services);
         ICommandBuilder reload = platform.createCommandBuilder()
                 .literal("customcommandsreload")
                 .requires(src -> services.getCommandToggleStore().isEnabled("customcommands")
                         && (src.isConsole() || (src.getPlayer() != null
                         && services.getPermissionsHandler().hasPermission(src.getPlayer(), eu.avalanche7.paradigm.modules.permissions.PermissionsHandler.RELOAD_PERMISSION))))
                 .executes(ctx -> {
-                    int count = reloadCustomCommands(services);
-                    String raw = services.getLang().getTranslation("reload.customcommands_success");
-                    if (raw == null || raw.equals("reload.customcommands_success")) {
-                        raw = "Reloaded {count} custom commands from config.";
-                    }
-                    IComponent message = services.getMessageParser().parseMessage("&a" + raw.replace("{count}", String.valueOf(count)), null);
-                    platform.sendSuccess(ctx.getSource(), message, false);
+                    eu.avalanche7.paradigm.modules.commands.Reload.runReload(ctx.getSource(), services,
+                            Set.of(eu.avalanche7.paradigm.configs.ConfigSection.CUSTOMCOMMANDS));
                     return 1;
                 });
         platform.registerCommand(reload);
@@ -71,29 +64,31 @@ public class CommandManager implements ParadigmModule {
     public void registerEventListeners(Object eventBus, Services services) {
     }
 
-    public static int reloadCustomCommands(Services services) {
+    public static int registerReloadedCommands(Services services) {
         if (services == null) {
             return 0;
         }
         for (ParadigmModule module : ParadigmAPI.getModules()) {
             if (module instanceof CommandManager manager) {
-                return manager.reloadCustomCommandsInternal(services);
+                return manager.registerReloadedCommandsInternal(services);
             }
         }
 
-        CommandManager manager = new CommandManager();
-        return manager.reloadCustomCommandsInternal(services);
+        return 0;
     }
 
-    private int reloadCustomCommandsInternal(Services services) {
+    private int registerReloadedCommandsInternal(Services services) {
         bind(services);
         unregisterRegisteredCustomCommands();
-        services.getCmConfig().reloadCommands();
-        services.getPermissionsHandler().refreshCustomCommandPermissions();
-        int count = registerLoadedCustomCommands();
-        platform.refreshAllPlayerCommandTrees();
-        services.getDebugLogger().debugLog(NAME + ": Reloaded and registered " + count + " custom commands.");
-        return count;
+        registeredCommandCount = registerLoadedCustomCommands();
+        return registeredCommandCount;
+    }
+
+    public static int registeredCount() {
+        for (ParadigmModule module : ParadigmAPI.getModules()) {
+            if (module instanceof CommandManager manager) return manager.registeredCommandCount;
+        }
+        return 0;
     }
 
     private void bind(Services services) {
@@ -421,6 +416,7 @@ public class CommandManager implements ParadigmModule {
     public void onDisable(Services services) {
         bind(services);
         unregisterRegisteredCustomCommands();
+        registeredCommandCount = 0;
     }
 
     @Override

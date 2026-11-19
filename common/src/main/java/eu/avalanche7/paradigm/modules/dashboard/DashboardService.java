@@ -14,14 +14,7 @@ import java.util.concurrent.Executors;
 import com.google.gson.JsonObject;
 
 import eu.avalanche7.paradigm.ParadigmAPI;
-import eu.avalanche7.paradigm.configs.AfkConfigHandler;
-import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
-import eu.avalanche7.paradigm.configs.ChatConfigHandler;
-import eu.avalanche7.paradigm.configs.DiscordConfigHandler;
-import eu.avalanche7.paradigm.configs.MOTDConfigHandler;
-import eu.avalanche7.paradigm.configs.MainConfigHandler;
-import eu.avalanche7.paradigm.configs.MentionConfigHandler;
-import eu.avalanche7.paradigm.configs.RestartConfigHandler;
+import eu.avalanche7.paradigm.configs.ConfigSection;
 import eu.avalanche7.paradigm.configs.schema.ConfigField;
 import eu.avalanche7.paradigm.configs.schema.ConfigPatchOperation;
 import eu.avalanche7.paradigm.configs.schema.ConfigPatchService;
@@ -34,12 +27,9 @@ import eu.avalanche7.paradigm.configs.schema.RemoteConfigSnapshot;
 import eu.avalanche7.paradigm.configs.schema.RemoteConfigValidationService;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.Announcements;
-import eu.avalanche7.paradigm.modules.Restart;
 import eu.avalanche7.paradigm.modules.audit.AuditActionType;
 import eu.avalanche7.paradigm.modules.audit.AuditResult;
 import eu.avalanche7.paradigm.modules.audit.AuditService;
-import eu.avalanche7.paradigm.modules.commands.Reload;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardAuthService;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardAuthorization;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
@@ -148,12 +138,20 @@ public class DashboardService implements AutoCloseable {
         }
     }
 
-    public synchronized void reload(DashboardConfig newConfig) {
+    public void reloadSettings() {
+        reload(DashboardConfig.read(services.getPlatformAdapter().getConfig()));
+    }
+
+    public synchronized void reload(DashboardConfig candidate) {
         boolean wasRunning = running();
+        DashboardConfig previous = this.config;
         stop();
-        this.config = newConfig;
-        if (wasRunning || newConfig.enabled) {
-            start();
+        this.config = candidate;
+        if ((wasRunning || candidate.enabled) && !usesCentralHost() && !start()) {
+            stop();
+            this.config = previous;
+            if (wasRunning) start();
+            throw new IllegalStateException("Could not bind the dashboard to " + candidate.host + ":" + candidate.port + ".");
         }
     }
 
@@ -196,57 +194,32 @@ public class DashboardService implements AutoCloseable {
 
     public CompletableFuture<Object> applyConfigAsync(DashboardPrincipal actor, String rawPage) {
         String page = safeText(rawPage).toLowerCase(java.util.Locale.ROOT);
-        CompletableFuture<Object> result = new CompletableFuture<>();
-        Runnable apply = () -> {
-            try {
-                requireConfigurationMutation(actor, DashboardAuthorization.categoriesForPage(page), false);
-                if ("dashboard".equals(page)) {
-                    result.complete(Map.of("page", page, "message", "Dashboard reload scheduled. Reconnect using /paradigm dashboard open if the bind address changed."));
-                    CompletableFuture.delayedExecutor(750L, java.util.concurrent.TimeUnit.MILLISECONDS).execute(() -> {
-                        if (!hasDashboardPermission(actor) || !canEditConfigCategories(actor, DashboardAuthorization.categoriesForPage(page))) return;
-                        DashboardConfig reloaded = DashboardConfig.load(services.getPlatformAdapter().getConfig(), services.getLogger());
-                        reload(reloaded);
-                    });
-                    return;
-                }
-                switch (page) {
-                    case "general", "teleports" -> {
-                        Map<ParadigmModule, Boolean> moduleStates = Reload.snapshotModuleStates(services);
-                        MainConfigHandler.reload();
-                        Reload.refreshModuleStates(services, moduleStates);
-                    }
-                    case "chat" -> {
-                        ChatConfigHandler.reload();
-                        MentionConfigHandler.reload();
-                    }
-                    case "announcements" -> {
-                        AnnouncementsConfigHandler.reload();
-                        for (ParadigmModule module : ParadigmAPI.getModules()) if (module instanceof Announcements announcements) announcements.rescheduleAnnouncements();
-                    }
-                    case "restart" -> {
-                        RestartConfigHandler.reload();
-                        for (ParadigmModule module : ParadigmAPI.getModules()) if (module instanceof Restart restart) restart.rescheduleNextRestart(services);
-                    }
-                    case "motd" -> MOTDConfigHandler.reload();
-                    case "commands" -> Reload.refreshAllCommandStates(services);
-                    case "discord" -> {
-                        DiscordConfigHandler.reload();
-                        services.getDiscordService().reload();
-                    }
-                    case "afk" -> {
-                        AfkConfigHandler.reload();
-                        services.getAfkService().restart();
-                    }
-                    default -> throw new IllegalArgumentException("This page does not support a live module reload.");
-                }
-                result.complete(Map.of("page", page, "message", "Reload applied for " + page + "."));
-            } catch (Throwable t) {
-                result.completeExceptionally(t);
-            }
+        Set<String> categories = DashboardAuthorization.categoriesForPage(page);
+        var runtime = services.getConfigApplyService();
+        if ("dashboard".equals(page)) {
+            requireConfigurationMutation(actor, categories, false);
+            runtime.reload(Set.of(ConfigSection.DASHBOARD), () -> requireConfigurationMutation(actor, categories, false),
+                    CompletableFuture.delayedExecutor(750L, java.util.concurrent.TimeUnit.MILLISECONDS))
+                    .whenComplete((outcome, failure) -> audit().dashboard(actor, AuditActionType.CONFIG_PATCH,
+                            failure == null && outcome.ok() ? AuditResult.SUCCESS : AuditResult.FAILED,
+                            failure == null && outcome.ok() ? "Dashboard config reload applied." : "Dashboard config reload failed.",
+                            Map.of("page", page)));
+            return CompletableFuture.completedFuture(Map.of("page", page, "status", "pending",
+                    "message", "Dashboard reload scheduled. Reconnect using /paradigm dashboard open if the bind address changed."));
+        }
+        Set<ConfigSection> sections = switch (page) {
+            case "general", "teleports" -> Set.of(ConfigSection.MAIN);
+            case "chat" -> Set.of(ConfigSection.CHAT, ConfigSection.MENTIONS);
+            case "announcements", "restart", "motd", "tablist", "moderation", "discord", "afk", "commands", "cooldowns" ->
+                    Set.of(ConfigSection.forName(page));
+            default -> throw new IllegalArgumentException("This page does not support a live module reload.");
         };
-        if (services.getTaskScheduler() != null) services.getTaskScheduler().schedule(apply, 0L, java.util.concurrent.TimeUnit.MILLISECONDS);
-        else apply.run();
-        return result;
+        return runtime.reload(sections, () -> requireConfigurationMutation(actor, categories, false))
+                .thenApply(result -> Map.of("page", page, "result", result, "status",
+                        !result.ok() ? "failed" : result.pending().isEmpty() ? "applied" : "restart_required",
+                        "message", !result.ok() ? result.rejected().stream()
+                                .map(error -> error.key() + ": " + error.reason()).collect(java.util.stream.Collectors.joining(", "))
+                                : result.pending().isEmpty() ? "Reload applied for " + page + "." : String.join(" ", result.warnings())));
     }
 
     public boolean requiresNetworkManage(String scope, String targetServerId) {

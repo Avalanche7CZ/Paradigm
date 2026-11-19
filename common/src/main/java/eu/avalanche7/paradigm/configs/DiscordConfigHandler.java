@@ -12,7 +12,6 @@ import eu.avalanche7.paradigm.utils.DebugLogger;
 public class DiscordConfigHandler extends BaseConfigHandler<DiscordConfigHandler.Config> {
     private static final Logger LOGGER = LoggerFactory.getLogger(ParadigmConstants.MOD_ID);
     private static DiscordConfigHandler INSTANCE;
-    private Config config;
 
     private DiscordConfigHandler(IConfig platformConfig) {
         super(LOGGER, platformConfig, "discord.json");
@@ -41,16 +40,14 @@ public class DiscordConfigHandler extends BaseConfigHandler<DiscordConfigHandler
         return INSTANCE != null;
     }
 
-    public static void reload() {
-        if (INSTANCE != null) {
-            INSTANCE.config = INSTANCE.load();
-        }
-    }
-
     public static void persistConfig() {
         if (INSTANCE != null && INSTANCE.config != null) {
             INSTANCE.save(INSTANCE.config);
         }
+    }
+
+    public static DiscordConfigHandler handler() {
+        return INSTANCE;
     }
 
     @Override

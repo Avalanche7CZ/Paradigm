@@ -14,7 +14,6 @@ public class MOTDConfigHandler extends BaseConfigHandler<MOTDConfigHandler.Confi
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MOTDConfigHandler.class);
     private static MOTDConfigHandler INSTANCE;
-    private Config config;
 
     private MOTDConfigHandler(IConfig platformConfig) {
         super(LOGGER, platformConfig, "motd.json");
@@ -40,17 +39,14 @@ public class MOTDConfigHandler extends BaseConfigHandler<MOTDConfigHandler.Confi
         return INSTANCE.config;
     }
 
-    public static void reload() {
-        if (INSTANCE != null) {
-            INSTANCE.config = INSTANCE.load();
-            ServerStatusIconCache.reload(INSTANCE.platformConfig, LOGGER);
-        }
-    }
-
     public static void persistConfig() {
         if (INSTANCE != null && INSTANCE.config != null) {
             INSTANCE.save(INSTANCE.config);
         }
+    }
+
+    public static MOTDConfigHandler handler() {
+        return INSTANCE;
     }
 
     @Override

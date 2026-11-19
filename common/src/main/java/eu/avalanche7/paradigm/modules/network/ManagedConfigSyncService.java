@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -19,7 +20,6 @@ import eu.avalanche7.paradigm.configs.schema.ConfigPatchOperation;
 import eu.avalanche7.paradigm.configs.schema.ConfigPatchService;
 import eu.avalanche7.paradigm.configs.schema.ConfigSchemaRegistry;
 import eu.avalanche7.paradigm.configs.schema.ConfigSnapshot;
-import eu.avalanche7.paradigm.configs.schema.ConfigValidationResult;
 import eu.avalanche7.paradigm.configs.schema.RemoteConfigEligibility;
 import eu.avalanche7.paradigm.configs.schema.RemoteConfigValidationService;
 import eu.avalanche7.paradigm.core.Services;
@@ -36,6 +36,7 @@ public class ManagedConfigSyncService {
 
     private final Services services;
     private final Map<String, long[]> lastAppliedTickRevisions = new ConcurrentHashMap<>();
+    private final Set<String> applyingSections = ConcurrentHashMap.newKeySet();
     private final AtomicBoolean syncPending = new AtomicBoolean();
     private final AtomicBoolean syncInFlight = new AtomicBoolean();
     private volatile Set<String> managedSections = Set.of();
@@ -45,14 +46,14 @@ public class ManagedConfigSyncService {
         this.services = services;
     }
 
-    public void start() {
-        if (services.getTaskScheduler() == null) {
+    public synchronized void start() {
+        if (tickFuture != null || services.getTaskScheduler() == null) {
             return;
         }
         tickFuture = services.getTaskScheduler().scheduleAtFixedRate(this::scheduledTick, TICK_SECONDS, TICK_SECONDS, TimeUnit.SECONDS);
     }
 
-    public void stop() {
+    public synchronized void stop() {
         ScheduledFuture<?> current = tickFuture;
         if (current != null) {
             current.cancel(false);
@@ -74,17 +75,7 @@ public class ManagedConfigSyncService {
     }
 
     public void reconcileOnStartup() {
-        StorageService storage = services.getStorageService();
-        if (storage == null || !storage.isMysqlActive()) {
-            return;
-        }
-        try {
-            tickOnStorageThread();
-        } catch (Throwable t) {
-            if (services.getLogger() != null) {
-                services.getLogger().warn("Paradigm network: startup reconciliation failed: {}", t.getMessage());
-            }
-        }
+        triggerImmediateSync();
     }
 
     private void scheduledTick() {
@@ -100,18 +91,21 @@ public class ManagedConfigSyncService {
         if (!syncInFlight.compareAndSet(false, true)) {
             return;
         }
-        storage.runStorageAsync(operation, () -> {
+        storage.submitAcknowledged(() -> {
             syncPending.set(false);
-            try {
-                tickOnStorageThread();
-            } finally {
-                syncInFlight.set(false);
-                if (syncPending.get()) {
-                    StorageService current = services.getStorageService();
-                    if (current != null && current.isMysqlActive()) {
-                        requestSync(current, "managed_config.sync.coalesced");
-                    }
+            if (!services.isStopping()) tickOnStorageThread();
+            return null;
+        }).whenComplete((ignored, failure) -> {
+            syncInFlight.set(false);
+            if (failure != null) {
+                if (services.getLogger() != null && !services.isStopping()) {
+                    services.getLogger().warn("Failed to run managed configuration operation {}", operation, failure);
                 }
+                return;
+            }
+            if (syncPending.get() && !services.isStopping()) {
+                StorageService current = services.getStorageService();
+                if (current != null && current.isMysqlActive()) requestSync(current, "managed_config.sync.coalesced");
             }
         });
     }
@@ -203,7 +197,7 @@ public class ManagedConfigSyncService {
             if (known != null && known[0] == globalRev && known[1] == serverRev) {
                 continue;
             }
-            applySection(storage, networkId, serverId, section, globalRev, serverRev);
+            if (!applyingSections.contains(section)) applySection(storage, networkId, serverId, section, globalRev, serverRev);
         }
     }
 
@@ -217,6 +211,10 @@ public class ManagedConfigSyncService {
             ManagedConfigEntry serverEntry = serverRev > 0
                     ? repository.get(networkId, ServerScope.SERVER, serverId, section).orElse(null) : null;
 
+            if ((globalRev > 0 && (globalEntry == null || globalEntry.revision() != globalRev))
+                    || (serverRev > 0 && (serverEntry == null || serverEntry.revision() != serverRev))) {
+                return;
+            }
             if (globalEntry != null && !myFingerprint.equals(globalEntry.schemaFingerprint())) {
                 recordApplyError(storage, networkId, serverId, section,
                         "schema_incompatible: network row authored for a different Paradigm build");
@@ -269,16 +267,32 @@ public class ManagedConfigSyncService {
                 return;
             }
 
+            if (!applyingSections.add(section)) return;
             ConfigPatch patch = new ConfigPatch(snapshot.revision(), operations);
-            ConfigValidationResult result = new ConfigPatchService(services, registry).apply(patch);
-            if (result.ok()) {
-                recordAppliedRevision(storage, networkId, serverId, section, globalRev, serverRev);
-            } else {
-                String reason = result.rejected().stream()
-                        .map(err -> err.key() + ": " + err.reason())
-                        .collect(Collectors.joining("; "));
-                recordApplyError(storage, networkId, serverId, section, reason);
-            }
+            CompletableFuture.supplyAsync(() -> {
+                services.getConfigApplyService().requireRunning();
+                return new ConfigPatchService(services, registry).apply(patch);
+            }).whenComplete((result, failure) -> storage.submitAcknowledged(() -> {
+                if (services.isStopping() || services.getStorageService() != storage) return null;
+                if (failure != null) {
+                    recordApplyError(storage, networkId, serverId, section,
+                            eu.avalanche7.paradigm.configs.schema.ConfigApplyService.message(failure));
+                } else if (result.locallyApplied()) {
+                    recordAppliedRevision(storage, networkId, serverId, section, globalRev, serverRev);
+                } else {
+                    String reason = result.rejected().stream()
+                            .map(err -> err.key() + ": " + err.reason())
+                            .collect(Collectors.joining("; "));
+                    if (reason.isEmpty()) reason = String.join(" ", result.warnings());
+                    recordApplyError(storage, networkId, serverId, section, reason);
+                }
+                return null;
+            }).whenComplete((ignored, acknowledgementFailure) -> {
+                applyingSections.remove(section);
+                if (acknowledgementFailure != null && !services.isStopping() && services.getLogger() != null) {
+                    services.getLogger().warn("Could not record managed configuration outcome for {}", section, acknowledgementFailure);
+                }
+            }));
         } catch (Throwable t) {
             if (services.getLogger() != null) {
                 services.getLogger().warn("Paradigm network: failed to apply managed config section '{}': {}", section, t.getMessage());

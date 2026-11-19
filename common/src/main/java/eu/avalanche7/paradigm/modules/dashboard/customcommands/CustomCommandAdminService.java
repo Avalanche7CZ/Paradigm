@@ -13,8 +13,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 import java.util.regex.Pattern;
 
@@ -39,7 +37,6 @@ public final class CustomCommandAdminService {
     private static final Pattern PERMISSION = Pattern.compile("[A-Za-z0-9_*.-]{1,128}");
     private static final String MANAGED_FILE = "dashboard-commands.json";
 
-    private final Services services;
     private final Path directory;
     private final Supplier<Integer> reloader;
     private final ActionRegistry actionRegistry;
@@ -47,20 +44,13 @@ public final class CustomCommandAdminService {
     private final Object mutationLock = new Object();
 
     public CustomCommandAdminService(Services services) {
-        this(services,
-                services.getPlatformAdapter().getConfig().getConfigDirectory().resolve("paradigm").resolve("commands"),
-                () -> CommandManager.reloadCustomCommands(services),
+        this(services.getPlatformAdapter().getConfig().getConfigDirectory().resolve("paradigm").resolve("commands"),
+                () -> reloadLocal(services),
                 services.getActionDispatcher().actions(), services.getActionDispatcher().conditions());
     }
 
     CustomCommandAdminService(Path directory, Supplier<Integer> reloader,
             ActionRegistry actions, ConditionRegistry conditions) {
-        this(null, directory, reloader, actions, conditions);
-    }
-
-    private CustomCommandAdminService(Services services, Path directory, Supplier<Integer> reloader,
-            ActionRegistry actions, ConditionRegistry conditions) {
-        this.services = services;
         this.directory = directory;
         this.reloader = reloader;
         this.actionRegistry = actions;
@@ -148,29 +138,19 @@ public final class CustomCommandAdminService {
 
     public MutationResult reload() {
         synchronized (mutationLock) {
-            return new MutationResult("reloaded", "", reloadCommands().join());
+            return new MutationResult("reloaded", "", reloader.get());
         }
     }
 
     private MutationResult reloaded(String action, String name) {
-        return new MutationResult(action, name, reloadCommands().join());
+        return new MutationResult(action, name, reloader.get());
     }
 
-    private CompletableFuture<Integer> reloadCommands() {
-        CompletableFuture<Integer> result = new CompletableFuture<>();
-        Runnable task = () -> {
-            try {
-                result.complete(reloader.get());
-            } catch (Throwable t) {
-                result.completeExceptionally(t);
-            }
-        };
-        if (services != null && services.getTaskScheduler() != null) {
-            services.getTaskScheduler().schedule(task, 0L, TimeUnit.MILLISECONDS);
-        } else {
-            task.run();
-        }
-        return result;
+    private static int reloadLocal(Services services) {
+        var result = services.getConfigApplyService()
+                .reload(Set.of(eu.avalanche7.paradigm.configs.ConfigSection.CUSTOMCOMMANDS)).join();
+        if (!result.ok()) throw new IllegalArgumentException(result.rejected().get(0).reason());
+        return CommandManager.registeredCount();
     }
 
     private JsonObject validate(JsonObject input, String originalName) {

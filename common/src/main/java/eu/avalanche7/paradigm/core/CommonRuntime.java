@@ -15,7 +15,6 @@ import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.data.WarpStore;
 import eu.avalanche7.paradigm.modules.*;
 import eu.avalanche7.paradigm.modules.chat.*;
-import eu.avalanche7.paradigm.modules.commands.Reload;
 import eu.avalanche7.paradigm.modules.commands.shared.CommandCatalog;
 import eu.avalanche7.paradigm.modules.permissions.CommandNodeAccessGate;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
@@ -132,7 +131,6 @@ public final class CommonRuntime {
                 return modVersion != null ? modVersion : "unknown";
             }
         });
-        Reload.recordModuleStates(runtime.services());
         ApiProviderRegistry.install(new ParadigmApiProvider(runtime.services(), modVersion));
     }
 

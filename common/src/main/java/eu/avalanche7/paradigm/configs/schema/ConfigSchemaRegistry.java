@@ -15,6 +15,7 @@ import eu.avalanche7.paradigm.configs.AfkConfigHandler;
 import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
 import eu.avalanche7.paradigm.configs.ChatConfigHandler;
 import eu.avalanche7.paradigm.configs.ConfigEntry;
+import eu.avalanche7.paradigm.configs.ConfigSection;
 import eu.avalanche7.paradigm.configs.CooldownConfigHandler;
 import eu.avalanche7.paradigm.configs.DiscordConfigHandler;
 import eu.avalanche7.paradigm.configs.MOTDConfigHandler;
@@ -112,7 +113,7 @@ public class ConfigSchemaRegistry {
     }
 
     private void addMainFields(List<ConfigField> fields) {
-        MainConfigHandler.Config current = MainConfigHandler.getConfig();
+        MainConfigHandler.Config current = MainConfigHandler.handler().reviewed();
         MainConfigHandler.Config defaults = new MainConfigHandler.Config();
         Map<String, ConfigEntry<?>> defaultEntries = configEntries(MainConfigHandler.Config.class, defaults);
         for (Map.Entry<String, ConfigEntry<?>> entry : configEntries(MainConfigHandler.Config.class, current).entrySet()) {
@@ -122,7 +123,7 @@ public class ConfigSchemaRegistry {
             }
             String category = categoryForMain(name, entry.getValue());
             ConfigField field = entryField("main." + name, category, name, entry.getValue(), defaultEntries.get(name),
-                    "main.json", ConfigReloadBehavior.RELOAD_REQUIRED, riskForMain(name), true);
+                    "main.json", riskForMain(name), true);
             if (field != null) {
                 fields.add(field);
             }
@@ -134,25 +135,25 @@ public class ConfigSchemaRegistry {
     private void addChatFields(List<ConfigField> fields) {
         ChatConfigHandler.Config current = ChatConfigHandler.getConfig();
         ChatConfigHandler.Config defaults = new ChatConfigHandler.Config();
-        addConfigEntries(fields, "chat", "chat", ChatConfigHandler.Config.class, current, defaults, "chat.json", ConfigReloadBehavior.RELOAD_REQUIRED);
+        addConfigEntries(fields, "chat", "chat", ChatConfigHandler.Config.class, current, defaults, "chat.json");
 
         fields.removeIf(field -> List.of("chat.playerNameHover", "chat.playerNameClickAction",
                 "chat.playerNameClickValue", "chat.playerNameHoverVariants").contains(field.key()));
         fields.add(stringListField("chat.playerNameHover", "chat", "Player Name Hover Lines", current.playerNameHover.description,
                 current.playerNameHover.value, defaults.playerNameHover.value,
-                "chat.json", true, ConfigReloadBehavior.RELOAD_REQUIRED));
+                "chat.json", true));
         fields.add(simpleField("chat.playerNameClickAction", "chat", "Player Name Click Action", current.playerNameClickAction.description,
                 ConfigFieldType.ENUM, current.playerNameClickAction.value, defaults.playerNameClickAction.value,
-                "chat.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.SAFE,
+                "chat.json", ConfigRiskLevel.SAFE,
                 null, null, null, PlayerNameClickAction.TYPES, null, true, true, false, "", true, false));
         fields.add(simpleField("chat.playerNameClickValue", "chat", "Player Name Click Command", current.playerNameClickValue.description,
                 ConfigFieldType.STRING, current.playerNameClickValue.value, defaults.playerNameClickValue.value,
-                "chat.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.SAFE,
+                "chat.json", ConfigRiskLevel.SAFE,
                 null, null, null, List.of(), null, true, false, true, "", false, false));
         fields.add(stringListField("chat.playerNameHoverVariants", "chat", "Player Name Hover Variants",
                 current.playerNameHoverVariants.description,
                 encodeHoverVariants(current.playerNameHoverVariants.value), encodeHoverVariants(defaults.playerNameHoverVariants.value),
-                "chat.json", false, ConfigReloadBehavior.RELOAD_REQUIRED));
+                "chat.json", false));
     }
 
     private static List<String> encodeHoverVariants(List<ChatConfigHandler.PlayerNameHoverVariant> variants) {
@@ -172,38 +173,38 @@ public class ConfigSchemaRegistry {
     private void addMentionFields(List<ConfigField> fields) {
         MentionConfigHandler.Config current = MentionConfigHandler.getConfig();
         MentionConfigHandler.Config defaults = new MentionConfigHandler.Config();
-        addConfigEntries(fields, "mentions", "chat", MentionConfigHandler.Config.class, current, defaults, "mentions.json", ConfigReloadBehavior.RELOAD_REQUIRED);
+        addConfigEntries(fields, "mentions", "chat", MentionConfigHandler.Config.class, current, defaults, "mentions.json");
     }
 
     private void addAnnouncementFields(List<ConfigField> fields) {
         AnnouncementsConfigHandler.Config current = AnnouncementsConfigHandler.getConfig();
         AnnouncementsConfigHandler.Config defaults = new AnnouncementsConfigHandler.Config();
         addConfigEntries(fields, "announcements", "announcements", AnnouncementsConfigHandler.Config.class, current, defaults,
-                "announcements.json", ConfigReloadBehavior.RELOAD_REQUIRED);
+                "announcements.json");
     }
 
     private void addRestartFields(List<ConfigField> fields) {
         RestartConfigHandler.Config current = RestartConfigHandler.getConfig();
         RestartConfigHandler.Config defaults = new RestartConfigHandler.Config();
         addConfigEntries(fields, "restart", "restart", RestartConfigHandler.Config.class, current, defaults,
-                "restarts.json", ConfigReloadBehavior.RELOAD_REQUIRED);
+                "restarts.json");
         fields.removeIf(field -> "restart.restartInterval".equals(field.key()));
         fields.add(simpleField("restart.restartInterval", "restart", "Fixed Restart Interval",
                 current.restartInterval.description, ConfigFieldType.DOUBLE,
                 current.restartInterval.value, defaults.restartInterval.value,
-                "restarts.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.SAFE,
+                "restarts.json", ConfigRiskLevel.SAFE,
                 0.01, 8760.0, 0.25, List.of(), null, true, true, false,
                 "hours", true, false));
         fields.add(simpleField("restart.timerBroadcast", "restart", "Timer Broadcast Thresholds",
                 current.timerBroadcast.description, ConfigFieldType.STRING_LIST,
                 restartThresholds(current.timerBroadcast.value), restartThresholds(defaults.timerBroadcast.value),
-                "restarts.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.SAFE,
+                "restarts.json", ConfigRiskLevel.SAFE,
                 null, null, null, List.of(), ConfigFieldType.INTEGER, true, false, true,
                 "seconds", true, false));
         fields.add(simpleField("restart.preRestartCommands", "restart", "Pre Restart Commands",
                 "One command per row using: seconds before | command. Commands remain constrained to the restart configuration.",
                 ConfigFieldType.STRING_LIST, restartCommands(current.preRestartCommands.value), restartCommands(defaults.preRestartCommands.value),
-                "restarts.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.ADVANCED,
+                "restarts.json", ConfigRiskLevel.ADVANCED,
                 null, null, null, List.of(), null, true, false, true, "", false, false));
     }
 
@@ -212,39 +213,39 @@ public class ConfigSchemaRegistry {
         MOTDConfigHandler.Config defaults = new MOTDConfigHandler.Config();
         fields.add(stringListField("motd.motdLines", "motd", "Join MOTD Lines",
                 "Message sent to players after joining. Empty lines are preserved.", current.motdLines, defaults.motdLines,
-                "motd.json", true, ConfigReloadBehavior.RELOAD_REQUIRED));
+                "motd.json", true));
         fields.add(entryField("motd.iconEnabled", "motd", "iconEnabled", current.iconEnabled, defaults.iconEnabled,
-                "motd.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.SAFE, true));
+                "motd.json", ConfigRiskLevel.SAFE, true));
         fields.add(entryField("motd.serverlistMotdEnabled", "motd", "serverlistMotdEnabled", current.serverlistMotdEnabled, defaults.serverlistMotdEnabled,
-                "motd.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.SAFE, true));
+                "motd.json", ConfigRiskLevel.SAFE, true));
 
         MOTDConfigHandler.ServerListMOTD currentFirst = firstMotd(current);
         MOTDConfigHandler.ServerListMOTD defaultFirst = firstMotd(defaults);
         fields.add(simpleField("motd.serverlist.0.icon", "motd", "Server-list Icon",
                 "Icon name from config/paradigm/icons without .png. Use random where supported.", ConfigFieldType.STRING,
-                currentFirst.icon, defaultFirst.icon, "motd.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.SAFE,
+                currentFirst.icon, defaultFirst.icon, "motd.json", ConfigRiskLevel.SAFE,
                 null, null, null, List.of(), null, true, false, true, "", true, false));
         fields.add(simpleField("motd.serverlist.0.line1", "motd", "Server-list Line 1",
                 "First line shown in the multiplayer server list.", ConfigFieldType.STRING,
-                currentFirst.line1, defaultFirst.line1, "motd.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.SAFE,
+                currentFirst.line1, defaultFirst.line1, "motd.json", ConfigRiskLevel.SAFE,
                 null, null, null, List.of(), null, true, false, true, "", false, false));
         fields.add(simpleField("motd.serverlist.0.line2", "motd", "Server-list Line 2",
                 "Second line shown in the multiplayer server list.", ConfigFieldType.STRING,
-                currentFirst.line2, defaultFirst.line2, "motd.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.SAFE,
+                currentFirst.line2, defaultFirst.line2, "motd.json", ConfigRiskLevel.SAFE,
                 null, null, null, List.of(), null, true, false, true, "", false, false));
         if (currentFirst.playerCount != null) {
             MOTDConfigHandler.PlayerCountDisplay defaultPlayerCount = defaultFirst.playerCount != null ? defaultFirst.playerCount : new MOTDConfigHandler.PlayerCountDisplay();
             fields.add(simpleField("motd.serverlist.0.playerCount.hoverText", "motd", "Player Count Hover",
                     "Hover text shown over the server-list player count.", ConfigFieldType.STRING,
-                    currentFirst.playerCount.hoverText, defaultPlayerCount.hoverText, "motd.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.SAFE,
+                    currentFirst.playerCount.hoverText, defaultPlayerCount.hoverText, "motd.json", ConfigRiskLevel.SAFE,
                     null, null, null, List.of(), null, true, false, true, "", false, false));
             fields.add(simpleField("motd.serverlist.0.playerCount.maxPlayers", "motd", "Displayed Max Players",
                     "Optional max player count displayed in the server list.", ConfigFieldType.INTEGER,
-                    currentFirst.playerCount.maxPlayers, defaultPlayerCount.maxPlayers, "motd.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.SAFE,
+                    currentFirst.playerCount.maxPlayers, defaultPlayerCount.maxPlayers, "motd.json", ConfigRiskLevel.SAFE,
                     0.0, 1_000_000.0, 1.0, List.of(), null, true, false, true, "", true, false));
             fields.add(simpleField("motd.serverlist.0.playerCount.showActualCount", "motd", "Show Actual Player Count",
                     "Show the real online player count in the server list.", ConfigFieldType.BOOLEAN,
-                    currentFirst.playerCount.showActualCount, defaultPlayerCount.showActualCount, "motd.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.SAFE,
+                    currentFirst.playerCount.showActualCount, defaultPlayerCount.showActualCount, "motd.json", ConfigRiskLevel.SAFE,
                     null, null, null, List.of(), null, true, false, true, "", true, false));
         }
     }
@@ -253,22 +254,22 @@ public class ConfigSchemaRegistry {
         TablistConfigHandler.Config current = TablistConfigHandler.getConfig();
         TablistConfigHandler.Config defaults = new TablistConfigHandler.Config();
         addConfigEntries(fields, "tablist", "tablist", TablistConfigHandler.Config.class, current, defaults,
-                "tablist.json", ConfigReloadBehavior.LIVE);
+                "tablist.json");
         fields.removeIf(field -> List.of("tablist.header", "tablist.footer", "tablist.sorting", "tablist.refreshInterval").contains(field.key()));
         fields.add(stringListField("tablist.header", "tablist", "Header", current.header.description,
-                current.header.value, defaults.header.value, "tablist.json", true, ConfigReloadBehavior.LIVE));
+                current.header.value, defaults.header.value, "tablist.json", true));
         fields.add(stringListField("tablist.footer", "tablist", "Footer", current.footer.description,
-                current.footer.value, defaults.footer.value, "tablist.json", true, ConfigReloadBehavior.LIVE));
+                current.footer.value, defaults.footer.value, "tablist.json", true));
         fields.add(stringListField("tablist.sorting", "tablist", "Sorting", current.sorting.description,
-                current.sorting.value, defaults.sorting.value, "tablist.json", false, ConfigReloadBehavior.LIVE));
+                current.sorting.value, defaults.sorting.value, "tablist.json", false));
         fields.add(simpleField("tablist.refreshInterval", "tablist", "Refresh Interval",
                 current.refreshInterval.description, ConfigFieldType.INTEGER, current.refreshInterval.value,
-                defaults.refreshInterval.value, "tablist.json", ConfigReloadBehavior.LIVE, ConfigRiskLevel.SAFE,
+                defaults.refreshInterval.value, "tablist.json", ConfigRiskLevel.SAFE,
                 1.0, 3600.0, 1.0, List.of(), null, true, true, false, "seconds", true, false));
         fields.add(stringListField("tablist.perWorldOverrides", "tablist", "Per-world Overrides",
                 "Structured world-specific header, footer, player format, and ping overrides.",
                 encodeWorldOverrides(current.perWorldOverrides), encodeWorldOverrides(defaults.perWorldOverrides),
-                "tablist.json", false, ConfigReloadBehavior.LIVE));
+                "tablist.json", false));
     }
 
     private void addDiscordFields(List<ConfigField> fields) {
@@ -278,7 +279,7 @@ public class ConfigSchemaRegistry {
         DiscordConfigHandler.Config current = DiscordConfigHandler.getConfig();
         DiscordConfigHandler.Config defaults = new DiscordConfigHandler.Config();
         addConfigEntries(fields, "discord", "discord", DiscordConfigHandler.Config.class, current, defaults,
-                "discord.json", ConfigReloadBehavior.LIVE);
+                "discord.json");
 
         fields.removeIf(field -> "discord.botToken".equals(field.key()));
         String token = current.botToken.get();
@@ -310,11 +311,11 @@ public class ConfigSchemaRegistry {
         ModerationConfigHandler.Config current = ModerationConfigHandler.getConfig();
         ModerationConfigHandler.Config defaults = new ModerationConfigHandler.Config();
         addConfigEntries(fields, "moderation", "moderation", ModerationConfigHandler.Config.class, current, defaults,
-                "moderation-settings.json", ConfigReloadBehavior.RELOAD_REQUIRED);
+                "moderation-settings.json");
         fields.add(stringListField("moderation.warnEscalationRules", "moderation", "Warn Escalation Rules",
                 "One rule per row as JSON: {\"warnings\":3,\"window\":\"7d\",\"banDuration\":\"1h\",\"reason\":\"\"}.",
                 encodeEscalationRules(current.warnEscalationRules.value), encodeEscalationRules(defaults.warnEscalationRules.value),
-                "moderation-settings.json", false, ConfigReloadBehavior.RELOAD_REQUIRED));
+                "moderation-settings.json", false));
     }
 
     private void addAfkFields(List<ConfigField> fields) {
@@ -324,7 +325,7 @@ public class ConfigSchemaRegistry {
         AfkConfigHandler.Config current = AfkConfigHandler.getConfig();
         AfkConfigHandler.Config defaults = new AfkConfigHandler.Config();
         addConfigEntries(fields, "afk", "afk", AfkConfigHandler.Config.class, current, defaults,
-                "afk.json", ConfigReloadBehavior.LIVE);
+                "afk.json");
     }
 
     static List<String> encodeEscalationRules(List<ModerationConfigHandler.EscalationRule> rules) {
@@ -356,7 +357,7 @@ public class ConfigSchemaRegistry {
                     ConfigFieldValue.plain(Boolean.TRUE.equals(entry.getValue())),
                     ConfigFieldValue.plain(true),
                     DashboardPermission.CONFIG_EDIT,
-                    ConfigReloadBehavior.LIVE,
+                    ConfigSection.behavior("commands." + entry.getKey()),
                     protectedCommand ? ConfigRiskLevel.ADVANCED : ConfigRiskLevel.SAFE,
                     "commands.json",
                     null,
@@ -404,27 +405,33 @@ public class ConfigSchemaRegistry {
         if (services == null || services.getPlatformAdapter() == null || services.getPlatformAdapter().getConfig() == null) {
             return;
         }
-        DashboardConfig config = DashboardConfig.load(services.getPlatformAdapter().getConfig(), services.getLogger());
+        DashboardConfig config;
+        try {
+            config = DashboardConfig.read(services.getPlatformAdapter().getConfig());
+        } catch (IllegalArgumentException invalid) {
+            var module = eu.avalanche7.paradigm.modules.dashboard.LocalDashboardModule.current();
+            config = module != null && module.dashboard() != null ? module.dashboard().config() : new DashboardConfig();
+        }
         DashboardConfig defaults = new DashboardConfig();
-        fields.add(dashboardBoolean("dashboard.enabled", "Dashboard Enabled", "Start dashboard automatically on server start.", config.enabled, defaults.enabled, ConfigReloadBehavior.RELOAD_REQUIRED));
-        fields.add(dashboardBoolean("dashboard.requireLogin", "Require Login", "Require a Minecraft-bound dashboard login session.", config.requireLogin, defaults.requireLogin, ConfigReloadBehavior.RELOAD_REQUIRED));
-        fields.add(dashboardBoolean("dashboard.allowRemoteAccess", "Allow Remote Access", "Acknowledges that the dashboard may be exposed beyond localhost.", config.allowRemoteAccess, defaults.allowRemoteAccess, ConfigReloadBehavior.RELOAD_REQUIRED));
-        fields.add(dashboardInteger("dashboard.port", "Port", "Dashboard HTTP bind port. Requires dashboard reload.", config.port, defaults.port, 1, 65535, ConfigReloadBehavior.RELOAD_REQUIRED));
+        fields.add(dashboardBoolean("dashboard.enabled", "Dashboard Enabled", "Start dashboard automatically on server start.", config.enabled, defaults.enabled));
+        fields.add(dashboardBoolean("dashboard.requireLogin", "Require Login", "Require a Minecraft-bound dashboard login session.", config.requireLogin, defaults.requireLogin));
+        fields.add(dashboardBoolean("dashboard.allowRemoteAccess", "Allow Remote Access", "Acknowledges that the dashboard may be exposed beyond localhost.", config.allowRemoteAccess, defaults.allowRemoteAccess));
+        fields.add(dashboardInteger("dashboard.port", "Port", "Dashboard HTTP bind port. Requires dashboard reload.", config.port, defaults.port, 1, 65535));
         fields.add(dashboardDuration("dashboard.loginTokenMinutes", "Login Token Lifetime", "One-time login token lifetime.", config.loginTokenMinutes, defaults.loginTokenMinutes, 1, 120, "minutes"));
         fields.add(dashboardDuration("dashboard.sessionMinutes", "Session Lifetime", "Dashboard session lifetime.", config.sessionMinutes, defaults.sessionMinutes, 5, 1440, "minutes"));
-        fields.add(dashboardInteger("dashboard.rateLimitPerMinute", "Rate Limit", "Maximum dashboard requests per minute per remote address.", config.rateLimitPerMinute, defaults.rateLimitPerMinute, 10, 5000, ConfigReloadBehavior.RELOAD_REQUIRED));
-        fields.add(dashboardInteger("dashboard.staticCacheSeconds", "Static Cache Seconds", "Browser cache seconds for dashboard static assets.", config.staticCacheSeconds, defaults.staticCacheSeconds, 0, 86400, ConfigReloadBehavior.RELOAD_REQUIRED));
+        fields.add(dashboardInteger("dashboard.rateLimitPerMinute", "Rate Limit", "Maximum dashboard requests per minute per remote address.", config.rateLimitPerMinute, defaults.rateLimitPerMinute, 10, 5000));
+        fields.add(dashboardInteger("dashboard.staticCacheSeconds", "Static Cache Seconds", "Browser cache seconds for dashboard static assets.", config.staticCacheSeconds, defaults.staticCacheSeconds, 0, 86400));
         fields.add(stringListField("dashboard.allowedOrigins", "dashboard", "Allowed Origins",
                 "Optional Origin allow-list for dashboard requests.", config.allowedOrigins, defaults.allowedOrigins,
-                "dashboard.json", false, ConfigReloadBehavior.RELOAD_REQUIRED));
+                "dashboard.json", false));
         fields.add(simpleField("dashboard.host", "dashboard", "Bind Host", "Local bind host such as 127.0.0.1. Use 0.0.0.0 only with remote access deliberately enabled.",
-                ConfigFieldType.STRING, config.host, defaults.host, "dashboard.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.ADVANCED,
+                ConfigFieldType.STRING, config.host, defaults.host, "dashboard.json", ConfigRiskLevel.ADVANCED,
                 null, null, null, List.of(), null, true, false, true, "", true, false));
         fields.add(simpleField("dashboard.centralHostServerId", "dashboard", "Central Dashboard Host", "Optional server ID hosting the Dashboard in the same shared MariaDB network. Other servers issue login links without starting a local HTTP listener.",
-                ConfigFieldType.STRING, config.centralHostServerId, defaults.centralHostServerId, "dashboard.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.ADVANCED,
+                ConfigFieldType.STRING, config.centralHostServerId, defaults.centralHostServerId, "dashboard.json", ConfigRiskLevel.ADVANCED,
                 null, null, null, List.of(), null, true, true, false, "", true, false));
         fields.add(simpleField("dashboard.publicBaseUrl", "dashboard", "Public Dashboard URL", "Optional browser-visible http(s) URL used by /paradigm dashboard open.",
-                ConfigFieldType.STRING, config.publicBaseUrl, defaults.publicBaseUrl, "dashboard.json", ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.ADVANCED,
+                ConfigFieldType.STRING, config.publicBaseUrl, defaults.publicBaseUrl, "dashboard.json", ConfigRiskLevel.ADVANCED,
                 null, null, null, List.of(), null, true, true, false, "", true, false));
     }
 
@@ -448,11 +455,11 @@ public class ConfigSchemaRegistry {
     }
 
     private void addConfigEntries(List<ConfigField> fields, String prefix, String category, Class<?> configClass, Object current,
-                                  Object defaults, String owner, ConfigReloadBehavior reloadBehavior) {
+                                  Object defaults, String owner) {
         Map<String, ConfigEntry<?>> defaultEntries = configEntries(configClass, defaults);
         for (Map.Entry<String, ConfigEntry<?>> entry : configEntries(configClass, current).entrySet()) {
             ConfigField field = entryField(prefix + "." + entry.getKey(), category, entry.getKey(), entry.getValue(), defaultEntries.get(entry.getKey()),
-                    owner, reloadBehavior, ConfigRiskLevel.SAFE, true);
+                    owner, ConfigRiskLevel.SAFE, true);
             if (field != null) {
                 fields.add(field);
             }
@@ -472,7 +479,7 @@ public class ConfigSchemaRegistry {
     }
 
     private ConfigField entryField(String key, String category, String entryName, ConfigEntry<?> entry, ConfigEntry<?> defaultEntry,
-                                   String owner, ConfigReloadBehavior reloadBehavior, ConfigRiskLevel risk, boolean editable) {
+                                   String owner, ConfigRiskLevel risk, boolean editable) {
         if (entry == null) {
             return null;
         }
@@ -488,13 +495,13 @@ public class ConfigSchemaRegistry {
         Double step = stepFor(type);
         String durationUnit = durationUnitFor(key, entryName, type);
         boolean allowEmptyItems = "motd.motdLines".equals(key);
-        return simpleField(key, category, labelFromKey(entryName), entry.description, type, value, defaultValue, owner, reloadBehavior,
+        return simpleField(key, category, labelFromKey(entryName), entry.description, type, value, defaultValue, owner,
                 risk, min, max, step, options, type == ConfigFieldType.STRING_LIST ? ConfigFieldType.STRING : null,
                 editable, false, true, durationUnit, true, allowEmptyItems);
     }
 
     private ConfigField simpleField(String key, String category, String label, String help, ConfigFieldType type,
-                                    Object value, Object defaultValue, String owner, ConfigReloadBehavior reloadBehavior,
+                                    Object value, Object defaultValue, String owner,
                                     ConfigRiskLevel risk, Double min, Double max, Double step, List<String> options,
                                     ConfigFieldType listElementType, boolean editable, boolean required, boolean nullable,
                                     String durationUnit, boolean trim, boolean allowEmptyItems) {
@@ -507,7 +514,7 @@ public class ConfigSchemaRegistry {
                 ConfigFieldValue.plain(value),
                 ConfigFieldValue.plain(defaultValue),
                 editable ? DashboardPermission.CONFIG_EDIT : DashboardPermission.CONFIG_VIEW,
-                reloadBehavior,
+                ConfigSection.behavior(key),
                 risk,
                 owner,
                 min,
@@ -526,36 +533,35 @@ public class ConfigSchemaRegistry {
     }
 
     private ConfigField stringListField(String key, String category, String label, String help, List<String> value, List<String> defaultValue,
-                                        String owner, boolean allowEmptyItems, ConfigReloadBehavior reloadBehavior) {
+                                        String owner, boolean allowEmptyItems) {
         return simpleField(key, category, label, help, ConfigFieldType.STRING_LIST,
-                value != null ? value : List.of(), defaultValue != null ? defaultValue : List.of(), owner, reloadBehavior, ConfigRiskLevel.SAFE,
+                value != null ? value : List.of(), defaultValue != null ? defaultValue : List.of(), owner, ConfigRiskLevel.SAFE,
                 null, null, null, List.of(), ConfigFieldType.STRING, true, false, true, "", false, allowEmptyItems);
     }
 
     private ConfigField durationField(String key, String label, String help, Integer value, String owner, int min, int max, String unit) {
         return simpleField(key, "cooldowns", label, help, ConfigFieldType.DURATION, Math.max(0, value != null ? value : 0), 0,
-                owner, ConfigReloadBehavior.LIVE, ConfigRiskLevel.SAFE, (double) min, (double) max, 1.0, List.of(), null,
+                owner, ConfigRiskLevel.SAFE, (double) min, (double) max, 1.0, List.of(), null,
                 true, false, true, unit, true, false);
     }
 
-    private ConfigField dashboardBoolean(String key, String label, String help, boolean value, boolean defaultValue, ConfigReloadBehavior reload) {
+    private ConfigField dashboardBoolean(String key, String label, String help, boolean value, boolean defaultValue) {
         return simpleField(key, "dashboard", label, help, ConfigFieldType.BOOLEAN, value, defaultValue, "dashboard.json",
-                reload, ConfigRiskLevel.ADVANCED, null, null, null, List.of(), null, true, false, true, "", true, false);
+                ConfigRiskLevel.ADVANCED, null, null, null, List.of(), null, true, false, true, "", true, false);
     }
 
-    private ConfigField dashboardInteger(String key, String label, String help, int value, int defaultValue, int min, int max, ConfigReloadBehavior reload) {
+    private ConfigField dashboardInteger(String key, String label, String help, int value, int defaultValue, int min, int max) {
         return simpleField(key, "dashboard", label, help, ConfigFieldType.INTEGER, value, defaultValue, "dashboard.json",
-                reload, ConfigRiskLevel.ADVANCED, (double) min, (double) max, 1.0, List.of(), null, true, false, true, "", true, false);
+                ConfigRiskLevel.ADVANCED, (double) min, (double) max, 1.0, List.of(), null, true, false, true, "", true, false);
     }
 
     private ConfigField dashboardDuration(String key, String label, String help, int value, int defaultValue, int min, int max, String unit) {
-        return simpleField(key, "dashboard", label, help, ConfigFieldType.DURATION, value, defaultValue, "dashboard.json",
-                ConfigReloadBehavior.RELOAD_REQUIRED, ConfigRiskLevel.ADVANCED, (double) min, (double) max, 1.0, List.of(), null,
+        return simpleField(key, "dashboard", label, help, ConfigFieldType.DURATION, value, defaultValue, "dashboard.json", ConfigRiskLevel.ADVANCED, (double) min, (double) max, 1.0, List.of(), null,
                 true, false, true, unit, true, false);
     }
 
     private ConfigField readOnly(String key, String category, String label, String value, String help, String owner) {
-        return simpleField(key, category, label, help, ConfigFieldType.READ_ONLY_TEXT, value, value, owner, ConfigReloadBehavior.LIVE,
+        return simpleField(key, category, label, help, ConfigFieldType.READ_ONLY_TEXT, value, value, owner,
                 ConfigRiskLevel.SAFE, null, null, null, List.of(), null, false, false, true, "", true, false);
     }
 

@@ -67,20 +67,21 @@ public class DiscordApiHandler {
             return DashboardResponse.apiError(503, "unavailable", "Discord configuration is not loaded.");
         }
 
-        if (clear) {
-            config.botToken.value = "";
-        } else if (submitted.isEmpty()) {
+        if (!clear && submitted.isEmpty()) {
             return DashboardResponse.apiOk(Map.of("botTokenSet", DiscordSecrets.isPresent(config.botToken.get()),
                     "changed", false));
-        } else {
+        } else if (!clear) {
             if (submitted.length() < 20 || submitted.length() > 200 || submitted.chars().anyMatch(Character::isWhitespace)) {
                 return DashboardResponse.apiError(400, "validation_failed", "That does not look like a Discord bot token.");
             }
-            config.botToken.value = submitted;
         }
 
-        DiscordConfigHandler.persistConfig();
-        dashboard.services().getDiscordService().reload();
+        var outcome = dashboard.services().getConfigApplyService().saveDiscordToken(clear ? "" : submitted);
+        if (!outcome.ok()) {
+            dashboard.audit().dashboard(ctx.principal(), AuditActionType.DISCORD_CHANGE, AuditResult.FAILED,
+                    "Discord bot token update failed.", Map.of());
+            return DashboardResponse.apiError(409, "apply_failed", "Could not save or apply the Discord token locally.");
+        }
 
         dashboard.audit().dashboard(ctx.principal(), AuditActionType.DISCORD_CHANGE, AuditResult.SUCCESS,
                 clear ? "Discord bot token cleared." : "Discord bot token replaced.",
@@ -91,8 +92,9 @@ public class DiscordApiHandler {
                 List.of(clear
                         ? DashboardMutationFeedback.remove("discord.botToken")
                         : DashboardMutationFeedback.info("discord.botToken replaced · <hidden>")));
-        return DashboardResponse.apiOk(Map.of("botTokenSet", DiscordSecrets.isPresent(config.botToken.get()),
-                "changed", true));
+        return DashboardResponse.apiOk(Map.of("botTokenSet", !clear,
+                "changed", !java.util.Objects.equals(config.botToken.get(), clear ? "" : submitted),
+                "status", "applied"), outcome.warnings());
     }
 
     public DashboardResponse test(DashboardRequestContext ctx) {

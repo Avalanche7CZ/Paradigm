@@ -82,19 +82,22 @@ public class PermissionAPI {
     }
 
     public void reload() {
+        try {
+            reloadFromStore();
+        } catch (RuntimeException failure) {
+            logger.warn("Paradigm: Failed to reload internal permissions from storage, keeping last known cache. {}", failure.getMessage());
+            debugLogger.debugLog("[PermissionAPI] repository reload failed: " + failure);
+        }
+    }
+
+    void reloadFromStore() {
         PermissionDataStore.PermissionState loaded;
         PermissionRepository repository;
         Map<String, StoredUserPermissionData> loadedUsers = new LinkedHashMap<>();
         stateLock.writeLock().lock();
         try {
             repository = this.permissionRepository;
-            try {
-                loaded = repository != null ? loadFromRepository(repository, loadedUsers) : dataStore.load();
-            } catch (Throwable failure) {
-                logger.warn("Paradigm: Failed to reload internal permissions from storage, keeping last known cache. {}", failure.getMessage());
-                debugLogger.debugLog("[PermissionAPI] repository reload failed: " + failure);
-                return;
-            }
+            loaded = repository != null ? loadFromRepository(repository, loadedUsers) : dataStore.load();
             this.state = loaded;
             this.persistedState = copyState(loaded);
             this.acceptedState = copyState(loaded);

@@ -2,23 +2,18 @@ package eu.avalanche7.paradigm.modules.commands;
 
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
-import eu.avalanche7.paradigm.ParadigmAPI;
-import eu.avalanche7.paradigm.configs.*;
+import eu.avalanche7.paradigm.configs.ConfigSection;
+import eu.avalanche7.paradigm.configs.schema.ConfigApplyService;
+import eu.avalanche7.paradigm.configs.schema.ConfigValidationResult;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.Announcements;
-import eu.avalanche7.paradigm.modules.CommandManager;
-import eu.avalanche7.paradigm.modules.Restart;
 import eu.avalanche7.paradigm.modules.commands.moderation.PunishmentCommands;
 import eu.avalanche7.paradigm.modules.commands.permissions.PermissionCommands;
 import eu.avalanche7.paradigm.modules.commands.shared.ChatUi;
@@ -28,14 +23,12 @@ import eu.avalanche7.paradigm.modules.discord.DiscordModule;
 import eu.avalanche7.paradigm.modules.holograms.Holograms;
 import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.modules.tab.Tablist;
-import eu.avalanche7.paradigm.modules.tickets.TicketsModule;
 import eu.avalanche7.paradigm.platform.Interfaces.*;
 import eu.avalanche7.paradigm.storage.StorageService;
 import eu.avalanche7.paradigm.storage.migration.StorageMigrationOptions;
 import eu.avalanche7.paradigm.utils.CommandToggleStore;
 
 public class Reload implements ParadigmModule {
-    private static final Map<ParadigmModule, Boolean> LAST_HELP_STATE = new ConcurrentHashMap<>();
     private static final Map<Object, Object> REGISTRY_ACCESS_BY_DISPATCHER =
             Collections.synchronizedMap(new WeakHashMap<>());
 
@@ -61,79 +54,21 @@ public class Reload implements ParadigmModule {
                 .then(platform.createCommandBuilder()
                         .argument("config", ICommandBuilder.ArgumentType.WORD)
                         .executes(ctx -> {
-                            Map<ParadigmModule, Boolean> prevEnabled = new HashMap<>();
-                            for (var m : ParadigmAPI.getModules()) {
-                                try { prevEnabled.put(m, m.isEnabled(services)); } catch (Throwable ignored) { prevEnabled.put(m, false); }
-                            }
-
                             String cfg = ctx.getStringArgument("config").toLowerCase(Locale.ROOT);
-                            String msg;
-
-                            switch (cfg) {
-                                case "main" -> { MainConfigHandler.reload(); msg = "Main config reloaded."; }
-                                case "announcements" -> { AnnouncementsConfigHandler.reload(); msg = "Announcements config reloaded."; }
-                                case "chat" -> { ChatConfigHandler.reload(); msg = "Chat config reloaded."; }
-                                case "motd" -> { MOTDConfigHandler.reload(); msg = "MOTD config reloaded."; }
-                                case "mention" -> { MentionConfigHandler.reload(); msg = "Mention config reloaded."; }
-                                case "restart" -> { RestartConfigHandler.reload(); msg = "Restart config reloaded."; }
-                                case "moderation" -> { ModerationConfigHandler.reload(); services.getPunishmentService().refreshAsync(); msg = "Moderation config reloaded."; }
-                                case "tablist" -> { TablistConfigHandler.reload(); msg = "Tablist config reloaded."; }
-                                case "discord" -> { DiscordConfigHandler.reload(); msg = "Discord config reloaded."; }
-                                case "afk" -> { AfkConfigHandler.reload(); msg = "AFK config reloaded."; }
-                                case "tickets" -> { TicketsConfigHandler.reload(); msg = "Tickets config reloaded."; }
-                                case "customcommands" -> {
-                                    CommandManager.reloadCustomCommands(services);
-                                    msg = "Custom commands config reloaded.";
+                            Collection<ConfigSection> sections;
+                            try {
+                                if ("all".equals(cfg)) {
+                                    sections = reloadAllSections();
+                                } else {
+                                    ConfigSection section = ConfigSection.forName(cfg);
+                                    if (!reloadAllSections().contains(section)) throw new IllegalArgumentException();
+                                    sections = Set.of(section);
                                 }
-                                case "all" -> {
-                                    MainConfigHandler.reload();
-                                    AnnouncementsConfigHandler.reload();
-                                    ChatConfigHandler.reload();
-                                    MOTDConfigHandler.reload();
-                                    MentionConfigHandler.reload();
-                                    RestartConfigHandler.reload();
-                                    ModerationConfigHandler.reload();
-                                    TablistConfigHandler.reload();
-                                    DiscordConfigHandler.reload();
-                                    AfkConfigHandler.reload();
-                                    TicketsConfigHandler.reload();
-                                    CommandManager.reloadCustomCommands(services);
-                                    msg = "All configs reloaded.";
-                                }
-                                default -> {
-                                    platform.sendFailure(ctx.getSource(), platform.createLiteralComponent("§cUnknown config: " + cfg));
-                                    return 0;
-                                }
+                            } catch (IllegalArgumentException unknown) {
+                                platform.sendFailure(ctx.getSource(), platform.createLiteralComponent("§cUnknown config: " + cfg));
+                                return 0;
                             }
-
-                            refreshModuleStates(services, prevEnabled);
-                            if ("main".equals(cfg) || "all".equals(cfg)) {
-                                refreshAllCommandStates(services);
-                                services.getPermissionsHandler().refreshInternalPermissions();
-                            }
-
-                            if ("main".equals(cfg) || "announcements".equals(cfg) || "all".equals(cfg)) {
-                                rescheduleAnnouncements();
-                            }
-                            if ("main".equals(cfg) || "restart".equals(cfg) || "all".equals(cfg)) {
-                                rescheduleRestart(services);
-                            }
-                            if ("tablist".equals(cfg) || "all".equals(cfg)) {
-                                Tablist tablist = Tablist.current();
-                                if (tablist != null) tablist.reload();
-                            }
-                            if ("discord".equals(cfg) || "all".equals(cfg)) {
-                                services.getDiscordService().reload();
-                            }
-                            if ("afk".equals(cfg) || "all".equals(cfg)) {
-                                services.getAfkService().restart();
-                            }
-                            if ("tickets".equals(cfg) || "all".equals(cfg)) {
-                                TicketsModule ticketsModule = TicketsModule.current();
-                                if (ticketsModule != null) ticketsModule.reloadTasks();
-                            }
-
-                            platform.sendSuccess(ctx.getSource(), platform.createLiteralComponent("§a" + msg), true);
+                            runReload(ctx.getSource(), services, sections);
                             return 1;
                         }));
 
@@ -171,107 +106,52 @@ public class Reload implements ParadigmModule {
             paradigm = paradigm.then(discord.buildCommandBranch(platform, services));
         }
 
-        if (services.getPermissionsHandler().isInternalPermissionsEnabled()) {
-            paradigm = PermissionCommands.register(paradigm, platform, services);
-        }
+        paradigm = PermissionCommands.register(paradigm, platform, services);
         paradigm = PunishmentCommands.register(paradigm, platform, services);
 
         platform.registerCommand(paradigm);
     }
 
-    public static void rescheduleAnnouncements() {
-        for (var m : ParadigmAPI.getModules()) {
-            if (m instanceof Announcements) {
-                ((Announcements) m).rescheduleAnnouncements();
-            }
-        }
+    public static Set<ConfigSection> reloadAllSections() {
+        var sections = java.util.EnumSet.allOf(ConfigSection.class);
+        sections.removeAll(Set.of(ConfigSection.DASHBOARD, ConfigSection.COMMANDS, ConfigSection.MENUS, ConfigSection.HOLOGRAMS));
+        return sections;
     }
 
-    public static void rescheduleRestart(Services services) {
-        for (var m : ParadigmAPI.getModules()) {
-            if (m instanceof Restart) {
-                ((Restart) m).rescheduleNextRestart(services);
-            }
-        }
+    public static void runReload(ICommandSource source, Services services, Collection<ConfigSection> sections) {
+        var runtime = services.getConfigApplyService();
+        runtime.reload(sections).whenComplete((result, failure) -> runtime.onServer(() -> {
+            sendReloadResult(source, services, result, failure);
+            return null;
+        }));
     }
 
-    public static void refreshModuleStatesForHelp(Services services) {
-        refreshModuleStates(services, LAST_HELP_STATE);
+    public static boolean sendReloadResult(ICommandSource source, Services services,
+            ConfigValidationResult result, Throwable failure) {
+        IPlatformAdapter platform = services.getPlatformAdapter();
+        if (failure != null) {
+            platform.sendFailure(source, platform.createLiteralComponent(ConfigApplyService.message(failure)));
+            return false;
+        }
+        if (!result.applied().isEmpty()) {
+            platform.sendSuccess(source, platform.createLiteralComponent("§aReloaded: " + String.join(", ", result.applied())), true);
+        }
+        for (var error : result.rejected()) {
+            platform.sendFailure(source, platform.createLiteralComponent(error.key() + ": " + error.reason()));
+        }
+        for (String warning : result.warnings()) {
+            platform.sendSuccess(source, platform.createLiteralComponent("§e" + warning), false);
+        }
+        return result.ok();
     }
 
-    public static Map<ParadigmModule, Boolean> snapshotModuleStates(Services services) {
-        Map<ParadigmModule, Boolean> states = new HashMap<>();
-        for (ParadigmModule module : ParadigmAPI.getModules()) {
-            try {
-                states.put(module, module.isEnabled(services));
-            } catch (Throwable ignored) {
-                states.put(module, false);
-            }
-        }
-        return states;
-    }
-
-    public static void recordModuleStates(Services services) {
-        LAST_HELP_STATE.clear();
-        LAST_HELP_STATE.putAll(snapshotModuleStates(services));
-    }
-
-    public static void refreshModuleStates(Services services, Map<ParadigmModule, Boolean> prevEnabled) {
-        boolean commandsChanged = false;
-        boolean moduleStateChanged = false;
-        for (var m : ParadigmAPI.getModules()) {
-            try {
-                boolean before = prevEnabled.getOrDefault(m, m.isEnabled(services));
-                boolean after;
-                try { after = m.isEnabled(services); } catch (Throwable t) { after = false; }
-
-                if (!after && (before || services.isModuleActive(m))) {
-                    moduleStateChanged = true;
-                    commandsChanged |= releaseModuleCommands(m, services);
-                    services.disableModule(m);
-                } else if (after && !services.isModuleActive(m)) {
-                    moduleStateChanged = true;
-                    services.enableModule(m);
-                    if (!services.isModuleActive(m)) continue;
-                    commandsChanged |= registerModuleCommands(m, services);
-                }
-                prevEnabled.put(m, after);
-                LAST_HELP_STATE.put(m, after);
-            } catch (Throwable t) {
-                if (services != null && services.getLogger() != null) {
-                    services.getLogger().warn("Failed to refresh module {}: {}", m.getName(), t.toString());
-                }
-            }
-        }
-        if (moduleStateChanged) {
-            commandsChanged |= services.getPlatformAdapter().refreshRegisteredCommandContributors();
-        }
-        if (commandsChanged) services.getPlatformAdapter().refreshAllPlayerCommandTrees();
-    }
-
-    public static void refreshCommandStates(Services services, Collection<String> commandIds) {
-        if (services == null || commandIds == null || commandIds.isEmpty()) return;
-        if (services.getPlatformAdapter().refreshRegisteredCommandContributors()) {
-            services.getPlatformAdapter().refreshAllPlayerCommandTrees();
-            return;
-        }
-        Set<ParadigmModule> modules = new HashSet<>();
-        for (String commandId : commandIds) {
-            CommandCatalog.Entry entry = CommandCatalog.findById(commandId);
-            if (entry == null) continue;
-            for (ParadigmModule module : ParadigmAPI.getModules()) {
-                if (CommandCatalog.entriesForModule(module).contains(entry)) modules.add(module);
-            }
-        }
+    public static boolean rebuildCommands(Services services, Set<ParadigmModule> modules) {
+        if (services.getPlatformAdapter().refreshRegisteredCommandContributors()) return true;
+        for (ParadigmModule module : modules) releaseModuleCommands(module, services);
         for (ParadigmModule module : modules) {
-            releaseModuleCommands(module, services);
             if (module.isEnabled(services)) registerModuleCommands(module, services);
         }
-        services.getPlatformAdapter().refreshAllPlayerCommandTrees();
-    }
-
-    public static void refreshAllCommandStates(Services services) {
-        refreshCommandStates(services, CommandCatalog.entries().stream().map(CommandCatalog.Entry::id).toList());
+        return false;
     }
 
     private static boolean releaseModuleCommands(ParadigmModule module, Services services) {
@@ -363,10 +243,7 @@ public class Reload implements ParadigmModule {
         ICommandBuilder reload = platform.createCommandBuilder()
                 .literal("reload")
                 .executes(ctx -> {
-                    toggles.reload();
-                    refreshAllCommandStates(services);
-                    sendToggleMessage(ctx.getSource(), services, "command_toggle.reloaded", "Command toggles reloaded from commands.json.");
-                    sendCommandTogglePanel(ctx.getSource(), services, "", available);
+                    runReload(ctx.getSource(), services, Set.of(ConfigSection.COMMANDS));
                     return 1;
                 });
 
@@ -388,22 +265,23 @@ public class Reload implements ParadigmModule {
                     "Command " + canonical + " is unavailable on this platform."));
             return 0;
         }
-        CommandToggleStore.ToggleResult result = services.getCommandToggleStore().setEnabled(commandName, enabled);
-        if (!result.ok()) {
-            if ("protected".equals(result.reason())) {
-                sendToggleMessage(source, services, "command_toggle.protected", "Command {command} is protected and cannot be disabled.", "{command}", result.canonicalId());
-                return 0;
-            }
-            sendToggleMessage(source, services, "command_toggle.unknown", "Unknown command key: {command}", "{command}", commandName);
+        if (canonical == null || !enabled && services.getCommandToggleStore().isProtected(canonical)) {
+            String key = canonical == null ? "command_toggle.unknown" : "command_toggle.protected";
+            String fallback = canonical == null ? "Unknown command key: {command}" : "Command {command} is protected and cannot be disabled.";
+            sendToggleMessage(source, services, key, fallback, "{command}", commandName);
             return 0;
         }
-
-        sendToggleMessage(source, services,
-                enabled ? "command_toggle.enabled" : "command_toggle.disabled",
-                enabled ? "Enabled command {command}." : "Disabled command {command}.",
-                "{command}", result.canonicalId());
-        refreshCommandStates(services, java.util.List.of(result.canonicalId()));
-        sendCommandTogglePanel(source, services, "", available);
+        var runtime = services.getConfigApplyService();
+        runtime.setCommandToggle(canonical, enabled).whenComplete((result, failure) -> runtime.onServer(() -> {
+            if (sendReloadResult(source, services, result, failure)) {
+                sendToggleMessage(source, services,
+                        enabled ? "command_toggle.enabled" : "command_toggle.disabled",
+                        enabled ? "Enabled command {command}." : "Disabled command {command}.",
+                        "{command}", canonical);
+                sendCommandTogglePanel(source, services, "", available);
+            }
+            return null;
+        }));
         return 1;
     }
 

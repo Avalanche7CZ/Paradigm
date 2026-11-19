@@ -14,7 +14,6 @@ public class ChatConfigHandler extends BaseConfigHandler<ChatConfigHandler.Confi
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ParadigmConstants.MOD_ID);
     private static ChatConfigHandler INSTANCE;
-    private Config config;
 
     private ChatConfigHandler(IConfig platformConfig) {
         super(LOGGER, platformConfig, "chat.json");
@@ -39,16 +38,14 @@ public class ChatConfigHandler extends BaseConfigHandler<ChatConfigHandler.Confi
         return INSTANCE.config;
     }
 
-    public static void reload() {
-        if (INSTANCE != null) {
-            INSTANCE.config = INSTANCE.load();
-        }
-    }
-
     public static void persistConfig() {
         if (INSTANCE != null && INSTANCE.config != null) {
             INSTANCE.save(INSTANCE.config);
         }
+    }
+
+    public static ChatConfigHandler handler() {
+        return INSTANCE;
     }
 
     @Override

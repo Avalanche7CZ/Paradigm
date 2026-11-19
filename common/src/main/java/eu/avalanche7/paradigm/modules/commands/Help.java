@@ -49,7 +49,6 @@ public class Help implements ParadigmModule {
                 .literal("paradigm")
                 .requires(src -> services.getCommandToggleStore().isEnabled("paradigm.help"))
                 .executes(ctx -> {
-                    Reload.refreshModuleStatesForHelp(services);
                     IPlayer p = ctx.getSource().getPlayer();
                     if (p == null) {
                         platform.sendFailure(ctx.getSource(), platform.createLiteralComponent("Paradigm: Use this in-game."));
@@ -61,7 +60,6 @@ public class Help implements ParadigmModule {
                 .then(platform.createCommandBuilder()
                         .literal("help")
                         .executes(ctx -> {
-                            Reload.refreshModuleStatesForHelp(services);
                             IPlayer p = ctx.getSource().getPlayer();
                             if (p == null) {
                                 platform.sendFailure(ctx.getSource(), platform.createLiteralComponent("Paradigm: Use this in-game."));
@@ -74,7 +72,6 @@ public class Help implements ParadigmModule {
                                 .argument("arg", ICommandBuilder.ArgumentType.GREEDY_STRING)
                                 .suggests((c, input) -> baseSuggestions)
                                 .executes(ctx -> {
-                                    Reload.refreshModuleStatesForHelp(services);
                                     IPlayer p = ctx.getSource().getPlayer();
                                     if (p == null) {
                                         platform.sendFailure(ctx.getSource(), platform.createLiteralComponent("Paradigm: Use this in-game."));

@@ -66,6 +66,22 @@ public class DashboardConfig {
         return merged;
     }
 
+    public static DashboardConfig read(IConfig platformConfig) {
+        Path path = platformConfig.resolveConfigPath(FILE_NAME);
+        if (Files.notExists(path)) return new DashboardConfig();
+        try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+            DashboardConfig loaded = GSON.fromJson(reader, DashboardConfig.class);
+            if (loaded == null) throw new IllegalArgumentException("Expected a JSON object.");
+            if (loaded.port < 1 || loaded.port > 65535) throw new IllegalArgumentException("Invalid dashboard port.");
+            if (loaded.host == null || loaded.host.isBlank()) throw new IllegalArgumentException("Invalid dashboard host.");
+            DashboardConfig candidate = merge(new DashboardConfig(), loaded);
+            java.net.URI.create(candidate.localBaseUrl());
+            return candidate;
+        } catch (java.io.IOException | RuntimeException failure) {
+            throw new IllegalArgumentException("Could not read dashboard.json: " + failure.getMessage(), failure);
+        }
+    }
+
     public static void save(IConfig platformConfig, DashboardConfig config) {
         try {
             Path path = platformConfig.resolveConfigPath(FILE_NAME);

@@ -1,7 +1,6 @@
 package eu.avalanche7.paradigm.configs;
 
 import java.io.IOException;
-import java.io.Reader;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -9,6 +8,8 @@ import java.nio.file.Path;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 import org.slf4j.Logger;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
@@ -23,6 +24,7 @@ public abstract class BaseConfigHandler<T> {
     protected final IConfig platformConfig;
     protected final String configFileName;
     protected JsonValidator jsonValidator;
+    protected volatile T config;
 
     protected BaseConfigHandler(Logger logger, IConfig platformConfig, String configFileName) {
         this.logger = logger;
@@ -65,61 +67,116 @@ public abstract class BaseConfigHandler<T> {
         }
     }
 
+    public T active() {
+        return config;
+    }
+
+    public void publish(T candidate) {
+        config = candidate;
+    }
+
+    public T copy(T source) {
+        return GSON.fromJson(GSON.toJsonTree(source), getConfigClass());
+    }
+
+    public JsonElement settings(T source) {
+        return GSON.toJsonTree(source);
+    }
+
+    public String fileName() {
+        return configFileName;
+    }
+
+    public T editableCopy() {
+        return copy(active());
+    }
+
+    public T forRuntime(T candidate) {
+        return candidate;
+    }
+
+    public record Candidate<T>(BaseConfigHandler<T> handler, T value) {
+        public void save() {
+            handler.save(value);
+        }
+
+        public boolean changed() {
+            return !handler.settings(handler.active()).equals(handler.settings(value));
+        }
+
+        public Runnable publication() {
+            T active = handler.forRuntime(value);
+            return () -> handler.publish(active);
+        }
+    }
+
+    public Candidate<T> edit() {
+        return new Candidate<>(this, editableCopy());
+    }
+
+    public Candidate<T> loadCandidate() {
+        return new Candidate<>(this, read());
+    }
+
     public T load() {
-        T defaultConfig = createDefaultConfig();
-        boolean shouldSaveMerged = false;
-        Path configPath = getConfigPath();
+        T candidate;
+        try {
+            candidate = read();
+        } catch (RuntimeException failure) {
+            logger.warn("[Paradigm] Could not load {}, using defaults", configFileName, failure);
+            return createDefaultConfig();
+        }
+        try {
+            save(candidate);
+        } catch (RuntimeException failure) {
+            logger.warn("[Paradigm] Loaded {} but could not update the file", configFileName, failure);
+        }
+        return candidate;
+    }
 
-        if (Files.exists(configPath)) {
-            try (Reader reader = Files.newBufferedReader(configPath, StandardCharsets.UTF_8)) {
-                StringBuilder content = new StringBuilder();
-                int c;
-                while ((c = reader.read()) != -1) {
-                    content.append((char) c);
-                }
-
-                if (jsonValidator != null) {
-                    JsonValidator.ValidationResult result = jsonValidator.validateAndFix(content.toString());
-                    if (result.isValid()) {
-                        if (result.hasIssues()) {
-                            logger.info("[Paradigm] Fixed JSON syntax issues in {}: {}", configFileName, result.getIssuesSummary());
-
-                            try {
-                                AtomicFileIO.writeUtf8Atomic(configPath, writer -> writer.write(result.getFixedJson()));
-                            } catch (IOException saveError) {
-                                logger.warn("[Paradigm] Failed to save corrected file: {}", saveError.getMessage());
-                            }
-                        }
-
-                        T loadedConfig = GSON.fromJson(result.getFixedJson(), getConfigClass());
-                        if (loadedConfig != null) {
-                            mergeConfigs(defaultConfig, loadedConfig);
-                            shouldSaveMerged = true;
-                        }
-                    } else {
-                        logger.warn("[Paradigm] Critical JSON syntax errors in {}: {}", configFileName, result.getMessage());
-                    }
-                } else {
-                    T loadedConfig = GSON.fromJson(content.toString(), getConfigClass());
-                    if (loadedConfig != null) {
-                        mergeConfigs(defaultConfig, loadedConfig);
-                        shouldSaveMerged = true;
-                    }
-                }
-            } catch (Exception e) {
-                logger.warn("[Paradigm] Could not parse {}, using defaults", configFileName, e);
+    public T read() {
+        Path path = getConfigPath();
+        T defaults = createDefaultConfig();
+        if (Files.notExists(path)) return defaults;
+        try {
+            String content = Files.readString(path, StandardCharsets.UTF_8);
+            if (jsonValidator != null) {
+                JsonValidator.ValidationResult validation = jsonValidator.validateAndFix(content);
+                if (!validation.isValid()) throw new IllegalArgumentException(validation.getMessage());
+                content = validation.getFixedJson();
             }
-        } else {
-            logger.info("[Paradigm] {} not found, generating with default values.", configFileName);
+            JsonElement json = JsonParser.parseString(content);
+            if (!json.isJsonObject()) throw new IllegalArgumentException("Expected a JSON object.");
+            checkTypes("", GSON.toJsonTree(defaults), json);
+            T loaded = GSON.fromJson(json, getConfigClass());
+            mergeConfigs(defaults, loaded);
+            return defaults;
+        } catch (IOException | RuntimeException failure) {
+            throw new IllegalArgumentException("Could not read " + configFileName + ": " + failure.getMessage(), failure);
         }
+    }
 
-        if (!Files.exists(configPath)) {
-            save(defaultConfig);
-        } else if (shouldSaveMerged) {
-            save(defaultConfig);
+    private static void checkTypes(String key, JsonElement expected, JsonElement supplied) {
+        if (supplied.isJsonNull() || expected.isJsonNull()) return;
+        if (expected.isJsonObject() && supplied.isJsonObject()) {
+            for (var entry : expected.getAsJsonObject().entrySet()) {
+                JsonElement value = supplied.getAsJsonObject().get(entry.getKey());
+                if (value != null) checkTypes(key + "." + entry.getKey(), entry.getValue(), value);
+            }
+            return;
         }
-
-        return defaultConfig;
+        if (expected.isJsonArray() && supplied.isJsonArray()) {
+            if (expected.getAsJsonArray().size() > 0) {
+                for (JsonElement item : supplied.getAsJsonArray()) {
+                    checkTypes(key, expected.getAsJsonArray().get(0), item);
+                }
+            }
+            return;
+        }
+        if (expected.isJsonPrimitive() && supplied.isJsonPrimitive()
+                && expected.getAsJsonPrimitive().isBoolean() == supplied.getAsJsonPrimitive().isBoolean()
+                && expected.getAsJsonPrimitive().isNumber() == supplied.getAsJsonPrimitive().isNumber()) return;
+        throw new IllegalArgumentException("Incorrect value type for " + key.substring(1));
     }
 
     public void save(T config) {

@@ -15,7 +15,6 @@ import eu.avalanche7.paradigm.utils.DebugLogger;
 public final class TablistConfigHandler extends BaseConfigHandler<TablistConfigHandler.Config> {
     private static final Logger LOGGER = LoggerFactory.getLogger(TablistConfigHandler.class);
     private static TablistConfigHandler instance;
-    private Config config;
 
     private TablistConfigHandler(IConfig platformConfig) {
         super(LOGGER, platformConfig, "tablist.json");
@@ -38,12 +37,12 @@ public final class TablistConfigHandler extends BaseConfigHandler<TablistConfigH
         return instance.config;
     }
 
-    public static void reload() {
-        if (instance != null) instance.config = instance.load();
-    }
-
     public static void persistConfig() {
         if (instance != null && instance.config != null) instance.save(instance.config);
+    }
+
+    public static TablistConfigHandler handler() {
+        return instance;
     }
 
     @Override

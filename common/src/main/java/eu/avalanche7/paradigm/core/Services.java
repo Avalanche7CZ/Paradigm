@@ -40,12 +40,6 @@ public class Services {
     private final Object moduleActivationLock = new Object();
     private final Set<ParadigmModule> enabledModules = Collections.newSetFromMap(new IdentityHashMap<>());
 
-    private final MainConfigHandler.Config mainConfig;
-    private final AnnouncementsConfigHandler.Config announcementsConfig;
-    private final MOTDConfigHandler.Config motdConfig;
-    private final MentionConfigHandler.Config mentionConfig;
-    private final RestartConfigHandler.Config restartConfig;
-    private final ChatConfigHandler.Config chatConfig;
     private final CMConfig cmConfigInstance;
 
     private final DebugLogger debugLoggerInstance;
@@ -107,12 +101,6 @@ public class Services {
             IPlatformAdapter platformAdapter
     ) {
         this.logger = logger;
-        this.mainConfig = mainConfig;
-        this.announcementsConfig = announcementsConfig;
-        this.motdConfig = motdConfig;
-        this.mentionConfig = mentionConfig;
-        this.restartConfig = restartConfig;
-        this.chatConfig = chatConfig;
         this.cmConfigInstance = cmConfig;
         this.groupChatManagerInstance = groupChatManager;
         this.debugLoggerInstance = debugLogger;
@@ -146,6 +134,16 @@ public class Services {
 
     private final Set<ParadigmModule> activatingModules = Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
     private volatile boolean stopping;
+    private final eu.avalanche7.paradigm.configs.schema.ConfigApplyService configApplyService =
+            new eu.avalanche7.paradigm.configs.schema.ConfigApplyService(this);
+
+    public eu.avalanche7.paradigm.configs.schema.ConfigApplyService getConfigApplyService() {
+        return configApplyService;
+    }
+
+    public boolean isStopping() {
+        return stopping;
+    }
     private final Set<ParadigmModule> inactiveModules = Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
 
     public boolean isModuleActive(ParadigmModule module) {
@@ -166,6 +164,14 @@ public class Services {
         if (managedConfigSyncService != null) managedConfigSyncService.stop();
         if (serverHeartbeatPublisher != null) serverHeartbeatPublisher.stop();
         if (taskSchedulerInstance != null) taskSchedulerInstance.onServerStopping();
+    }
+
+    public boolean reconcileModule(ParadigmModule module) {
+        boolean active = isModuleActive(module);
+        if (stopping || active == module.isEnabled(this)) return false;
+        if (active) disableModule(module);
+        else enableModule(module);
+        return true;
     }
 
     public void enableModule(ParadigmModule module) {

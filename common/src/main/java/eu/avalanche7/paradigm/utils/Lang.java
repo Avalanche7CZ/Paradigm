@@ -19,8 +19,8 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 public class Lang {
 
     private final Logger logger;
-    private final Map<String, String> translations = new HashMap<>();
-    private String currentLanguage;
+    private volatile Map<String, String> translations = Map.of();
+    private volatile String currentLanguage;
     private final MainConfigHandler.Config mainConfig;
     private final MessageParser messageParser;
     private final IPlatformAdapter platformAdapter;
@@ -55,32 +55,35 @@ public class Lang {
     }
 
     public void initializeLanguage() {
-        if (mainConfig == null || mainConfig.defaultLanguage == null) {
+        var handler = MainConfigHandler.handler();
+        var settings = handler != null ? handler.active() : mainConfig;
+        if (settings == null || settings.defaultLanguage == null) {
             if (logger != null) logger.warn("Lang: MainConfig or defaultLanguage setting is null. Using default language 'en'.");
             loadLanguage("en");
             return;
         }
-        String language = mainConfig.defaultLanguage.get();
+        String language = settings.defaultLanguage.get();
         if (logger != null) logger.info("Paradigm: Loaded language setting: {}", language);
         loadLanguage(language);
     }
 
     public void loadLanguage(String language) {
+        if (language == null || !language.matches("[A-Za-z0-9_-]{1,32}")) language = "en";
         if (logger != null) logger.info("Paradigm: Attempting to load language: {}", language);
         Gson gson = new Gson();
         Type type = new TypeToken<Map<String, Object>>() {}.getType();
         Path langFile = langFolder.resolve(language + ".json");
 
-        translations.clear();
-        loadFromResource("en", gson, type);
+        Map<String, String> candidate = new HashMap<>();
+        loadFromResource("en", gson, type, candidate);
         if (!"en".equalsIgnoreCase(language)) {
-            loadFromResource(language, gson, type);
+            loadFromResource(language, gson, type, candidate);
         }
 
         if (Files.exists(langFile)) {
             try (Reader reader = Files.newBufferedReader(langFile, StandardCharsets.UTF_8)) {
                 Map<String, Object> rawMap = gson.fromJson(reader, type);
-                flattenMap("", rawMap);
+                flattenMap("", rawMap, candidate);
                 if (logger != null) logger.info("Paradigm: Successfully loaded language from config: {}", language);
             } catch (Exception e) {
                 if (logger != null) logger.error("Paradigm: Failed to load language file from config: " + language, e);
@@ -88,10 +91,11 @@ public class Lang {
         } else {
             if (logger != null) logger.warn("Language file not found in config: {}.json. Using defaults from resources.", language);
         }
+        translations = Map.copyOf(candidate);
         currentLanguage = language;
     }
 
-    private void loadFromResource(String langCode, Gson gson, Type type) {
+    private void loadFromResource(String langCode, Gson gson, Type type, Map<String, String> candidate) {
         try (InputStream in = getClass().getResourceAsStream("/lang/" + langCode + ".json")) {
             if (in == null) {
                 if (logger != null) logger.warn("Resource language file missing: /lang/{}.json", langCode);
@@ -99,25 +103,25 @@ public class Lang {
             }
             try (Reader reader = new InputStreamReader(in, StandardCharsets.UTF_8)) {
                 Map<String, Object> rawMap = gson.fromJson(reader, type);
-                flattenMap("", rawMap);
+                flattenMap("", rawMap, candidate);
             }
         } catch (Exception e) {
             if (logger != null) logger.warn("Failed to load resource language file for: {}", langCode, e);
         }
     }
 
-    private void flattenMap(String prefix, Map<String, Object> map) {
+    private void flattenMap(String prefix, Map<String, Object> map, Map<String, String> candidate) {
         for (Map.Entry<String, Object> entry : map.entrySet()) {
             String key = prefix.isEmpty() ? entry.getKey() : prefix + "." + entry.getKey();
             Object value = entry.getValue();
             if (value instanceof String) {
-                translations.put(key, (String) value);
+                candidate.put(key, (String) value);
             } else if (value instanceof Map) {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> castedMap = (Map<String, Object>) value;
-                flattenMap(key, castedMap);
+                flattenMap(key, castedMap, candidate);
             } else if (value != null) {
-                translations.put(key, value.toString());
+                candidate.put(key, value.toString());
             }
         }
     }

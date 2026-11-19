@@ -14,7 +14,6 @@ public class RestartConfigHandler extends BaseConfigHandler<RestartConfigHandler
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ParadigmConstants.MOD_ID);
     private static RestartConfigHandler INSTANCE;
-    private Config config;
 
     private RestartConfigHandler(IConfig platformConfig) {
         super(LOGGER, platformConfig, "restarts.json");
@@ -39,16 +38,14 @@ public class RestartConfigHandler extends BaseConfigHandler<RestartConfigHandler
         return INSTANCE.config;
     }
 
-    public static void reload() {
-        if (INSTANCE != null) {
-            INSTANCE.config = INSTANCE.load();
-        }
-    }
-
     public static void persistConfig() {
         if (INSTANCE != null && INSTANCE.config != null) {
             INSTANCE.save(INSTANCE.config);
         }
+    }
+
+    public static RestartConfigHandler handler() {
+        return INSTANCE;
     }
 
     @Override

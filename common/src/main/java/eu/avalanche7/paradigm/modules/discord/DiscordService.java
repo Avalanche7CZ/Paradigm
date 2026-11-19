@@ -134,11 +134,41 @@ public final class DiscordService implements DiscordOutbox {
         services.getParadigmEvents().register(relay);
     }
 
+    private ConnectionSettings appliedConnectionSettings;
+
+    private record ConnectionSettings(boolean enabled, String token, String guildId, boolean consoleCommands,
+            int queueSize, boolean consoleRelay, String consoleChannel, String consoleLevel,
+            List<String> ignoredLogs, Integer consoleFlush, Boolean presenceEnabled, Integer presenceInterval) {
+    }
+
+    private ConnectionSettings connectionSettings(DiscordConfigHandler.Config config) {
+        boolean consoleRelay = Boolean.TRUE.equals(config.notifyConsoleLog.get())
+                && !DiscordDestination.CONSOLE.channelId(config).isBlank();
+        return new ConnectionSettings(isEnabled(), token(), config.guildId.get(), Boolean.TRUE.equals(config.allowConsoleCommands.get()),
+                clampQueueSize(config), consoleRelay, consoleRelay ? DiscordDestination.CONSOLE.channelId(config) : "",
+                config.consoleLogMinimumLevel.get(), config.consoleLogIgnoredPatterns.get(), config.consoleLogFlushSeconds.get(),
+                config.presenceEnabled.get(), config.presenceUpdateSeconds.get());
+    }
+
+    public synchronized void applyConfiguration() {
+        if (services.isStopping()) throw new IllegalStateException("Discord is stopping.");
+        DiscordConfigHandler.Config config = config();
+        if (config == null) throw new IllegalStateException("Discord configuration is unavailable.");
+        ConnectionSettings desired = connectionSettings(config);
+        if (!desired.equals(appliedConnectionSettings)) {
+            stop(false);
+            start();
+        } else if (gateway != null) {
+            updatePresence();
+        }
+    }
+
     public synchronized void start() {
         DiscordConfigHandler.Config config = config();
         if (config == null || !isEnabled()) {
             state = DiscordConnectionState.DISABLED;
             lastError = describeWhyDisabled(config);
+            appliedConnectionSettings = config == null ? null : connectionSettings(config);
             return;
         }
         if (dispatcher != null && dispatcher.isRunning()) {
@@ -175,9 +205,10 @@ public final class DiscordService implements DiscordOutbox {
         });
         interactionExecutor = interaction;
 
+        String connectionToken = token();
         DebugLogger debugLogger = services.getDebugLogger();
         autocompleteCoordinator = new AutocompleteCoordinator(debugLogger, pool, interaction, this::respondAutocomplete);
-        DiscordRestClient restClient = new DiscordRestClient(this::token, rateLimiter, debugLogger, http);
+        DiscordRestClient restClient = new DiscordRestClient(() -> connectionToken, rateLimiter, debugLogger, http);
         rest = restClient;
 
         DiscordDispatcher queue = new DiscordDispatcher(
@@ -194,7 +225,7 @@ public final class DiscordService implements DiscordOutbox {
         dispatcher = queue;
         queue.start();
 
-        DiscordGatewayClient client = new DiscordGatewayClient(this::token, restClient, debugLogger,
+        DiscordGatewayClient client = new DiscordGatewayClient(() -> connectionToken, restClient, debugLogger,
                 new GatewayListener(), pool);
         gateway = client;
         state = DiscordConnectionState.CONNECTING;
@@ -202,6 +233,7 @@ public final class DiscordService implements DiscordOutbox {
         client.start();
 
         startConsoleRelay(config, pool);
+        appliedConnectionSettings = connectionSettings(config);
     }
 
     private void startConsoleRelay(DiscordConfigHandler.Config config, ScheduledExecutorService pool) {
@@ -520,6 +552,7 @@ public final class DiscordService implements DiscordOutbox {
         }
         autocompleteCoordinator = null;
 
+        appliedConnectionSettings = null;
         gateway = null;
         dispatcher = null;
         rest = null;
@@ -534,11 +567,6 @@ public final class DiscordService implements DiscordOutbox {
         webhookRetryAfterMs.clear();
         webhookIds.clear();
         state = DiscordConnectionState.DISABLED;
-    }
-
-    public synchronized void reload() {
-        stop(false);
-        start();
     }
 
     public synchronized void reconnect() {

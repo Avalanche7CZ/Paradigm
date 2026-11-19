@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Stream;
 
 import com.google.gson.Gson;
@@ -27,7 +28,10 @@ public class CMConfig {
 
     private final Gson gson = new GsonBuilder().disableHtmlEscaping().setPrettyPrinting().create();
     private final Path configFolderPath;
-    private List<CustomCommand> loadedCommands = new ArrayList<>();
+    private volatile List<CustomCommand> loadedCommands = new java.util.concurrent.CopyOnWriteArrayList<>();
+    private volatile Map<Path, List<CustomCommand>> lastGoodFiles = Map.of();
+
+    public record LoadResult(Map<Path, List<CustomCommand>> files, List<String> errors) {}
     private final DebugLogger debugLogger;
 
     public CMConfig(DebugLogger debugLogger) {
@@ -48,71 +52,83 @@ public class CMConfig {
     }
 
     public void loadCommands() {
-        loadedCommands.clear();
+        try {
+            var result = readCommands();
+            publishCommands(result);
+            result.errors().forEach(error -> LOGGER.warn("CMConfig: {}", error));
+        } catch (IllegalArgumentException failure) {
+            LOGGER.warn("CMConfig: {}", failure.getMessage());
+        }
+    }
 
+    public LoadResult readCommands() {
+        Map<Path, List<CustomCommand>> candidate = new java.util.LinkedHashMap<>();
+        List<String> errors = new ArrayList<>();
+        var previous = lastGoodFiles;
         try {
             Files.createDirectories(configFolderPath);
-
-            boolean isEmpty = true;
-            if (Files.exists(configFolderPath) && Files.isDirectory(configFolderPath)) {
-                try (Stream<Path> stream = Files.list(configFolderPath)) {
-                    isEmpty = stream.noneMatch(p -> p.toString().endsWith(".json"));
+            List<Path> files;
+            try (Stream<Path> stream = Files.list(configFolderPath)) {
+                files = stream.filter(path -> path.toString().endsWith(".json")).sorted().toList();
+            }
+            if (files.isEmpty()) {
+                var examples = defaultCommands();
+                writeExamples(examples);
+                candidate.put(configFolderPath.resolve("examples.json"), examples);
+            }
+            for (Path file : files) {
+                String name = file.getFileName().toString();
+                List<CustomCommand> lastGood = previous.getOrDefault(file, List.of());
+                try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+                    CustomCommand[] commands = gson.fromJson(reader, CustomCommand[].class);
+                    if (commands == null) throw new IllegalArgumentException("Expected a command list.");
+                    var valid = new ArrayList<CustomCommand>();
+                    for (CustomCommand command : commands) {
+                        if (command == null || command.getName() == null || command.getName().isBlank()) {
+                            errors.add(name + ": a custom command has no name.");
+                            continue;
+                        }
+                        try {
+                            PlayerInputService.validateActions(command.getActions(), "custom command '" + command.getName() + "'", 0);
+                            valid.add(command);
+                        } catch (IllegalArgumentException failure) {
+                            errors.add(name + ": " + failure.getMessage());
+                            lastGood.stream().filter(old -> command.getName().equalsIgnoreCase(old.getName())).findFirst().ifPresent(valid::add);
+                        }
+                    }
+                    candidate.put(file, List.copyOf(valid));
+                } catch (IOException | RuntimeException failure) {
+                    errors.add(name + ": " + failure.getMessage());
+                    candidate.put(file, lastGood);
                 }
             }
-
-            if (isEmpty) {
-                this.debugLogger.debugLog("CMConfig: No command files found in " + configFolderPath + ". Generating example commands.");
-                generateDefaultConfig();
-            } else {
-                try (Stream<Path> stream = Files.list(configFolderPath)) {
-                    stream.filter(path -> path.toString().endsWith(".json"))
-                            .forEach(file -> {
-                                try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
-                                    CustomCommand[] commands = gson.fromJson(reader, CustomCommand[].class);
-                                    if (commands != null) {
-                                        for (CustomCommand command : commands) {
-                                            if (command != null && command.getName() != null && !command.getName().trim().isEmpty()) {
-                                                try {
-                                                    PlayerInputService.validateActions(command.getActions(),
-                                                            "custom command '" + command.getName() + "'", 0);
-                                                    this.loadedCommands.add(command);
-                                                } catch (IllegalArgumentException invalid) {
-                                                    LOGGER.warn("CMConfig: skipped invalid command in {}: {}",
-                                                            file.getFileName(), invalid.getMessage());
-                                                }
-                                            } else {
-                                                this.debugLogger.debugLog("CMConfig: Skipped a null or invalid command entry in file: " + file.getFileName());
-                                            }
-                                        }
-                                    }
-                                    this.debugLogger.debugLog("CMConfig: Loaded commands from file: " + file.getFileName());
-                                } catch (IOException | com.google.gson.JsonSyntaxException e) {
-                                    this.debugLogger.debugLog("CMConfig: Failed to load or parse commands from file: " + file.getFileName(), e);
-                                }
-                            });
-                }
-                if (this.loadedCommands.isEmpty() && !isEmpty) {
-                    this.debugLogger.debugLog("CMConfig: No valid commands loaded from existing files. Consider checking their format or generating defaults.");
-                }
-            }
-
-        } catch (IOException e) {
-            this.debugLogger.debugLog("CMConfig: Failed to read commands configuration folder.", e);
+            return new LoadResult(java.util.Collections.unmodifiableMap(candidate), List.copyOf(errors));
+        } catch (IOException failure) {
+            throw new IllegalArgumentException("Could not read the custom command directory.", failure);
         }
+    }
+
+    public void publishCommands(LoadResult candidate) {
+        lastGoodFiles = candidate.files();
+        loadedCommands = new java.util.concurrent.CopyOnWriteArrayList<>(
+                candidate.files().values().stream().flatMap(List::stream).toList());
     }
 
     public void saveCommands() {
         try {
-            Files.createDirectories(configFolderPath);
-            Path exampleFile = configFolderPath.resolve("examples.json");
-            AtomicFileIO.writeUtf8Atomic(exampleFile, writer -> gson.toJson(this.loadedCommands, writer));
+            writeExamples(loadedCommands);
             this.debugLogger.debugLog("CMConfig: Commands configuration saved successfully to examples.json.");
         } catch (IOException e) {
             this.debugLogger.debugLog("CMConfig: Failed to save commands configuration.", e);
         }
     }
 
-    private void generateDefaultConfig() {
+    private void writeExamples(List<CustomCommand> commands) throws IOException {
+        Files.createDirectories(configFolderPath);
+        AtomicFileIO.writeUtf8Atomic(configFolderPath.resolve("examples.json"), writer -> gson.toJson(commands, writer));
+    }
+
+    private List<CustomCommand> defaultCommands() {
         List<CustomCommand> defaultCommands = new ArrayList<>();
 
         List<CustomCommand.Action> actions1 = new ArrayList<>();
@@ -178,17 +194,11 @@ public class CMConfig {
                 restriction
         ));
 
-        this.loadedCommands = defaultCommands;
-        saveCommands();
+        return defaultCommands;
     }
 
     public List<CustomCommand> getLoadedCommands() {
         return this.loadedCommands;
     }
 
-    public void reloadCommands() {
-        this.debugLogger.debugLog("CMConfig: Reloading custom commands...");
-        loadCommands();
-        this.debugLogger.debugLog("CMConfig: Custom commands reloaded. Found " + this.loadedCommands.size() + " commands.");
-    }
 }

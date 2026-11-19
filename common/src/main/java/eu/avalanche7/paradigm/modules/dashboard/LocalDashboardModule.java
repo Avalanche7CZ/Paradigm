@@ -35,6 +35,10 @@ public class LocalDashboardModule implements ParadigmModule {
         return INSTANCE;
     }
 
+    public DashboardService dashboard() {
+        return dashboard;
+    }
+
     public AuditService audit() {
         return dashboard != null ? dashboard.audit() : null;
     }
@@ -271,18 +275,22 @@ public class LocalDashboardModule implements ParadigmModule {
         return 1;
     }
 
+    public void reloadSettings() {
+        DashboardService current = dashboard;
+        if (current == null) throw new IllegalStateException("Dashboard is unavailable.");
+        current.reloadSettings();
+        config = current.config();
+    }
+
     private int reload(ICommandSource source) {
-        this.config = DashboardConfig.load(services.getPlatformAdapter().getConfig(), services.getLogger());
-        if (dashboard == null) {
-            dashboard = new DashboardService(services, config);
-        } else {
-            dashboard.reload(config);
-        }
-        dashboard.audit().command(source, AuditActionType.DASHBOARD_STATUS, AuditResult.SUCCESS, "Dashboard reloaded.", java.util.Map.of("action", "reload"));
-        send(source, "dashboard.server.reload", "Dashboard config reloaded.");
-        if (dashboard.running()) {
-            send(source, "dashboard.status.url", "Dashboard URL: {url}", "{url}", dashboard.baseUrl());
-        }
+        var runtime = services.getConfigApplyService();
+        runtime.reload(java.util.Set.of(eu.avalanche7.paradigm.configs.ConfigSection.DASHBOARD)).whenComplete((outcome, failure) -> runtime.onServer(() -> {
+            boolean applied = eu.avalanche7.paradigm.modules.commands.Reload.sendReloadResult(source, services, outcome, failure);
+            dashboard.audit().command(source, AuditActionType.DASHBOARD_STATUS, applied ? AuditResult.SUCCESS : AuditResult.FAILED,
+                    applied ? "Dashboard reloaded." : "Dashboard reload failed.", java.util.Map.of("action", "reload"));
+            if (applied && dashboard.running()) send(source, "dashboard.status.url", "Dashboard URL: {url}", "{url}", dashboard.baseUrl());
+            return null;
+        }));
         return 1;
     }
 
