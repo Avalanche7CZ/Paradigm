@@ -1783,6 +1783,8 @@ fieldset {
   box-shadow: var(--shadow);
 }
 .permission-suggestions button {
+  flex-shrink: 0;
+  overflow-wrap: anywhere;
   border: 0;
   border-radius: 0;
   display: flex;
