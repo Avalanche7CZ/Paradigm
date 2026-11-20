@@ -603,9 +603,29 @@ public final class DiscordGatewayClient {
             }
         }
 
+        String modalId = type == DiscordInteraction.TYPE_MODAL_SUBMIT
+                ? DiscordJson.string(commandData, "custom_id") : null;
+        String modalCode = DiscordInteraction.LINK_MODAL_ID.equals(modalId) ? parseLinkCode(commandData) : null;
         return new DiscordInteraction(id, token, type, DiscordJson.string(data, "guild_id"),
                 DiscordJson.string(data, "channel_id"), commandName, optionValue, authorId,
-                authorDisplayName, bot);
+                authorDisplayName, bot, modalId, modalCode);
+    }
+
+    private static String parseLinkCode(JsonObject commandData) {
+        JsonArray components = DiscordJson.array(commandData, "components");
+        if (components == null) {
+            return null;
+        }
+        for (JsonElement element : components) {
+            if (!element.isJsonObject()) {
+                continue;
+            }
+            JsonObject input = DiscordJson.object(element.getAsJsonObject(), "component");
+            if (DiscordInteraction.LINK_CODE_FIELD.equals(DiscordJson.string(input, "custom_id"))) {
+                return DiscordJson.string(input, "value");
+            }
+        }
+        return null;
     }
 
     DiscordInboundMessage parseMessage(JsonObject data) {

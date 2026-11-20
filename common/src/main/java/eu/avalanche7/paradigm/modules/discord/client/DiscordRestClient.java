@@ -90,6 +90,11 @@ public final class DiscordRestClient {
     }
 
     private Result post(String bucketKey, String uri, String payloadJson, String token) {
+        return sendPayload(bucketKey, uri, payloadJson, token, "POST", false);
+    }
+
+    private Result sendPayload(String bucketKey, String uri, String payloadJson, String token, String method,
+                               boolean interaction) {
         try {
             rateLimiter.awaitSlot(bucketKey);
         } catch (InterruptedException interrupted) {
@@ -101,7 +106,7 @@ public final class DiscordRestClient {
             HttpRequest.Builder builder = HttpRequest.newBuilder()
                     .uri(URI.create(uri))
                     .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofString(payloadJson, StandardCharsets.UTF_8));
+                    .method(method, HttpRequest.BodyPublishers.ofString(payloadJson, StandardCharsets.UTF_8));
             HttpRequest request = (token != null ? authorized(builder, token) : unauthorized(builder)).build();
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
@@ -119,11 +124,15 @@ public final class DiscordRestClient {
             }
 
             boolean retryable = status >= 500;
-            return Result.failure(status, describe(status, response.body(), token), retryable);
+            return Result.failure(status, interaction ? "Discord rejected the interaction response."
+                    : describe(status, response.body(), token), retryable);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             return Result.failure(0, "Interrupted while sending a Discord message.", false);
         } catch (Exception failure) {
+            if (interaction) {
+                return Result.failure(0, "Could not reach Discord for the interaction response.", true);
+            }
             String message = DiscordSecrets.redact(String.valueOf(failure.getMessage()), token);
             debug("REST send failed: " + message);
             return Result.failure(0, "Could not reach Discord: " + message, true);
@@ -203,6 +212,34 @@ public final class DiscordRestClient {
         return body.getAsJsonObject();
     }
 
+    public JsonArray listGuildChannels(String guildId) throws DiscordApiException {
+        return getArray("/guilds/" + guildId + "/channels");
+    }
+
+    public JsonObject createGuildTextChannel(String guildId, JsonObject channel) throws DiscordApiException {
+        return postForObject("/guilds/" + guildId + "/channels", channel.toString());
+    }
+
+    public void setChannelOverwrites(String channelId, JsonArray overwrites) throws DiscordApiException {
+        JsonObject payload = new JsonObject();
+        payload.add("permission_overwrites", overwrites);
+        request("/channels/" + channelId, payload.toString(), "PATCH");
+    }
+
+    public void removeChannelOverwrite(String channelId, String userId) throws DiscordApiException {
+        try {
+            request("/channels/" + channelId + "/permissions/" + userId, null, "DELETE");
+        } catch (DiscordApiException failure) {
+            if (failure.status() != 404) {
+                throw failure;
+            }
+        }
+    }
+
+    public void postTicketOpening(String channelId, JsonObject payload) throws DiscordApiException {
+        postForObject("/channels/" + channelId + "/messages", payload.toString());
+    }
+
     public JsonArray listGuildCommands(String guildId, String applicationId) throws DiscordApiException {
         return getArray("/applications/" + applicationId + "/guilds/" + guildId + "/commands");
     }
@@ -211,16 +248,36 @@ public final class DiscordRestClient {
         postForObject("/applications/" + applicationId + "/guilds/" + guildId + "/commands", commandJson);
     }
 
+    public JsonObject createNewGuildCommand(String guildId, String applicationId, String commandJson) throws DiscordApiException {
+        String path = "/applications/" + applicationId + "/guilds/" + guildId + "/commands";
+        JsonElement body = request(path, commandJson, "POST", 201);
+        if (!body.isJsonObject()) {
+            throw new DiscordApiException("Discord did not return the created command.", false);
+        }
+        return body.getAsJsonObject();
+    }
+
     public void deleteGuildCommand(String guildId, String applicationId, String commandId) throws DiscordApiException {
         request("/applications/" + applicationId + "/guilds/" + guildId + "/commands/" + commandId, null, "DELETE");
     }
 
     public Result respondToInteraction(String interactionId, String interactionToken, String payloadJson) {
-        return post(interactionId, apiBase + "/interactions/" + interactionId + "/" + interactionToken + "/callback",
-                payloadJson, null);
+        return sendPayload("interaction:" + interactionId,
+                apiBase + "/interactions/" + interactionId + "/" + interactionToken + "/callback",
+                payloadJson, null, "POST", true);
+    }
+
+    public Result editInteractionResponse(String applicationId, String interactionToken, String payloadJson) {
+        return sendPayload("interaction-edit:" + applicationId,
+                apiBase + "/webhooks/" + applicationId + "/" + interactionToken + "/messages/@original",
+                payloadJson, null, "PATCH", true);
     }
 
     private JsonElement request(String path, String payloadJson, String method) throws DiscordApiException {
+        return request(path, payloadJson, method, 0);
+    }
+
+    private JsonElement request(String path, String payloadJson, String method, int expectedStatus) throws DiscordApiException {
         String token = tokenSupplier.get();
         if (!DiscordSecrets.isPresent(token)) {
             throw new DiscordApiException("No Discord bot token configured.", false);
@@ -253,6 +310,9 @@ public final class DiscordRestClient {
             if (status < 200 || status >= 300) {
                 throw new DiscordApiException(describe(status, response.body(), token),
                         status >= 500, status);
+            }
+            if (expectedStatus != 0 && status != expectedStatus) {
+                throw new DiscordApiException("Discord did not confirm creation of a new guild command.", false, status);
             }
             String body = response.body();
             return body == null || body.isBlank() ? com.google.gson.JsonNull.INSTANCE : JsonParser.parseString(body);

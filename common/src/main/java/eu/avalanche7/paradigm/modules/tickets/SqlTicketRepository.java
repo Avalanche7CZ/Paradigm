@@ -160,6 +160,15 @@ public class SqlTicketRepository implements TicketRepository {
                 rs -> rs.next() ? Optional.of(readTicket(rs)) : Optional.empty());
     }
 
+    public Optional<Ticket> findById(String networkId, String ticketId) {
+        return sql.query("SELECT " + TICKET_COLUMNS + " FROM tickets WHERE network_id = ? AND ticket_id = ?",
+                ps -> {
+                    ps.setString(1, network(networkId));
+                    ps.setString(2, ticketId);
+                },
+                rs -> rs.next() ? Optional.of(readTicket(rs)) : Optional.empty());
+    }
+
     @Override
     public List<Ticket> listTickets(TicketQuery query) {
         List<Object> parameters = new ArrayList<>();

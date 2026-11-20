@@ -4,6 +4,8 @@ import org.slf4j.Logger;
 
 import eu.avalanche7.paradigm.modules.audit.AuditRepository;
 import eu.avalanche7.paradigm.modules.audit.SqlAuditRepository;
+import eu.avalanche7.paradigm.modules.discord.DiscordAccountLinks;
+import eu.avalanche7.paradigm.modules.discord.DiscordTicketRoomStore;
 import eu.avalanche7.paradigm.modules.tickets.SqlTicketRepository;
 import eu.avalanche7.paradigm.modules.tickets.TicketRepository;
 import eu.avalanche7.paradigm.storage.StorageConfig;
@@ -39,7 +41,7 @@ public class SqlStorageProvider implements StorageProvider {
     private ServerRepository servers;
     private ManagedConfigRepository managedConfig;
     private AuditRepository audit;
-    private TicketRepository tickets;
+    private SqlTicketRepository tickets;
     private boolean serverRegistered;
 
     public SqlStorageProvider(
@@ -101,6 +103,14 @@ public class SqlStorageProvider implements StorageProvider {
     }
 
     @Override public int migrationVersion() { return migrations.currentVersion(); }
+
+    public DiscordTicketRoomStore discordTicketRooms() {
+        return new DiscordTicketRoomStore(executor, context.networkId(), tickets);
+    }
+
+    public DiscordAccountLinks discordAccountLinks() {
+        return new DiscordAccountLinks(executor, context.networkId());
+    }
 
     public boolean serverRegistered() {
         return serverRegistered;

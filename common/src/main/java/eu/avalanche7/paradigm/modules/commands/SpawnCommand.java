@@ -54,6 +54,10 @@ public class SpawnCommand implements ParadigmModule {
 
     @Override
     public void registerEventListeners(Object eventBus, Services services) {
+        AutomaticSpawnPlacement placement = services.getAutomaticSpawnPlacement();
+        var platform = services.getPlatformAdapter();
+        platform.getEventSystem().onPlayerJoin(event ->
+                placement.joined(event.getPlayer(), event.isFirstJoin(platform)));
     }
 
     private void registerSpawn() {
@@ -147,7 +151,7 @@ public class SpawnCommand implements ParadigmModule {
         return new StoredLocation(location.getWorldId(), location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
     }
 
-    private PlayerDataStore.StoredLocation toDataLocation(StoredLocation location) {
+    static PlayerDataStore.StoredLocation toDataLocation(StoredLocation location) {
         return new PlayerDataStore.StoredLocation(location.worldId(), location.x(), location.y(), location.z(), location.yaw(), location.pitch());
     }
 

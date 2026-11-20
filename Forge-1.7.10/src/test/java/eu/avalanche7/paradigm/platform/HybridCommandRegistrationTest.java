@@ -238,6 +238,78 @@ public class HybridCommandRegistrationTest {
         verify(external, never()).processCommand(any(), any());
     }
 
+    @Test void tpClaimsPrimaryBukkitRootAndReleasesItOnDisableWithoutGrantingForeignPermissions() {
+        SimulatedCrucible manager = hybrid();
+        Object vanilla = new Object();
+        manager.primary.knownCommands.put("tp", vanilla);
+        manager.primary.knownCommands.put("bukkit:tp", vanilla);
+        EntityPlayerMP player = player(false);
+        assertTrue(permissions.addPermissionToPlayer(player.getUniqueID(), "paradigm.tp", false));
+        MainConfigHandler.getConfig().forceCommandPriorityEnable.value = true;
+        platform.registerCommandContributor("tp-owner", () -> platform.registerCommand(root("tp")));
+        assertFalse(manager.primary.knownCommands.containsKey("tp"));
+        assertSame(vanilla, manager.primary.knownCommands.get("bukkit:tp"));
+        manager.forward("tp", player);
+        assertEquals(1, executions.get());
+        assertTrue(permissions.addPermissionToPlayer(player.getUniqueID(), "paradigm.tp", true));
+        manager.forward("tp", player);
+        assertEquals(1, executions.get());
+        toggles.setEnabled("tp", false);
+        platform.refreshRegisteredCommandContributors();
+        assertSame(vanilla, manager.primary.knownCommands.get("tp"));
+        assertEquals(ForgeCommand.class.getName(), manager.wrappers.get("tp").getPermission());
+    }
+
+    @Test void tpPreservesPrimaryBukkitRootWithoutPriorityAndPreservesALaterReplacement() {
+        SimulatedCrucible manager = hybrid();
+        Object vanilla = new Object();
+        manager.primary.knownCommands.put("tp", vanilla);
+        platform.registerCommand(root("tp"));
+        assertSame(vanilla, manager.primary.knownCommands.get("tp"));
+        assertFalse(platform.ownsRegisteredCommandRoot("tp"));
+        MainConfigHandler.getConfig().forceCommandPriorityEnable.value = true;
+        platform.registerCommand(root("tp"));
+        Object later = new Object();
+        manager.primary.knownCommands.put("tp", later);
+        platform.unregisterCommandRoot("tp");
+        assertSame(later, manager.primary.knownCommands.get("tp"));
+    }
+
+    @Test void shutdownRestoresPrimaryBukkitRoot() {
+        SimulatedCrucible manager = hybrid();
+        Object vanilla = new Object();
+        manager.primary.knownCommands.put("tp", vanilla);
+        MainConfigHandler.getConfig().forceCommandPriorityEnable.value = true;
+        platform.registerCommand(root("tp"));
+        platform.clear();
+        assertSame(vanilla, manager.primary.knownCommands.get("tp"));
+    }
+
+    @Test void tpWithoutForcedPriorityPreservesVanillaOwnership() {
+        SimulatedCrucible manager = hybrid();
+        ICommand vanilla = external("tp");
+        manager.registerCommand(vanilla);
+        platform.registerCommand(root("tp"));
+        assertSame(vanilla, manager.getCommands().get("tp"));
+        assertFalse(platform.ownsRegisteredCommandRoot("tp"));
+    }
+
+    @Test void tpPriorityAndDisableRestoreVanillaCommandWithoutLeavingAnOpenGate() {
+        SimulatedCrucible manager = hybrid();
+        ICommand external = external("tp");
+        manager.registerCommand(external);
+        MainConfigHandler.getConfig().forceCommandPriorityEnable.value = true;
+        platform.registerCommandContributor("owner", () -> platform.registerCommand(root("tp")));
+        assertTrue(platform.ownsRegisteredCommandRoot("tp"));
+        assertEquals("", manager.wrappers.get("mod:tp").getPermission());
+        toggles.setEnabled("tp", false);
+        platform.refreshRegisteredCommandContributors();
+        assertSame(external, manager.getCommands().get("tp"));
+        assertEquals(ForgeCommand.class.getName(), manager.wrappers.get("mod:tp").getPermission());
+        manager.forward("mod:tp", player(false));
+        verify(external, never()).processCommand(any(), any());
+    }
+
     @Test void failedGateRestorationPreventsNativeOwnershipHandoff() {
         SimulatedCrucible manager = hybrid();
         platform.registerCommand(root("fly"));
@@ -427,6 +499,8 @@ public class HybridCommandRegistrationTest {
 
     /** Mirrors class-name registration, Bukkit collisions, and forwarding without the native gate. */
     public static final class SimulatedCrucible extends CommandHandler {
+        final PrimaryBukkitCommandMap primary = new PrimaryBukkitCommandMap();
+        public PrimaryBukkitCommandMap getCommandMap() { return primary; }
         final Map<String, ModCustomCommand> wrappers = new LinkedHashMap<>();
         int registrations;
         boolean failOpen;
@@ -444,6 +518,7 @@ public class HybridCommandRegistrationTest {
         }
 
         void forward(String label, EntityPlayerMP player, String... args) {
+            if (primary.knownCommands.containsKey(label)) return;
             ModCustomCommand wrapper = wrappers.get(label);
             if (!wrapper.getPermission().isEmpty() && !player.canCommandSenderUseCommand(2, "paradigm")) return;
             ICommand command = (ICommand) getCommands().get(wrapper.getName());
@@ -456,6 +531,10 @@ public class HybridCommandRegistrationTest {
                 if (!event.isCanceled()) command.processCommand(player, args);
             }
         }
+    }
+
+    public static final class PrimaryBukkitCommandMap {
+        final Map<String, Object> knownCommands = new LinkedHashMap<>();
     }
 
     public static final class BukkitCommandMap {

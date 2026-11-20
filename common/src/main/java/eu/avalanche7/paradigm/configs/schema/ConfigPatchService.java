@@ -137,6 +137,7 @@ public class ConfigPatchService {
                     DashboardConfig.save(services.getPlatformAdapter().getConfig(), dashboard);
                 } else {
                     var candidate = candidates.get(section);
+                    if (section == ConfigSection.DISCORD) validateFile(section, candidate.value());
                     boolean liveChanged = runtime.save(section, candidate, publications);
                     if (liveChanged) changed.add(section);
                 }
@@ -234,6 +235,13 @@ public class ConfigPatchService {
             case DISCORD -> {
                 var discord = (DiscordConfigHandler.Config) value;
                 discord.consoleLogIgnoredPatterns.value.forEach(Pattern::compile);
+                DiscordConfigHandler.validateTicketRooms(discord);
+                if (Boolean.TRUE.equals(discord.linkingEnabled.get())) {
+                    DiscordConfigHandler.normalizeLinkingOwner(discord.linkingOwnerServerId.get());
+                    if (!DiscordConfigHandler.isGuildId(discord.guildId.get())) {
+                        throw new IllegalArgumentException("Discord account linking requires a valid guildId.");
+                    }
+                }
             }
             default -> {}
         }
@@ -519,9 +527,13 @@ public class ConfigPatchService {
         switch (fieldName) {
             case "guildId", "chatChannelId", "moderationChannelId", "notificationChannelId",
                     "serverChannelId", "deathsChannelId", "advancementsChannelId", "commandLogChannelId",
-                    "consoleChannelId" ->
+                    "consoleChannelId", "ticketCategoryId" ->
                     applyConfigEntry(DiscordConfigHandler.Config.class, config, fieldName,
                             validateSnowflake(fieldName, value));
+            case "ticketStaffRoleIds" -> config.ticketStaffRoleIds.value = stringList(value).stream()
+                    .map(role -> validateSnowflake(fieldName, role)).toList();
+            case "linkingOwnerServerId" -> applyConfigEntry(DiscordConfigHandler.Config.class, config, fieldName,
+                    DiscordConfigHandler.normalizeLinkingOwner(value == null ? null : value.toString()));
             case "presenceType" -> applyConfigEntry(DiscordConfigHandler.Config.class, config, fieldName,
                     validatePresenceType(value));
             case "presenceUpdateSeconds" -> applyConfigEntry(DiscordConfigHandler.Config.class, config, fieldName,

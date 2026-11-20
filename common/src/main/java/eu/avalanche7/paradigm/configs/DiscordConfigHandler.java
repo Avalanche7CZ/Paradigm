@@ -1,6 +1,7 @@
 package eu.avalanche7.paradigm.configs;
 
 import java.util.List;
+import java.util.Locale;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,10 +61,35 @@ public class DiscordConfigHandler extends BaseConfigHandler<DiscordConfigHandler
         return Config.class;
     }
 
+    public static String normalizeLinkingOwner(String value) {
+        String owner = value == null ? "" : value.trim();
+        if (!owner.isEmpty() && !owner.matches("[A-Za-z0-9_.:-]{1,64}")) {
+            throw new IllegalArgumentException("Discord linkingOwnerServerId must be a valid storage server ID.");
+        }
+        return owner.toLowerCase(Locale.ROOT);
+    }
+
+    public static boolean isGuildId(String value) {
+        return value != null && value.matches("[0-9]{5,25}");
+    }
+
+    public static void validateTicketRooms(Config config) {
+        List<String> roles = config.ticketStaffRoleIds.get();
+        String guild = config.guildId.get() == null ? "" : config.guildId.get().trim();
+        if (roles == null || roles.size() > 32 || roles.stream().anyMatch(id -> !isGuildId(id) || id.equals(guild))) {
+            throw new IllegalArgumentException("Discord ticketStaffRoleIds must contain up to 32 role IDs and must exclude @everyone.");
+        }
+        if (Boolean.TRUE.equals(config.ticketRoomsEnabled.get())
+                && (!Boolean.TRUE.equals(config.enabled.get()) || !Boolean.TRUE.equals(config.linkingEnabled.get())
+                    || !isGuildId(config.ticketCategoryId.get()) || !isGuildId(config.guildId.get()))) {
+            throw new IllegalArgumentException("Discord ticket rooms require Discord and account linking enabled, with valid guild and category IDs.");
+        }
+    }
+
     public static class Config {
         public ConfigEntry<Boolean> enabled = new ConfigEntry<>(
                 false,
-                "Enable or disable the Discord integration. Requires a bot token and at least one channel ID."
+                "Enable or disable the Discord integration. Requires a bot token and a channel ID or ownership of Discord account linking."
         );
 
         public ConfigEntry<String> botToken = new ConfigEntry<>(
@@ -74,6 +100,37 @@ public class DiscordConfigHandler extends BaseConfigHandler<DiscordConfigHandler
         public ConfigEntry<String> guildId = new ConfigEntry<>(
                 "",
                 "Discord guild (server) ID. Messages from other guilds are ignored."
+        );
+
+        public ConfigEntry<Boolean> linkingEnabled = new ConfigEntry<>(
+                false,
+                "Allow Minecraft players to link their Discord account in the configured guild. Requires active SQL storage."
+        );
+
+        public ConfigEntry<String> linkingOwnerServerId = new ConfigEntry<>(
+                "",
+                "Stable storage serverId that registers and handles Discord /link. Required on a shared SQL network. "
+                        + "Leave empty for a standalone SQLite server."
+        );
+
+        public ConfigEntry<Boolean> ticketRoomsEnabled = new ConfigEntry<>(
+                false,
+                "Create private Discord rooms for new Minecraft tickets with linked creators. Uses the account-linking owner."
+        );
+
+        public ConfigEntry<String> ticketCategoryId = new ConfigEntry<>(
+                "",
+                "Discord category ID for new private ticket rooms."
+        );
+
+        public ConfigEntry<List<String>> ticketStaffRoleIds = new ConfigEntry<>(
+                List.of(),
+                "Optional Discord roles allowed to see and write in ticket rooms."
+        );
+
+        public ConfigEntry<String> ticketChannelNameTemplate = new ConfigEntry<>(
+                "ticket-{ticket_key}",
+                "Ticket room name. Supports {ticket_key}, {server}, {category}, and {player}."
         );
 
         public ConfigEntry<String> chatChannelId = new ConfigEntry<>(

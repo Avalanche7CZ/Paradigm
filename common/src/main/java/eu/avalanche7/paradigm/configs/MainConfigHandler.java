@@ -183,6 +183,16 @@ public class MainConfigHandler extends BaseConfigHandler<MainConfigHandler.Confi
                 true,
                 "Enable or disable /warp, /warps, /setwarp, /delwarp and /warpinfo commands."
         );
+        public ConfigEntry<Boolean> spawnOnFirstJoin = new ConfigEntry<>(
+                false,
+                "Place genuinely new players at the saved Paradigm spawn on their first join to this server."
+        );
+
+        public ConfigEntry<Boolean> spawnOnDeathFallback = new ConfigEntry<>(
+                false,
+                "Use the saved Paradigm spawn when a supported loader confirms the native death fallback."
+        );
+
         public ConfigEntry<Boolean> spawnCommandsEnable = new ConfigEntry<>(
                 true,
                 "Enable or disable /spawn and /setspawn commands."

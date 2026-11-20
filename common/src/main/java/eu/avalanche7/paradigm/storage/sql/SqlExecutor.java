@@ -41,6 +41,10 @@ public class SqlExecutor {
     }
 
     public <T> T transaction(Supplier<T> work) {
+        return transaction(null, work);
+    }
+
+    public <T> T transaction(Integer isolation, Supplier<T> work) {
         Connection active = transactionConnection.get();
         if (active != null) {
             return work.get();
@@ -48,6 +52,9 @@ public class SqlExecutor {
         return withOperationLock(() -> {
             boolean committed = false;
             try (Connection connection = connections.getConnection()) {
+                if (isolation != null) {
+                    connection.setTransactionIsolation(isolation);
+                }
                 connection.setAutoCommit(false);
                 transactionConnection.set(connection);
                 try {

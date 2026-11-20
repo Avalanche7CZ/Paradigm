@@ -4,6 +4,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.WeakHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -45,6 +46,7 @@ public final class MinecraftEventSystem implements IEventSystem {
 
     private static volatile MinecraftEventSystem active;
     private static final String JOINED = "paradigmJoined";
+    private final Map<EntityPlayerMP, Boolean> existingPlayerData = new WeakHashMap<>();
     private final Map<EntityPlayerMP, IChatComponent> pendingJoins = new IdentityHashMap<>();
     private final Map<EntityPlayerMP, IChatComponent> pendingLeaves = new IdentityHashMap<>();
     private final List<ChatEventListener> chatListeners = new CopyOnWriteArrayList<>();
@@ -171,11 +173,19 @@ public final class MinecraftEventSystem implements IEventSystem {
         }
     }
 
+    public static void captureLoadedPlayerData(EntityPlayerMP player, boolean exists) {
+        MinecraftEventSystem system = active;
+        if (system != null) {
+            system.existingPlayerData.put(player, exists);
+        }
+    }
+
     @SubscribeEvent
     public void joined(PlayerEvent.PlayerLoggedInEvent forge) {
         if (forge.player instanceof EntityPlayerMP player) {
             boolean announce = pendingJoins.containsKey(player) && visible(player);
-            JoinLeaveEvent event = new JoinLeaveEvent(new MinecraftPlayer(player), pendingJoins.remove(player));
+            boolean first = Boolean.FALSE.equals(existingPlayerData.remove(player)) && firstJoin(player);
+            JoinLeaveEvent event = new JoinLeaveEvent(new MinecraftPlayer(player), pendingJoins.remove(player), first);
             for (PlayerJoinEventListener listener : joinListeners) {
                 listener.onPlayerJoin(event);
             }
@@ -188,7 +198,7 @@ public final class MinecraftEventSystem implements IEventSystem {
     public void left(PlayerEvent.PlayerLoggedOutEvent forge) {
         if (forge.player instanceof EntityPlayerMP player) {
             boolean announce = pendingLeaves.containsKey(player) && visible(player);
-            JoinLeaveEvent event = new JoinLeaveEvent(new MinecraftPlayer(player), pendingLeaves.remove(player));
+            JoinLeaveEvent event = new JoinLeaveEvent(new MinecraftPlayer(player), pendingLeaves.remove(player), false);
             for (PlayerLeaveEventListener listener : leaveListeners) {
                 listener.onPlayerLeave(event);
             }
@@ -284,15 +294,22 @@ public final class MinecraftEventSystem implements IEventSystem {
     private static final class JoinLeaveEvent implements PlayerJoinEvent, PlayerLeaveEvent {
         private final IPlayer player;
         private IComponent message;
+        private final boolean firstJoin;
 
-        private JoinLeaveEvent(IPlayer player, IChatComponent message) {
+        private JoinLeaveEvent(IPlayer player, IChatComponent message, boolean firstJoin) {
             this.player = player;
+            this.firstJoin = firstJoin;
             this.message = message != null ? new MinecraftComponent(message) : null;
         }
 
         @Override
         public IPlayer getPlayer() {
             return player;
+        }
+
+        @Override
+        public boolean isFirstJoin(eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter platform) {
+            return firstJoin;
         }
 
         @Override

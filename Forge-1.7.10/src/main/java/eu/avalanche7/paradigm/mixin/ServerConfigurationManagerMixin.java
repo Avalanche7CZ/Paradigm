@@ -1,6 +1,7 @@
 package eu.avalanche7.paradigm.mixin;
 
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.network.NetHandlerPlayServer;
 import net.minecraft.network.NetworkManager;
 import net.minecraft.server.management.ServerConfigurationManager;
@@ -10,6 +11,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import eu.avalanche7.paradigm.platform.MinecraftEventSystem;
 import eu.avalanche7.paradigm.platform.visual.LegacyVisualController;
@@ -26,6 +28,11 @@ public abstract class ServerConfigurationManagerMixin {
     private void paradigm$visualJoin(NetworkManager network, EntityPlayerMP player, NetHandlerPlayServer handler, CallbackInfo callback) {
         LegacyVisualController visuals = LegacyVisualController.current();
         if (visuals != null) visuals.joined(player);
+    }
+
+    @Inject(method = "readPlayerDataFromFile", at = @At("RETURN"), require = 0)
+    private void paradigm$capturePlayerData(EntityPlayerMP player, CallbackInfoReturnable<NBTTagCompound> callback) {
+        MinecraftEventSystem.captureLoadedPlayerData(player, callback.getReturnValue() != null);
     }
 
     @Redirect(method = "removeAllPlayers", at = @At(value = "INVOKE",

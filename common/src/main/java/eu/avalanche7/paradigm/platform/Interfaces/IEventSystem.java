@@ -12,6 +12,10 @@ public interface IEventSystem {
         IPlayer getPlayer();
         IComponent getJoinMessage();
         void setJoinMessage(IComponent message);
+
+        default boolean isFirstJoin(IPlatformAdapter platform) {
+            return platform.isFirstJoin(getPlayer());
+        }
     }
     interface PlayerLeaveEvent {
         IPlayer getPlayer();

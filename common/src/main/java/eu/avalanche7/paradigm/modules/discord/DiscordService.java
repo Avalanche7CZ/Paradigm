@@ -1,5 +1,7 @@
 package eu.avalanche7.paradigm.modules.discord;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +14,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -32,6 +35,8 @@ import eu.avalanche7.paradigm.modules.discord.client.DiscordRateLimiter;
 import eu.avalanche7.paradigm.modules.discord.client.DiscordRestClient;
 import eu.avalanche7.paradigm.modules.discord.console.ConsoleRelayAppender;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.storage.StorageProviderType;
+import eu.avalanche7.paradigm.storage.StorageService;
 import eu.avalanche7.paradigm.utils.CommandSuggestions;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 import eu.avalanche7.paradigm.utils.ServerThreadCalls;
@@ -71,6 +76,20 @@ public final class DiscordService implements DiscordOutbox {
     private final Object consoleRelayLock = new Object();
 
     private static final String CONSOLE_COMMAND_NAME = "console";
+    static final String LINK_COMMAND_NAME = "link";
+    private final Object linkRegistrationLock = new Object();
+    private volatile LinkGateway linkGateway;
+    private volatile String linkRegistrationWarning;
+    private boolean linkRegistrationVerified;
+
+    private record LinkGateway(String token, String application) {}
+
+    private volatile TicketRoomRun ticketRoomRun;
+    private ScheduledFuture<?> ticketRoomTask;
+    private final Object ticketRoomLock = new Object();
+    private volatile String ticketRoomWarning;
+
+    private record TicketRoomRun(DiscordTicketRooms.Settings settings, long since, boolean advanceFloor) {}
 
     private final Map<String, DiscordRestClient.Webhook> webhooks = new ConcurrentHashMap<>();
     private final Map<String, Long> webhookRetryAfterMs = new ConcurrentHashMap<>();
@@ -110,7 +129,7 @@ public final class DiscordService implements DiscordOutbox {
         if (!DiscordSecrets.isPresent(token())) {
             return false;
         }
-        return anyChannelConfigured(config);
+        return anyChannelConfigured(config) || linkingSettings(config).owner();
     }
 
     static boolean anyChannelConfigured(DiscordConfigHandler.Config config) {
@@ -132,6 +151,61 @@ public final class DiscordService implements DiscordOutbox {
             return;
         }
         services.getParadigmEvents().register(relay);
+    }
+
+    record LinkingSettings(String guild, boolean owner) {
+        private static final LinkingSettings DISABLED = new LinkingSettings("", false);
+
+        boolean accepts(DiscordInteraction interaction) {
+            return owner && guild.equals(interaction.guildId()) && !interaction.bot()
+                    && DiscordConfigHandler.isGuildId(interaction.authorId())
+                    && (interaction.isLinkModal()
+                            || (interaction.isSubmit() && LINK_COMMAND_NAME.equals(interaction.commandName())));
+        }
+    }
+
+    private LinkingSettings linkingSettings(DiscordConfigHandler.Config config) {
+        StorageService storage = services == null ? null : services.getStorageService();
+        if (storage == null) {
+            return LinkingSettings.DISABLED;
+        }
+        return linkingSettings(config, StorageProviderType.parse(storage.config().provider), storage.context().serverId());
+    }
+
+    static LinkingSettings linkingSettings(DiscordConfigHandler.Config config, StorageProviderType provider, String serverId) {
+        if (!linkingEnabled(config)) {
+            return LinkingSettings.DISABLED;
+        }
+        String guild = nullToEmpty(config.guildId.get());
+        if (!DiscordConfigHandler.isGuildId(guild)) {
+            return LinkingSettings.DISABLED;
+        }
+        String owner = configuredLinkOwner(config, provider, serverId);
+        return owner.isEmpty() ? LinkingSettings.DISABLED : new LinkingSettings(guild, owner.equals(serverId));
+    }
+
+    private static boolean linkingEnabled(DiscordConfigHandler.Config config) {
+        return config != null && Boolean.TRUE.equals(config.enabled.get()) && Boolean.TRUE.equals(config.linkingEnabled.get());
+    }
+
+    private static String configuredLinkOwner(DiscordConfigHandler.Config config, StorageProviderType provider, String serverId) {
+        String owner;
+        try {
+            owner = DiscordConfigHandler.normalizeLinkingOwner(config.linkingOwnerServerId.get());
+        } catch (IllegalArgumentException invalidOwner) {
+            return "";
+        }
+        if (provider == StorageProviderType.SQLITE && (owner.isEmpty() || owner.equals(serverId))) {
+            return serverId;
+        }
+        if (provider == StorageProviderType.MYSQL && !"default".equals(owner)) {
+            return owner;
+        }
+        return "";
+    }
+
+    String linkingGuild() {
+        return linkingSettings(config()).guild();
     }
 
     private ConnectionSettings appliedConnectionSettings;
@@ -158,13 +232,19 @@ public final class DiscordService implements DiscordOutbox {
         if (!desired.equals(appliedConnectionSettings)) {
             stop(false);
             start();
-        } else if (gateway != null) {
-            updatePresence();
+        } else {
+            if (gateway != null) {
+                updatePresence();
+            }
+            scheduleLinkRegistration();
+            configureTicketRooms();
         }
     }
 
     public synchronized void start() {
         DiscordConfigHandler.Config config = config();
+        scheduleLinkRegistration();
+        configureTicketRooms();
         if (config == null || !isEnabled()) {
             state = DiscordConnectionState.DISABLED;
             lastError = describeWhyDisabled(config);
@@ -226,7 +306,7 @@ public final class DiscordService implements DiscordOutbox {
         queue.start();
 
         DiscordGatewayClient client = new DiscordGatewayClient(() -> connectionToken, restClient, debugLogger,
-                new GatewayListener(), pool);
+                new GatewayListener(connectionToken), pool);
         gateway = client;
         state = DiscordConnectionState.CONNECTING;
         lastError = null;
@@ -378,8 +458,263 @@ public final class DiscordService implements DiscordOutbox {
         return command.toString();
     }
 
+    private boolean isConfiguredLinkOwner(DiscordConfigHandler.Config config, StorageService storage) {
+        return config != null && storage != null && storage.context().serverId().equals(
+                configuredLinkOwner(config, StorageProviderType.parse(storage.config().provider), storage.context().serverId()));
+    }
+
+    private void scheduleLinkRegistration() {
+        StorageService storage = services == null ? null : services.getStorageService();
+        if (!isConfiguredLinkOwner(config(), storage) || services.getTaskScheduler() == null || services.isStopping()) {
+            return;
+        }
+        services.getTaskScheduler().scheduleRaw(() -> {
+            synchronized (linkRegistrationLock) {
+                reconcileLinkRegistration(storage);
+            }
+        }, 0, TimeUnit.MILLISECONDS);
+    }
+
+    private void reconcileLinkRegistration(StorageService storage) {
+        DiscordConfigHandler.Config config = config();
+        if (services.isStopping() || !isConfiguredLinkOwner(config, storage)) {
+            return;
+        }
+        boolean remove = !linkingEnabled(config);
+        LinkingSettings settings = linkingSettings(config);
+        LinkGateway ready = linkGateway;
+        String configuredToken = token();
+        if (!remove && (!settings.owner() || ready == null || !ready.token().equals(configuredToken)
+                || !DiscordConfigHandler.isGuildId(ready.application()))) {
+            return;
+        }
+        var owner = new DiscordLinkRegistration.Owner(storage.context().networkId(), storage.context().serverId());
+        var path = services.getPlatformAdapter().getConfig().resolveConfigPath("paradigm/data/discord-link-command.json");
+        if (remove && !linkRegistrationVerified && Files.notExists(path)) {
+            return;
+        }
+        var registration = new DiscordLinkRegistration(path);
+        // The HTTP client used for this operation must survive a Gateway stop during config apply.
+        var client = new DiscordRestClient(() -> configuredToken, rateLimiter, services.getDebugLogger(), null);
+        try {
+            if (remove) {
+                BooleanSupplier stillOwner = () -> !services.isStopping() && !linkingEnabled(config())
+                        && isConfiguredLinkOwner(config(), storage) && configuredToken.equals(token());
+                if (registration.remove(client, owner, stillOwner)) {
+                    linkRegistrationVerified = false;
+                    linkRegistrationWarning = null;
+                } else if (linkRegistrationVerified && stillOwner.getAsBoolean()) {
+                    reportLinkRegistrationFailure(true, "The saved /link registration receipt is missing");
+                }
+            } else if (registration.register(client, owner, settings.guild(), ready.application(), () -> !services.isStopping()
+                    && ready == linkGateway && settings.equals(linkingSettings(config())) && configuredToken.equals(token()))) {
+                linkRegistrationVerified = true;
+                linkRegistrationWarning = null;
+            }
+        } catch (IOException | DiscordRestClient.DiscordApiException failure) {
+            String detail = failure instanceof DiscordRestClient.DiscordApiException api
+                    ? (api.status() > 0 ? "Discord HTTP " + api.status() : "Discord did not confirm the request")
+                    : failure.getMessage();
+            reportLinkRegistrationFailure(remove, detail);
+        }
+    }
+
+    private void reportLinkRegistrationFailure(boolean remove, String detail) {
+        String warning = "Could not confirm /link " + (remove ? "removal" : "registration")
+                + ". " + detail + ". See the README for manual recovery.";
+        if (!warning.equals(linkRegistrationWarning) && services.getLogger() != null) {
+            services.getLogger().warn("[Discord] {}", warning);
+        }
+        linkRegistrationWarning = warning;
+    }
+
+    private DiscordTicketRooms.Settings ticketRoomSettings() {
+        DiscordConfigHandler.Config config = config();
+        LinkingSettings linking = linkingSettings(config);
+        if (!linking.owner()) {
+            return null;
+        }
+        DiscordConfigHandler.validateTicketRooms(config);
+        return new DiscordTicketRooms.Settings(linking.guild(), config.ticketCategoryId.get(),
+                config.ticketStaffRoleIds.get().stream().distinct().sorted().toList(), config.ticketChannelNameTemplate.get(),
+                Boolean.TRUE.equals(config.ticketRoomsEnabled.get()));
+    }
+
+    private void configureTicketRooms() {
+        if (services == null || services.getTaskScheduler() == null) {
+            return;
+        }
+        DiscordTicketRooms.Settings settings;
+        try {
+            settings = ticketRoomSettings();
+        } catch (IllegalArgumentException invalid) {
+            settings = null;
+            warnTicketRoom(invalid.getMessage());
+        }
+        if (settings == null) {
+            if (ticketRoomTask != null) {
+                ticketRoomTask.cancel(false);
+                ticketRoomTask = null;
+            }
+            ticketRoomRun = null;
+            return;
+        }
+        TicketRoomRun previous = ticketRoomRun;
+        if (previous == null || !previous.settings().equals(settings)) {
+            boolean sameGuild = previous != null && previous.settings().guild().equals(settings.guild());
+            boolean newlyEnabled = sameGuild && !previous.settings().admits() && settings.admits();
+            long since = sameGuild && !newlyEnabled ? previous.since() : System.currentTimeMillis();
+            boolean advance = newlyEnabled || (sameGuild && previous.advanceFloor());
+            ticketRoomRun = new TicketRoomRun(settings, since, advance);
+        }
+        if (ticketRoomTask == null || ticketRoomTask.isDone()) {
+            ticketRoomTask = services.getTaskScheduler().scheduleAtFixedRateRaw(this::sweepTicketRooms, 0, 4, TimeUnit.SECONDS);
+        }
+    }
+
+    private void sweepTicketRooms() {
+        synchronized (ticketRoomLock) {
+            TicketRoomRun run = ticketRoomRun;
+            if (run == null || services.isStopping()) {
+                return;
+            }
+            StorageService storage = services.getStorageService();
+            if (!storage.isSqlActive()) {
+                if (run.settings().admits()) {
+                    warnTicketRoom("Discord ticket rooms require active SQL storage.");
+                }
+                return;
+            }
+            try {
+                DiscordTicketRoomStore store = storage.discordTicketRooms();
+                if (run.settings().admits()) {
+                    if (run.advanceFloor()) {
+                        store.advanceFloor(run.settings().guild(), run.since());
+                    }
+                } else if (!store.hasState(run.settings().guild())) {
+                    return;
+                }
+                DiscordRestClient client = rest;
+                String bot = botUserId;
+                if (client == null || !DiscordConfigHandler.isGuildId(bot)) {
+                    // Keep the admission window durable even while Discord is unavailable.
+                    if (run.settings().admits()) {
+                        store.discover(run.settings().guild(), run.since());
+                    } else {
+                        store.pause(run.settings().guild());
+                    }
+                    return;
+                }
+                new DiscordTicketRooms(store, storage.discordAccountLinks(), client, ticket ->
+                        storage.servers().getServer(ticket.originServerId())
+                                .filter(identity -> ticket.networkId().equals(identity.networkId()))
+                                .map(identity -> identity.serverName())
+                                .orElse(ticket.originServerId() == null ? "unknown" : ticket.originServerId()),
+                        this::warnTicketRoom).sweep(run.settings(), bot, run.since(),
+                        () -> !services.isStopping() && ticketRoomRun == run && rest == client
+                                && linkingSettings(config()).owner() && run.settings().equals(ticketRoomSettings()));
+            } catch (RuntimeException failure) {
+                warnTicketRoom("Discord ticket-room reconciliation failed (" + failure.getClass().getSimpleName() + ").");
+            }
+        }
+    }
+
+    private void warnTicketRoom(String warning) {
+        if (!warning.equals(ticketRoomWarning) && services.getLogger() != null) {
+            services.getLogger().warn("[Discord] {}", warning);
+        }
+        ticketRoomWarning = warning;
+    }
+
+    static String linkModalPayload() {
+        JsonObject input = new JsonObject();
+        input.addProperty("type", 4);
+        input.addProperty("custom_id", DiscordInteraction.LINK_CODE_FIELD);
+        input.addProperty("style", 1);
+        input.addProperty("required", true);
+        input.addProperty("min_length", DiscordAccountLinks.CODE_LENGTH);
+        input.addProperty("max_length", DiscordAccountLinks.CODE_LENGTH);
+        JsonObject label = new JsonObject();
+        label.addProperty("type", 18);
+        label.addProperty("label", "Minecraft link code");
+        label.add("component", input);
+        JsonArray components = new JsonArray();
+        components.add(label);
+        JsonObject data = new JsonObject();
+        data.addProperty("custom_id", DiscordInteraction.LINK_MODAL_ID);
+        data.addProperty("title", "Link your Minecraft account");
+        data.add("components", components);
+        JsonObject response = new JsonObject();
+        response.addProperty("type", 9);
+        response.add("data", data);
+        return response.toString();
+    }
+
+    private void handleLinkInteraction(DiscordInteraction interaction) {
+        LinkingSettings settings = linkingSettings(config());
+        DiscordRestClient client = rest;
+        String application = applicationId;
+        ExecutorService worker = interactionExecutor;
+        if (!settings.accepts(interaction) || client == null || application == null || worker == null) {
+            return;
+        }
+        worker.execute(() -> {
+            if (!canHandleLink(settings, client, interaction)) {
+                return;
+            }
+            if (interaction.isSubmit()) {
+                sendInteractionResponse(client, interaction, linkModalPayload());
+                return;
+            }
+            // Acknowledge within Discord's deadline even if the shared database is slow.
+            JsonObject deferred = new JsonObject();
+            deferred.addProperty("type", 5);
+            JsonObject ephemeral = new JsonObject();
+            ephemeral.addProperty("flags", 64);
+            deferred.add("data", ephemeral);
+            if (!sendInteractionResponse(client, interaction, deferred.toString())) {
+                return;
+            }
+            services.getStorageService().withDiscordAccountLinksAsync(links ->
+                    canHandleLink(settings, client, interaction)
+                            ? links.claim(interaction.authorId(), settings.guild(), interaction.modalCode())
+                            : null)
+                    .whenCompleteAsync((claim, failure) -> {
+                        String message;
+                        if (failure != null || claim == null) {
+                            message = "Account linking is currently unavailable. Check your link status in Minecraft before retrying.";
+                            if (failure != null) {
+                                services.getDebugLogger().debugLog("[Discord] Link claim could not be confirmed ("
+                                        + failure.getClass().getSimpleName() + ").");
+                            }
+                        } else {
+                            message = switch (claim) {
+                                case LINKED -> "Your Minecraft and Discord accounts are linked.";
+                                case INVALID_CODE -> "That code is invalid or expired. Request a new one in Minecraft.";
+                                case ALREADY_LINKED -> "An account is already linked. Check your link status in Minecraft.";
+                                case RATE_LIMITED -> "Too many attempts. Try again in a minute.";
+                            };
+                        }
+                        JsonObject data = new JsonObject();
+                        data.addProperty("content", message);
+                        DiscordRestClient.Result result = client.editInteractionResponse(application, interaction.token(), data.toString());
+                        if (!result.success()) {
+                            services.getDebugLogger().debugLog("[Discord] Could not update the /link response (HTTP " + result.status() + ").");
+                        }
+                    }, worker);
+        });
+    }
+
+    private boolean canHandleLink(LinkingSettings settings, DiscordRestClient client, DiscordInteraction interaction) {
+        return client == rest && !services.isStopping() && settings.equals(linkingSettings(config())) && settings.accepts(interaction);
+    }
+
     private void handleInteraction(DiscordInteraction interaction) {
-        if (!CONSOLE_COMMAND_NAME.equals(interaction.commandName())) {
+        if (LINK_COMMAND_NAME.equals(interaction.commandName()) || interaction.isLinkModal()) {
+            handleLinkInteraction(interaction);
+            return;
+        }
+        if (!CONSOLE_COMMAND_NAME.equals(interaction.commandName()) || (!interaction.isSubmit() && !interaction.isAutocomplete())) {
             return;
         }
         if (!relay.ownsConsoleChannel(interaction.channelId())) {
@@ -469,6 +804,10 @@ public final class DiscordService implements DiscordOutbox {
                     + ": no REST client available.");
             return;
         }
+        sendInteractionResponse(restClient, interaction, payloadJson);
+    }
+
+    private boolean sendInteractionResponse(DiscordRestClient restClient, DiscordInteraction interaction, String payloadJson) {
         long startNanos = System.nanoTime();
         DiscordRestClient.Result result = restClient.respondToInteraction(interaction.id(), interaction.token(),
                 payloadJson);
@@ -476,6 +815,7 @@ public final class DiscordService implements DiscordOutbox {
         services.getDebugLogger().debugLog("[Discord] Interaction response for " + interaction.id()
                 + " success=" + result.success() + " status=" + result.status() + " restMs=" + restMs
                 + (result.success() ? "" : " error=" + result.errorMessage()));
+        return result.success();
     }
 
     private void drainAndStopConsoleRelay() {
@@ -495,10 +835,16 @@ public final class DiscordService implements DiscordOutbox {
     }
 
     public synchronized void shutdown() {
+        if (ticketRoomTask != null) {
+            ticketRoomTask.cancel(false);
+            ticketRoomTask = null;
+        }
+        ticketRoomRun = null;
         stop(true);
     }
 
     private void stop(boolean notifyServerStopping) {
+        linkGateway = null;
         DiscordDispatcher queue = dispatcher;
         DiscordGatewayClient client = gateway;
         ScheduledExecutorService pool = executor;
@@ -873,6 +1219,23 @@ public final class DiscordService implements DiscordOutbox {
                 List.of());
 
         List<String> warnings = buildWarnings(config, status);
+        String roomWarning = ticketRoomWarning;
+        if (roomWarning != null) {
+            warnings.add(roomWarning);
+        }
+        String registrationWarning = linkRegistrationWarning;
+        if (registrationWarning != null) {
+            warnings.add(registrationWarning);
+        }
+        if (config != null && Boolean.TRUE.equals(config.enabled.get()) && Boolean.TRUE.equals(config.linkingEnabled.get())) {
+            StorageService storage = services == null ? null : services.getStorageService();
+            if (storage == null || !storage.isSqlActive()) {
+                warnings.add("Discord account linking requires active SQLite or shared MariaDB storage.");
+            }
+            if (linkingSettings(config).guild().isEmpty()) {
+                warnings.add("Discord account linking requires a guild ID and, on shared storage, the owner's stable server ID.");
+            }
+        }
         String webhookProblem = webhookUnavailable;
         if (webhookProblem != null && config != null && Boolean.TRUE.equals(config.webhookEnabled.get())) {
             warnings.add("Webhook chat mode is enabled but no webhook is available, so chat is relayed under the "
@@ -920,6 +1283,9 @@ public final class DiscordService implements DiscordOutbox {
             return "No Discord bot token is configured.";
         }
         if (!anyChannelConfigured(config)) {
+            if (!linkingSettings(config).guild().isEmpty()) {
+                return null; // A code-issuing server does not need a gateway for linking.
+            }
             return "No Discord channel ID is configured.";
         }
         return null;
@@ -930,11 +1296,18 @@ public final class DiscordService implements DiscordOutbox {
     }
 
     private final class GatewayListener implements DiscordGatewayClient.Listener {
+        private final String connectionToken;
+
+        private GatewayListener(String connectionToken) {
+            this.connectionToken = connectionToken;
+        }
+
         @Override
         public void onReady(String userId, String username, String application) {
             botUserId = userId;
             botUsername = username;
             applicationId = application;
+            linkGateway = new LinkGateway(connectionToken, application);
             connectedSinceMs = System.currentTimeMillis();
             schedulePresence();
 
@@ -942,6 +1315,7 @@ public final class DiscordService implements DiscordOutbox {
             DiscordRestClient restClient = rest;
             if (cfg != null && restClient != null) {
                 runOnHttpExecutor(() -> reconcileConsoleSlashCommand(cfg, restClient));
+                scheduleLinkRegistration();
             }
         }
 

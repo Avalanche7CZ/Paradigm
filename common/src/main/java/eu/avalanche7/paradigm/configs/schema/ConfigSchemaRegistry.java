@@ -52,7 +52,7 @@ public class ConfigSchemaRegistry {
                 new ConfigCategory("afk", "AFK", "Automatic AFK detection, timeout, and broadcast settings."),
                 new ConfigCategory("storage", "Storage", "Read-only data provider status and masked storage settings."),
                 new ConfigCategory("dashboard", "Dashboard", "Local dashboard settings from dashboard.json."),
-                new ConfigCategory("discord", "Discord", "Discord relay, notification, and formatting settings from discord.json."),
+                new ConfigCategory("discord", "Discord", "Discord relay, notifications, account linking, and private ticket rooms from discord.json."),
                 new ConfigCategory("admin_utilities", "Admin Utilities", "Admin and moderation utility command toggles from main.json."),
                 new ConfigCategory("custom_commands", "Custom Commands", "Read-only custom command summary from config/paradigm/commands.")
         );
@@ -735,7 +735,8 @@ public class ConfigSchemaRegistry {
         if (name.equals("adminUtilityCommandsEnable") || name.equals("moderationCommandsEnable")) {
             return "admin_utilities";
         }
-        if (name.equals("homeCommandsEnable") || name.equals("tpaCommandsEnable") || name.equals("warpCommandsEnable") || name.equals("spawnCommandsEnable")) {
+        if (name.equals("homeCommandsEnable") || name.equals("tpaCommandsEnable") || name.equals("warpCommandsEnable") || name.equals("spawnCommandsEnable")
+                || name.equals("spawnOnFirstJoin") || name.equals("spawnOnDeathFallback")) {
             return "teleports";
         }
         if (entry != null && entry.value instanceof Boolean && isCommandGroupToggle(name)) {

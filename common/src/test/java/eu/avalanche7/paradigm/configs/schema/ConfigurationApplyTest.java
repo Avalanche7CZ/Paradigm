@@ -563,6 +563,76 @@ class ConfigurationApplyTest {
         assertSame(before, connection.get(discord));
     }
 
+    @Test
+    void discordLinkingSettingsUseTheStandardPatchAndReloadFlow() throws Exception {
+        var discord = services.getDiscordService();
+        discord.start();
+        var connection = discord.getClass().getDeclaredField("appliedConnectionSettings");
+        connection.setAccessible(true);
+        var fields = dashboard.schemaRegistry().snapshot().fields();
+        assertTrue(fields.stream().anyMatch(field -> field.key().equals("discord.linkingEnabled")));
+        assertTrue(fields.stream().anyMatch(field -> field.key().equals("discord.linkingOwnerServerId")));
+        var invalid = finish(CompletableFuture.supplyAsync(() -> dashboard.patchService().apply(patch("discord.linkingEnabled", true))));
+        assertFalse(invalid.ok());
+        assertFalse(DiscordConfigHandler.getConfig().linkingEnabled.get());
+
+        var patch = new ConfigPatch(dashboard.schemaRegistry().snapshot().revision(), List.of(
+                new ConfigPatchOperation("discord.guildId", "100000000000000001"),
+                new ConfigPatchOperation("discord.linkingEnabled", true),
+                new ConfigPatchOperation("discord.linkingOwnerServerId", " Hub-01 ")));
+        var enabled = finish(CompletableFuture.supplyAsync(() -> dashboard.patchService().apply(patch)));
+        assertTrue(enabled.ok(), enabled.rejected().toString());
+        assertTrue(DiscordConfigHandler.getConfig().linkingEnabled.get());
+        assertEquals("hub-01", DiscordConfigHandler.getConfig().linkingOwnerServerId.get());
+
+        Object before = connection.get(discord);
+        var changed = finish(CompletableFuture.supplyAsync(() -> dashboard.patchService().apply(patch("discord.linkingOwnerServerId", "hub-02"))));
+        assertTrue(changed.ok(), changed.rejected().toString());
+        assertSame(before, connection.get(discord));
+        var reloaded = finish(services.getConfigApplyService().reload(Set.of(ConfigSection.DISCORD)));
+        assertTrue(reloaded.ok(), reloaded.rejected().toString());
+        assertSame(before, connection.get(discord));
+        assertEquals("hub-02", DiscordConfigHandler.getConfig().linkingOwnerServerId.get());
+    }
+
+    @Test
+    void disablingLinkingSchedulesCleanupWithoutAnyGatewayOrRelayChannel() throws Exception {
+        storage.config().provider = "sqlite";
+        var discord = services.getDiscordService();
+        var config = DiscordConfigHandler.getConfig();
+        config.enabled.value = true;
+        config.linkingEnabled.value = true;
+        config.guildId.value = "100000000000000001";
+        scheduler.captureRaw = true;
+
+        Path receipt = root.resolve("paradigm/data/discord-link-command.json");
+        Files.createDirectories(receipt.getParent());
+        Files.writeString(receipt, """
+                {"owner":{"network":"%s","server":"%s"},"guild":"100000000000000001",
+                 "application":"100000000000000002","id":"100000000000000003","version":"100000000000000004"}
+                """.formatted(storage.context().networkId(), storage.context().serverId()));
+
+        discord.start();
+        var startTask = scheduler.raw.poll();
+        assertNotNull(startTask);
+        startTask.run();
+        assertFalse(discord.isEnabled());
+
+        // No bot token is installed in this fixture. Cleanup reaches the REST client and
+        // reports the failure without contacting Discord or discarding the receipt.
+        config.linkingEnabled.value = false;
+        discord.applyConfiguration();
+        var cleanup = scheduler.raw.poll();
+        assertNotNull(cleanup);
+        cleanup.run();
+        assertTrue(discord.status().warnings().stream().anyMatch(message -> message.contains("Could not confirm /link removal")));
+        assertTrue(Files.exists(receipt));
+
+        config.linkingOwnerServerId.value = "different-server";
+        discord.applyConfiguration();
+        assertTrue(scheduler.raw.isEmpty());
+    }
+
     private void assertTabDiskConflict(ConfigValidationResult result) {
         assertFalse(result.ok());
         assertTrue(result.accepted().isEmpty());
@@ -634,6 +704,8 @@ class ConfigurationApplyTest {
 
     private static final class CountingScheduler extends TaskScheduler {
         private final List<Timer> timers = new ArrayList<>();
+        private final BlockingQueue<Runnable> raw = new LinkedBlockingQueue<>();
+        private boolean captureRaw;
 
         CountingScheduler() { super(new DebugLogger(null)); }
 
@@ -646,6 +718,12 @@ class ConfigurationApplyTest {
         }
 
         @Override public ScheduledFuture<?> schedule(Runnable task, long delay, TimeUnit unit) { return new Timer(); }
+
+        @Override public ScheduledFuture<?> scheduleRaw(Runnable task, long delay, TimeUnit unit) {
+            if (!captureRaw) return super.scheduleRaw(task, delay, unit);
+            raw.add(task);
+            return new Timer();
+        }
     }
 
     private static final class Timer implements ScheduledFuture<Object> {

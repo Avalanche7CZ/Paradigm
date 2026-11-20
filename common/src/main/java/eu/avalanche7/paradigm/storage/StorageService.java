@@ -13,6 +13,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
@@ -23,6 +24,8 @@ import eu.avalanche7.paradigm.data.ModerationDataStore;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.data.WarpStore;
 import eu.avalanche7.paradigm.modules.audit.AuditRepository;
+import eu.avalanche7.paradigm.modules.discord.DiscordAccountLinks;
+import eu.avalanche7.paradigm.modules.discord.DiscordTicketRoomStore;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
 import eu.avalanche7.paradigm.storage.identity.ServerIdentityService;
@@ -527,6 +530,26 @@ public class StorageService implements AutoCloseable {
         if (!isMysqlActive()) throw new StorageException("Cross-server Dashboard login requires active shared MySQL/MariaDB storage.");
         return requireProvider().dashboardLogins();
     }
+    public DiscordTicketRoomStore discordTicketRooms() {
+        StorageProvider provider = activeProvider;
+        if (!(provider instanceof SqlStorageProvider sql)) {
+            throw new StorageException("Discord ticket rooms require active SQL storage.");
+        }
+        return sql.discordTicketRooms();
+    }
+
+    public DiscordAccountLinks discordAccountLinks() {
+        StorageProvider provider = activeProvider;
+        if (!(provider instanceof SqlStorageProvider sql)) {
+            throw new StorageException("Discord account linking requires active SQL storage.");
+        }
+        return sql.discordAccountLinks();
+    }
+
+    public <T> CompletableFuture<T> withDiscordAccountLinksAsync(Function<DiscordAccountLinks, T> action) {
+        return submitStorageTask(() -> action.apply(discordAccountLinks()));
+    }
+
     public StorageContext context() { return context; }
     public StorageConfig config() { return config; }
 

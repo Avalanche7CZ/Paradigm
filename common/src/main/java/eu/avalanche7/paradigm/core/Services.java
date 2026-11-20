@@ -19,6 +19,7 @@ import eu.avalanche7.paradigm.modules.actions.ConditionRegistry;
 import eu.avalanche7.paradigm.modules.actions.PlayerInputService;
 import eu.avalanche7.paradigm.modules.audit.AuditService;
 import eu.avalanche7.paradigm.modules.chat.ChatFormatter;
+import eu.avalanche7.paradigm.modules.commands.AutomaticSpawnPlacement;
 import eu.avalanche7.paradigm.modules.dashboard.customcommands.CustomCommandAdminService;
 import eu.avalanche7.paradigm.modules.discord.DiscordService;
 import eu.avalanche7.paradigm.modules.holograms.HologramService;
@@ -73,6 +74,12 @@ public class Services {
     private volatile PlayerMessenger playerMessenger;
     private volatile ChatFormatter chatFormatter;
     private volatile ParadigmEvents paradigmEvents;
+    private final AutomaticSpawnPlacement automaticSpawnPlacement = new AutomaticSpawnPlacement(this);
+
+    public AutomaticSpawnPlacement getAutomaticSpawnPlacement() {
+        return automaticSpawnPlacement;
+    }
+
     private volatile DiscordService discordService;
     private volatile eu.avalanche7.paradigm.modules.network.ManagedConfigSyncService managedConfigSyncService;
     private volatile eu.avalanche7.paradigm.modules.network.ServerHeartbeatPublisher serverHeartbeatPublisher;
