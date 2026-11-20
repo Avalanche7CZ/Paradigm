@@ -9,6 +9,8 @@ public record TicketWriteResult(Status status, Ticket ticket, Long cooldownRemai
         ALREADY_CLAIMED,
         LIMIT_REACHED,
         COOLDOWN,
+        DUPLICATE_REPLY,
+        PERMISSION_DENIED,
         UNSUPPORTED
     }
 

@@ -7,7 +7,7 @@ import java.util.regex.Pattern;
 public final class TicketIds {
 
     private static final Pattern KEY_PATTERN = Pattern.compile("T-\\d{1,18}");
-    private static final Pattern RECORD_PATTERN = Pattern.compile("(?:TK|TM|TE)-[A-F0-9]{32}");
+    private static final Pattern RECORD_PATTERN = Pattern.compile("(?:(?:TK|TM|TE)-[A-F0-9]{32}|TD-[0-9]{5,25})");
 
     private TicketIds() {
     }
@@ -43,6 +43,13 @@ public final class TicketIds {
 
     public static String messageId() {
         return "TM-" + randomHex();
+    }
+
+    public static String discordReplyId(String discordMessageId) {
+        if (discordMessageId == null || !discordMessageId.matches("[0-9]{5,25}")) {
+            throw new IllegalArgumentException("Invalid Discord message ID.");
+        }
+        return "TD-" + discordMessageId;
     }
 
     public static String eventId() {

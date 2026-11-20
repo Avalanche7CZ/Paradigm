@@ -19,6 +19,10 @@ final class LuckPermsPublicApiBridge {
     static Boolean query(UUID playerUuid, String permission, PermissionContextSet context) {
         var user = LuckPermsProvider.get().getUserManager().getUser(playerUuid);
         if (user == null) return null;
+        return query(user, permission, context);
+    }
+
+    static Boolean query(net.luckperms.api.model.user.User user, String permission, PermissionContextSet context) {
         ImmutableContextSet.Builder contexts = ImmutableContextSet.builder();
         context.asMap().forEach(contexts::add);
         QueryOptions options = QueryOptions.contextual(contexts.build());

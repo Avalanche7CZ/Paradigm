@@ -16,7 +16,6 @@ import eu.avalanche7.paradigm.modules.discord.client.DiscordRestClient;
 import eu.avalanche7.paradigm.modules.discord.client.DiscordRestClient.DiscordApiException;
 import eu.avalanche7.paradigm.utils.AtomicFileIO;
 
-/** Local proof of a guild command created by this server. Account links still live in SQL. */
 final class DiscordLinkRegistration {
     private static final String COMMAND = DiscordService.LINK_COMMAND_NAME;
     private static final Gson GSON = new Gson();

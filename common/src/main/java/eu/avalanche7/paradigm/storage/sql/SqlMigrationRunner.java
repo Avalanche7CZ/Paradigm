@@ -326,6 +326,7 @@ public class SqlMigrationRunner implements MigrationRunner {
                 case 25 -> "permission_default_group";
                 case 26 -> "discord_account_links";
                 case 27 -> "discord_ticket_rooms";
+                case 28 -> "discord_ticket_replies";
                 default -> "migration";
             } + ".sql";
             String sql = resourceText(resource);

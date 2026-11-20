@@ -160,13 +160,11 @@ final class DiscordTicketRooms {
             return;
         }
         if (room.possibleUser() != null && !Objects.equals(room.possibleUser(), player) && !bot.equals(room.possibleUser())) {
-            // Revoke the previous member independently, even if a new user or staff role is invalid.
             rest.removeChannelOverwrite(room.channelId(), room.possibleUser());
         }
         if (!current.getAsBoolean()) {
             return;
         }
-        // Remember the potential grant before writing. An ambiguous PATCH must still be revocable.
         store.recordPossibleAccess(room.ticketId(), player);
         if (!current.getAsBoolean()) {
             return;
@@ -178,7 +176,8 @@ final class DiscordTicketRooms {
         }
         JsonObject opening = new JsonObject();
         opening.addProperty("content", "Minecraft ticket " + ticket.ticketKey() + " · Category: " + ticket.category()
-                + " · Server: " + originatingServer.apply(ticket) + "\nReplies here do not sync to Minecraft yet.");
+                + " · Server: " + originatingServer.apply(ticket)
+                + "\nText replies sync with Minecraft. Link your Minecraft account before replying here.");
         JsonObject mentions = new JsonObject();
         mentions.add("parse", new JsonArray());
         opening.add("allowed_mentions", mentions);

@@ -7,9 +7,9 @@ import java.util.UUID;
 
 import eu.avalanche7.paradigm.modules.tickets.SqlTicketRepository;
 import eu.avalanche7.paradigm.modules.tickets.Ticket;
+import eu.avalanche7.paradigm.modules.tickets.TicketIds;
 import eu.avalanche7.paradigm.storage.sql.SqlExecutor;
 
-/** Durable provisioning and access state for guild rooms. The ticket itself stays in TicketService storage. */
 public final class DiscordTicketRoomStore {
     private static final int BATCH_SIZE = 12;
     private final SqlExecutor sql;
@@ -24,8 +24,117 @@ public final class DiscordTicketRoomStore {
 
     record Room(String ticketId, String channelId, String marker, String phase, boolean openingPending, String possibleUser) {}
 
+    record Reply(String id, String channel, String author, String text, int offset) {}
+
     Optional<Ticket> ticket(String ticketId) {
         return tickets.findById(network, ticketId);
+    }
+
+    Optional<String> boundTicket(String guild, String channel) {
+        return sql.query("""
+                SELECT ticket_id FROM discord_ticket_rooms
+                WHERE guild_id = ? AND channel_id = ? AND network_id = ? AND phase = 'BOUND'
+                """, stmt -> {
+            stmt.setString(1, guild);
+            stmt.setString(2, channel);
+            stmt.setString(3, network);
+        }, rs -> rs.next() ? Optional.of(rs.getString(1)) : Optional.empty());
+    }
+
+    boolean handledReply(String ticket, String discordMessage) {
+        return tickets.hasDiscordReplyOutcome(network, ticket, TicketIds.discordReplyId(discordMessage));
+    }
+
+    boolean rejectReply(String ticket, String discordMessage) {
+        return tickets.rejectDiscordReply(network, ticket, TicketIds.discordReplyId(discordMessage));
+    }
+
+    List<Reply> repliesToDeliver(String guild, String roles, long now) {
+        return sql.query("""
+                SELECT m.message_id, r.channel_id, m.author_name, m.message_text, COALESCE(d.next_offset, 0)
+                FROM discord_ticket_rooms r
+                JOIN tickets t ON t.network_id = r.network_id AND t.ticket_id = r.ticket_id
+                JOIN ticket_messages m ON m.network_id = r.network_id AND m.ticket_id = r.ticket_id
+                LEFT JOIN discord_account_links l ON l.network_id = r.network_id AND l.player_uuid = LOWER(t.creator_uuid)
+                LEFT JOIN discord_ticket_reply_delivery d ON d.network_id = m.network_id AND d.message_id = m.message_id
+                WHERE r.network_id = ? AND r.guild_id = ? AND r.phase = 'BOUND'
+                    AND r.opening_pending = 0 AND r.applied_writable IS NOT NULL
+                    AND r.applied_roles = ? AND COALESCE(r.applied_user, '') = COALESCE(l.discord_id, '')
+                    AND m.author_type IN ('PLAYER', 'STAFF') AND m.message_id NOT LIKE 'TD-%'
+                    AND (d.message_id IS NULL OR (d.phase = 'READY' AND d.retry_at_ms <= ?))
+                ORDER BY m.created_at_ms, m.message_id LIMIT ?
+                """, stmt -> {
+            stmt.setString(1, network);
+            stmt.setString(2, guild);
+            stmt.setString(3, roles);
+            stmt.setLong(4, now);
+            stmt.setInt(5, BATCH_SIZE);
+        }, rs -> {
+            var replies = new ArrayList<Reply>();
+            while (rs.next()) {
+                replies.add(new Reply(rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getInt(5)));
+            }
+            return replies;
+        });
+    }
+
+    boolean claimReply(String guild, String roles, Reply reply) {
+        sql.update(insert("discord_ticket_reply_delivery", "network_id, message_id, guild_id", "?, ?, ?",
+                "network_id, message_id"), stmt -> {
+            stmt.setString(1, network);
+            stmt.setString(2, reply.id());
+            stmt.setString(3, guild);
+        });
+        return sql.update("""
+                UPDATE discord_ticket_reply_delivery SET phase = 'SENDING'
+                WHERE network_id = ? AND message_id = ? AND guild_id = ? AND phase = 'READY'
+                    AND next_offset = ? AND retry_at_ms <= ?
+                    AND EXISTS (
+                        SELECT 1 FROM discord_ticket_rooms r
+                        JOIN tickets t ON t.network_id = r.network_id AND t.ticket_id = r.ticket_id
+                        JOIN ticket_messages m ON m.network_id = r.network_id AND m.ticket_id = r.ticket_id
+                        LEFT JOIN discord_account_links l ON l.network_id = r.network_id AND l.player_uuid = LOWER(t.creator_uuid)
+                        WHERE r.network_id = ? AND r.guild_id = ? AND r.channel_id = ? AND r.phase = 'BOUND'
+                            AND m.message_id = ? AND r.applied_roles = ? AND r.applied_writable IS NOT NULL
+                            AND COALESCE(r.applied_user, '') = COALESCE(l.discord_id, '')
+                    )
+                """, stmt -> {
+            stmt.setString(1, network);
+            stmt.setString(2, reply.id());
+            stmt.setString(3, guild);
+            stmt.setInt(4, reply.offset());
+            stmt.setLong(5, System.currentTimeMillis());
+            stmt.setString(6, network);
+            stmt.setString(7, guild);
+            stmt.setString(8, reply.channel());
+            stmt.setString(9, reply.id());
+            stmt.setString(10, roles);
+        }) == 1;
+    }
+
+    void finishReply(Reply reply, String phase, int nextOffset, long retryAt) {
+        sql.update("""
+                UPDATE discord_ticket_reply_delivery SET phase = ?, next_offset = ?, retry_at_ms = ?
+                WHERE network_id = ? AND message_id = ? AND phase = 'SENDING' AND next_offset = ?
+                """, stmt -> {
+            stmt.setString(1, phase);
+            stmt.setInt(2, nextOffset);
+            stmt.setLong(3, retryAt);
+            stmt.setString(4, network);
+            stmt.setString(5, reply.id());
+            stmt.setInt(6, reply.offset());
+        });
+    }
+
+    Optional<String> unconfirmedReply(String guild) {
+        return sql.query("""
+                SELECT message_id FROM discord_ticket_reply_delivery
+                WHERE network_id = ? AND guild_id = ? AND phase = 'SENDING'
+                ORDER BY message_id LIMIT 1
+                """, stmt -> {
+            stmt.setString(1, network);
+            stmt.setString(2, guild);
+        }, rs -> rs.next() ? Optional.of(rs.getString(1)) : Optional.empty());
     }
 
     void discover(String guild, long enabledAt) {
@@ -96,7 +205,6 @@ public final class DiscordTicketRoomStore {
             stmt.setString(1, network);
             stmt.setString(2, guild);
         });
-        // Already-issued remote requests still need reconciliation. Unsubmitted rooms need no channel.
         sql.update("UPDATE discord_ticket_rooms SET phase = 'SKIPPED' WHERE network_id = ? AND guild_id = ? AND phase = 'PENDING'", stmt -> {
             stmt.setString(1, network);
             stmt.setString(2, guild);
@@ -163,14 +271,32 @@ public final class DiscordTicketRoomStore {
     }
 
     boolean bind(String ticket, String channelId) {
-        return sql.update("""
-                UPDATE discord_ticket_rooms SET phase = 'BOUND', channel_id = ?, retry_at_ms = 0
-                WHERE network_id = ? AND ticket_id = ? AND phase = 'CREATING'
-                """, stmt -> {
-            stmt.setString(1, channelId);
-            stmt.setString(2, network);
-            stmt.setString(3, ticket);
-        }) == 1;
+        return sql.transaction(() -> {
+            if (!tickets.lockTicket(network, ticket)) {
+                return false;
+            }
+            if (sql.update("""
+                    UPDATE discord_ticket_rooms SET phase = 'BOUND', channel_id = ?, retry_at_ms = 0
+                    WHERE network_id = ? AND ticket_id = ? AND phase = 'CREATING'
+                    """, stmt -> {
+                stmt.setString(1, channelId);
+                stmt.setString(2, network);
+                stmt.setString(3, ticket);
+            }) != 1) {
+                return false;
+            }
+            sql.update("""
+                    INSERT INTO discord_ticket_reply_delivery (network_id, message_id, guild_id, phase)
+                    SELECT m.network_id, m.message_id, r.guild_id, 'SKIPPED'
+                    FROM discord_ticket_rooms r
+                    JOIN ticket_messages m ON m.network_id = r.network_id AND m.ticket_id = r.ticket_id
+                    WHERE r.network_id = ? AND r.ticket_id = ? AND m.author_type IN ('PLAYER', 'STAFF')
+                    """, stmt -> {
+                stmt.setString(1, network);
+                stmt.setString(2, ticket);
+            });
+            return true;
+        });
     }
 
     void applied(String ticket, String user, String roles, boolean writable) {

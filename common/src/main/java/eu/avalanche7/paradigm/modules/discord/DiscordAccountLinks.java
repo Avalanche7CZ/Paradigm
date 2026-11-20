@@ -14,7 +14,6 @@ import java.util.function.Supplier;
 
 import eu.avalanche7.paradigm.storage.sql.SqlExecutor;
 
-/** Network-scoped account links. Minecraft and Discord callers supply their authenticated identities. */
 public final class DiscordAccountLinks {
     private static final String ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
     static final int CODE_LENGTH = 12;
@@ -54,7 +53,6 @@ public final class DiscordAccountLinks {
                 .map(UUID::fromString);
     }
 
-    /** Returns an empty result if the player already has a link. */
     Optional<String> issue(UUID player, String guild) {
         return mutate(() -> {
             if (discordId(player).isPresent()) {
@@ -158,7 +156,6 @@ public final class DiscordAccountLinks {
         if (clock != null) {
             return clock.millis();
         }
-        // Use the shared database clock so issuer and owner need no local clock agreement.
         String query = isSqlite()
                 ? "SELECT CAST((julianday('now') - 2440587.5) * 86400000 AS INTEGER)"
                 : "SELECT CAST(UNIX_TIMESTAMP(CURRENT_TIMESTAMP(3)) * 1000 AS SIGNED)";
@@ -175,8 +172,6 @@ public final class DiscordAccountLinks {
     private <T> T mutate(Supplier<T> operation) {
         var isolation = isSqlite() ? null : java.sql.Connection.TRANSACTION_READ_COMMITTED;
         return sql.transaction(isolation, () -> {
-            // The first write takes the database lock even when the network has no existing rows.
-            // MariaDB retains the exclusive row lock on duplicate-key UPDATE until commit.
             String lock = "INSERT INTO discord_link_networks (network_id) VALUES (?)";
             lock += isSqlite()
                     ? " ON CONFLICT(network_id) DO UPDATE SET network_id = excluded.network_id"

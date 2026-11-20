@@ -612,6 +612,24 @@ public class PermissionsHandler {
         return permission != null && hasPermission(playerUuid, permission.node(), permission.fallbackLevel());
     }
 
+    public boolean hasOfflinePermission(UUID uuid, PermissionDefinition permission) {
+        var context = permissionContextResolver.currentServer();
+        if (isLuckPermsAvailable()) {
+            var users = net.luckperms.api.LuckPermsProvider.get().getUserManager();
+            var user = users.getUser(uuid);
+            if (user == null) {
+                user = users.loadUser(uuid).copy().orTimeout(4, java.util.concurrent.TimeUnit.SECONDS).join();
+            }
+            Boolean defined = LuckPermsPublicApiBridge.query(user, permission.node(), context);
+            if (defined != null) return defined;
+        }
+        if (isInternalPermissionsEnabled()) {
+            Boolean defined = internalPermissionApi.hasPermission(uuid, permission.node(), context);
+            if (defined != null) return defined;
+        }
+        return permission.fallbackLevel() == 0;
+    }
+
     public boolean hasPermission(IPlayer player, String permission) {
         int fallbackLevel = vanillaLevelFor(permission);
         return hasPermission(player, permission, fallbackLevel);

@@ -107,6 +107,17 @@ public class TicketService {
     }
 
     public TicketOutcome reply(TicketActor actor, String ticketKey, String message, Long expectedRevision) {
+        return reply(actor, ticketKey, message, expectedRevision, null, null, null);
+    }
+
+    public TicketOutcome replyFromDiscord(TicketActor actor, Ticket boundTicket, String message, String discordUserId,
+                                          String discordMessageId) {
+        return reply(actor, boundTicket.ticketKey(), message, null, boundTicket.ticketId(), discordUserId,
+                TicketIds.discordReplyId(discordMessageId));
+    }
+
+    private TicketOutcome reply(TicketActor actor, String ticketKey, String message, Long expectedRevision,
+                                 String boundTicketId, String discordUserId, String discordReplyId) {
         TicketsConfigHandler.Config config = config();
         if (!enabled(config)) {
             return TicketOutcome.fail(TicketError.TICKETS_DISABLED);
@@ -117,7 +128,7 @@ public class TicketService {
             return TicketOutcome.fail(messageError, null, Map.of("limit", String.valueOf(maxMessageLength)));
         }
         Ticket ticket = load(ticketKey);
-        if (ticket == null) {
+        if (ticket == null || (boundTicketId != null && !boundTicketId.equals(ticket.ticketId()))) {
             return TicketOutcome.fail(TicketError.TICKET_NOT_FOUND);
         }
         boolean creator = ticket.isCreatedBy(actor.uuid());
@@ -134,12 +145,19 @@ public class TicketService {
         TicketStatus nextStatus = TicketWorkflow.statusAfterReply(ticket.status(), authorType);
         Ticket updated = TicketWorkflow.applyStatus(ticket, nextStatus, now);
 
-        TicketMessage newMessage = new TicketMessage(TicketIds.messageId(), ticket.ticketId(), ticket.networkId(),
+        TicketMessage newMessage = new TicketMessage(discordReplyId == null ? TicketIds.messageId() : discordReplyId,
+                ticket.ticketId(), ticket.networkId(),
                 ticket.ticketKey(), authorType, actor.uuid(), actor.name(), serverId(), message.strip(), now);
         List<TicketEvent> events = eventsWithStatusChange(ticket, TicketEventType.REPLIED, actor,
                 null, authorType.name(), nextStatus, now);
 
-        TicketWriteResult result = apply(TicketMutation.of(updated, revisionOf(ticket, expectedRevision), newMessage, events));
+        TicketMutation mutation = TicketMutation.of(updated, revisionOf(ticket, expectedRevision), newMessage, events);
+        TicketRepository repository = repository();
+        TicketWriteResult result = repository == null ? TicketWriteResult.unsupported()
+                : discordReplyId == null ? repository.applyMutation(mutation) : repository.applyDiscordReply(mutation, discordUserId);
+        if (result.status() == TicketWriteResult.Status.DUPLICATE_REPLY) {
+            return TicketOutcome.ok(ticket);
+        }
         if (!result.ok()) {
             return translate(result, ticketKey);
         }
@@ -751,7 +769,8 @@ public class TicketService {
             case LIMIT_REACHED -> TicketOutcome.fail(TicketError.TICKET_LIMIT_REACHED);
             case COOLDOWN -> TicketOutcome.fail(TicketError.TICKET_COOLDOWN);
             case UNSUPPORTED -> TicketOutcome.fail(TicketError.STORAGE_UNAVAILABLE);
-            case OK -> TicketOutcome.ok(result.ticket());
+            case PERMISSION_DENIED -> TicketOutcome.fail(TicketError.PERMISSION_DENIED);
+            case OK, DUPLICATE_REPLY -> TicketOutcome.ok(result.ticket());
         };
     }
 

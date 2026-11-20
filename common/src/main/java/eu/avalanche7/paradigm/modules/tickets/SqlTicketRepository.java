@@ -1,5 +1,6 @@
 package eu.avalanche7.paradigm.modules.tickets;
 
+import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -103,48 +104,108 @@ public class SqlTicketRepository implements TicketRepository {
 
     @Override
     public TicketWriteResult applyMutation(TicketMutation mutation) {
-        return sql.transaction(() -> {
-            Ticket updatedTicket = mutation.updated();
-            StringBuilder statement = new StringBuilder("UPDATE tickets SET category = ?, subject = ?, status = ?, "
-                    + "priority = ?, assignee_uuid = ?, assignee_name = ?, updated_at_ms = ?, resolved_at_ms = ?, "
-                    + "closed_at_ms = ?, last_activity_at_ms = ?, revision = revision + 1 "
-                    + "WHERE network_id = ? AND ticket_key = ? AND revision = ?");
-            if (mutation.requireUnassigned()) {
-                statement.append(" AND assignee_uuid IS NULL");
+        return sql.transaction(() -> applyMutationInTransaction(mutation));
+    }
+
+    @Override
+    public TicketWriteResult applyDiscordReply(TicketMutation mutation, String discordUserId) {
+        boolean mysql = "mysql".equals(sql.dialectName());
+        return sql.transaction(mysql ? Connection.TRANSACTION_READ_COMMITTED : null, () -> {
+            String ticketId = mutation.updated().ticketId();
+            String messageId = mutation.message().messageId();
+            if (!lockTicket(mutation.networkId(), ticketId)) {
+                return TicketWriteResult.notFound();
             }
-            int updated = sql.update(statement.toString(), ps -> {
-                ps.setString(1, updatedTicket.category());
-                ps.setString(2, updatedTicket.subject());
-                ps.setString(3, updatedTicket.status().name());
-                ps.setString(4, updatedTicket.priority().name());
-                bindNullableString(ps, 5, updatedTicket.assigneeUuid());
-                bindNullableString(ps, 6, updatedTicket.assigneeName());
-                ps.setLong(7, updatedTicket.updatedAtMs());
-                bindNullableLong(ps, 8, updatedTicket.resolvedAtMs());
-                bindNullableLong(ps, 9, updatedTicket.closedAtMs());
-                ps.setLong(10, updatedTicket.lastActivityAtMs());
-                ps.setString(11, network(mutation.networkId()));
-                ps.setString(12, mutation.ticketKey());
-                ps.setLong(13, mutation.expectedRevision());
-            });
-            if (updated == 0) {
-                Ticket fresh = findTicket(mutation.networkId(), mutation.ticketKey()).orElse(null);
-                if (fresh == null) {
-                    return TicketWriteResult.notFound();
-                }
-                if (mutation.requireUnassigned() && fresh.isAssigned()) {
-                    return TicketWriteResult.alreadyClaimed(fresh);
-                }
-                return TicketWriteResult.stale(fresh);
+            if (hasDiscordReplyOutcome(mutation.networkId(), ticketId, messageId)) {
+                return new TicketWriteResult(TicketWriteResult.Status.DUPLICATE_REPLY, null, null);
             }
-            if (mutation.message() != null) {
-                insertMessage(mutation.message());
+            String linked = sql.query("SELECT discord_id FROM discord_account_links "
+                    + "WHERE network_id = ? AND player_uuid = ?" + (mysql ? " FOR UPDATE" : ""), ps -> {
+                ps.setString(1, mutation.networkId());
+                ps.setString(2, mutation.message().authorUuid().toLowerCase(Locale.ROOT));
+            }, rs -> rs.next() ? rs.getString(1) : null);
+            if (!discordUserId.equals(linked)) {
+                return new TicketWriteResult(TicketWriteResult.Status.PERMISSION_DENIED, null, null);
             }
-            for (TicketEvent event : mutation.events()) {
-                insertEvent(event);
-            }
-            return TicketWriteResult.ok(updatedTicket.withRevision(mutation.expectedRevision() + 1));
+            return applyMutationInTransaction(mutation);
         });
+    }
+
+    public boolean lockTicket(String networkId, String ticketId) {
+        return !"mysql".equals(sql.dialectName()) || sql.query(
+                "SELECT 1 FROM tickets WHERE network_id = ? AND ticket_id = ? FOR UPDATE", ps -> {
+                    ps.setString(1, networkId);
+                    ps.setString(2, ticketId);
+                }, ResultSet::next);
+    }
+
+    public boolean hasDiscordReplyOutcome(String networkId, String ticketId, String messageId) {
+        return sql.query("""
+                SELECT 1 FROM ticket_messages WHERE message_id = ? AND network_id = ? AND ticket_id = ?
+                UNION ALL SELECT 1 FROM discord_ticket_reply_rejections WHERE message_id = ? AND network_id = ?
+                """, ps -> {
+            ps.setString(1, messageId);
+            ps.setString(2, networkId);
+            ps.setString(3, ticketId);
+            ps.setString(4, messageId);
+            ps.setString(5, networkId);
+        }, ResultSet::next);
+    }
+
+    public boolean rejectDiscordReply(String networkId, String ticketId, String messageId) {
+        return sql.transaction("mysql".equals(sql.dialectName()) ? Connection.TRANSACTION_READ_COMMITTED : null, () -> {
+            lockTicket(networkId, ticketId);
+            if (hasDiscordReplyOutcome(networkId, ticketId, messageId)) {
+                return false;
+            }
+            return sql.update("INSERT INTO discord_ticket_reply_rejections (network_id, message_id) VALUES (?, ?)", ps -> {
+                ps.setString(1, networkId);
+                ps.setString(2, messageId);
+            }) == 1;
+        });
+    }
+
+    private TicketWriteResult applyMutationInTransaction(TicketMutation mutation) {
+        Ticket updatedTicket = mutation.updated();
+        StringBuilder statement = new StringBuilder("UPDATE tickets SET category = ?, subject = ?, status = ?, "
+                + "priority = ?, assignee_uuid = ?, assignee_name = ?, updated_at_ms = ?, resolved_at_ms = ?, "
+                + "closed_at_ms = ?, last_activity_at_ms = ?, revision = revision + 1 "
+                + "WHERE network_id = ? AND ticket_key = ? AND revision = ?");
+        if (mutation.requireUnassigned()) {
+            statement.append(" AND assignee_uuid IS NULL");
+        }
+        int updated = sql.update(statement.toString(), ps -> {
+            ps.setString(1, updatedTicket.category());
+            ps.setString(2, updatedTicket.subject());
+            ps.setString(3, updatedTicket.status().name());
+            ps.setString(4, updatedTicket.priority().name());
+            bindNullableString(ps, 5, updatedTicket.assigneeUuid());
+            bindNullableString(ps, 6, updatedTicket.assigneeName());
+            ps.setLong(7, updatedTicket.updatedAtMs());
+            bindNullableLong(ps, 8, updatedTicket.resolvedAtMs());
+            bindNullableLong(ps, 9, updatedTicket.closedAtMs());
+            ps.setLong(10, updatedTicket.lastActivityAtMs());
+            ps.setString(11, network(mutation.networkId()));
+            ps.setString(12, mutation.ticketKey());
+            ps.setLong(13, mutation.expectedRevision());
+        });
+        if (updated == 0) {
+            Ticket fresh = findTicket(mutation.networkId(), mutation.ticketKey()).orElse(null);
+            if (fresh == null) {
+                return TicketWriteResult.notFound();
+            }
+            if (mutation.requireUnassigned() && fresh.isAssigned()) {
+                return TicketWriteResult.alreadyClaimed(fresh);
+            }
+            return TicketWriteResult.stale(fresh);
+        }
+        if (mutation.message() != null) {
+            insertMessage(mutation.message());
+        }
+        for (TicketEvent event : mutation.events()) {
+            insertEvent(event);
+        }
+        return TicketWriteResult.ok(updatedTicket.withRevision(mutation.expectedRevision() + 1));
     }
 
     @Override

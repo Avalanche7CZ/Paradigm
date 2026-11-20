@@ -618,8 +618,6 @@ class ConfigurationApplyTest {
         startTask.run();
         assertFalse(discord.isEnabled());
 
-        // No bot token is installed in this fixture. Cleanup reaches the REST client and
-        // reports the failure without contacting Discord or discarding the receipt.
         config.linkingEnabled.value = false;
         discord.applyConfiguration();
         var cleanup = scheduler.raw.poll();

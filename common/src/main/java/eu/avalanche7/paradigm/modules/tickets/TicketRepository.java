@@ -25,6 +25,10 @@ public interface TicketRepository {
 
     TicketWriteResult applyMutation(TicketMutation mutation);
 
+    default TicketWriteResult applyDiscordReply(TicketMutation mutation, String discordUserId) {
+        return TicketWriteResult.unsupported();
+    }
+
     Optional<Ticket> findTicket(String networkId, String ticketKey);
 
     List<Ticket> listTickets(TicketQuery query);

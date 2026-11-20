@@ -14,7 +14,6 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.model.StoredLocation;
 
-/** A loader must confirm the native cause before requesting a deferred placement. */
 public final class AutomaticSpawnPlacement {
     public enum RespawnCause { DEATH_FALLBACK, PERSONAL_OR_CUSTOM, NON_DEATH, UNKNOWN }
 
@@ -29,8 +28,6 @@ public final class AutomaticSpawnPlacement {
         if (player == null || player.getUUID() == null || !firstJoin || !observedFirstJoins.add(player.getUUID()) || !enabled(true)) {
             return;
         }
-        // The native statistics and player-data directories share a save root. Check the
-        // actual save as well as the join detector, including worlds with reset statistics.
         Path playerData;
         String uuid;
         try {

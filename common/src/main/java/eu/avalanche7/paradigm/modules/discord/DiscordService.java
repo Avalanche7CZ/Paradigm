@@ -6,12 +6,16 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
@@ -34,6 +38,8 @@ import eu.avalanche7.paradigm.modules.discord.client.DiscordJson;
 import eu.avalanche7.paradigm.modules.discord.client.DiscordRateLimiter;
 import eu.avalanche7.paradigm.modules.discord.client.DiscordRestClient;
 import eu.avalanche7.paradigm.modules.discord.console.ConsoleRelayAppender;
+import eu.avalanche7.paradigm.modules.tickets.Ticket;
+import eu.avalanche7.paradigm.modules.tickets.TicketActor;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.storage.StorageProviderType;
 import eu.avalanche7.paradigm.storage.StorageService;
@@ -53,6 +59,7 @@ public final class DiscordService implements DiscordOutbox {
     private volatile ScheduledExecutorService executor;
     private volatile ExecutorService httpExecutor;
     private volatile ExecutorService interactionExecutor;
+    private volatile ExecutorService ticketReplyExecutor;
     private volatile DiscordRestClient rest;
     private volatile DiscordGatewayClient gateway;
     private volatile DiscordDispatcher dispatcher;
@@ -284,6 +291,11 @@ public final class DiscordService implements DiscordOutbox {
             return thread;
         });
         interactionExecutor = interaction;
+        ticketReplyExecutor = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(256), runnable -> {
+            Thread thread = new Thread(runnable, "paradigm-discord-ticket-replies");
+            thread.setDaemon(true);
+            return thread;
+        });
 
         String connectionToken = token();
         DebugLogger debugLogger = services.getDebugLogger();
@@ -494,7 +506,6 @@ public final class DiscordService implements DiscordOutbox {
             return;
         }
         var registration = new DiscordLinkRegistration(path);
-        // The HTTP client used for this operation must survive a Gateway stop during config apply.
         var client = new DiscordRestClient(() -> configuredToken, rateLimiter, services.getDebugLogger(), null);
         try {
             if (remove) {
@@ -597,7 +608,6 @@ public final class DiscordService implements DiscordOutbox {
                 DiscordRestClient client = rest;
                 String bot = botUserId;
                 if (client == null || !DiscordConfigHandler.isGuildId(bot)) {
-                    // Keep the admission window durable even while Discord is unavailable.
                     if (run.settings().admits()) {
                         store.discover(run.settings().guild(), run.since());
                     } else {
@@ -605,14 +615,17 @@ public final class DiscordService implements DiscordOutbox {
                     }
                     return;
                 }
+                BooleanSupplier current = () -> !services.isStopping() && ticketRoomRun == run && rest == client
+                        && linkingSettings(config()).owner() && run.settings().equals(ticketRoomSettings());
                 new DiscordTicketRooms(store, storage.discordAccountLinks(), client, ticket ->
                         storage.servers().getServer(ticket.originServerId())
                                 .filter(identity -> ticket.networkId().equals(identity.networkId()))
                                 .map(identity -> identity.serverName())
                                 .orElse(ticket.originServerId() == null ? "unknown" : ticket.originServerId()),
-                        this::warnTicketRoom).sweep(run.settings(), bot, run.since(),
-                        () -> !services.isStopping() && ticketRoomRun == run && rest == client
-                                && linkingSettings(config()).owner() && run.settings().equals(ticketRoomSettings()));
+                        this::warnTicketRoom).sweep(run.settings(), bot, run.since(), current);
+                new DiscordTicketReplies(store, client, this::warnTicketRoom)
+                        .deliver(linkingSettings(config()), run.settings().rolesKey(bot),
+                                () -> current.getAsBoolean() && services.getTicketService().enabled());
             } catch (RuntimeException failure) {
                 warnTicketRoom("Discord ticket-room reconciliation failed (" + failure.getClass().getSimpleName() + ").");
             }
@@ -624,6 +637,21 @@ public final class DiscordService implements DiscordOutbox {
             services.getLogger().warn("[Discord] {}", warning);
         }
         ticketRoomWarning = warning;
+    }
+
+    private TicketActor discordTicketActor(UUID uuid, Ticket ticket) {
+        String playerId = uuid.toString();
+        var permissions = services.getPermissionsHandler();
+        String name = services.getStorageService().players().getProfile(playerId)
+                .map(profile -> profile.name()).filter(value -> !value.isBlank())
+                .orElse(ticket.isCreatedBy(playerId) && ticket.creatorName() != null ? ticket.creatorName() : playerId);
+        return TicketActor.administrative(playerId, name, permission -> {
+            Boolean online = ServerThreadCalls.supply(services, () -> {
+                var player = services.getPlatformAdapter().getPlayerByUuid(playerId);
+                return player == null ? null : permissions.hasPermission(player, permission);
+            }).orTimeout(4, TimeUnit.SECONDS).join();
+            return online != null ? online : permissions.hasOfflinePermission(uuid, permission);
+        });
     }
 
     static String linkModalPayload() {
@@ -666,7 +694,6 @@ public final class DiscordService implements DiscordOutbox {
                 sendInteractionResponse(client, interaction, linkModalPayload());
                 return;
             }
-            // Acknowledge within Discord's deadline even if the shared database is slow.
             JsonObject deferred = new JsonObject();
             deferred.addProperty("type", 5);
             JsonObject ephemeral = new JsonObject();
@@ -850,6 +877,11 @@ public final class DiscordService implements DiscordOutbox {
         ScheduledExecutorService pool = executor;
         ExecutorService http = httpExecutor;
         ExecutorService interaction = interactionExecutor;
+        ExecutorService ticketReplies = ticketReplyExecutor;
+        ticketReplyExecutor = null;
+        if (ticketReplies != null) {
+            ticketReplies.shutdownNow();
+        }
 
         if (notifyServerStopping && queue != null && queue.isAccepting()) {
             relay.notifyServerStopping();
@@ -1321,6 +1353,51 @@ public final class DiscordService implements DiscordOutbox {
 
         @Override
         public void onMessage(DiscordInboundMessage message) {
+            DiscordConfigHandler.Config cfg = config();
+            LinkingSettings linking = linkingSettings(cfg);
+            boolean relayChannel = cfg != null && (relay.ownsConsoleChannel(message.channelId())
+                    || relay.matchesRelayChannel(cfg, message));
+            DiscordRestClient client = rest;
+            StorageService storage = services.getStorageService();
+            if (client != null && storage != null && storage.isSqlActive() && linking.guild().equals(message.guildId())
+                    && (relayChannel || (linking.owner() && !message.bot() && !message.webhook() && !message.system()))) {
+                ExecutorService worker = ticketReplyExecutor;
+                if (worker != null) {
+                    try {
+                        worker.execute(() -> routeTicketRoomMessage(message, linking, client, storage, relayChannel));
+                    } catch (RejectedExecutionException overloaded) {
+                        if (ticketReplyExecutor == worker) {
+                            warnTicketRoom("Discord ticket-room message queue is full. Message " + message.messageId()
+                                    + " was not routed.");
+                        }
+                    }
+                }
+            } else {
+                relayMessage(message);
+            }
+        }
+
+        private void routeTicketRoomMessage(DiscordInboundMessage message, LinkingSettings linking,
+                                            DiscordRestClient client, StorageService storage, boolean relayChannel) {
+            if (services.isStopping() || rest != client) {
+                return;
+            }
+            try {
+                var replies = new DiscordTicketReplies(storage.discordTicketRooms(), client, DiscordService.this::warnTicketRoom);
+                boolean handled = replies.handle(linking, message, storage.discordAccountLinks(),
+                        services.getTicketService(), DiscordService.this::discordTicketActor,
+                        !inboundCapability.blocksInboundRelay(),
+                        () -> !services.isStopping() && rest == client && linking.equals(linkingSettings(config())));
+                if (!handled && relayChannel && rest == client) {
+                    relayMessage(message);
+                }
+            } catch (RuntimeException failure) {
+                warnTicketRoom("Could not verify the ticket room for Discord message " + message.messageId()
+                        + " (" + failure.getClass().getSimpleName() + ").");
+            }
+        }
+
+        private void relayMessage(DiscordInboundMessage message) {
             try {
                 if (relay.ownsConsoleChannel(message.channelId())) {
                     relay.handleConsoleCommand(message);
@@ -1383,7 +1460,7 @@ public final class DiscordService implements DiscordOutbox {
             if (capability.blocksInboundRelay()) {
                 services.getLogger().warn("[Paradigm] Discord: the bot cannot read message content. "
                         + "Enable the MESSAGE CONTENT privileged intent in the Discord developer portal "
-                        + "to use Discord to Minecraft chat.");
+                        + "to use Discord to Minecraft chat and ticket replies.");
             }
         }
     }

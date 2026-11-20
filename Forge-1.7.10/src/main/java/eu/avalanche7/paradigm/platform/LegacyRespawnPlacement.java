@@ -9,7 +9,6 @@ import net.minecraft.util.ChunkCoordinates;
 import eu.avalanche7.paradigm.Paradigm;
 import eu.avalanche7.paradigm.modules.commands.AutomaticSpawnPlacement.RespawnCause;
 
-/** Collects the native destination decision for one respawn invocation. */
 public final class LegacyRespawnPlacement {
     private static final String BUKKIT_RESPAWN_EVENT = "org.bukkit.event.player.PlayerRespawnEvent";
     private static final ThreadLocal<Deque<Attempt>> ATTEMPTS = ThreadLocal.withInitial(ArrayDeque::new);
@@ -106,7 +105,6 @@ public final class LegacyRespawnPlacement {
         return new Location(null, player.worldObj, player.posX, player.posY, player.posZ, player.rotationYaw, player.rotationPitch);
     }
 
-    // Bukkit is optional on 1.7.10. Read its event only inside the optional Bukkit mixin.
     private static Location bukkitLocation(Object event) throws ReflectiveOperationException {
         Object location = event.getClass().getMethod("getRespawnLocation").invoke(event);
         var type = location.getClass();
