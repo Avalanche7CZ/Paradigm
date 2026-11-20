@@ -209,7 +209,12 @@ describe('preview and feature inventory', () => {
     expect(result.segments.map((s) => s.text).join('')).toContain('<img src=x onerror=alert(1)>');
     expect(result.unsupported).toContain('img src=x onerror=alert(1)');
     expect(result.segments.find((s) => s.text === 'world')?.style.fontWeight).toBe(700);
-    expect(previewSegments('<gradient:red:blue>Hi</gradient>').unsupported).toContain('gradient');
+    const gradient = previewSegments('<gradient:red:blue>Hi</gradient>');
+    expect(gradient.unsupported).toEqual([]);
+    expect(gradient.segments.map(({ text, style }) => [text, style.color])).toEqual([
+      ['H', '#ff5555'],
+      ['i', '#5555ff'],
+    ]);
   });
   it('has every existing management route including tickets', () => {
     for (const id of [
