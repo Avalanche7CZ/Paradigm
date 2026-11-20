@@ -14,10 +14,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up JDK 21 and 25
+      - name: Set up Temurin JDK 8, 25, and 21
         uses: actions/setup-java@v4
         with:
           java-version: |
+            8
             25
             21
           distribution: 'temurin'
@@ -48,7 +49,7 @@ jobs:
       - name: Build all versions
         env:
           GRADLE_OPTS: -Dorg.gradle.java.home=${{ env.JAVA_HOME }}
-        run: ./gradlew --no-daemon --stacktrace -Dorg.gradle.java.home="$JAVA_HOME" build
+        run: ./gradlew --no-daemon --stacktrace -Dorg.gradle.java.home="$JAVA_HOME" -Porg.gradle.java.installations.fromEnv=JAVA_HOME_8_X64 build
 
       - name: Collect JAR files
         id: collect-jars
