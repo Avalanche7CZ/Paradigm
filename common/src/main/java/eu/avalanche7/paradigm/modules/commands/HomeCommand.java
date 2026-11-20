@@ -60,18 +60,6 @@ public class HomeCommand implements ParadigmModule {
     }
 
     @Override
-    public void onServerStarting(Object event, Services services) {
-    }
-
-    @Override
-    public void onEnable(Services services) {
-    }
-
-    @Override
-    public void onDisable(Services services) {
-    }
-
-    @Override
     public void onServerStopping(Object event, Services services) {
         otherSuggestions.clear();
         otherSuggestionsInFlight.clear();
@@ -303,12 +291,13 @@ public class HomeCommand implements ParadigmModule {
     private int executeDefaultHome(IPlayer player) {
         if (player == null) return 0;
         String uuid = player.getUUID();
+        var activation = services.moduleActivationGuard(this);
         return StorageCommandSupport.runForPlayer(services, player, "home.default_load",
-                () -> services.getStorageService().players().listHomes(uuid), (current, homes) -> {
+                () -> services.getStorageService().players().listHomes(uuid), activation, (current, homes) -> {
                     if (!canUseHome(current)) return;
                     updateHomeCache(uuid, homes);
                     HomeSelection.defaultHome(homes).ifPresentOrElse(home ->
-                            CommandCooldowns.run(services, current, "home", fresh -> canUseHome(fresh)
+                            CommandCooldowns.run(services, current, "home", activation, fresh -> canUseHome(fresh)
                                     ? teleportHome(fresh, home.name(), toDataLocation(home.location())) : 0),
                             () -> sendHomes(current, homes));
                 }, "home.error_load");
@@ -326,15 +315,16 @@ public class HomeCommand implements ParadigmModule {
         }
         String homeKey = PlayerDataStore.normalizeHomeKey(normalized);
         String playerUuid = player.getUUID();
+        var activation = services.moduleActivationGuard(this);
         return StorageCommandSupport.runForPlayer(services, player, "home.load", () ->
                 homeKey != null ? services.getStorageService().players().getHome(playerUuid, homeKey).orElse(null) : null,
-                (current, home) -> {
+                activation, (current, home) -> {
                     if (home == null || home.location() == null) {
                         send(current, "home.home_not_found", "Home {home} was not found.", "{home}", normalized);
                         return;
                     }
                     PlayerDataStore.StoredLocation destination = toDataLocation(home.location());
-                    CommandCooldowns.run(services, current, "home", fresh ->
+                    CommandCooldowns.run(services, current, "home", activation, fresh ->
                             canUseHome(fresh) ? teleportHome(fresh, normalized, destination) : 0);
                 },
                 "home.error_load");
@@ -373,8 +363,9 @@ public class HomeCommand implements ParadigmModule {
         }
         IPlayer online = platform.getPlayerByName(owner);
         String onlineUuid = online != null ? online.getUUID() : null;
+        var activation = services.moduleActivationGuard(this);
         return StorageCommandSupport.runForPlayer(services, player, "home.other_load", () -> loadOtherHomes(owner, onlineUuid),
-                (current, result) -> {
+                activation, (current, result) -> {
                     if (!canVisitOtherHomes(current)) return;
                     if (result == null) {
                         send(current, "home.other_player_missing", "That player has no stored profile.");
@@ -388,7 +379,7 @@ public class HomeCommand implements ParadigmModule {
                             send(current, "home.home_not_found", "Home {home} was not found.", "{home}", name);
                             return;
                         }
-                        CommandCooldowns.run(services, current, "home", fresh -> canVisitOtherHomes(fresh)
+                        CommandCooldowns.run(services, current, "home", activation, fresh -> canVisitOtherHomes(fresh)
                                 ? teleportHome(fresh, owner + ":" + home.name(), toDataLocation(home.location())) : 0);
                     }
                 }, "home.error_load");
@@ -522,15 +513,16 @@ public class HomeCommand implements ParadigmModule {
         if (player == null) return 0;
 
         String playerUuid = player.getUUID();
+        var activation = services.moduleActivationGuard(this);
         return StorageCommandSupport.runForPlayer(services, player, "home.back_load", () ->
                 services.getStorageService().players().getBackLocation(playerUuid).orElse(null),
-                (current, storedLast) -> {
+                activation, (current, storedLast) -> {
                     if (storedLast == null) {
                         send(current, "home.back_missing", "No previous location saved for /back.");
                         return;
                     }
                     PlayerDataStore.StoredLocation last = toDataLocation(storedLast);
-                    CommandCooldowns.run(services, current, "back", fresh ->
+                    CommandCooldowns.run(services, current, "back", activation, fresh ->
                             canBack(fresh) ? teleportBack(fresh, last) : 0);
                 },
                 "home.error_load");

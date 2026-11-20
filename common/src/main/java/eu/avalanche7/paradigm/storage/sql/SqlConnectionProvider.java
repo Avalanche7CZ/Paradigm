@@ -49,14 +49,6 @@ public class SqlConnectionProvider implements AutoCloseable {
 
     public Connection getConnection() {
         try {
-            if (runtimeDrivers != null && config.runtimeLibraries != null && config.runtimeLibraries.enabled) {
-                runtimeDrivers.ensureDriver(dialect);
-            } else {
-                String driver = dialect.driverClassName();
-                if (driver != null && !driver.isBlank()) {
-                    Class.forName(driver);
-                }
-            }
             Properties properties = new Properties();
             if (config.sql != null && config.sql.username != null && !config.sql.username.isBlank()) {
                 properties.setProperty("user", config.sql.username);
@@ -65,7 +57,15 @@ public class SqlConnectionProvider implements AutoCloseable {
             if (password != null && !password.isBlank()) {
                 properties.setProperty("password", password);
             }
-            Connection connection = DriverManager.getConnection(dialect.jdbcUrl(config), properties);
+            String url = dialect.jdbcUrl(config);
+            Connection connection;
+            if (runtimeDrivers != null && config.runtimeLibraries != null && config.runtimeLibraries.enabled) {
+                connection = runtimeDrivers.connect(dialect, url, properties);
+            } else {
+                String driver = dialect.driverClassName();
+                if (driver != null && !driver.isBlank()) Class.forName(driver);
+                connection = DriverManager.getConnection(url, properties);
+            }
             configureConnection(connection);
             return connection;
         } catch (ClassNotFoundException e) {

@@ -10,8 +10,6 @@ public final class PlayerInputModule implements ParadigmModule {
 
     @Override public String getName() { return "PlayerInput"; }
     @Override public boolean isEnabled(Services services) { return true; }
-    @Override public void onLoad(Object event, Services services, Object modEventBus) { }
-    @Override public void onServerStarting(Object event, Services services) { }
     @Override public void onEnable(Services services) { services.getPlayerInputService().activate(); }
     @Override public void onDisable(Services services) { services.getPlayerInputService().clear(); }
     @Override public void onServerStopping(Object event, Services services) { services.getPlayerInputService().shutdown(); }

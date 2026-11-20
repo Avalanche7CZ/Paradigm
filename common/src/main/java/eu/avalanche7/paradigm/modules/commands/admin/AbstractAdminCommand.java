@@ -23,26 +23,6 @@ public abstract class AbstractAdminCommand implements ParadigmModule {
         this.services = services;
     }
 
-    @Override
-    public void onServerStarting(Object event, Services services) {
-    }
-
-    @Override
-    public void onEnable(Services services) {
-    }
-
-    @Override
-    public void onDisable(Services services) {
-    }
-
-    @Override
-    public void onServerStopping(Object event, Services services) {
-    }
-
-    @Override
-    public void registerEventListeners(Object eventBus, Services services) {
-    }
-
     protected ICommandBuilder builder() {
         return services.getPlatformAdapter().createCommandBuilder();
     }

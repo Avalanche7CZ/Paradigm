@@ -29,22 +29,6 @@ public class GamemodeCommand implements ParadigmModule {
     }
 
     @Override
-    public void onServerStarting(Object event, Services services) {
-    }
-
-    @Override
-    public void onEnable(Services services) {
-    }
-
-    @Override
-    public void onDisable(Services services) {
-    }
-
-    @Override
-    public void onServerStopping(Object event, Services services) {
-    }
-
-    @Override
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         registerGamemodeRoot();
         registerAlias("gmc", "creative");
@@ -57,10 +41,6 @@ public class GamemodeCommand implements ParadigmModule {
             registerAlias("gmsp", "spectator");
             registerAlias("spectator", "spectator");
         }
-    }
-
-    @Override
-    public void registerEventListeners(Object eventBus, Services services) {
     }
 
     private void registerGamemodeRoot() {

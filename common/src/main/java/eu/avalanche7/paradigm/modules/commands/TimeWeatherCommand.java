@@ -27,22 +27,6 @@ public class TimeWeatherCommand implements ParadigmModule {
     }
 
     @Override
-    public void onServerStarting(Object event, Services services) {
-    }
-
-    @Override
-    public void onEnable(Services services) {
-    }
-
-    @Override
-    public void onDisable(Services services) {
-    }
-
-    @Override
-    public void onServerStopping(Object event, Services services) {
-    }
-
-    @Override
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         registerTimeLiteral("day", 1000L);
         registerTimeLiteral("night", 13000L);
@@ -50,10 +34,6 @@ public class TimeWeatherCommand implements ParadigmModule {
         registerWeatherLiteral("sun", "clear");
         registerWeatherLiteral("rain", "rain");
         registerWeatherLiteral("thunder", "thunder");
-    }
-
-    @Override
-    public void registerEventListeners(Object eventBus, Services services) {
     }
 
     private void registerTimeLiteral(String literal, long timeOfDay) {

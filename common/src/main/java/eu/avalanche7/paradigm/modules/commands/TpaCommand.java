@@ -19,6 +19,7 @@ import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.model.StoredLocation;
 import eu.avalanche7.paradigm.utils.CommandCooldowns;
+import eu.avalanche7.paradigm.utils.PlayerConnection;
 
 public class TpaCommand implements ParadigmModule {
     private Services services;
@@ -45,19 +46,8 @@ public class TpaCommand implements ParadigmModule {
     }
 
     @Override
-    public void onServerStarting(Object event, Services services) {
-    }
-
-    @Override
-    public void onEnable(Services services) {
-    }
-
-    @Override
     public void onDisable(Services services) {
-    }
-
-    @Override
-    public void onServerStopping(Object event, Services services) {
+        if (teleportRequests != null) teleportRequests.clear();
     }
 
     @Override
@@ -182,15 +172,18 @@ public class TpaCommand implements ParadigmModule {
         String commandKey = type == TeleportRequestService.RequestType.TPA ? "tpa" : "tpahere";
         String requesterUuid = requester.getUUID();
         String targetUuid = target.getUUID();
+        var recipient = new PlayerConnection(target);
         return StorageCommandSupport.runForPlayer(services, requester, "tpa.ignore_check", () ->
                         targetUuid != null && requesterUuid != null
                                 && services.getStorageService().players().listIgnoredPlayers(targetUuid).contains(requesterUuid.toLowerCase(Locale.ROOT)),
+                services.moduleActivationGuard(this),
                 (currentRequester, blocked) -> {
                     IPlayer currentTarget = targetUuid != null ? platform.getPlayerByUuid(targetUuid) : null;
                     if (currentTarget == null) {
                         send(currentRequester, "tpa.player_not_found", "That player is not online.");
                         return;
                     }
+                    if (!recipient.matches(currentTarget)) return;
                     if (blocked) {
                         send(currentRequester, "tpa.blocked_by_ignore", "That player is ignoring you.");
                         return;
@@ -254,8 +247,10 @@ public class TpaCommand implements ParadigmModule {
             return 0;
         }
 
-        return CommandCooldowns.run(services, accepter, "tpaccept", freshAccepter ->
-                canUseTpAccept(freshAccepter) ? acceptTeleportRequest(freshAccepter, request) : 0);
+        var requesterConnection = new PlayerConnection(requester);
+        return CommandCooldowns.run(services, accepter, "tpaccept", services.moduleActivationGuard(this), freshAccepter ->
+                canUseTpAccept(freshAccepter) && requesterConnection.matches(platform.getPlayerByUuid(request.requesterUuid()))
+                        ? acceptTeleportRequest(freshAccepter, request) : 0);
     }
 
     private int acceptTeleportRequest(IPlayer accepter, TeleportRequestService.Request request) {
@@ -408,6 +403,10 @@ public class TpaCommand implements ParadigmModule {
             Request request = new Request(type, requesterKey, targetKey, now, now + ttlMillis);
             list.add(request);
             return request;
+        }
+
+        synchronized void clear() {
+            requestsByTarget.clear();
         }
 
         public synchronized Request peekIncoming(String targetUuid, String requesterUuidOrNull) {

@@ -16,6 +16,9 @@ public final class AfkService {
     private final Services services;
     private final Map<String, Session> sessions = new ConcurrentHashMap<>();
     private volatile ScheduledFuture<?> watchTask;
+    private volatile Watch watch;
+
+    private record Watch(long intervalSeconds) {}
     private volatile boolean running;
 
     public AfkService(Services services) {
@@ -23,32 +26,49 @@ public final class AfkService {
     }
 
     public synchronized void start() {
-        if (running || services == null || services.getTaskScheduler() == null) {
-            return;
-        }
+        if (running || services == null || services.isStopping() || services.getTaskScheduler() == null
+                || !services.getTaskScheduler().isServerAvailable()) return;
+        updateWatch();
         running = true;
-        long interval = Math.max(1L, checkIntervalSeconds());
-        watchTask = services.getTaskScheduler().scheduleAtFixedRate(this::sweep, interval, interval, TimeUnit.SECONDS);
-        for (IPlayer player : onlinePlayers()) {
-            beginSession(player);
-        }
+        for (IPlayer player : onlinePlayers()) beginSession(player);
     }
 
     public synchronized void stop() {
         running = false;
+        watch = null;
         ScheduledFuture<?> task = watchTask;
         watchTask = null;
-        if (task != null) {
-            task.cancel(false);
-        }
+        if (task != null) task.cancel(false);
         sessions.clear();
     }
 
     public synchronized void restart() {
         stop();
-        if (isConfigured()) {
+        if (isConfigured()) start();
+    }
+
+    public synchronized void applySettings() {
+        if (!isConfigured()) {
+            stop();
+        } else if (!running) {
             start();
+        } else {
+            updateWatch();
         }
+    }
+
+    private void updateWatch() {
+        long interval = Math.max(1L, checkIntervalSeconds());
+        if (watch != null && watch.intervalSeconds() == interval && !watchTask.isDone()) return;
+        var nextWatch = new Watch(interval);
+        var nextTask = services.getTaskScheduler().scheduleAtFixedRate(() -> {
+            if (watch == nextWatch) sweep();
+        }, interval, interval, TimeUnit.SECONDS);
+        if (nextTask == null || nextTask.isCancelled()) throw new IllegalStateException("Could not schedule the AFK watcher.");
+        var previous = watchTask;
+        watch = nextWatch;
+        watchTask = nextTask;
+        if (previous != null) previous.cancel(false);
     }
 
     public boolean isRunning() {

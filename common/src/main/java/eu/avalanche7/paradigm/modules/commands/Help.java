@@ -19,13 +19,6 @@ public class Help implements ParadigmModule {
 
     @Override public String getName() { return NAME; }
     @Override public boolean isEnabled(Services services) { return true; }
-    @Override public void onLoad(Object e, Services s, Object b) {}
-    @Override public void onServerStarting(Object e, Services s) {}
-    @Override public void onEnable(Services s) {}
-    @Override public void onDisable(Services s) {}
-    @Override public void onServerStopping(Object e, Services s) {}
-    @Override public void registerEventListeners(Object bus, Services s) {}
-
     @Override
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         IPlatformAdapter platform = services.getPlatformAdapter();

@@ -1,11 +1,12 @@
 package eu.avalanche7.paradigm.storage.runtime;
 
 import java.io.IOException;
+import java.sql.Connection;
 import java.sql.Driver;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Properties;
 
 import org.slf4j.Logger;
 
@@ -21,32 +22,42 @@ public class RuntimeJdbcDriverProvider implements AutoCloseable {
         this.logger = logger;
     }
 
-    public synchronized RuntimeLibraryDownloadResult ensureDriver(SqlDialect dialect) {
+    public Connection connect(SqlDialect dialect, String url, Properties properties) throws SQLException {
+        Connection connection = loadDriver(dialect).driver().connect(url, properties);
+        if (connection == null) throw new SQLException("Runtime JDBC driver rejected the " + dialect.name() + " URL.");
+        return connection;
+    }
+
+    private synchronized LoadedDriver loadDriver(SqlDialect dialect) {
         RuntimeLibrary library = RuntimeLibrary.forDialect(dialect != null ? dialect.name() : "");
         LoadedDriver existing = loadedDrivers.get(library.id());
-        if (existing != null) {
-            RuntimeLibraryDownloadResult previous = existing.result();
-            return new RuntimeLibraryDownloadResult(library, RuntimeLibraryDownloadResult.State.LOADED, previous.path(), "Runtime JDBC driver already loaded.");
-        }
+        if (existing != null) return existing;
 
         RuntimeLibraryDownloadResult result = libraries.ensureLibrary(library);
+        RuntimeLibraryClassLoader classLoader = null;
         try {
-            RuntimeLibraryClassLoader classLoader = new RuntimeLibraryClassLoader(result.path());
+            classLoader = new RuntimeLibraryClassLoader(result.path(), library.primaryClass());
             Class<?> driverClass = Class.forName(library.primaryClass(), true, classLoader);
             Driver driver = (Driver) driverClass.getDeclaredConstructor().newInstance();
-            DriverShim shim = new DriverShim(driver);
-            DriverManager.registerDriver(shim);
-            loadedDrivers.put(library.id(), new LoadedDriver(shim, classLoader, result));
+            LoadedDriver loaded = new LoadedDriver(driver, classLoader, result);
+            loadedDrivers.put(library.id(), loaded);
             if (logger != null) {
                 logger.info("Paradigm storage: runtime JDBC driver loaded for {} from {}.", library.id(), result.path());
             }
-            return new RuntimeLibraryDownloadResult(library, RuntimeLibraryDownloadResult.State.LOADED, result.path(), "Runtime JDBC driver loaded.");
+            return loaded;
         } catch (Exception | LinkageError t) {
+            if (classLoader != null) {
+                try {
+                    classLoader.close();
+                } catch (IOException closeFailure) {
+                    t.addSuppressed(closeFailure);
+                }
+            }
             throw new RuntimeLibraryException("Could not load runtime JDBC driver " + library.primaryClass() + ": " + t.getMessage(), t);
         }
     }
 
-    public RuntimeLibraryDownloadResult inspect(RuntimeLibrary library, boolean needed) {
+    public synchronized RuntimeLibraryDownloadResult inspect(RuntimeLibrary library, boolean needed) {
         LoadedDriver loaded = loadedDrivers.get(library.id());
         if (loaded != null) {
             return new RuntimeLibraryDownloadResult(library, RuntimeLibraryDownloadResult.State.LOADED, loaded.result().path(), "Runtime JDBC driver loaded.");
@@ -62,13 +73,6 @@ public class RuntimeJdbcDriverProvider implements AutoCloseable {
     public synchronized void close() {
         for (LoadedDriver loaded : loadedDrivers.values()) {
             try {
-                DriverManager.deregisterDriver(loaded.shim());
-            } catch (SQLException t) {
-                if (logger != null) {
-                    logger.warn("Paradigm storage: failed to deregister runtime JDBC driver: {}", t.getMessage());
-                }
-            }
-            try {
                 loaded.classLoader().close();
             } catch (IOException t) {
                 if (logger != null) {
@@ -79,6 +83,6 @@ public class RuntimeJdbcDriverProvider implements AutoCloseable {
         loadedDrivers.clear();
     }
 
-    private record LoadedDriver(DriverShim shim, RuntimeLibraryClassLoader classLoader, RuntimeLibraryDownloadResult result) {
+    private record LoadedDriver(Driver driver, RuntimeLibraryClassLoader classLoader, RuntimeLibraryDownloadResult result) {
     }
 }

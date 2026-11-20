@@ -67,18 +67,12 @@ public class LocalDashboardModule implements ParadigmModule {
         }
     }
 
-    @Override public void onEnable(Services services) {}
-    @Override public void onDisable(Services services) {}
-
     @Override
     public void onServerStopping(Object event, Services services) {
         if (dashboard != null) {
             dashboard.close();
         }
     }
-
-    @Override public void registerEventListeners(Object eventBus, Services services) {}
-    @Override public void registerCommands(Object dispatcher, Object registryAccess, Services services) {}
 
     public ICommandBuilder buildCommandBranch(IPlatformAdapter platform, Services services) {
         ICommandBuilder root = platform.createCommandBuilder()

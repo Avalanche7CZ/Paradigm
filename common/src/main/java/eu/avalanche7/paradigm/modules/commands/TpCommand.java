@@ -17,12 +17,6 @@ public final class TpCommand implements ParadigmModule {
         return services == null || services.getMainConfig() == null || Boolean.TRUE.equals(services.getMainConfig().tpCommandEnable.value);
     }
     @Override public void onLoad(Object event, Services services, Object bus) { this.services = services; }
-    @Override public void onServerStarting(Object event, Services services) { }
-    @Override public void onEnable(Services services) { }
-    @Override public void onDisable(Services services) { }
-    @Override public void onServerStopping(Object event, Services services) { }
-    @Override public void registerEventListeners(Object bus, Services services) { }
-
     @Override public void registerCommands(Object dispatcher, Object registry, Services services) {
         var platform = services.getPlatformAdapter();
         platform.registerCommand(platform.createCommandBuilder().literal("tp")

@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -25,6 +26,11 @@ import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.Announcements;
 import eu.avalanche7.paradigm.modules.CommandManager;
 import eu.avalanche7.paradigm.modules.Restart;
+import eu.avalanche7.paradigm.modules.afk.AfkModule;
+import eu.avalanche7.paradigm.modules.chat.GroupChat;
+import eu.avalanche7.paradigm.modules.chat.JoinLeaveMessages;
+import eu.avalanche7.paradigm.modules.chat.PrivateMessages;
+import eu.avalanche7.paradigm.modules.chat.StaffChat;
 import eu.avalanche7.paradigm.modules.commands.Reload;
 import eu.avalanche7.paradigm.modules.dashboard.LocalDashboardModule;
 import eu.avalanche7.paradigm.modules.menus.Menus;
@@ -200,7 +206,7 @@ public final class ConfigApplyService {
         Set<ConfigSection> failed = EnumSet.noneOf(ConfigSection.class);
         var previousMain = effects.contains(ConfigSection.MAIN) ? MainConfigHandler.getConfig() : null;
         var previousCommands = effects.contains(ConfigSection.COMMANDS) ? services.getCommandToggleStore().listStates() : Map.<String, Boolean>of();
-        ConfigSection commandTree;
+        Set<ConfigSection> commandTree;
         try {
             commandTree = onServer(() -> {
                 for (var publication : publications.entrySet()) {
@@ -251,14 +257,12 @@ public final class ConfigApplyService {
             });
             if (result.rejected().size() > errors) failed.add(section);
         }
-        if (commandTree != null && !attempt(commandTree, result, () -> onServer(() -> {
+        if (!commandTree.isEmpty() && !attempt(commandTree.iterator().next(), result, () -> onServer(() -> {
             if (effects.contains(ConfigSection.CUSTOMCOMMANDS)) services.getPermissionsHandler().registerLuckPermsPermissions();
             services.getPlatformAdapter().refreshAllPlayerCommandTrees();
             return null;
         }).join())) {
-            failed.add(commandTree);
-            if (effects.contains(ConfigSection.COMMANDS)) failed.add(ConfigSection.COMMANDS);
-            if (effects.contains(ConfigSection.CUSTOMCOMMANDS)) failed.add(ConfigSection.CUSTOMCOMMANDS);
+            failed.addAll(commandTree);
         }
         for (ConfigSection section : effects) {
             if (failed.contains(section)) {
@@ -270,11 +274,12 @@ public final class ConfigApplyService {
         }
     }
 
-    private ConfigSection applyMinecraftEffects(Set<ConfigSection> effects, ConfigValidationResult result, Set<ConfigSection> failed,
+    private Set<ConfigSection> applyMinecraftEffects(Set<ConfigSection> effects, ConfigValidationResult result, Set<ConfigSection> failed,
             MainConfigHandler.Config previousMain, Map<String, Boolean> previousCommands, boolean explicitReload) {
         var modules = ParadigmAPI.getModules();
         var transitioned = new HashSet<ParadigmModule>();
         var commandModules = new HashSet<ParadigmModule>();
+        var commandSections = EnumSet.noneOf(ConfigSection.class);
         boolean mainChanged = effects.contains(ConfigSection.MAIN);
         boolean togglesChanged = effects.contains(ConfigSection.COMMANDS);
         if (mainChanged) {
@@ -282,6 +287,7 @@ public final class ConfigApplyService {
             if (explicitReload || failedEffects.contains(ConfigSection.MAIN)
                     || !java.util.Objects.equals(previousMain.forceCommandPriorityEnable.value, current.forceCommandPriorityEnable.value)) {
                 commandModules.addAll(modules);
+                if (!modules.isEmpty()) commandSections.add(ConfigSection.MAIN);
             }
         }
         if (togglesChanged) {
@@ -291,67 +297,65 @@ public final class ConfigApplyService {
                 if (eu.avalanche7.paradigm.modules.commands.shared.CommandCatalog.entriesForModule(module).stream()
                         .anyMatch(entry -> allCommands || !java.util.Objects.equals(commands.get(entry.id()), previousCommands.get(entry.id())))) {
                     commandModules.add(module);
+                    commandSections.add(ConfigSection.COMMANDS);
                 }
             }
         }
-        if (mainChanged || effects.contains(ConfigSection.TABLIST)
-                || effects.contains(ConfigSection.AFK) || effects.contains(ConfigSection.TICKETS)) {
-            for (ParadigmModule module : ParadigmAPI.getModules()) {
-                ConfigSection section = switch (module.getName()) {
-                    case "Tablist" -> ConfigSection.TABLIST;
-                    case "Afk" -> ConfigSection.AFK;
-                    case "Tickets" -> ConfigSection.TICKETS;
-                    default -> ConfigSection.MAIN;
-                };
-                if (!effects.contains(section)) continue;
-                int errors = result.rejected().size();
-                attempt(section, result, () -> {
-                    if (services.reconcileModule(module)) transitioned.add(module);
-                });
-                if (result.rejected().size() > errors) failed.add(section);
+        for (ParadigmModule module : modules) {
+            var sections = activationSections(module).stream().filter(effects::contains).toList();
+            if (sections.isEmpty()) continue;
+            if (!attempt(sections.get(0), result, () -> {
+                if (services.reconcileModule(module)) transitioned.add(module);
+            })) {
+                failed.addAll(sections);
+            }
+            if ((transitioned.contains(module) || sections.stream().anyMatch(failedEffects::contains))
+                    && (module instanceof Announcements
+                    || !eu.avalanche7.paradigm.modules.commands.shared.CommandCatalog.entriesForModule(module).isEmpty())) {
+                commandModules.add(module);
+                commandSections.addAll(sections);
             }
         }
         for (ConfigSection section : effects) {
             int errors = result.rejected().size();
             attempt(section, result, () -> {
-                for (ParadigmModule module : ParadigmAPI.getModules()) {
+                for (ParadigmModule module : modules) {
                     if (transitioned.contains(module) || !services.isModuleActive(module)) continue;
                     if (section == ConfigSection.ANNOUNCEMENTS && module instanceof Announcements announcements) announcements.rescheduleAnnouncements();
                     if (section == ConfigSection.RESTART && module instanceof Restart restart) restart.rescheduleNextRestart(services);
                     if (section == ConfigSection.TABLIST && module instanceof Tablist tablist) tablist.applySettings();
                     if (section == ConfigSection.TICKETS && module instanceof TicketsModule tickets) tickets.reloadTasks();
-                    if (section == ConfigSection.AFK && module instanceof eu.avalanche7.paradigm.modules.afk.AfkModule) services.getAfkService().restart();
+                    if (section == ConfigSection.AFK && module instanceof AfkModule) services.getAfkService().applySettings();
                 }
             });
             if (result.rejected().size() > errors) failed.add(section);
-        }
-        for (var module : transitioned) {
-            if (!eu.avalanche7.paradigm.modules.commands.shared.CommandCatalog.entriesForModule(module).isEmpty()) commandModules.add(module);
         }
         boolean customReload = effects.contains(ConfigSection.CUSTOMCOMMANDS);
         boolean permissionsChanged = mainChanged && (explicitReload
                 || !java.util.Objects.equals(previousMain.internalPermissionsEnable.value, MainConfigHandler.getConfig().internalPermissionsEnable.value)
                 || !java.util.Objects.equals(previousMain.externalCommandPermissionsEnable.value, MainConfigHandler.getConfig().externalCommandPermissionsEnable.value)
                 || !java.util.Objects.equals(previousMain.externalCommandPermissionMode.value, MainConfigHandler.getConfig().externalCommandPermissionMode.value));
-        if (!commandModules.isEmpty() || customReload || permissionsChanged) {
-            ConfigSection section = mainChanged ? ConfigSection.MAIN
-                    : togglesChanged ? ConfigSection.COMMANDS
-                    : customReload ? ConfigSection.CUSTOMCOMMANDS : effects.iterator().next();
-            int errors = result.rejected().size();
-            attempt(section, result, () -> {
-                boolean rebuilt = !commandModules.isEmpty() && Reload.rebuildCommands(services, commandModules);
-                if (customReload && !rebuilt && commandModules.stream().noneMatch(CommandManager.class::isInstance)) {
-                    CommandManager.registerReloadedCommands(services);
-                }
-            });
-            if (result.rejected().size() > errors) {
-                failed.add(section);
-                if (effects.contains(ConfigSection.COMMANDS)) failed.add(ConfigSection.COMMANDS);
-                if (effects.contains(ConfigSection.CUSTOMCOMMANDS)) failed.add(ConfigSection.CUSTOMCOMMANDS);
+        if (customReload) commandSections.add(ConfigSection.CUSTOMCOMMANDS);
+        if (permissionsChanged) commandSections.add(ConfigSection.MAIN);
+        if (!commandSections.isEmpty() && !attempt(commandSections.iterator().next(), result, () -> {
+            boolean rebuilt = !commandModules.isEmpty() && Reload.rebuildCommands(services, commandModules);
+            if (customReload && !rebuilt && commandModules.stream().noneMatch(CommandManager.class::isInstance)) {
+                CommandManager.registerReloadedCommands(services);
             }
-            return section;
+        })) {
+            failed.addAll(commandSections);
         }
-        return null;
+        return commandSections;
+    }
+
+    private static List<ConfigSection> activationSections(ParadigmModule module) {
+        if (module instanceof Announcements) return List.of(ConfigSection.ANNOUNCEMENTS, ConfigSection.MAIN);
+        if (module instanceof StaffChat || module instanceof PrivateMessages
+                || module instanceof GroupChat || module instanceof JoinLeaveMessages) return List.of(ConfigSection.CHAT);
+        if (module instanceof Tablist) return List.of(ConfigSection.TABLIST);
+        if (module instanceof AfkModule) return List.of(ConfigSection.AFK);
+        if (module instanceof TicketsModule) return List.of(ConfigSection.TICKETS);
+        return List.of(ConfigSection.MAIN);
     }
 
     private void prepareCustomCommands(Map<ConfigSection, Runnable> publications, ConfigValidationResult result) {

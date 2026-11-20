@@ -38,11 +38,6 @@ public class TempBanCommand extends AbstractModerationCommand {
         cancelExpiryTask();
     }
 
-    @Override
-    public void onServerStopping(Object event, Services services) {
-        cancelExpiryTask();
-    }
-
     private void startExpiryTask(Services services) {
         cancelExpiryTask();
         if (services != null && services.getTaskScheduler() != null) {

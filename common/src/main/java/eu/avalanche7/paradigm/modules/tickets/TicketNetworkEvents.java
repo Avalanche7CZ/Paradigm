@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BooleanSupplier;
 
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.core.network.NetworkEvent;
@@ -26,17 +27,21 @@ public final class TicketNetworkEvents {
     }
 
     public static NetworkEventHandler handler(TicketService tickets, TicketNotifier notifier) {
-        return event -> {
-            if (event == null || notifier == null || tickets == null) {
-                return;
+        return new NetworkEventHandler() {
+            @Override
+            public void onRemoteEvent(NetworkEvent event) {
+                onRemoteEvent(event, () -> true);
             }
-            String ticketKey = event.payload(PAYLOAD_TICKET_KEY);
-            TicketRepository repository = tickets.repository();
-            if (ticketKey == null || repository == null) {
-                return;
+
+            @Override
+            public void onRemoteEvent(NetworkEvent event, BooleanSupplier current) {
+                if (event == null || notifier == null || tickets == null || !current.getAsBoolean()) return;
+                String ticketKey = event.payload(PAYLOAD_TICKET_KEY);
+                TicketRepository repository = tickets.repository();
+                if (ticketKey == null || repository == null) return;
+                repository.findTicket(event.networkId(), ticketKey)
+                        .ifPresent(ticket -> notifier.remoteEvent(ticket, toTicketEvent(event, ticket), current));
             }
-            repository.findTicket(event.networkId(), ticketKey)
-                    .ifPresent(ticket -> notifier.remoteEvent(ticket, toTicketEvent(event, ticket)));
         };
     }
 

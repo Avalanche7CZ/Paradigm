@@ -38,26 +38,10 @@ public class RtpCommand implements ParadigmModule {
     }
 
     @Override
-    public void onServerStarting(Object event, Services services) {
-    }
-
-    @Override
-    public void onEnable(Services services) {
-    }
-
-    @Override
     public void onDisable(Services services) {
         generation++;
         pending.values().forEach(result -> result.complete(0));
         pending.clear();
-    }
-
-    @Override
-    public void onServerStopping(Object event, Services services) {
-    }
-
-    @Override
-    public void registerEventListeners(Object eventBus, Services services) {
     }
 
     @Override

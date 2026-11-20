@@ -1,9 +1,8 @@
 package eu.avalanche7.paradigm.core;
 
-import java.util.Collections;
-import java.util.IdentityHashMap;
-import java.util.Set;
 import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
 
 import org.slf4j.Logger;
 
@@ -38,8 +37,8 @@ public class Services {
 
     private Object server;
     private final Logger logger;
-    private final Object moduleActivationLock = new Object();
-    private final Set<ParadigmModule> enabledModules = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final ModuleLifecycle moduleLifecycle = new ModuleLifecycle(this);
+    private final AtomicBoolean shutdownStarted = new AtomicBoolean();
 
     private final CMConfig cmConfigInstance;
 
@@ -139,8 +138,6 @@ public class Services {
         return vanishService;
     }
 
-    private final Set<ParadigmModule> activatingModules = Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
-    private volatile boolean stopping;
     private final eu.avalanche7.paradigm.configs.schema.ConfigApplyService configApplyService =
             new eu.avalanche7.paradigm.configs.schema.ConfigApplyService(this);
 
@@ -149,99 +146,51 @@ public class Services {
     }
 
     public boolean isStopping() {
-        return stopping;
+        return moduleLifecycle.isStopping();
     }
-    private final Set<ParadigmModule> inactiveModules = Collections.synchronizedSet(Collections.newSetFromMap(new IdentityHashMap<>()));
 
     public boolean isModuleActive(ParadigmModule module) {
-        synchronized (moduleActivationLock) {
-            return enabledModules.contains(module);
-        }
+        return moduleLifecycle.isActive(module);
     }
 
     public boolean canDispatchModuleEvents(ParadigmModule module) {
-        return !stopping && !inactiveModules.contains(module) && !activatingModules.contains(module);
+        return moduleLifecycle.canDispatchEvents(module);
+    }
+
+    public BooleanSupplier moduleActivationGuard(ParadigmModule module) {
+        return moduleLifecycle.activationGuard(module);
     }
 
     public void beginStopping() {
-        synchronized (moduleActivationLock) {
-            stopping = true;
-        }
-        if (permissionsHandlerInstance != null) permissionsHandlerInstance.stopDefinitionSync();
-        if (managedConfigSyncService != null) managedConfigSyncService.stop();
-        if (serverHeartbeatPublisher != null) serverHeartbeatPublisher.stop();
-        if (taskSchedulerInstance != null) taskSchedulerInstance.onServerStopping();
+        if (!moduleLifecycle.beginStopping()) return;
+        shutdownStep(logger, "cancelling command warmups", () -> CommandCooldowns.clearWarmups(this));
+        if (permissionsHandlerInstance != null) shutdownStep(logger, "stopping permission sync", permissionsHandlerInstance::stopDefinitionSync);
+        var configSync = managedConfigSyncService;
+        if (configSync != null) shutdownStep(logger, "stopping managed config sync", configSync::stop);
+        var heartbeat = serverHeartbeatPublisher;
+        if (heartbeat != null) shutdownStep(logger, "stopping server heartbeat", heartbeat::stop);
+        if (taskSchedulerInstance != null) shutdownStep(logger, "stopping the task scheduler", taskSchedulerInstance::onServerStopping);
     }
 
     public boolean reconcileModule(ParadigmModule module) {
-        boolean active = isModuleActive(module);
-        if (stopping || active == module.isEnabled(this)) return false;
-        if (active) disableModule(module);
-        else enableModule(module);
-        return true;
+        return moduleLifecycle.reconcile(module);
     }
 
     public void enableModule(ParadigmModule module) {
-        synchronized (moduleActivationLock) {
-            if (stopping || !module.isEnabled(this) || enabledModules.contains(module) || !activatingModules.add(module)) return;
-            boolean cleanupAttempted = false;
-            try {
-                module.onEnable(this);
-                if (stopping || !module.isEnabled(this)) {
-                    inactiveModules.add(module);
-                    cleanupAttempted = true;
-                    module.onDisable(this);
-                } else {
-                    enabledModules.add(module);
-                    inactiveModules.remove(module);
-                }
-            } catch (RuntimeException | Error failure) {
-                enabledModules.remove(module);
-                inactiveModules.add(module);
-                if (!cleanupAttempted) {
-                    try {
-                        module.onDisable(this);
-                    } catch (RuntimeException | Error cleanupFailure) {
-                        if (cleanupFailure != failure) failure.addSuppressed(cleanupFailure);
-                    }
-                }
-                throw failure;
-            } finally {
-                activatingModules.remove(module);
-            }
-        }
+        moduleLifecycle.enable(module);
     }
 
     public void disableModule(ParadigmModule module) {
-        synchronized (moduleActivationLock) {
-            inactiveModules.add(module);
-            if (enabledModules.remove(module)) module.onDisable(this);
-        }
+        moduleLifecycle.disable(module);
     }
 
     public void stopModule(ParadigmModule module, Object event) {
-        synchronized (moduleActivationLock) {
-            if (!enabledModules.remove(module)) return;
-            inactiveModules.add(module);
-            try {
-                module.onServerStopping(event, this);
-            } catch (RuntimeException | Error failure) {
-                if (logger != null) logger.warn("Failed to stop module {}; disable cleanup will continue.", module.getName(), failure);
-            } finally {
-                try {
-                    module.onDisable(this);
-                } catch (RuntimeException | Error failure) {
-                    if (logger != null) logger.warn("Failed to disable module {} during shutdown.", module.getName(), failure);
-                }
-            }
-        }
+        moduleLifecycle.stop(module, event);
     }
 
     public void setServer(Object server) {
         if (server != null) {
-            synchronized (moduleActivationLock) {
-                stopping = false;
-            }
+            moduleLifecycle.setStopping(false);
         }
         this.server = server;
         if (this.server != null && this.taskSchedulerInstance != null) {
@@ -263,45 +212,23 @@ public class Services {
 
     public void shutdown() {
         beginStopping();
-        java.util.List<ParadigmModule> remaining;
-        synchronized (moduleActivationLock) {
-            remaining = java.util.List.copyOf(enabledModules);
-        }
-        for (ParadigmModule module : remaining) stopModule(module, null);
-        PlayerInputService input = this.playerInputService;
-        if (input != null) {
-            input.shutdown();
-        }
-        PunishmentService punishments = this.punishmentService;
-        if (punishments != null) {
-            try {
-                punishments.stop();
-            } catch (RuntimeException failure) {
-                if (logger != null) {
-                    logger.warn("[Paradigm] Shutdown: failed to stop the punishment cache refresher; shutdown cleanup will continue.",
-                            failure);
-                }
-            }
-        }
-        eu.avalanche7.paradigm.modules.playtime.PlaytimeService playtime = this.playtimeService;
-        if (playtime != null) {
-            try {
-                playtime.stop();
-            } catch (RuntimeException failure) {
-                if (logger != null) {
-                    logger.warn("[Paradigm] Shutdown: failed to flush pending playtime.", failure);
-                }
-            }
-        }
-        eu.avalanche7.paradigm.modules.afk.AfkService afk = this.afkService;
-        if (afk != null) {
-            try {
-                afk.stop();
-            } catch (RuntimeException failure) {
-                if (logger != null) {
-                    logger.warn("[Paradigm] Shutdown: failed to stop the AFK watcher.", failure);
-                }
-            }
+        if (!shutdownStarted.compareAndSet(false, true)) return;
+        moduleLifecycle.stopRemaining();
+        var input = playerInputService;
+        if (input != null) shutdownStep(logger, "closing player input", input::shutdown);
+        var punishments = punishmentService;
+        if (punishments != null) shutdownStep(logger, "stopping the punishment cache refresher", punishments::stop);
+        var playtime = playtimeService;
+        if (playtime != null) shutdownStep(logger, "flushing pending playtime", playtime::stop);
+        var afk = afkService;
+        if (afk != null) shutdownStep(logger, "stopping the AFK watcher", afk::stop);
+    }
+
+    static void shutdownStep(Logger logger, String action, Runnable task) {
+        try {
+            task.run();
+        } catch (RuntimeException | LinkageError failure) {
+            if (logger != null) logger.warn("[Paradigm] Shutdown: failed while {}; cleanup will continue.", action, failure);
         }
     }
 

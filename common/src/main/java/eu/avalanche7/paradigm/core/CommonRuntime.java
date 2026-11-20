@@ -2,6 +2,7 @@ package eu.avalanche7.paradigm.core;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 import org.slf4j.Logger;
 
@@ -32,24 +33,21 @@ public final class CommonRuntime {
         Objects.requireNonNull(platformConfig, "platformConfig");
         Objects.requireNonNull(platformAdapter, "platformAdapter");
 
-        DebugLogger bootstrapDebugLogger = new DebugLogger(null);
-        MainConfigHandler.init(platformConfig, bootstrapDebugLogger);
-        bootstrapDebugLogger = new DebugLogger(MainConfigHandler.getConfig());
-
-        AnnouncementsConfigHandler.init(platformConfig, bootstrapDebugLogger);
-        MOTDConfigHandler.init(platformConfig, bootstrapDebugLogger);
-        MentionConfigHandler.init(platformConfig, bootstrapDebugLogger);
-        RestartConfigHandler.init(platformConfig, bootstrapDebugLogger);
-        ChatConfigHandler.init(platformConfig, bootstrapDebugLogger);
-        ModerationConfigHandler.init(platformConfig, bootstrapDebugLogger);
-        CooldownConfigHandler.init(platformConfig, bootstrapDebugLogger);
-        EmojiConfigHandler.init(platformConfig, bootstrapDebugLogger);
-        TablistConfigHandler.init(platformConfig, bootstrapDebugLogger);
-        DiscordConfigHandler.init(platformConfig, bootstrapDebugLogger);
-        AfkConfigHandler.init(platformConfig, bootstrapDebugLogger);
-        TicketsConfigHandler.init(platformConfig, bootstrapDebugLogger);
-
+        MainConfigHandler.init(platformConfig, new DebugLogger(null));
         DebugLogger debugLogger = new DebugLogger(MainConfigHandler.getConfig());
+        AnnouncementsConfigHandler.init(platformConfig, debugLogger);
+        MOTDConfigHandler.init(platformConfig, debugLogger);
+        MentionConfigHandler.init(platformConfig, debugLogger);
+        RestartConfigHandler.init(platformConfig, debugLogger);
+        ChatConfigHandler.init(platformConfig, debugLogger);
+        ModerationConfigHandler.init(platformConfig, debugLogger);
+        CooldownConfigHandler.init(platformConfig, debugLogger);
+        EmojiConfigHandler.init(platformConfig, debugLogger);
+        TablistConfigHandler.init(platformConfig, debugLogger);
+        DiscordConfigHandler.init(platformConfig, debugLogger);
+        AfkConfigHandler.init(platformConfig, debugLogger);
+        TicketsConfigHandler.init(platformConfig, debugLogger);
+
         CMConfig cmConfig = new CMConfig(debugLogger, platformConfig);
         cmConfig.loadCommands();
 
@@ -134,7 +132,119 @@ public final class CommonRuntime {
         ApiProviderRegistry.install(new ParadigmApiProvider(runtime.services(), modVersion));
     }
 
-    public record Runtime(List<ParadigmModule> modules, Services services, PermissionsHandler permissionsHandler) {
+    public enum Startup {
+        PREPARED_IN_LOADER_SETUP, ACTIVATE_AT_SERVER_START, LEGACY_FORGE
+    }
+
+    public static final class Runtime {
+        private enum Phase {
+            CREATED, PREPARED, STARTED, STOPPING, STOPPED
+        }
+
+        private final List<ParadigmModule> modules;
+        private final Services services;
+        private final PermissionsHandler permissionsHandler;
+        private TelemetryReporter telemetry;
+        private Phase phase = Phase.CREATED;
+
+        public Runtime(List<ParadigmModule> modules, Services services, PermissionsHandler permissionsHandler) {
+            this.modules = List.copyOf(modules);
+            this.services = services;
+            this.permissionsHandler = permissionsHandler;
+        }
+
+        public List<ParadigmModule> modules() {
+            return modules;
+        }
+
+        public Services services() {
+            return services;
+        }
+
+        public PermissionsHandler permissionsHandler() {
+            return permissionsHandler;
+        }
+
+        /** Only loaders with an early activation event call this. */
+        public synchronized void prepareModules() {
+            if (phase != Phase.CREATED) return;
+            phase = Phase.PREPARED;
+            for (ParadigmModule module : modules) {
+                services.enableModule(module);
+            }
+        }
+
+        public void serverStarting(Object event, Object server, Consumer<Runnable> mainThread, Startup startup) {
+            serverStarting(event, server, mainThread, startup, null);
+        }
+
+        public synchronized void serverStarting(Object event, Object server, Consumer<Runnable> mainThread,
+                                                Startup startup, Runnable beforeModules) {
+            if (phase != Phase.CREATED && phase != Phase.PREPARED) return;
+            phase = Phase.STARTED;
+            services.setServer(server);
+            try {
+                services.getTaskScheduler().setMainThreadExecutor(mainThread);
+            } catch (Throwable failure) {
+                services.getLogger().error("[Paradigm] Startup: failed to bind the task scheduler to the Minecraft server thread.", failure);
+            }
+            telemetry = new TelemetryReporter(services);
+            telemetry.start();
+            if (startup != Startup.LEGACY_FORGE) {
+                try {
+                    permissionsHandler.registerLuckPermsPermissions();
+                } catch (Throwable failure) {
+                    services.getLogger().warn("[Paradigm] Startup: LuckPerms permission registration failed; platform authorization fallback remains active.", failure);
+                }
+            }
+            if (beforeModules != null) beforeModules.run();
+            for (ParadigmModule module : modules) {
+                if (!module.isEnabled(services)) continue;
+                if (startup != Startup.PREPARED_IN_LOADER_SETUP) services.enableModule(module);
+                module.onServerStarting(event, services);
+            }
+        }
+
+        public void serverStopping(Object event) {
+            serverStopping(event, null);
+        }
+
+        public synchronized void serverStopping(Object event, Runnable afterModuleStops) {
+            if (phase == Phase.STOPPING || phase == Phase.STOPPED) return;
+            phase = Phase.STOPPING;
+            Logger logger = services.getLogger();
+            Services.shutdownStep(logger, "rejecting new work", services::beginStopping);
+            Services.shutdownStep(logger, "detaching the public API", ApiProviderRegistry::uninstall);
+            CommandNodeAccessGate.uninstall();
+            ParadigmAPI.setInstance(null);
+            // Pass the loader event to active modules in registration order. Services retries incomplete cleanup.
+            for (ParadigmModule module : modules) {
+                if (services.isModuleActive(module)) services.stopModule(module, event);
+            }
+            if (telemetry != null) Services.shutdownStep(logger, "stopping telemetry", telemetry::stop);
+            if (afterModuleStops != null) Services.shutdownStep(logger, "running the loader stop hook", afterModuleStops);
+            Services.shutdownStep(logger, "flushing shared services", services::shutdown);
+            Services.shutdownStep(logger, "saving command cooldowns", CooldownConfigHandler::saveCooldowns);
+        }
+
+        public synchronized void serverStopped(Object event) {
+            if (phase == Phase.STOPPED) return;
+            try {
+                // Some failed starts reach the final loader event without a stopping event.
+                serverStopping(null);
+                phase = Phase.STOPPED;
+                Logger logger = services.getLogger();
+                for (ParadigmModule module : modules) {
+                    Services.shutdownStep(logger, "running the stopped hook for " + module.getName(), () -> {
+                        if (module.isEnabled(services)) module.onServerStopped(event, services);
+                    });
+                }
+            } finally {
+                phase = Phase.STOPPED;
+                StorageService storage = services.getStorageService();
+                if (storage != null) storage.close();
+            }
+        }
     }
 
     private static TaskScheduler adoptPlatformScheduler(Logger logger, IPlatformAdapter platformAdapter, DebugLogger debugLogger) {

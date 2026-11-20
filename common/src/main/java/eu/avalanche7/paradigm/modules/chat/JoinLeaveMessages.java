@@ -36,26 +36,6 @@ public class JoinLeaveMessages implements ParadigmModule {
     }
 
     @Override
-    public void onEnable(Services services) {
-    }
-
-    @Override
-    public void onDisable(Services services) {
-    }
-
-    @Override
-    public void onServerStarting(Object event, Services services) {
-    }
-
-    @Override
-    public void onServerStopping(Object event, Services services) {
-    }
-
-    @Override
-    public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
-    }
-
-    @Override
     public void registerEventListeners(Object eventBus, Services services) {
         IEventSystem events = moduleEvents(services);
         if (events == null) {

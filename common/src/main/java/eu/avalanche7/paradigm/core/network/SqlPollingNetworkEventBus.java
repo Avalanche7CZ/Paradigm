@@ -1,12 +1,15 @@
 package eu.avalanche7.paradigm.core.network;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
 import java.util.function.IntSupplier;
 
 import eu.avalanche7.paradigm.core.Services;
@@ -20,13 +23,19 @@ public class SqlPollingNetworkEventBus implements NetworkEventBus {
     private final IntSupplier pollSeconds;
     private final List<NetworkEventSource> sources = new CopyOnWriteArrayList<>();
     private final Map<String, List<NetworkEventHandler>> handlers = new ConcurrentHashMap<>();
-    private final Map<String, NetworkEventCursor> cursors = new ConcurrentHashMap<>();
-
-    private volatile ScheduledFuture<?> pollTask;
-    private volatile boolean running;
-    private volatile long baselineMs;
+    private volatile PollRun run;
+    private volatile PollSchedule schedule;
+    private ScheduledFuture<?> pollTask;
     private volatile int consecutivePollFailures;
     private volatile long lastPollFailureAtMs;
+
+    private static final class PollRun {
+        private final long baselineMs = System.currentTimeMillis();
+        private final Map<String, NetworkEventCursor> cursors = new HashMap<>();
+        private final AtomicBoolean polling = new AtomicBoolean();
+    }
+
+    private record PollSchedule(PollRun run, int intervalSeconds) {}
 
     public SqlPollingNetworkEventBus(Services services, IntSupplier pollSeconds) {
         this.services = services;
@@ -67,38 +76,50 @@ public class SqlPollingNetworkEventBus implements NetworkEventBus {
 
     @Override
     public synchronized void start() {
-        if (running || !hasAvailableSource()) {
-            return;
-        }
+        if (run == null) applySchedule();
+    }
+
+    public synchronized void applySchedule() {
+        if (services != null && services.isStopping()) return;
         int interval = pollSeconds != null ? pollSeconds.getAsInt() : 5;
         if (interval <= 0) {
+            stop();
             return;
         }
-        running = true;
-        long now = System.currentTimeMillis();
-        baselineMs = now;
-        for (NetworkEventSource source : sources) {
-            cursors.computeIfAbsent(source.channel(), key -> new NetworkEventCursor(now, SEEN_CAPACITY)).reset(now);
-        }
+        if (run == null && !hasAvailableSource()) return;
+        if (schedule != null && schedule.intervalSeconds() == interval && (pollTask == null || !pollTask.isDone())) return;
+        var nextRun = run != null ? run : new PollRun();
+        var nextSchedule = new PollSchedule(nextRun, interval);
+        ScheduledFuture<?> nextTask = null;
         if (services != null && services.getTaskScheduler() != null) {
-            pollTask = services.getTaskScheduler().scheduleAtFixedRateRaw(
-                    this::poll, interval, interval, TimeUnit.SECONDS);
+            nextTask = services.getTaskScheduler().scheduleAtFixedRateRaw(() -> {
+                if (schedule == nextSchedule) poll(nextSchedule.run());
+            }, interval, interval, TimeUnit.SECONDS);
+            if (nextTask == null || nextTask.isCancelled()) throw new IllegalStateException("Could not schedule network event polling.");
         }
+        var previous = pollTask;
+        run = nextRun;
+        schedule = nextSchedule;
+        pollTask = nextTask;
+        if (previous != null) previous.cancel(false);
     }
 
     @Override
     public synchronized void stop() {
-        running = false;
+        run = null;
+        schedule = null;
         ScheduledFuture<?> current = pollTask;
         pollTask = null;
-        if (current != null) {
-            current.cancel(false);
-        }
+        if (current != null) current.cancel(false);
     }
 
     @Override
     public boolean isRunning() {
-        return running;
+        return run != null;
+    }
+
+    private boolean isCurrent(PollRun expected) {
+        return expected != null && run == expected && (services == null || !services.isStopping());
     }
 
     @Override
@@ -107,71 +128,65 @@ public class SqlPollingNetworkEventBus implements NetworkEventBus {
     }
 
     public int poll() {
-        if (!running) {
-            return 0;
-        }
-        int delivered = 0;
-        boolean failed = false;
-        for (NetworkEventSource source : sources) {
-            try {
-                delivered += pollSource(source);
-            } catch (RuntimeException | LinkageError failure) {
-                if (!failed) {
-                    failed = true;
-                    consecutivePollFailures++;
-                    lastPollFailureAtMs = System.currentTimeMillis();
-                }
-                if (services != null && services.getLogger() != null) {
-                    services.getLogger().warn("Paradigm network bus: polling channel {} failed ({} consecutive failures)",
-                            source.channel(), consecutivePollFailures, failure);
-                }
-            }
-        }
-        if (!failed) {
-            consecutivePollFailures = 0;
-        }
-        return delivered;
+        return poll(run);
     }
 
-    int pollSource(NetworkEventSource source) {
-        if (source == null || !source.available()) {
-            return 0;
+    private int poll(PollRun expected) {
+        if (!isCurrent(expected) || !expected.polling.compareAndSet(false, true)) return 0;
+        try {
+            int delivered = 0;
+            boolean failed = false;
+            for (NetworkEventSource source : sources) {
+                if (!isCurrent(expected)) break;
+                try {
+                    delivered += pollSource(source, expected);
+                } catch (RuntimeException | LinkageError failure) {
+                    if (!isCurrent(expected)) break;
+                    if (!failed) {
+                        failed = true;
+                        consecutivePollFailures++;
+                        lastPollFailureAtMs = System.currentTimeMillis();
+                    }
+                    if (services != null && services.getLogger() != null) {
+                        services.getLogger().warn("Paradigm network bus: polling channel {} failed ({} consecutive failures)",
+                                source.channel(), consecutivePollFailures, failure);
+                    }
+                }
+            }
+            if (!failed && isCurrent(expected)) consecutivePollFailures = 0;
+            return delivered;
+        } finally {
+            expected.polling.set(false);
         }
-        NetworkEventCursor cursor = cursors.computeIfAbsent(source.channel(),
-                key -> new NetworkEventCursor(baselineMs, SEEN_CAPACITY));
+    }
+
+    private int pollSource(NetworkEventSource source, PollRun expected) {
+        if (!source.available()) return 0;
+        NetworkEventCursor cursor = expected.cursors.computeIfAbsent(source.channel(),
+                key -> new NetworkEventCursor(expected.baselineMs, SEEN_CAPACITY));
         String localServerId = resolveLocalServerId();
         List<NetworkEvent> batch = source.fetchSince(cursor.cursorMs(), cursor.cursorEventId(), localServerId, MAX_BATCH);
-        List<NetworkEvent> fresh = cursor.accept(batch);
-        if (fresh.isEmpty()) {
-            return 0;
+        if (!isCurrent(expected)) return 0;
+        var deliverable = new ArrayList<NetworkEvent>();
+        for (NetworkEvent event : cursor.accept(batch)) {
+            if (!isLocal(event, localServerId)) deliverable.add(event);
         }
-        List<NetworkEvent> deliverable = new ArrayList<>();
-        for (NetworkEvent event : fresh) {
-            if (!isLocal(event, localServerId)) {
-                deliverable.add(event);
-            }
-        }
-        if (deliverable.isEmpty()) {
-            return 0;
-        }
-        dispatch(source.channel(), deliverable);
+        if (!deliverable.isEmpty()) dispatch(source.channel(), deliverable, () -> isCurrent(expected));
         return deliverable.size();
     }
 
-    private void dispatch(String channel, List<NetworkEvent> events) {
+    private void dispatch(String channel, List<NetworkEvent> events, BooleanSupplier current) {
         List<NetworkEventHandler> registered = handlers.get(channel);
-        if (registered == null || registered.isEmpty()) {
-            return;
-        }
+        if (registered == null || registered.isEmpty()) return;
         Runnable task = () -> {
             for (NetworkEvent event : events) {
                 for (NetworkEventHandler handler : registered) {
+                    if (!current.getAsBoolean()) return;
                     try {
-                        handler.onRemoteEvent(event);
+                        handler.onRemoteEvent(event, current);
                     } catch (RuntimeException | LinkageError failure) {
                         if (services != null && services.getLogger() != null) {
-                            services.getLogger().warn("Paradigm network bus: handler for {} failed",
-                                    channel, failure);
+                            services.getLogger().warn("Paradigm network bus: handler for {} failed", channel, failure);
                         }
                     }
                 }

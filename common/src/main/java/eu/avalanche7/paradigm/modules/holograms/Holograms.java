@@ -57,18 +57,9 @@ public final class Holograms implements ParadigmModule {
     }
 
     @Override
-    public void onServerStopping(Object event, Services services) {
-        holograms.stop();
-    }
-
-    @Override
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         services.getPlatformAdapter().registerCommand(command("hologram"));
         services.getPlatformAdapter().registerCommand(command("holo"));
-    }
-
-    @Override
-    public void registerEventListeners(Object eventBus, Services services) {
     }
 
     private ICommandBuilder command(String rootName) {

@@ -31,22 +31,6 @@ public class SpawnCommand implements ParadigmModule {
     }
 
     @Override
-    public void onServerStarting(Object event, Services services) {
-    }
-
-    @Override
-    public void onEnable(Services services) {
-    }
-
-    @Override
-    public void onDisable(Services services) {
-    }
-
-    @Override
-    public void onServerStopping(Object event, Services services) {
-    }
-
-    @Override
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         registerSpawn();
         registerSetSpawn();
@@ -70,15 +54,16 @@ public class SpawnCommand implements ParadigmModule {
                         return 0;
                     }
 
+                    var activation = services.moduleActivationGuard(this);
                     return StorageCommandSupport.runForPlayer(services, player, "spawn.load", () ->
                             services.getStorageService().warps().getGlobalSpawn().orElse(null),
-                            (current, storedSpawn) -> {
+                            activation, (current, storedSpawn) -> {
                                 if (storedSpawn == null) {
                                     send(current, "spawn.not_set", "Spawn is not set yet. Use /setspawn.");
                                     return;
                                 }
                                 PlayerDataStore.StoredLocation location = toDataLocation(storedSpawn);
-                                CommandCooldowns.run(services, current, "spawn", fresh ->
+                                CommandCooldowns.run(services, current, "spawn", activation, fresh ->
                                         canUseSpawn(fresh) ? teleportSpawn(fresh, location) : 0);
                             },
                             "spawn.error_load");

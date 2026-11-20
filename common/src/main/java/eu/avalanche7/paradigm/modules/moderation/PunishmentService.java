@@ -6,6 +6,7 @@ import java.util.Optional;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import eu.avalanche7.paradigm.configs.ModerationConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
@@ -30,6 +31,7 @@ public final class PunishmentService {
     private volatile long lastRefreshMs;
     private final AtomicBoolean refreshRunning = new AtomicBoolean();
     private final AtomicBoolean started = new AtomicBoolean();
+    private final AtomicLong activationVersion = new AtomicLong();
     private volatile ScheduledFuture<?> refreshTask;
 
     public PunishmentService(Services services, AuditService audit) {
@@ -38,17 +40,35 @@ public final class PunishmentService {
         this.banScreen = new BanScreenFormatter(services);
     }
 
-    public void start() {
-        if (!started.compareAndSet(false, true)) return;
+    public synchronized void start() {
+        if (started.get()) return;
+        // Do not publish STARTED until the initial cache load and timer registration succeed.
         refreshNow();
         TaskScheduler scheduler = services.getTaskScheduler();
-        if (scheduler != null) {
-            refreshTask = scheduler.scheduleAtFixedRate(this::refreshIfDue, 10L, 10L, TimeUnit.SECONDS);
+        long version = activationVersion.incrementAndGet();
+        ScheduledFuture<?> task = null;
+        try {
+            if (scheduler != null) {
+                task = scheduler.scheduleAtFixedRate(() -> {
+                    if (started.get() && activationVersion.get() == version) refreshIfDue();
+                }, 10L, 10L, TimeUnit.SECONDS);
+                if (task.isCancelled()) {
+                    throw new IllegalStateException("Punishment refresh scheduler rejected startup.");
+                }
+            }
+            refreshTask = task;
+            started.set(true);
+        } catch (RuntimeException | Error failure) {
+            if (task != null) task.cancel(false);
+            refreshTask = null;
+            throw failure;
         }
     }
 
-    public void stop() {
+    public synchronized void stop() {
+        // Do not wait for a storage refresh here; queued work checks this generation.
         started.set(false);
+        activationVersion.incrementAndGet();
         ScheduledFuture<?> task = refreshTask;
         refreshTask = null;
         if (task != null) task.cancel(false);
@@ -377,18 +397,30 @@ public final class PunishmentService {
     }
 
     public void refreshAsync() {
+        if (!started.get() || services.isStopping()) return;
+        long version = activationVersion.get();
         if (!refreshRunning.compareAndSet(false, true)) return;
-        services.getStorageService().runStorageAsync("moderation.cache-refresh", () -> {
-            try {
-                if (!started.get()) return;
+        try {
+            services.getStorageService().submitAcknowledged(() -> {
+                if (!started.get() || activationVersion.get() != version) return null;
                 synchronized (mutationLock) {
-                    cache.replace(services.getStorageService().moderation().listActivePunishmentRecords(0L));
+                    if (!started.get() || activationVersion.get() != version) return null;
+                    var records = services.getStorageService().moderation().listActivePunishmentRecords(0L);
+                    if (!started.get() || activationVersion.get() != version) return null;
+                    cache.replace(records);
                     lastRefreshMs = System.currentTimeMillis();
                 }
-            } finally {
+                return null;
+            }).whenComplete((ignored, failure) -> {
                 refreshRunning.set(false);
-            }
-        });
+                if (failure != null && !services.isStopping() && services.getLogger() != null) {
+                    services.getLogger().warn("[Paradigm] Moderation cache refresh failed.", failure);
+                }
+            });
+        } catch (RuntimeException | Error failure) {
+            refreshRunning.set(false);
+            throw failure;
+        }
     }
 
     private void refreshIfDue() {

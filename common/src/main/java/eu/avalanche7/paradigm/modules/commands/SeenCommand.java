@@ -33,22 +33,6 @@ public class SeenCommand implements ParadigmModule {
     }
 
     @Override
-    public void onServerStarting(Object event, Services services) {
-    }
-
-    @Override
-    public void onEnable(Services services) {
-    }
-
-    @Override
-    public void onDisable(Services services) {
-    }
-
-    @Override
-    public void onServerStopping(Object event, Services services) {
-    }
-
-    @Override
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         ICommandBuilder cmd = services.getPlatformAdapter().createCommandBuilder()
                 .literal("seen")

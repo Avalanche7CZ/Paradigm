@@ -57,13 +57,6 @@ public final class PlaytimeModule implements ParadigmModule {
     }
 
     @Override
-    public void onServerStopping(Object event, Services services) {
-        if (services != null) {
-            services.getPlaytimeService().stop();
-        }
-    }
-
-    @Override
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         this.services = services;
         if (importer == null) importer = new LegacyPlaytimeCommand(services);

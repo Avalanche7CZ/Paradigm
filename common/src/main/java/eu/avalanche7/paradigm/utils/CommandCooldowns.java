@@ -5,13 +5,21 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 
 import eu.avalanche7.paradigm.configs.CooldownConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
 public final class CommandCooldowns {
-    private static final Map<String, Long> PENDING_WARMUPS = new ConcurrentHashMap<>();
+    private static final Map<WarmupKey, Warmup> PENDING_WARMUPS = new ConcurrentHashMap<>();
+
+    private record WarmupKey(Services services, UUID uuid, String command) {}
+    private record Warmup(PlayerConnection connection, BooleanSupplier activation, long until) {}
+
+    public static void clearWarmups(Services services) {
+        PENDING_WARMUPS.keySet().removeIf(key -> key.services() == services);
+    }
 
     private CommandCooldowns() {
     }
@@ -34,6 +42,10 @@ public final class CommandCooldowns {
         return runInternal(services, player, commandName, true, action);
     }
 
+    public static int run(Services services, IPlayer player, String commandName, BooleanSupplier activation, PlayerCommandAction action) {
+        return runInternal(services, player, commandName, true, action, true, activation);
+    }
+
     public static int runCooldownOnly(Services services, IPlayer player, String commandName, CommandAction action) {
         return runInternal(services, player, commandName, false, current -> action.run());
     }
@@ -54,7 +66,7 @@ public final class CommandCooldowns {
                 }
             });
             return result.getNow(1);
-        }, false);
+        }, false, () -> true);
     }
 
     private static int runInternal(
@@ -64,12 +76,12 @@ public final class CommandCooldowns {
             boolean allowWarmup,
             PlayerCommandAction action
     ) {
-        return runInternal(services, player, commandName, allowWarmup, action, true);
+        return runInternal(services, player, commandName, allowWarmup, action, true, () -> true);
     }
 
     private static int runInternal(Services services, IPlayer player, String commandName,
-            boolean allowWarmup, PlayerCommandAction action, boolean recordUsage) {
-        if (action == null) {
+            boolean allowWarmup, PlayerCommandAction action, boolean recordUsage, BooleanSupplier activation) {
+        if (action == null || (services != null && services.isStopping()) || !activation.getAsBoolean()) {
             return 0;
         }
         if (services == null || player == null) {
@@ -102,31 +114,38 @@ public final class CommandCooldowns {
             return result;
         }
 
-        String pendingKey = uuid + ":" + key;
-        Long pendingUntil = PENDING_WARMUPS.get(pendingKey);
-        if (pendingUntil != null && pendingUntil > now) {
-            send(services, player, "Teleport already warming up. Please wait " + secondsCeil(pendingUntil - now) + "s.");
+        var pendingKey = new WarmupKey(services, uuid, key);
+        var previous = PENDING_WARMUPS.get(pendingKey);
+        if (previous != null && previous.until() > now && previous.connection().matches(player) && previous.activation().getAsBoolean()) {
+            send(services, player, "Teleport already warming up. Please wait " + secondsCeil(previous.until() - now) + "s.");
             return 0;
         }
 
-        long until = now + warmupSeconds * 1000L;
-        PENDING_WARMUPS.put(pendingKey, until);
-        send(services, player, "Teleporting in " + warmupSeconds + "s...");
-
-        services.getTaskScheduler().schedule(() -> {
-            try {
-                IPlayer online = services.getPlatformAdapter().getPlayerByUuid(uuid.toString());
-                if (online == null) {
-                    return;
+        var warmup = new Warmup(new PlayerConnection(player), activation, now + warmupSeconds * 1000L);
+        PENDING_WARMUPS.put(pendingKey, warmup);
+        try {
+            var task = services.getTaskScheduler().schedule(() -> {
+                try {
+                    if (PENDING_WARMUPS.get(pendingKey) != warmup || services.isStopping() || !activation.getAsBoolean()) return;
+                    IPlayer online = services.getPlatformAdapter().getPlayerByUuid(uuid.toString());
+                    if (!warmup.connection().matches(online)) return;
+                    int result = action.run(online);
+                    if (recordUsage && result > 0) {
+                        CooldownConfigHandler.setLastUsage(uuid, key, System.currentTimeMillis());
+                    }
+                } finally {
+                    PENDING_WARMUPS.remove(pendingKey, warmup);
                 }
-                int result = action.run(online);
-                if (recordUsage && result > 0) {
-                    CooldownConfigHandler.setLastUsage(uuid, key, System.currentTimeMillis());
-                }
-            } finally {
-                PENDING_WARMUPS.remove(pendingKey);
+            }, warmupSeconds, TimeUnit.SECONDS);
+            if (task == null || task.isCancelled()) {
+                PENDING_WARMUPS.remove(pendingKey, warmup);
+                return 0;
             }
-        }, warmupSeconds, TimeUnit.SECONDS);
+        } catch (RuntimeException | Error failure) {
+            PENDING_WARMUPS.remove(pendingKey, warmup);
+            throw failure;
+        }
+        send(services, player, "Teleporting in " + warmupSeconds + "s...");
         return 1;
     }
 

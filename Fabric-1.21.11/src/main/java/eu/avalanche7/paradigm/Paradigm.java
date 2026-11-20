@@ -5,7 +5,6 @@ import eu.avalanche7.paradigm.core.CommonRuntime;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.PlatformAdapterImpl;
-import eu.avalanche7.paradigm.utils.TelemetryReporter;
 import net.fabricmc.api.DedicatedServerModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -25,10 +24,10 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
 
     private final List<ParadigmModule> modules = new ArrayList<>();
     private Services services;
+    private CommonRuntime.Runtime runtime;
     private static String modVersion = "unknown";
 
     private PlatformAdapterImpl platformAdapterInstance;
-    private TelemetryReporter telemetryReporter;
 
     @Override
     public void onInitializeServer() {
@@ -41,7 +40,7 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
         var taskScheduler = new eu.avalanche7.paradigm.utils.TaskScheduler(debugLogger);
         this.platformAdapterInstance = new PlatformAdapterImpl(null, placeholders, taskScheduler, debugLogger);
 
-        CommonRuntime.Runtime runtime = CommonRuntime.bootstrap(LOGGER, platformConfig, this.platformAdapterInstance);
+        runtime = CommonRuntime.bootstrap(LOGGER, platformConfig, this.platformAdapterInstance);
         this.services = runtime.services();
 
         try {
@@ -104,31 +103,8 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
     }
 
     private void onServerStarting(MinecraftServer server) {
-        services.setServer(server);
-
-        try {
-            services.getTaskScheduler().setMainThreadExecutor(server::execute);
-        } catch (Throwable failure) {
-            LOGGER.error("[Paradigm] Startup: failed to bind the task scheduler to the Minecraft server thread.", failure);
-        }
-
-        if (telemetryReporter == null) {
-            telemetryReporter = new TelemetryReporter(services);
-        }
-        telemetryReporter.start();
-
-        try {
-            services.getPermissionsHandler().registerLuckPermsPermissions();
-        } catch (Throwable failure) {
-            LOGGER.warn("[Paradigm] Startup: LuckPerms permission registration failed; platform authorization fallback remains active.", failure);
-        }
-
-        modules.forEach(module -> {
-            if (module.isEnabled(services)) {
-                services.enableModule(module);
-                module.onServerStarting(null, services);
-            }
-        });
+        runtime.serverStarting(null, server, server::execute,
+                CommonRuntime.Startup.ACTIVATE_AT_SERVER_START);
     }
 
     private void onRegisterCommands(CommandDispatcher<ServerCommandSource> dispatcher, net.minecraft.command.CommandRegistryAccess registryAccess, net.minecraft.server.command.CommandManager.RegistrationEnvironment environment) {
@@ -147,30 +123,11 @@ public class Paradigm implements DedicatedServerModInitializer, ParadigmAPI.Para
     }
 
     private void onServerStopping(MinecraftServer server) {
-        services.beginStopping();
-        modules.forEach(module -> {
-            if (services.isModuleActive(module)) {
-                services.stopModule(module, null);
-            }
-        });
-
-        if (telemetryReporter != null) {
-            telemetryReporter.stop();
-        }
-
-        try {
-            services.shutdown();
-        } catch (Throwable failure) {
-            LOGGER.error("[Paradigm] Shutdown: shared service shutdown failed.", failure);
-        }
+        runtime.serverStopping(null);
     }
 
     private void onServerStopped(MinecraftServer server) {
-        modules.forEach(module -> {
-            if (module.isEnabled(services)) {
-                module.onServerStopped(null, services);
-            }
-        });
+        runtime.serverStopped(null);
     }
 
     @Override

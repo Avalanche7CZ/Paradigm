@@ -9,7 +9,6 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import org.slf4j.Logger;
@@ -24,10 +23,10 @@ public class TaskScheduler {
 
     private final Object lifecycleLock = new Object();
     private final AtomicInteger threadIndex = new AtomicInteger();
-    private final AtomicReference<Object> serverRef = new AtomicReference<>(null);
     private final DebugLogger debugLogger;
 
     private ScheduledThreadPoolExecutor executorService;
+    private volatile Object server;
     private volatile Consumer<Runnable> mainThreadExecutor;
     private volatile boolean acceptingTasks = true;
 
@@ -67,7 +66,7 @@ public class TaskScheduler {
         synchronized (lifecycleLock) {
             this.acceptingTasks = true;
         }
-        this.serverRef.set(serverInstance);
+        this.server = serverInstance;
         if (serverInstance != null) {
             debug("TaskScheduler: Initialized with server instance.");
         } else {
@@ -140,7 +139,7 @@ public class TaskScheduler {
             return;
         }
 
-        Object currentServer = serverRef.get();
+        Object currentServer = server;
         if (currentServer == null) {
             runSafely(task, "async fallback");
             return;
@@ -180,7 +179,7 @@ public class TaskScheduler {
                         : "TaskScheduler: Executor service was never started, nothing to shut down.");
             }
         }
-        serverRef.set(null);
+        server = null;
         mainThreadExecutor = null;
         if (exec == null) {
             return;
@@ -208,7 +207,7 @@ public class TaskScheduler {
     }
 
     public boolean isServerAvailable() {
-        return serverRef.get() != null;
+        return server != null;
     }
 
     public boolean isShutdown() {

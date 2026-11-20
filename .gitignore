@@ -69,3 +69,36 @@ ForgeAnnoucements-1.0.0/plugin.yml
 
 !/common/src/test/java/eu/avalanche7/paradigm/configs/schema/ConfigurationApplyTest.java
 !/common/src/test/java/eu/avalanche7/paradigm/modules/discord/DiscordTicketRepliesTest.java
+
+# Lifecycle and storage regression coverage.
+!/common/src/test/java/eu/avalanche7/paradigm/core/CommonRuntimeTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/core/ModuleActivationTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/core/SchedulerOwnershipContractTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/core/network/SqlPollingNetworkEventBusTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/modules/AnnouncementsSchedulingLifecycleTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/modules/afk/AfkServiceTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/modules/commands/moderation/ExpiryTaskLifecycleTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/modules/discord/DiscordTicketRoomsTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/modules/moderation/PunishmentServiceLifecycleTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/modules/playtime/PlaytimeShutdownRecoveryTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/modules/tab/TablistLifecycleTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/modules/tickets/SqlTicketRepositoryTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/modules/tickets/TicketTestData.java
+!/common/src/test/java/eu/avalanche7/paradigm/storage/ShutdownLifecycleTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/storage/sql/RuntimeSqliteMigrationTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/storage/sql/SharedPermissionDefinitionTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/storage/sqlite/SqlIntegrationViewsTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/storage/sqlite/SqliteStorageProviderTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/utils/TaskSchedulerLifecycleTest.java
+!/Forge-1.7.10/src/test/
+/Forge-1.7.10/src/test/**
+!/Forge-1.7.10/src/test/**/
+!/Forge-1.7.10/src/test/java/eu/avalanche7/paradigm/ParadigmLifecycleTest.java
+!/Forge-1.7.10/src/test/java/eu/avalanche7/paradigm/platform/ChatSocialTest.java
+!/Forge-1.7.10/src/test/java/eu/avalanche7/paradigm/platform/HomeOtherAccessTest.java
+!/Forge-1.7.10/src/test/java/eu/avalanche7/paradigm/platform/ModerationIntegrationTest.java
+!/Forge-1.7.10/src/test/java/eu/avalanche7/paradigm/platform/VisualModulesTest.java
+!/NeoForge-26.1.2/src/test/
+/NeoForge-26.1.2/src/test/**
+!/NeoForge-26.1.2/src/test/**/
+!/NeoForge-26.1.2/src/test/java/eu/avalanche7/paradigm/platform/InventoryPreviewTest.java

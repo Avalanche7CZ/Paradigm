@@ -1,13 +1,11 @@
 package eu.avalanche7.paradigm;
 
 import com.mojang.logging.LogUtils;
-import eu.avalanche7.paradigm.configs.CooldownConfigHandler;
 import eu.avalanche7.paradigm.core.CommonRuntime;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.ForgeConfig;
 import eu.avalanche7.paradigm.platform.PlatformAdapterImpl;
-import eu.avalanche7.paradigm.utils.TelemetryReporter;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.RegisterCommandsEvent;
@@ -35,9 +33,9 @@ public class Paradigm {
 
     private final List<ParadigmModule> modules = new ArrayList<>();
     private Services services;
+    private CommonRuntime.Runtime runtime;
     private static Services SERVICES_INSTANCE;
 
-    private TelemetryReporter telemetryReporter;
     private static Paradigm INSTANCE;
 
     public static Services getServices() {
@@ -66,7 +64,7 @@ public class Paradigm {
         var taskScheduler = new eu.avalanche7.paradigm.utils.TaskScheduler(debugLogger);
         var platformAdapter = new PlatformAdapterImpl(null, placeholders, taskScheduler, debugLogger);
 
-        CommonRuntime.Runtime runtime = CommonRuntime.bootstrap(LOGGER, platformConfig, platformAdapter);
+        runtime = CommonRuntime.bootstrap(LOGGER, platformConfig, platformAdapter);
         this.services = runtime.services();
         SERVICES_INSTANCE = this.services;
 
@@ -103,11 +101,7 @@ public class Paradigm {
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        event.enqueueWork(() -> modules.forEach(module -> {
-            if (module.isEnabled(services)) {
-                services.enableModule(module);
-            }
-        }));
+        event.enqueueWork(runtime::prepareModules);
 
         ModList.get().getModContainerById(MOD_ID).ifPresent(modContainer -> {
             String version = modContainer.getModInfo().getVersion().toString();
@@ -148,27 +142,8 @@ public class Paradigm {
 
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
-        services.setServer(event.getServer());
-        try {
-            services.getTaskScheduler().setMainThreadExecutor(event.getServer()::execute);
-        } catch (Throwable failure) {
-            LOGGER.error("[Paradigm] Startup: failed to bind the task scheduler to the Minecraft server thread.", failure);
-        }
-
-        if (telemetryReporter == null) telemetryReporter = new TelemetryReporter(services);
-        telemetryReporter.start();
-
-        try {
-            services.getPermissionsHandler().registerLuckPermsPermissions();
-        } catch (Throwable failure) {
-            LOGGER.warn("[Paradigm] Startup: LuckPerms permission registration failed; platform authorization fallback remains active.", failure);
-        }
-
-        modules.forEach(module -> {
-            if (module.isEnabled(services)) {
-                module.onServerStarting(event, services);
-            }
-        });
+        runtime.serverStarting(event, event.getServer(), event.getServer()::execute,
+                CommonRuntime.Startup.PREPARED_IN_LOADER_SETUP);
     }
 
     @SubscribeEvent(priority = EventPriority.LOWEST)
@@ -206,23 +181,11 @@ public class Paradigm {
 
     @SubscribeEvent
     public void onServerStopping(ServerStoppingEvent event) {
-        services.beginStopping();
-        modules.forEach(module -> {
-            if (services.isModuleActive(module)) {
-                services.stopModule(module, event);
-            }
-        });
-        if (telemetryReporter != null) telemetryReporter.stop();
-        services.shutdown();
-        CooldownConfigHandler.saveCooldowns();
+        runtime.serverStopping(event);
     }
 
     @SubscribeEvent
     public void onServerStopped(ServerStoppedEvent event) {
-        modules.forEach(module -> {
-            if (module.isEnabled(services)) {
-                module.onServerStopped(event, services);
-            }
-        });
+        runtime.serverStopped(event);
     }
 }

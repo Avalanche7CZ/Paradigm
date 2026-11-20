@@ -14,6 +14,7 @@ import eu.avalanche7.paradigm.configs.schema.ConfigApplyService;
 import eu.avalanche7.paradigm.configs.schema.ConfigValidationResult;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.Announcements;
 import eu.avalanche7.paradigm.modules.commands.moderation.PunishmentCommands;
 import eu.avalanche7.paradigm.modules.commands.permissions.PermissionCommands;
 import eu.avalanche7.paradigm.modules.commands.shared.ChatUi;
@@ -34,13 +35,6 @@ public class Reload implements ParadigmModule {
 
     @Override public String getName() { return "Reload"; }
     @Override public boolean isEnabled(Services services) { return true; }
-    @Override public void onLoad(Object e, Services s, Object b) {}
-    @Override public void onServerStarting(Object e, Services s) {}
-    @Override public void onEnable(Services s) {}
-    @Override public void onDisable(Services s) {}
-    @Override public void onServerStopping(Object e, Services s) {}
-    @Override public void registerEventListeners(Object bus, Services s) {}
-
     @Override
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         if (dispatcher != null) {
@@ -167,7 +161,7 @@ public class Reload implements ParadigmModule {
     }
 
     private static boolean registerModuleCommands(ParadigmModule module, Services services) {
-        if (CommandCatalog.entriesForModule(module).isEmpty()) return false;
+        if (CommandCatalog.entriesForModule(module).isEmpty() && !(module instanceof Announcements)) return false;
         Object dispatcher = services.getPlatformAdapter().getCommandDispatcher();
         if (dispatcher == null) return false;
         module.registerCommands(dispatcher, REGISTRY_ACCESS_BY_DISPATCHER.get(dispatcher), services);

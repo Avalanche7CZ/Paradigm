@@ -42,6 +42,10 @@ public class SqlMigrationRunner implements MigrationRunner {
         return run(loadMigrations(connections.dialect().migrationsPath()));
     }
 
+    public static int latestAvailableVersion(SqlDialect dialect) {
+        return loadMigrations(dialect.migrationsPath()).stream().mapToInt(Migration::version).max().orElse(0);
+    }
+
     @Override
     public MigrationResult run(List<Migration> migrations) {
         var operationLock = connections.operationLock();
@@ -295,7 +299,7 @@ public class SqlMigrationRunner implements MigrationRunner {
         return List.of(identifier, identifier.toLowerCase(Locale.ROOT), identifier.toUpperCase(Locale.ROOT));
     }
 
-    private List<Migration> loadMigrations(String basePath) {
+    static List<Migration> loadMigrations(String basePath) {
         List<Migration> migrations = new ArrayList<>();
         for (int version = 1; version <= 99; version++) {
             String resource = basePath + "/V" + version + "__" + switch (version) {
@@ -339,7 +343,7 @@ public class SqlMigrationRunner implements MigrationRunner {
         return migrations;
     }
 
-    private String resourceText(String resource) {
+    private static String resourceText(String resource) {
         try (InputStream stream = SqlMigrationRunner.class.getClassLoader().getResourceAsStream(resource)) {
             if (stream == null) {
                 return null;

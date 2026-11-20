@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.io.ByteArrayInputStream;
 import java.io.InputStreamReader;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -20,6 +21,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -28,6 +30,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
@@ -38,16 +41,30 @@ import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.LoggerFactory;
 
 import eu.avalanche7.paradigm.ParadigmAPI;
+import eu.avalanche7.paradigm.configs.AfkConfigHandler;
+import eu.avalanche7.paradigm.configs.AnnouncementsConfigHandler;
 import eu.avalanche7.paradigm.configs.BaseConfigHandler;
 import eu.avalanche7.paradigm.configs.ConfigSection;
 import eu.avalanche7.paradigm.configs.CooldownConfigHandler;
 import eu.avalanche7.paradigm.configs.DiscordConfigHandler;
 import eu.avalanche7.paradigm.configs.MainConfigHandler;
 import eu.avalanche7.paradigm.configs.TablistConfigHandler;
+import eu.avalanche7.paradigm.configs.TicketsConfigHandler;
 import eu.avalanche7.paradigm.core.CommonRuntime;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.core.network.NetworkEvent;
+import eu.avalanche7.paradigm.core.network.NetworkEventSource;
+import eu.avalanche7.paradigm.core.network.SqlPollingNetworkEventBus;
+import eu.avalanche7.paradigm.modules.Announcements;
+import eu.avalanche7.paradigm.modules.Restart;
+import eu.avalanche7.paradigm.modules.afk.AfkModule;
+import eu.avalanche7.paradigm.modules.audit.AuditService;
+import eu.avalanche7.paradigm.modules.chat.GroupChat;
+import eu.avalanche7.paradigm.modules.chat.PrivateMessages;
+import eu.avalanche7.paradigm.modules.chat.StaffChat;
 import eu.avalanche7.paradigm.modules.commands.Reload;
+import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardConfig;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardJson;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardRequestContext;
@@ -57,9 +74,19 @@ import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
 import eu.avalanche7.paradigm.modules.menus.Menus;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 import eu.avalanche7.paradigm.modules.tab.Tablist;
+import eu.avalanche7.paradigm.modules.tickets.Ticket;
+import eu.avalanche7.paradigm.modules.tickets.TicketNetworkEvents;
+import eu.avalanche7.paradigm.modules.tickets.TicketNotifier;
+import eu.avalanche7.paradigm.modules.tickets.TicketRepository;
+import eu.avalanche7.paradigm.modules.tickets.TicketService;
+import eu.avalanche7.paradigm.modules.tickets.TicketsModule;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandContext;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
+import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.StorageService;
 import eu.avalanche7.paradigm.storage.identity.ServerScope;
 import eu.avalanche7.paradigm.storage.managedconfig.ManagedConfigAppliedState;
@@ -67,6 +94,7 @@ import eu.avalanche7.paradigm.storage.managedconfig.ManagedConfigEntry;
 import eu.avalanche7.paradigm.storage.managedconfig.ManagedConfigRevisionView;
 import eu.avalanche7.paradigm.storage.repository.ManagedConfigRepository;
 import eu.avalanche7.paradigm.storage.repository.ModerationRepository;
+import eu.avalanche7.paradigm.utils.CommandCooldowns;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 import eu.avalanche7.paradigm.utils.TaskScheduler;
 
@@ -80,9 +108,16 @@ class ConfigurationApplyTest {
     private final AtomicReference<ManagedConfigEntry> managed = new AtomicReference<>();
     private final AtomicReference<ManagedConfigAppliedState> applied = new AtomicReference<>();
     private final AtomicInteger cacheReads = new AtomicInteger();
+    private final AtomicInteger acknowledgedTasks = new AtomicInteger();
     private final AtomicBoolean failCache = new AtomicBoolean();
     private final AtomicInteger tabListeners = new AtomicInteger();
+    private final AtomicInteger commandRefreshes = new AtomicInteger();
+    private final AtomicBoolean failCommandRefresh = new AtomicBoolean();
+    private final AtomicBoolean failPermissionShutdown = new AtomicBoolean();
     private final CountingScheduler scheduler = new CountingScheduler();
+    private final Map<String, IPlayer> online = new ConcurrentHashMap<>();
+    private final AtomicInteger messagesSent = new AtomicInteger();
+    private final AtomicInteger onlineReads = new AtomicInteger();
     private Services services;
     private StorageService bootstrapStorage;
     private StorageService storage;
@@ -130,7 +165,23 @@ class ConfigurationApplyTest {
                     case "getConfig" -> config;
                     case "getEventSystem" -> eventSystem;
                     case "getTaskScheduler" -> scheduler;
-                    case "getOnlinePlayers" -> List.of();
+                    case "getOnlinePlayers" -> {
+                        onlineReads.incrementAndGet();
+                        yield List.copyOf(online.values());
+                    }
+                    case "getPlayerByUuid" -> online.get(args[0]);
+                    case "getPlayerName" -> ((IPlayer) args[0]).getName();
+                    case "replacePlaceholders" -> args[0];
+                    case "createLiteralComponent", "createComponentFromLiteral", "createEmptyComponent" -> testComponent();
+                    case "sendSystemMessage" -> {
+                        messagesSent.incrementAndGet();
+                        yield null;
+                    }
+                    case "refreshAllPlayerCommandTrees" -> {
+                        commandRefreshes.incrementAndGet();
+                        if (failCommandRefresh.get()) throw new IllegalStateException("Command refresh failed.");
+                        yield null;
+                    }
                     case "executeOnServerThread" -> {
                         server.add((Runnable) args[0]);
                         yield null;
@@ -172,18 +223,28 @@ class ConfigurationApplyTest {
             @Override public boolean isMysqlActive() { return managed.get() != null; }
             @Override public ManagedConfigRepository managedConfig() { return repository; }
             @Override public ModerationRepository moderation() { return moderation; }
+            @Override public <T> CompletableFuture<T> submitAcknowledged(Supplier<T> work) {
+                acknowledgedTasks.incrementAndGet();
+                return super.submitAcknowledged(work);
+            }
         };
         var permissions = new PermissionsHandler(logger, boot.getCmConfig(), boot.getDebugLogger(), platform,
                 boot.getPlayerDataStore(), storage) {
             @Override public void refreshInternalPermissions() {}
             @Override public void registerLuckPermsPermissions() {}
+            @Override public synchronized void stopDefinitionSync() {
+                if (failPermissionShutdown.get()) throw new IllegalStateException("Permission sync stop failed.");
+                super.stopDefinitionSync();
+            }
         };
         services = new Services(logger, null, null, null, null, null, null, boot.getCmConfig(),
                 boot.getGroupChatManager(), boot.getDebugLogger(), boot.getLang(), boot.getMessageParser(),
                 permissions, null, scheduler, boot.getPlayerDataStore(),
                 boot.getModerationDataStore(), boot.getAdminUtilityDataStore(), storage, boot.getCommandToggleStore(), platform) {
             private final ConfigApplyService configApply = new ConfigApplyService(this, toggleTasks::add, timeouts::add);
+            private final AuditService audit = new AuditService(this, Runnable::run);
             @Override public ConfigApplyService getConfigApplyService() { return configApply; }
+            @Override public AuditService getAuditService() { return audit; }
         };
 
         dashboard = new DashboardService(services, new DashboardConfig());
@@ -420,6 +481,98 @@ class ConfigurationApplyTest {
     }
 
     @Test
+    void punishmentStartCanRetryAfterInitialCacheFailureWithoutLeakingTimers() throws Exception {
+        var punishments = services.getPunishmentService();
+        failCache.set(true);
+        assertThrows(IllegalStateException.class, punishments::start);
+        assertFalse(punishments.isStarted());
+        assertEquals(0, scheduler.activeTimers());
+
+        failCache.set(false);
+        scheduler.rejectNextTimer = true;
+        assertThrows(IllegalStateException.class, punishments::start);
+        assertFalse(punishments.isStarted());
+        assertEquals(0, scheduler.activeTimers());
+        punishments.start();
+        assertTrue(punishments.isStarted());
+        assertEquals(1, scheduler.activeTimers());
+        punishments.start();
+        assertEquals(1, scheduler.timers.size(), "Repeated start must not create a second refresher");
+
+        Timer stale = scheduler.timers.get(scheduler.timers.size() - 1);
+        punishments.stop();
+        assertEquals(0, scheduler.activeTimers());
+        punishments.start();
+        assertTrue(punishments.isStarted());
+        assertEquals(1, scheduler.activeTimers());
+        assertEquals(2, scheduler.timers.size());
+        var lastRefresh = punishments.getClass().getDeclaredField("lastRefreshMs");
+        lastRefresh.setAccessible(true);
+        lastRefresh.setLong(punishments, 0L);
+        int before = acknowledgedTasks.get();
+        stale.callback.run();
+        assertEquals(before, acknowledgedTasks.get(), "Old timer must not queue a refresh after restart");
+        scheduler.timers.get(scheduler.timers.size() - 1).callback.run();
+        assertEquals(before + 1, acknowledgedTasks.get());
+        punishments.stop();
+    }
+
+    @Test
+    void moderationRefreshRejectionDoesNotKeepRefreshRunningForever() throws Exception {
+        var punishments = services.getPunishmentService();
+        punishments.start();
+        storage.close();
+        punishments.refreshAsync();
+        var running = punishments.getClass().getDeclaredField("refreshRunning");
+        running.setAccessible(true);
+        assertFalse(((AtomicBoolean) running.get(punishments)).get());
+    }
+
+    @Test
+    void tabRejectedSchedulerRollsBackAndAllowsRetry() throws Exception {
+        installModules(List.of(tab));
+        var edit = TablistConfigHandler.handler().edit();
+        edit.value().enabled.value = true;
+        edit.save();
+        scheduler.rejectNextTimer = true;
+        assertFalse(finish(services.getConfigApplyService().reload(Set.of(ConfigSection.TABLIST))).ok());
+        assertFalse(tab.isActive());
+        assertFalse(services.isModuleActive(tab));
+        assertEquals(0, scheduler.activeTimers());
+        assertTrue(finish(services.getConfigApplyService().reload(Set.of(ConfigSection.TABLIST))).ok());
+        assertTrue(tab.isActive());
+        assertEquals(2, scheduler.activeTimers());
+    }
+
+    @Test
+    void tabReloadFencesQueuedPeriodicWorldWatchAndImmediateCallbacks() throws Exception {
+        installModules(List.of(tab));
+        var edit = TablistConfigHandler.handler().edit();
+        edit.value().enabled.value = true;
+        edit.save();
+        assertTrue(finish(services.getConfigApplyService().reload(Set.of(ConfigSection.TABLIST))).ok());
+        assertEquals(2, scheduler.activeTimers());
+
+        Timer oldPeriodic = scheduler.timers.get(0);
+        Timer oldWorldWatch = scheduler.timers.get(1);
+        var scheduleRefresh = Tablist.class.getDeclaredMethod("scheduleRefresh", long.class);
+        scheduleRefresh.setAccessible(true);
+        scheduleRefresh.invoke(tab, 0L);
+        Timer oldImmediate = scheduler.oneShots.get(scheduler.oneShots.size() - 1);
+
+        assertTrue(finish(services.getConfigApplyService().reload(Set.of(ConfigSection.TABLIST))).ok());
+        assertEquals(2, scheduler.activeTimers());
+        int reads = onlineReads.get();
+        oldPeriodic.callback.run();
+        oldWorldWatch.callback.run();
+        oldImmediate.callback.run();
+        assertEquals(reads, onlineReads.get(), "Callbacks from the old activation must be inert");
+
+        scheduler.timers.get(2).callback.run();
+        assertEquals(reads + 1, onlineReads.get());
+    }
+
+    @Test
     void targetedAndAllReloadWaitForTheSameModerationRefresh() throws Exception {
         services.getPunishmentService().start();
         int baseline = cacheReads.get();
@@ -640,6 +793,585 @@ class ConfigurationApplyTest {
                 result.rejected().get(0).reason());
     }
 
+    @Test
+    void restartAndAnnouncementsWaitForServerAndArmExactlyOnceAtStartup() {
+        var restart = new Restart();
+        var announcements = new Announcements();
+        installModules(List.of(restart, announcements));
+        services.enableModule(restart);
+        services.enableModule(announcements);
+        assertEquals(0, scheduler.activeTimers());
+        assertEquals(0, scheduler.activeOneShots());
+
+        services.setServer(new Object());
+        restart.onServerStarting(null, services);
+        announcements.onServerStarting(null, services);
+        int countdownJobs = scheduler.oneShots.size();
+        assertTrue(countdownJobs > 0);
+        assertEquals(4, scheduler.activeTimers());
+        assertTrue(announcements.isScheduled());
+
+        restart.onServerStarting(null, services);
+        announcements.onServerStarting(null, services);
+        assertEquals(countdownJobs, scheduler.oneShots.size());
+        assertEquals(4, scheduler.timers.size());
+    }
+
+    @Test
+    void enablingRestartAndAnnouncementsFromMainReloadArmsLiveTimers() {
+        var restart = new Restart();
+        var announcements = new Announcements();
+        installModules(List.of(restart, announcements));
+        services.setServer(new Object());
+        var main = MainConfigHandler.handler().edit();
+        main.value().restartEnable.value = false;
+        main.value().announcementsEnable.value = false;
+        main.save();
+        assertApplied(ConfigSection.MAIN);
+        assertFalse(services.isModuleActive(restart));
+        assertFalse(services.isModuleActive(announcements));
+
+        main = MainConfigHandler.handler().edit();
+        main.value().restartEnable.value = true;
+        main.value().announcementsEnable.value = true;
+        main.save();
+        assertApplied(ConfigSection.MAIN);
+        assertTrue(services.isModuleActive(restart));
+        assertTrue(services.isModuleActive(announcements));
+        int countdownJobs = scheduler.oneShots.size();
+        assertTrue(countdownJobs > 0);
+        assertEquals(4, scheduler.activeTimers());
+
+        assertApplied(ConfigSection.RESTART, ConfigSection.ANNOUNCEMENTS);
+        assertEquals(countdownJobs, scheduler.oneShots.size());
+        assertEquals(4, scheduler.timers.size());
+
+        main = MainConfigHandler.handler().edit();
+        main.value().restartEnable.value = false;
+        main.value().announcementsEnable.value = false;
+        main.save();
+        assertApplied(ConfigSection.MAIN);
+        assertEquals(0, scheduler.activeOneShots());
+        assertEquals(0, scheduler.activeTimers());
+    }
+
+    @Test
+    void announcementsFirstAndLastChannelReconcileWithoutMainReload() {
+        var announcements = new Announcements();
+        installModules(List.of(announcements));
+        services.setServer(new Object());
+        var config = AnnouncementsConfigHandler.handler().edit();
+        config.value().globalEnable.value = false;
+        config.value().actionbarEnable.value = false;
+        config.value().titleEnable.value = false;
+        config.value().bossbarEnable.value = false;
+        config.save();
+        assertApplied(ConfigSection.ANNOUNCEMENTS);
+        assertFalse(services.isModuleActive(announcements));
+
+        config = AnnouncementsConfigHandler.handler().edit();
+        config.value().globalEnable.value = true;
+        config.save();
+        assertApplied(ConfigSection.MAIN, ConfigSection.ANNOUNCEMENTS);
+        assertTrue(services.isModuleActive(announcements));
+        assertEquals(1, scheduler.activeTimers());
+        assertEquals(1, scheduler.timers.size());
+
+        config = AnnouncementsConfigHandler.handler().edit();
+        config.value().globalEnable.value = false;
+        config.save();
+        assertApplied(ConfigSection.ANNOUNCEMENTS);
+        assertFalse(services.isModuleActive(announcements));
+        assertEquals(0, scheduler.activeTimers());
+
+        config = AnnouncementsConfigHandler.handler().edit();
+        config.value().globalEnable.value = true;
+        config.save();
+        assertApplied(ConfigSection.ANNOUNCEMENTS);
+        assertTrue(services.isModuleActive(announcements));
+        assertEquals(1, scheduler.activeTimers());
+        assertEquals(2, scheduler.timers.size());
+    }
+
+    @Test
+    void chatPatchReconcilesModulesAndRefreshesTheCommandTreeOnce() {
+        var staff = new StaffChat();
+        var privateMessages = new PrivateMessages();
+        var group = new GroupChat(services.getGroupChatManager());
+        var mods = List.<ParadigmModule>of(staff, privateMessages, group);
+        installModules(mods);
+        mods.forEach(services::enableModule);
+
+        IPlayer player = (IPlayer) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{IPlayer.class},
+                (proxy, method, args) -> method.getName().equals("getUUID") ? "79147999-0164-4177-87c0-981393cc52f1"
+                        : defaultValue(method.getReturnType()));
+        var playerData = services.getGroupChatManager().getPlayerData(player);
+        playerData.setCurrentGroup("friends");
+        playerData.setGroupChatToggled(true);
+
+        assertTrue(finish(CompletableFuture.supplyAsync(() -> dashboard.patchService().apply(chatPatch(false)))).locallyApplied());
+        assertTrue(mods.stream().noneMatch(services::isModuleActive));
+        assertFalse(playerData.isGroupChatToggled());
+        assertEquals("friends", services.getGroupChatManager().getPlayerData(player).getCurrentGroup());
+        assertEquals(1, commandRefreshes.get());
+
+        assertTrue(finish(CompletableFuture.supplyAsync(() -> dashboard.patchService().apply(chatPatch(true)))).locallyApplied());
+        assertTrue(mods.stream().allMatch(services::isModuleActive));
+        assertEquals(2, commandRefreshes.get());
+
+        assertApplied(ConfigSection.CHAT);
+        assertEquals(2, commandRefreshes.get());
+    }
+
+    @Test
+    void failedChatCommandRefreshRetriesOnAnUnchangedDashboardSave() {
+        var staff = new StaffChat();
+        installModules(List.of(staff));
+        services.enableModule(staff);
+        failCommandRefresh.set(true);
+
+        var result = finish(CompletableFuture.supplyAsync(() -> dashboard.patchService().apply(chatPatch(false))));
+        assertFalse(result.locallyApplied());
+        assertFalse(result.applied().contains("chat"));
+        assertFalse(services.isModuleActive(staff));
+        assertEquals(1, commandRefreshes.get());
+
+        failCommandRefresh.set(false);
+        result = finish(CompletableFuture.supplyAsync(() -> dashboard.patchService().apply(chatPatch(false))));
+        assertTrue(result.locallyApplied(), result.rejected().toString());
+        assertEquals(2, commandRefreshes.get());
+        assertFalse(services.isModuleActive(staff));
+    }
+
+    @Test
+    void failedDisableRemainsPendingUntilARepeatedApplyActuallyCleansUp() {
+        var module = new FailingModule();
+        installModules(List.of(module));
+        services.enableModule(module);
+        module.wanted = false;
+        module.failCleanup = true;
+
+        var failed = finish(services.getConfigApplyService().reload(Set.of(ConfigSection.MAIN)));
+        assertFalse(failed.ok());
+        assertFalse(failed.applied().contains("main"));
+        assertFalse(services.isModuleActive(module));
+        assertFalse(services.canDispatchModuleEvents(module));
+        assertTrue(module.resourceOpen);
+        assertEquals(1, module.cleanups);
+
+        module.failCleanup = false;
+        assertApplied(ConfigSection.MAIN);
+        assertFalse(module.resourceOpen);
+        assertEquals(2, module.cleanups);
+        assertApplied(ConfigSection.MAIN);
+        assertEquals(2, module.cleanups);
+    }
+
+    @Test
+    void shutdownRetriesPendingDisableWithoutRunningServerStopHook() {
+        var module = new FailingModule();
+        services.enableModule(module);
+        module.failCleanup = true;
+        assertThrows(IllegalStateException.class, () -> services.disableModule(module));
+        module.failCleanup = false;
+
+        services.shutdown();
+        assertEquals(0, module.stopHooks);
+        assertEquals(2, module.cleanups);
+        assertFalse(module.resourceOpen);
+    }
+
+    @Test
+    void shutdownContinuesThroughModuleCleanupAndStorageCloseAfterProducerFailure() {
+        var module = new FailingModule();
+        var storageCloses = new AtomicInteger();
+        storage.registerStorageResource(storageCloses::incrementAndGet);
+        var runtime = new CommonRuntime.Runtime(List.of(module), services, services.getPermissionsHandler());
+        runtime.prepareModules();
+        runtime.prepareModules();
+        var activation = services.moduleActivationGuard(module);
+        assertTrue(activation.getAsBoolean());
+        assertEquals(1, module.enables);
+
+        failPermissionShutdown.set(true);
+        runtime.serverStopping(null);
+        assertTrue(scheduler.isShutdown());
+        assertFalse(activation.getAsBoolean());
+        assertEquals(1, module.stopHooks);
+        assertEquals(1, module.cleanups);
+        assertFalse(module.resourceOpen);
+        assertEquals(0, storageCloses.get());
+        assertEquals(42, storage.submitAcknowledged(() -> 42).join());
+
+        runtime.serverStopped(null);
+        runtime.serverStopped(null);
+        assertEquals(1, storageCloses.get());
+        assertEquals(1, module.cleanups);
+    }
+
+    @Test
+    void failedEnableCleanupMustSucceedBeforeASecondActivation() {
+        var module = new FailingModule();
+        module.failEnable = true;
+        module.failCleanup = true;
+        var failure = assertThrows(IllegalStateException.class, () -> services.enableModule(module));
+        assertEquals(1, failure.getSuppressed().length);
+        assertFalse(services.isModuleActive(module));
+        assertFalse(services.canDispatchModuleEvents(module));
+
+        module.failEnable = false;
+        assertThrows(IllegalStateException.class, () -> services.enableModule(module));
+        assertEquals(1, module.enables);
+
+        module.failCleanup = false;
+        services.enableModule(module);
+        assertEquals(3, module.cleanups);
+        assertEquals(2, module.enables);
+        assertTrue(services.isModuleActive(module));
+        assertTrue(services.canDispatchModuleEvents(module));
+    }
+
+    @Test
+    void afkRetunesWithoutLosingSessionsAndInvalidatesTheOldWatcher() {
+        var afk = new AfkModule();
+        installModules(List.of(afk));
+        services.setServer(new Object());
+        IPlayer player = testPlayer("9744c703-8e21-4df3-9384-3b6f32b9ce2d");
+        online.put(player.getUUID(), player);
+        var config = AfkConfigHandler.handler().edit();
+        config.value().enabled.value = true;
+        config.value().broadcastEnabled.value = false;
+        config.value().activityCheckIntervalSeconds.value = 3;
+        config.save();
+        assertApplied(ConfigSection.AFK);
+        assertTrue(services.getAfkService().toggle(player));
+        long since = services.getAfkService().afkSinceMs(player.getUUID());
+        assertTrue(since > 0);
+        Timer first = scheduler.timers.get(0);
+
+        config = AfkConfigHandler.handler().edit();
+        config.value().afkTag.value = " (away)";
+        config.save();
+        assertApplied(ConfigSection.AFK);
+        assertEquals(1, scheduler.timers.size());
+        assertEquals(since, services.getAfkService().afkSinceMs(player.getUUID()));
+
+        config = AfkConfigHandler.handler().edit();
+        config.value().activityCheckIntervalSeconds.value = 9;
+        config.save();
+        assertApplied(ConfigSection.AFK);
+        assertTrue(first.isCancelled());
+        assertEquals(1, scheduler.activeTimers());
+        assertEquals(since, services.getAfkService().afkSinceMs(player.getUUID()));
+        int reads = onlineReads.get();
+        first.callback.run();
+        assertEquals(reads, onlineReads.get());
+        scheduler.timers.get(scheduler.timers.size() - 1).callback.run();
+        assertEquals(reads + 1, onlineReads.get());
+
+        config = AfkConfigHandler.handler().edit();
+        config.value().enabled.value = false;
+        config.save();
+        assertApplied(ConfigSection.AFK);
+        assertEquals(0, scheduler.activeTimers());
+        assertFalse(services.getAfkService().isAfk(player));
+    }
+
+    @Test
+    void ticketReloadReplacesOnlyTheChangedTimer() {
+        var tickets = new TicketsModule();
+        installModules(List.of(tickets));
+        services.setServer(new Object());
+        var config = TicketsConfigHandler.handler().edit();
+        config.value().enabled.value = true;
+        config.value().autoCloseResolvedAfterHours.value = 4;
+        config.value().autoCloseSweepIntervalMinutes.value = 20;
+        config.save();
+        assertApplied(ConfigSection.TICKETS);
+        assertEquals(1, scheduler.rawTimers.size());
+        Timer sweep = scheduler.rawTimers.get(0);
+
+        assertApplied(ConfigSection.TICKETS);
+        assertEquals(1, scheduler.rawTimers.size());
+        assertFalse(sweep.isCancelled());
+
+        config = TicketsConfigHandler.handler().edit();
+        config.value().autoCloseSweepIntervalMinutes.value = 35;
+        config.save();
+        assertApplied(ConfigSection.TICKETS);
+        assertEquals(2, scheduler.rawTimers.size());
+        assertTrue(sweep.isCancelled());
+        assertFalse(scheduler.rawTimers.get(scheduler.rawTimers.size() - 1).isCancelled());
+    }
+
+    @Test
+    void changingPollIntervalPreservesTheCursorAndAlreadyQueuedDelivery() throws Exception {
+        var interval = new AtomicInteger(10);
+        var bus = new SqlPollingNetworkEventBus(services, interval::get);
+        var source = new TestNetworkSource();
+        scheduler.captureRaw = true;
+        bus.registerSource(source);
+        var delivered = new ArrayList<String>();
+        bus.subscribe("pr2", event -> delivered.add(event.eventId()));
+        bus.start();
+        assertEquals(0, bus.poll());
+        source.event = source.next("one");
+        assertEquals(1, bus.poll());
+        Runnable first = scheduler.raw.poll(3, TimeUnit.SECONDS);
+        assertNotNull(first);
+        source.event = source.next("two");
+        bus.applySchedule();
+        assertEquals(1, scheduler.rawTimers.size());
+
+        interval.set(15);
+        bus.applySchedule();
+        assertEquals(2, scheduler.rawTimers.size());
+        assertTrue(scheduler.rawTimers.get(0).isCancelled());
+        first.run();
+        assertEquals(List.of("one"), delivered);
+        assertEquals(1, bus.poll());
+        Runnable second = scheduler.raw.poll(3, TimeUnit.SECONDS);
+        assertNotNull(second);
+        second.run();
+        assertEquals(List.of("one", "two"), delivered);
+        bus.stop();
+    }
+
+    @Test
+    void stoppingThenStartingPollerInvalidatesQueuedOldDelivery() throws Exception {
+        var bus = new SqlPollingNetworkEventBus(services, () -> 10);
+        var source = new TestNetworkSource();
+        scheduler.captureRaw = true;
+        bus.registerSource(source);
+        var delivered = new ArrayList<String>();
+        bus.subscribe("pr2", event -> delivered.add(event.eventId()));
+        bus.start();
+        assertEquals(0, bus.poll());
+        source.event = source.next("old");
+        assertEquals(1, bus.poll());
+        Runnable old = scheduler.raw.poll(3, TimeUnit.SECONDS);
+        assertNotNull(old);
+        bus.stop();
+        bus.start();
+        old.run();
+        assertTrue(delivered.isEmpty());
+        bus.stop();
+    }
+
+    @Test
+    void ticketNotificationChecksPollActivationAgainOnTheMinecraftThread() throws Exception {
+        var config = TicketsConfigHandler.handler().edit();
+        config.value().staffNotifyEnabled.value = true;
+        config.save();
+        assertApplied(ConfigSection.TICKETS);
+        var ticket = new Ticket("id", "T00001", "test", "other", "creator", "Creator", "general", "Example",
+                null, null, null, null, 0, 0, null, null, 0, 0, Map.of());
+        var repo = proxy(TicketRepository.class, (self, method, args) ->
+                method.getName().equals("findTicket") ? Optional.of(ticket) : defaultValue(method.getReturnType()));
+        var service = new TicketService(services) {
+            @Override public TicketRepository repository() { return repo; }
+        };
+        var bus = new SqlPollingNetworkEventBus(services, () -> 10);
+        var source = new TestNetworkSource();
+        scheduler.captureRaw = true;
+        bus.registerSource(source);
+        bus.subscribe("pr2", TicketNetworkEvents.handler(service, new TicketNotifier(services)));
+        bus.start();
+
+        assertEquals(0, bus.poll());
+        source.event = source.next("valid");
+        assertEquals(1, bus.poll());
+        Runnable validOffThread = scheduler.raw.poll(3, TimeUnit.SECONDS);
+        assertNotNull(validOffThread);
+        validOffThread.run();
+        Runnable valid = server.poll(3, TimeUnit.SECONDS);
+        assertNotNull(valid);
+        int reads = onlineReads.get();
+        valid.run();
+        assertEquals(reads + 1, onlineReads.get());
+
+        source.event = source.next("stale");
+        assertEquals(1, bus.poll());
+        Runnable staleOffThread = scheduler.raw.poll(3, TimeUnit.SECONDS);
+        assertNotNull(staleOffThread);
+        staleOffThread.run();
+        Runnable stale = server.poll(3, TimeUnit.SECONDS);
+        assertNotNull(stale);
+        bus.stop();
+        stale.run();
+        assertEquals(reads + 1, onlineReads.get());
+    }
+
+    @Test
+    void privateMessageDoesNotCrossModuleActivationOrRecipientSession() throws Exception {
+        var pm = new PrivateMessages();
+        installModules(List.of(pm));
+        services.enableModule(pm);
+        scheduler.captureMain = true;
+        var sender = testPlayer("8744c703-8e21-4df3-9384-3b6f32b9ce2d");
+        var target = testPlayer("8744c703-8e21-4df3-9384-3b6f32b9ce3e");
+        online.put(sender.getUUID(), sender);
+        online.put(target.getUUID(), target);
+
+        Runnable oldActivation = submitPrivateMessage(pm, sender, target);
+        services.disableModule(pm);
+        services.enableModule(pm);
+        oldActivation.run();
+        assertEquals(0, messagesSent.get());
+
+        Runnable oldConnection = submitPrivateMessage(pm, sender, target);
+        var newTarget = testPlayer(target.getUUID());
+        online.put(target.getUUID(), newTarget);
+        oldConnection.run();
+        assertEquals(0, messagesSent.get());
+
+        submitPrivateMessage(pm, sender, newTarget).run();
+        assertEquals(2, messagesSent.get());
+    }
+
+    @Test
+    void stalePlayerCallbackDoesNotUndoAlreadyAcceptedStorageWork() throws Exception {
+        var original = testPlayer("7744c703-8e21-4df3-9384-3b6f32b9ce2d");
+        online.put(original.getUUID(), original);
+        scheduler.captureMain = true;
+        var wrote = new AtomicInteger();
+        var callbacks = new AtomicInteger();
+        assertEquals(1, StorageCommandSupport.runForPlayer(services, original, "pr2.write", wrote::incrementAndGet,
+                (player, result) -> callbacks.incrementAndGet()));
+        Runnable callback = scheduler.mainCallbacks.poll(3, TimeUnit.SECONDS);
+        assertNotNull(callback);
+        online.put(original.getUUID(), testPlayer(original.getUUID()));
+        callback.run();
+        assertEquals(1, wrote.get());
+        assertEquals(0, callbacks.get());
+    }
+
+    @Test
+    void oldWarmupCannotActOnReconnectOrRemoveTheNewWarmup() throws Exception {
+        var oldPlayer = testPlayer("6744c703-8e21-4df3-9384-3b6f32b9ce2d");
+        var newPlayer = testPlayer(oldPlayer.getUUID());
+        online.put(oldPlayer.getUUID(), oldPlayer);
+        var config = CooldownConfigHandler.handler().edit();
+        config.value().commandWarmupSeconds.put("pr2warmup", 10);
+        config.save();
+        assertApplied(ConfigSection.COOLDOWNS);
+        scheduler.captureMain = true;
+        var actions = new AtomicInteger();
+        CommandCooldowns.PlayerCommandAction action = player -> actions.incrementAndGet();
+        assertEquals(1, CommandCooldowns.run(services, oldPlayer, "pr2warmup", action));
+        Runnable stale = scheduler.mainCallbacks.poll(3, TimeUnit.SECONDS);
+        assertNotNull(stale);
+        online.put(oldPlayer.getUUID(), newPlayer);
+        assertEquals(1, CommandCooldowns.run(services, newPlayer, "pr2warmup", action));
+        Runnable valid = scheduler.mainCallbacks.poll(3, TimeUnit.SECONDS);
+        assertNotNull(valid);
+        stale.run();
+        assertEquals(0, actions.get());
+        assertEquals(0, CommandCooldowns.run(services, newPlayer, "pr2warmup", action));
+        valid.run();
+        assertEquals(1, actions.get());
+    }
+
+    private Runnable submitPrivateMessage(PrivateMessages pm, IPlayer sender, IPlayer recipient) throws Exception {
+        var source = proxy(ICommandSource.class, (self, method, args) ->
+                method.getName().equals("requirePlayer") ? sender : defaultValue(method.getReturnType()));
+        var ctx = proxy(ICommandContext.class, (self, method, args) -> switch (method.getName()) {
+            case "getSource" -> source;
+            case "getPlayerArgument" -> recipient;
+            case "getStringArgument" -> "private test message";
+            default -> defaultValue(method.getReturnType());
+        });
+        var execute = PrivateMessages.class.getDeclaredMethod("executeMsgCommand", ICommandContext.class);
+        execute.setAccessible(true);
+        assertEquals(1, execute.invoke(pm, ctx));
+        Runnable callback = scheduler.mainCallbacks.poll(3, TimeUnit.SECONDS);
+        assertNotNull(callback);
+        return callback;
+    }
+
+    private static IPlayer testPlayer(String uuid) {
+        Object identity = new Object();
+        return proxy(IPlayer.class, (self, method, args) -> switch (method.getName()) {
+            case "getUUID" -> uuid;
+            case "getName" -> "TestPlayer";
+            case "getOriginalPlayer" -> identity;
+            default -> defaultValue(method.getReturnType());
+        });
+    }
+
+    private static IComponent testComponent() {
+        return proxy(IComponent.class, (self, method, args) -> method.getReturnType() == IComponent.class ? self
+                : method.getReturnType() == String.class ? "" : defaultValue(method.getReturnType()));
+    }
+
+    private static <T> T proxy(Class<T> type, InvocationHandler handler) {
+        return type.cast(Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type}, handler));
+    }
+
+    private static final class TestNetworkSource implements NetworkEventSource {
+        private long since;
+        private NetworkEvent event;
+
+        @Override public String channel() { return "pr2"; }
+        @Override public boolean available() { return true; }
+        @Override public List<NetworkEvent> fetchSince(long sinceMs, String afterEventId, String excludeServerId, int limit) {
+            since = sinceMs;
+            return event != null && event.createdAtMs() > sinceMs ? List.of(event) : List.of();
+        }
+
+        NetworkEvent next(String id) {
+            long timestamp = event != null ? event.createdAtMs() + 1 : since + 1;
+            return new NetworkEvent(channel(), id, "test", "other", "CREATED", timestamp,
+                    Map.of(TicketNetworkEvents.PAYLOAD_TICKET_KEY, "T00001"));
+        }
+    }
+
+    private void assertApplied(ConfigSection... sections) {
+        var result = finish(services.getConfigApplyService().reload(Set.of(sections)));
+        assertTrue(result.ok(), result.rejected().toString());
+        for (var section : sections) assertTrue(result.applied().contains(section.key()), result.applied().toString());
+    }
+
+    private void installModules(List<ParadigmModule> modules) {
+        ParadigmAPI.setInstance(new ParadigmAPI.ParadigmAccessor() {
+            @Override public List<ParadigmModule> getModules() { return modules; }
+            @Override public Services getServices() { return services; }
+            @Override public String getModVersion() { return "test"; }
+        });
+        modules.forEach(module -> module.onLoad(null, services, null));
+    }
+
+    private ConfigPatch chatPatch(boolean value) {
+        return new ConfigPatch(dashboard.schemaRegistry().snapshot().revision(), List.of(
+                new ConfigPatchOperation("chat.enableStaffChat", value),
+                new ConfigPatchOperation("chat.enablePrivateMessages", value),
+                new ConfigPatchOperation("chat.enableGroupChat", value)));
+    }
+
+    private static final class FailingModule implements ParadigmModule {
+        private boolean wanted = true;
+        private boolean resourceOpen;
+        private boolean failEnable;
+        private boolean failCleanup;
+        private int enables;
+        private int cleanups;
+        private int stopHooks;
+
+        @Override public String getName() { return "FailingModule"; }
+        @Override public boolean isEnabled(Services services) { return wanted; }
+        @Override public void onEnable(Services services) {
+            enables++;
+            resourceOpen = true;
+            if (failEnable) throw new IllegalStateException("Activation failed.");
+        }
+        @Override public void onDisable(Services services) {
+            cleanups++;
+            if (failCleanup) throw new IllegalStateException("Cleanup failed.");
+            resourceOpen = false;
+        }
+        @Override public void onServerStopping(Object event, Services services) { stopHooks++; }
+    }
+
     private void assertTab(boolean enabled) {
         assertEquals(enabled, TablistConfigHandler.getConfig().enabled.value);
         assertEquals(enabled, services.isModuleActive(tab));
@@ -702,30 +1434,57 @@ class ConfigurationApplyTest {
 
     private static final class CountingScheduler extends TaskScheduler {
         private final List<Timer> timers = new ArrayList<>();
+        private final List<Timer> oneShots = new ArrayList<>();
         private final BlockingQueue<Runnable> raw = new LinkedBlockingQueue<>();
+        private final List<Timer> rawTimers = new ArrayList<>();
+        private final BlockingQueue<Runnable> mainCallbacks = new LinkedBlockingQueue<>();
+        private boolean rejectNextTimer;
         private boolean captureRaw;
+        private volatile boolean captureMain;
 
         CountingScheduler() { super(new DebugLogger(null)); }
 
         long activeTimers() { return timers.stream().filter(timer -> !timer.isCancelled()).count(); }
 
         @Override public ScheduledFuture<?> scheduleAtFixedRate(Runnable task, long delay, long period, TimeUnit unit) {
-            var timer = new Timer();
+            var timer = new Timer(task);
+            if (rejectNextTimer) {
+                rejectNextTimer = false;
+                timer.cancel(false);
+                return timer;
+            }
             timers.add(timer);
             return timer;
         }
 
-        @Override public ScheduledFuture<?> schedule(Runnable task, long delay, TimeUnit unit) { return new Timer(); }
+        long activeOneShots() { return oneShots.stream().filter(timer -> !timer.isCancelled()).count(); }
+
+        @Override public ScheduledFuture<?> schedule(Runnable task, long delay, TimeUnit unit) {
+            var timer = new Timer(task);
+            oneShots.add(timer);
+            if (captureMain) mainCallbacks.add(task);
+            return timer;
+        }
+
+        @Override public ScheduledFuture<?> scheduleAtFixedRateRaw(Runnable task, long delay, long period, TimeUnit unit) {
+            var timer = new Timer(task);
+            rawTimers.add(timer);
+            return timer;
+        }
 
         @Override public ScheduledFuture<?> scheduleRaw(Runnable task, long delay, TimeUnit unit) {
             if (!captureRaw) return super.scheduleRaw(task, delay, unit);
             raw.add(task);
-            return new Timer();
+            return new Timer(task);
         }
     }
 
     private static final class Timer implements ScheduledFuture<Object> {
+        private final Runnable callback;
         private boolean cancelled;
+
+        Timer(Runnable callback) { this.callback = callback; }
+
         @Override public boolean cancel(boolean interrupt) { cancelled = true; return true; }
         @Override public boolean isCancelled() { return cancelled; }
         @Override public boolean isDone() { return cancelled; }

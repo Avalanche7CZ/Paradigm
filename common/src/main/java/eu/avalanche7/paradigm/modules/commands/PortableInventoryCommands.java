@@ -54,10 +54,4 @@ public final class PortableInventoryCommands implements ParadigmModule {
         return opened ? 1 : 0;
     }
 
-    @Override public void onLoad(Object event, Services services, Object modEventBus) { }
-    @Override public void onServerStarting(Object event, Services services) { }
-    @Override public void onEnable(Services services) { }
-    @Override public void onDisable(Services services) { }
-    @Override public void onServerStopping(Object event, Services services) { }
-    @Override public void registerEventListeners(Object eventBus, Services services) { }
 }

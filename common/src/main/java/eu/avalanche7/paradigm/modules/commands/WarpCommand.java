@@ -60,18 +60,10 @@ public class WarpCommand implements ParadigmModule {
     }
 
     @Override
-    public void onDisable(Services services) {
-    }
-
-    @Override
     public void onServerStopping(Object event, Services services) {
         warpCache = Map.of();
         warpCacheUpdatedAt = 0L;
         warpCacheRefreshInFlight.set(false);
-    }
-
-    @Override
-    public void registerEventListeners(Object eventBus, Services services) {
     }
 
     @Override
@@ -247,9 +239,10 @@ public class WarpCommand implements ParadigmModule {
             return 0;
         }
 
+        var activation = services.moduleActivationGuard(this);
         return StorageCommandSupport.runForPlayer(services, player, "warp.load", () ->
                 services.getStorageService().warps().getWarp(warpName).orElse(null),
-                (current, warp) -> {
+                activation, (current, warp) -> {
                     if (warp == null || warp.location() == null) {
                         send(current, "warp.not_found", "Warp {warp} was not found.", "{warp}", warpName);
                         return;
@@ -258,7 +251,7 @@ public class WarpCommand implements ParadigmModule {
                         send(current, "warp.no_permission", "You do not have permission to use warp {warp}.", "{warp}", warpName);
                         return;
                     }
-                    CommandCooldowns.run(services, current, "warp", fresh ->
+                    CommandCooldowns.run(services, current, "warp", activation, fresh ->
                             canUseWarpCommand(fresh) && canUseWarp(fresh, warp, warpName)
                                     ? teleportWarp(fresh, warp)
                                     : 0);

@@ -1,42 +1,18 @@
 package eu.avalanche7.paradigm.modules;
 
-import eu.avalanche7.paradigm.ParadigmAPI;
-import eu.avalanche7.paradigm.api.internal.ApiProviderRegistry;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.modules.permissions.CommandNodeAccessGate;
 
 public class StorageLifecycle implements ParadigmModule {
     @Override public String getName() { return "StorageLifecycle"; }
     @Override public boolean isEnabled(Services services) { return true; }
-    @Override public void onLoad(Object event, Services services, Object modEventBus) {}
-
     @Override
     public void onServerStarting(Object event, Services services) {
-        services.getManagedConfigSyncService().reconcileOnStartup();
+        var configSync = services.getManagedConfigSyncService();
+        configSync.reconcileOnStartup();
         services.getServerHeartbeatPublisher().start();
-        services.getManagedConfigSyncService().start();
+        configSync.start();
         services.getPermissionsHandler().startDefinitionSync(services.getTaskScheduler());
     }
 
-    @Override public void onEnable(Services services) {}
-    @Override public void onDisable(Services services) {}
-    @Override public void registerCommands(Object dispatcher, Object registryAccess, Services services) {}
-    @Override public void registerEventListeners(Object eventBus, Services services) {}
-
-    @Override
-    public void onServerStopping(Object event, Services services) {
-        ApiProviderRegistry.uninstall();
-        CommandNodeAccessGate.uninstall();
-        ParadigmAPI.setInstance(null);
-    }
-
-    @Override
-    public void onServerStopped(Object event, Services services) {
-        if (services != null) {
-            services.shutdown();
-            onServerStopping(event, services);
-            if (services.getStorageService() != null) services.getStorageService().close();
-        }
-    }
 }

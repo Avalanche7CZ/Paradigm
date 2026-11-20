@@ -19,7 +19,6 @@ import net.minecraftforge.common.MinecraftForge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import eu.avalanche7.paradigm.configs.CooldownConfigHandler;
 import eu.avalanche7.paradigm.core.CommonRuntime;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
@@ -29,7 +28,6 @@ import eu.avalanche7.paradigm.platform.PlatformAdapterImpl;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 import eu.avalanche7.paradigm.utils.Placeholders;
 import eu.avalanche7.paradigm.utils.TaskScheduler;
-import eu.avalanche7.paradigm.utils.TelemetryReporter;
 
 @Mod(modid = Paradigm.MOD_ID, name = "Paradigm", version = ModVersion.VALUE,
         acceptableRemoteVersions = "*")
@@ -40,9 +38,9 @@ public final class Paradigm {
     private final List<ParadigmModule> modules = new ArrayList<>();
     private PlatformAdapterImpl platform;
     private Services services;
+    private CommonRuntime.Runtime runtime;
     private static Services SERVICES_INSTANCE;
     private static Paradigm INSTANCE;
-    private TelemetryReporter telemetryReporter;
 
     public Paradigm() {
         INSTANCE = this;
@@ -67,7 +65,7 @@ public final class Paradigm {
         ForgeConfig config = new ForgeConfig(event.getModConfigurationDirectory().toPath());
         platform = new PlatformAdapterImpl(null, new Placeholders(), scheduler, debugLogger, config);
 
-        CommonRuntime.Runtime runtime =
+        runtime =
                 CommonRuntime.bootstrap(LOGGER, platform.getConfig(), platform);
         services = runtime.services();
         SERVICES_INSTANCE = services;
@@ -88,11 +86,7 @@ public final class Paradigm {
     @Mod.EventHandler
     public void init(FMLInitializationEvent event) {
         if (services == null) return;
-        for (ParadigmModule module : modules) {
-            if (module.isEnabled(services)) {
-                services.enableModule(module);
-            }
-        }
+        runtime.prepareModules();
 
         LOGGER.info("==================================================");
         LOGGER.info("  ____                     _ _");
@@ -130,18 +124,9 @@ public final class Paradigm {
     @Mod.EventHandler
     public void starting(FMLServerStartingEvent event) {
         if (services == null) return;
-        services.setServer(event.getServer());
-        MinecraftLoginHandler.bind(services);
-        services.getTaskScheduler().setMainThreadExecutor(platform::executeOnServerThread);
-        if (telemetryReporter == null) telemetryReporter = new TelemetryReporter(services);
-        telemetryReporter.start();
+        runtime.serverStarting(event, event.getServer(), platform::executeOnServerThread,
+                CommonRuntime.Startup.LEGACY_FORGE, () -> MinecraftLoginHandler.bind(services));
 
-        for (ParadigmModule module : modules) {
-            if (module.isEnabled(services)) {
-                services.enableModule(module);
-                module.onServerStarting(event, services);
-            }
-        }
         for (ParadigmModule module : modules) {
             platform.registerCommandContributor(module,
                     () -> platform.registerModuleCommands(module, services));
@@ -185,30 +170,21 @@ public final class Paradigm {
     @Mod.EventHandler
     public void stopping(FMLServerStoppingEvent event) {
         if (services == null) return;
-        services.beginStopping();
-        for (ParadigmModule module : modules) {
-            if (services.isModuleActive(module)) {
-                services.stopModule(module, event);
-            }
-        }
-        if (telemetryReporter != null) telemetryReporter.stop();
-        MinecraftLoginHandler.clear();
-        services.shutdown();
-        CooldownConfigHandler.saveCooldowns();
+        runtime.serverStopping(event, MinecraftLoginHandler::clear);
         LOGGER.info("Paradigm services shut down");
     }
 
     @Mod.EventHandler
     public void stopped(FMLServerStoppedEvent event) {
         if (services == null) return;
-        for (ParadigmModule module : modules) {
-            if (module.isEnabled(services)) {
-                module.onServerStopped(event, services);
-            }
+        try {
+            runtime.serverStopping(null, MinecraftLoginHandler::clear);
+            runtime.serverStopped(event);
+        } finally {
+            FMLCommonHandler.instance().bus().unregister(this);
+            platform.events().unregister();
+            platform.clear();
         }
-        FMLCommonHandler.instance().bus().unregister(this);
-        platform.events().unregister();
-        platform.clear();
         LOGGER.info("Paradigm Forge 1.7.10 cleanup complete");
     }
 }

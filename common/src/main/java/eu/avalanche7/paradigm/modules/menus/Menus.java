@@ -105,17 +105,6 @@ public final class Menus implements ParadigmModule {
     }
 
     @Override
-    public void onServerStopping(Object event, Services services) {
-        if (menuService != null) {
-            menuService.closeAll();
-        }
-    }
-
-    @Override
-    public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
-    }
-
-    @Override
     public void registerEventListeners(Object eventBus, Services services) {
         if (lifecycleEvents(services) == null) {
             return;

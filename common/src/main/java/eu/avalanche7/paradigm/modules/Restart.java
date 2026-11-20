@@ -78,27 +78,17 @@ public class Restart implements ParadigmModule {
 
     @Override
     public void onServerStarting(Object event, Services services) {
-        if (isEnabled(services)) {
-            services.getDebugLogger().debugLog(NAME + ": Server is starting, scheduling restarts.");
-            scheduleNextRestart(services);
-        }
+        rescheduleNextRestart(services);
     }
 
     @Override
     public void onEnable(Services services) {
-        if (services.getMinecraftServer() != null) {
-            services.getDebugLogger().debugLog(NAME + ": Module enabled (deferring restart scheduling to onServerStarting).");
-        }
+        rescheduleNextRestart(services);
     }
 
     @Override
     public void onDisable(Services services) {
         services.getDebugLogger().debugLog(NAME + ": Module disabled, cancelling any scheduled restarts.");
-        cancelAndCleanup();
-    }
-
-    @Override
-    public void onServerStopping(Object event, Services services) {
         cancelAndCleanup();
     }
 
@@ -158,7 +148,8 @@ public class Restart implements ParadigmModule {
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         ICommandBuilder cmd = platform.createCommandBuilder()
                 .literal("restart")
-                .requires(source -> services.getCommandToggleStore().isEnabled("restart")
+                .requires(source -> services.canDispatchModuleEvents(this) && isEnabled(services)
+                        && services.getCommandToggleStore().isEnabled("restart")
                         && (source.isConsole() || (source.getPlayer() != null && services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.RESTART_MANAGE_PERMISSION))))
                 .then(platform.createCommandBuilder()
                         .literal("now")
@@ -189,13 +180,8 @@ public class Restart implements ParadigmModule {
         platform.registerCommand(cmd);
     }
 
-    @Override
-    public void registerEventListeners(Object eventBus, Services services) {
-    }
-
     private synchronized void scheduleNextRestart(Services services) {
         cancelAndCleanup();
-        scheduleSettings = schedulingSettings(services);
         RestartConfigHandler.Config config = services.getRestartConfig();
         String restartType = config.restartType.value;
         long delayMillis = -1;
@@ -219,6 +205,7 @@ public class Restart implements ParadigmModule {
         } else {
             services.getDebugLogger().debugLog(NAME + ": No valid restart delay computed. Skipping schedule.");
         }
+        scheduleSettings = schedulingSettings(services);
     }
 
     private long getNextRealTimeDelay(RestartConfigHandler.Config config, Services services) {
@@ -360,6 +347,7 @@ public class Restart implements ParadigmModule {
             if (!restartInProgress.get()) return;
             performShutdown(services, config);
         }, totalIntervalMillis, TimeUnit.MILLISECONDS);
+        if (shutdownFuture.isCancelled()) throw new IllegalStateException("Could not schedule the server restart.");
     }
 
     private void executePreRestartConsoleCommand(String command, Services services) {
@@ -468,14 +456,20 @@ public class Restart implements ParadigmModule {
     }
 
     public synchronized void rescheduleNextRestart(Services services) {
-        if (services == null) return;
-        if (services.canDispatchModuleEvents(this) && isEnabled(services) && schedulingSettings(services).equals(scheduleSettings)) return;
+        if (services == null || services.isStopping() || !isEnabled(services)
+                || services.getTaskScheduler() == null || !services.getTaskScheduler().isServerAvailable()
+                || schedulingSettings(services).equals(scheduleSettings)) return;
         this.services = services;
-        cancelAndCleanup();
-        if (!services.canDispatchModuleEvents(this) || !isEnabled(services)) {
-            services.getDebugLogger().debugLog(NAME + ": Module is disabled after reload; restart will stay unscheduled.");
-            return;
+        this.platform = services.getPlatformAdapter();
+        try {
+            scheduleNextRestart(services);
+        } catch (RuntimeException | Error failure) {
+            try {
+                cancelAndCleanup();
+            } catch (RuntimeException | Error cleanupFailure) {
+                if (cleanupFailure != failure) failure.addSuppressed(cleanupFailure);
+            }
+            throw failure;
         }
-        scheduleNextRestart(services);
     }
 }

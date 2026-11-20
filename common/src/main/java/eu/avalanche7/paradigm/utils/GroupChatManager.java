@@ -292,6 +292,10 @@ public class GroupChatManager {
 
     public PlayerGroupData getPlayerData(IPlayer player) { return playerData.computeIfAbsent(player.getUUID(), k -> new PlayerGroupData()); }
 
+    public void clearChatToggles() {
+        playerData.values().forEach(data -> data.setGroupChatToggled(false));
+    }
+
     public void clearAllGroupsAndPlayerData() { groups.clear(); playerData.clear(); pendingJoinRequests.clear(); inviteCooldowns.clear(); debugLog("All group chat data cleared."); }
 
     public boolean acceptInvite(IPlayer player, String groupName) {

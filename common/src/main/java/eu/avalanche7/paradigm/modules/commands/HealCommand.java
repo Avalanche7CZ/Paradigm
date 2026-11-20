@@ -27,22 +27,6 @@ public class HealCommand implements ParadigmModule {
     }
 
     @Override
-    public void onServerStarting(Object event, Services services) {
-    }
-
-    @Override
-    public void onEnable(Services services) {
-    }
-
-    @Override
-    public void onDisable(Services services) {
-    }
-
-    @Override
-    public void onServerStopping(Object event, Services services) {
-    }
-
-    @Override
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         ICommandBuilder cmd = services.getPlatformAdapter().createCommandBuilder()
                 .literal("heal")
@@ -54,10 +38,6 @@ public class HealCommand implements ParadigmModule {
                         .argument("player", ICommandBuilder.ArgumentType.PLAYER)
                         .executes(ctx -> applyHeal(ctx.getSource().getPlayer(), ctx.getPlayerArgument("player"))));
         services.getPlatformAdapter().registerCommand(cmd);
-    }
-
-    @Override
-    public void registerEventListeners(Object eventBus, Services services) {
     }
 
     private int applyHeal(IPlayer actor, IPlayer target) {

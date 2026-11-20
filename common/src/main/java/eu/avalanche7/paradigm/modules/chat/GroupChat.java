@@ -54,21 +54,22 @@ public class GroupChat implements ParadigmModule {
     public void onDisable(Services services) {
         services.getDebugLogger().debugLog(NAME + " module disabled.");
         if (this.groupChatManager != null) {
-            this.groupChatManager.clearAllGroupsAndPlayerData();
+            this.groupChatManager.clearChatToggles();
         }
     }
 
     @Override
     public void onServerStopping(Object event, Services services) {
         services.getDebugLogger().debugLog(NAME + " module: Server stopping.");
-        onDisable(services);
+        if (groupChatManager != null) groupChatManager.clearAllGroupsAndPlayerData();
     }
 
     @Override
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         ICommandBuilder cmd = platform.createCommandBuilder()
                 .literal("groupchat")
-                .requires(source -> services.getCommandToggleStore().isEnabled("groupchat") && source.getPlayer() != null &&
+                .requires(source -> services.canDispatchModuleEvents(this) && isEnabled(services)
+                        && services.getCommandToggleStore().isEnabled("groupchat") && source.getPlayer() != null &&
                         services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.GROUPCHAT_PERMISSION))
                 .executes(ctx -> {
                     IPlayer player = ctx.getSource().requirePlayer();

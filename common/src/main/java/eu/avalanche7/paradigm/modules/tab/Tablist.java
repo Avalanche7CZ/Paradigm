@@ -34,6 +34,7 @@ public final class Tablist implements ParadigmModule {
     private volatile ScheduledFuture<?> pendingImmediateRefresh;
     private TablistMetadataProvider resolver;
     private boolean active;
+    private long activationVersion;
     private final TablistTeamOrder teamOrder = new TablistTeamOrder();
     private boolean orderApplied;
 
@@ -80,10 +81,6 @@ public final class Tablist implements ParadigmModule {
     @Override
     public void onServerStopping(Object event, Services services) {
         stop(false);
-    }
-
-    @Override
-    public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
     }
 
     @Override
@@ -180,15 +177,27 @@ public final class Tablist implements ParadigmModule {
 
     private void start() {
         if (active || services == null) return;
+        long version = ++activationVersion;
         active = true;
         resolver = metadataProvider != null ? metadataProvider : new TablistMetadataResolver(services);
         int seconds = Math.max(1, Math.min(3600, TablistConfigHandler.getConfig().refreshInterval.value));
-        refreshTask = services.getTaskScheduler().scheduleAtFixedRate(this::refreshNow, 0, seconds, TimeUnit.SECONDS);
-        worldWatchTask = services.getTaskScheduler().scheduleAtFixedRate(this::watchWorlds,
-                WORLD_WATCH_INTERVAL_SECONDS, WORLD_WATCH_INTERVAL_SECONDS, TimeUnit.SECONDS);
+        try {
+            refreshTask = services.getTaskScheduler().scheduleAtFixedRate(() -> {
+                if (active && activationVersion == version) refreshNow();
+            }, 0, seconds, TimeUnit.SECONDS);
+            if (refreshTask.isCancelled()) throw new IllegalStateException("Tablist refresh scheduler rejected startup.");
+            worldWatchTask = services.getTaskScheduler().scheduleAtFixedRate(() -> {
+                if (active && activationVersion == version) watchWorlds();
+            }, WORLD_WATCH_INTERVAL_SECONDS, WORLD_WATCH_INTERVAL_SECONDS, TimeUnit.SECONDS);
+            if (worldWatchTask.isCancelled()) throw new IllegalStateException("Tablist world watcher rejected startup.");
+        } catch (RuntimeException | Error failure) {
+            stop(false);
+            throw failure;
+        }
     }
 
     private void stop(boolean resetPlayers) {
+        ++activationVersion;
         active = false;
         if (pendingImmediateRefresh != null) pendingImmediateRefresh.cancel(false);
         pendingImmediateRefresh = null;
@@ -225,7 +234,10 @@ public final class Tablist implements ParadigmModule {
         ScheduledFuture<?> existing = pendingImmediateRefresh;
         if (existing != null && !existing.isDone() && !existing.isCancelled()) return;
         long delayMs = Math.max(0, delayTicks) * 50L;
-        pendingImmediateRefresh = services.getTaskScheduler().schedule(this::refreshNow, delayMs, TimeUnit.MILLISECONDS);
+        long version = activationVersion;
+        pendingImmediateRefresh = services.getTaskScheduler().schedule(() -> {
+            if (active && activationVersion == version) refreshNow();
+        }, delayMs, TimeUnit.MILLISECONDS);
     }
 
     public ICommandBuilder buildCommandBranch(IPlatformAdapter platform, Services services) {

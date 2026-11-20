@@ -14,6 +14,7 @@ import eu.avalanche7.paradigm.platform.Interfaces.ICommandContext;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.utils.PlayerConnection;
 
 public class PrivateMessages implements ParadigmModule {
 
@@ -44,22 +45,9 @@ public class PrivateMessages implements ParadigmModule {
     }
 
     @Override
-    public void onServerStarting(Object event, Services services) {
-    }
-
-    @Override
-    public void onEnable(Services services) {
-    }
-
-    @Override
     public void onDisable(Services services) {
         lastContactByUuid.clear();
         socialSpyEnabledByUuid.clear();
-    }
-
-    @Override
-    public void onServerStopping(Object event, Services services) {
-        onDisable(services);
     }
 
     @Override
@@ -78,7 +66,8 @@ public class PrivateMessages implements ParadigmModule {
     private void registerMsgRoot(String literal) {
         ICommandBuilder command = platform.createCommandBuilder()
                 .literal(literal)
-                .requires(source -> services.getCommandToggleStore().isEnabled("msg")
+                .requires(source -> services.canDispatchModuleEvents(this) && isEnabled(services)
+                        && services.getCommandToggleStore().isEnabled("msg")
                         && source.getPlayer() != null &&
                         services.getPermissionsHandler().hasPermission(
                                 source.getPlayer(),
@@ -95,7 +84,8 @@ public class PrivateMessages implements ParadigmModule {
     private void registerReplyRoot(String literal) {
         ICommandBuilder command = platform.createCommandBuilder()
                 .literal(literal)
-                .requires(source -> services.getCommandToggleStore().isEnabled("reply")
+                .requires(source -> services.canDispatchModuleEvents(this) && isEnabled(services)
+                        && services.getCommandToggleStore().isEnabled("reply")
                         && source.getPlayer() != null &&
                         services.getPermissionsHandler().hasPermission(
                                 source.getPlayer(),
@@ -110,7 +100,8 @@ public class PrivateMessages implements ParadigmModule {
     private void registerSocialSpy() {
         ICommandBuilder command = platform.createCommandBuilder()
                 .literal("socialspy")
-                .requires(source -> services.getCommandToggleStore().isEnabled("socialspy")
+                .requires(source -> services.canDispatchModuleEvents(this) && isEnabled(services)
+                        && services.getCommandToggleStore().isEnabled("socialspy")
                         && source.getPlayer() != null
                         && services.getPermissionsHandler().hasPermission(
                                 source.getPlayer(),
@@ -165,15 +156,18 @@ public class PrivateMessages implements ParadigmModule {
         String senderUuid = sender.getUUID();
         String targetUuid = target.getUUID();
         String cleanMessage = message.trim();
+        var recipient = new PlayerConnection(target);
         return StorageCommandSupport.runForPlayer(services, sender, "pm.ignore_check", () ->
                         targetUuid != null && senderUuid != null
                                 && services.getStorageService().players().listIgnoredPlayers(targetUuid).contains(senderUuid.toLowerCase(Locale.ROOT)),
+                services.moduleActivationGuard(this),
                 (currentSender, blocked) -> {
                     IPlayer currentTarget = targetUuid != null ? platform.getPlayerByUuid(targetUuid) : null;
                     if (currentTarget == null) {
                         platform.sendSystemMessage(currentSender, services.getLang().translate("pm.player_not_found"));
                         return;
                     }
+                    if (!recipient.matches(currentTarget)) return;
                     if (blocked) {
                         platform.sendSystemMessage(currentSender, services.getLang().translate("pm.blocked_by_ignore"));
                         return;
@@ -217,9 +211,11 @@ public class PrivateMessages implements ParadigmModule {
         String cleanMessage = message.trim();
         String targetUuidFinal = target.getUUID();
         String senderUuidFinal = sender.getUUID();
+        var recipient = new PlayerConnection(target);
         return StorageCommandSupport.runForPlayer(services, sender, "pm.reply_ignore_check", () ->
                         targetUuidFinal != null && senderUuidFinal != null
                                 && services.getStorageService().players().listIgnoredPlayers(targetUuidFinal).contains(senderUuidFinal.toLowerCase(Locale.ROOT)),
+                services.moduleActivationGuard(this),
                 (currentSender, blocked) -> {
                     IPlayer currentTarget = targetUuidFinal != null ? platform.getPlayerByUuid(targetUuidFinal) : null;
                     if (currentTarget == null) {
@@ -227,6 +223,7 @@ public class PrivateMessages implements ParadigmModule {
                         platform.sendSystemMessage(currentSender, services.getLang().translate("pm.reply_target_offline"));
                         return;
                     }
+                    if (!recipient.matches(currentTarget)) return;
                     if (blocked) {
                         platform.sendSystemMessage(currentSender, services.getLang().translate("pm.blocked_by_ignore"));
                         return;

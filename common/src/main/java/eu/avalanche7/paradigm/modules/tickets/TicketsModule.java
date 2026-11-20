@@ -13,7 +13,6 @@ import eu.avalanche7.paradigm.configs.ConfigEntry;
 import eu.avalanche7.paradigm.configs.TicketsConfigHandler;
 import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
-import eu.avalanche7.paradigm.core.network.NetworkEventBus;
 import eu.avalanche7.paradigm.core.network.SqlPollingNetworkEventBus;
 import eu.avalanche7.paradigm.modules.commands.shared.CommandMessages;
 import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
@@ -50,8 +49,11 @@ public class TicketsModule implements ParadigmModule {
     private TicketService tickets;
     private TicketChatView view;
     private TicketNotifier notifier;
-    private NetworkEventBus networkEvents;
-    private volatile ScheduledFuture<?> autoCloseTask;
+    private SqlPollingNetworkEventBus networkEvents;
+    private ScheduledFuture<?> autoCloseTask;
+    private volatile Sweep autoCloseSchedule;
+
+    private record Sweep(int intervalMinutes) {}
     private final ThreadLocal<TicketActor> commandActor = new ThreadLocal<>();
 
     public static TicketsModule current() {
@@ -104,11 +106,6 @@ public class TicketsModule implements ParadigmModule {
         stopTasks();
     }
 
-    @Override
-    public void onServerStopping(Object event, Services services) {
-        stopTasks();
-    }
-
     public void reloadTasks() {
         if (services == null) {
             return;
@@ -121,34 +118,41 @@ public class TicketsModule implements ParadigmModule {
     }
 
     private synchronized void startTasks() {
-        if (services == null) {
-            return;
+        if (services == null || services.isStopping()) return;
+        var scheduler = services.getTaskScheduler();
+        if (scheduler == null || !scheduler.isServerAvailable()) return;
+        int interval = 0;
+        var config = TicketsConfigHandler.configOrNull();
+        if (config != null && (ConfigEntry.valueOf(config.autoCloseResolvedAfterHours, 0) > 0
+                || ConfigEntry.valueOf(config.autoCloseWaitingPlayerAfterDays, 0) > 0)) {
+            interval = Math.max(1, ConfigEntry.valueOf(config.autoCloseSweepIntervalMinutes, 30));
         }
-        stopTasks();
-        TicketsConfigHandler.Config config = TicketsConfigHandler.configOrNull();
-        if (config != null && services.getTaskScheduler() != null) {
-            int resolvedHours = ConfigEntry.valueOf(config.autoCloseResolvedAfterHours, 0);
-            int waitingDays = ConfigEntry.valueOf(config.autoCloseWaitingPlayerAfterDays, 0);
-            if (resolvedHours > 0 || waitingDays > 0) {
-                int intervalMinutes = Math.max(1, ConfigEntry.valueOf(config.autoCloseSweepIntervalMinutes, 30));
-                autoCloseTask = services.getTaskScheduler().scheduleAtFixedRateRaw(
-                        this::runAutoCloseSweep, intervalMinutes, intervalMinutes, TimeUnit.MINUTES);
-            }
+        if (interval == 0) {
+            stopAutoClose();
+        } else if (autoCloseSchedule == null || autoCloseSchedule.intervalMinutes() != interval || autoCloseTask.isDone()) {
+            var nextSweep = new Sweep(interval);
+            var nextTask = scheduler.scheduleAtFixedRateRaw(() -> {
+                if (autoCloseSchedule == nextSweep && !services.isStopping()) runAutoCloseSweep();
+            }, interval, interval, TimeUnit.MINUTES);
+            if (nextTask == null || nextTask.isCancelled()) throw new IllegalStateException("Could not schedule ticket auto-close.");
+            var previous = autoCloseTask;
+            autoCloseSchedule = nextSweep;
+            autoCloseTask = nextTask;
+            if (previous != null) previous.cancel(false);
         }
-        if (networkEvents != null) {
-            networkEvents.start();
-        }
+        if (networkEvents != null) networkEvents.applySchedule();
     }
 
     private synchronized void stopTasks() {
-        ScheduledFuture<?> task = autoCloseTask;
+        stopAutoClose();
+        if (networkEvents != null) networkEvents.stop();
+    }
+
+    private void stopAutoClose() {
+        autoCloseSchedule = null;
+        var previous = autoCloseTask;
         autoCloseTask = null;
-        if (task != null) {
-            task.cancel(false);
-        }
-        if (networkEvents != null) {
-            networkEvents.stop();
-        }
+        if (previous != null) previous.cancel(false);
     }
 
     private void runAutoCloseSweep() {

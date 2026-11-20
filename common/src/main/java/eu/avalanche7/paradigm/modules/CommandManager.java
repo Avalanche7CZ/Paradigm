@@ -60,10 +60,6 @@ public class CommandManager implements ParadigmModule {
         platform.registerCommand(reload);
     }
 
-    @Override
-    public void registerEventListeners(Object eventBus, Services services) {
-    }
-
     public static int registerReloadedCommands(Services services) {
         if (services == null) {
             return 0;
@@ -405,22 +401,10 @@ public class CommandManager implements ParadigmModule {
     }
 
     @Override
-    public void onServerStarting(Object event, Services services) {
-    }
-
-    @Override
-    public void onEnable(Services services) {
-    }
-
-    @Override
     public void onDisable(Services services) {
         bind(services);
         unregisterRegisteredCustomCommands();
         registeredCommandCount = 0;
     }
 
-    @Override
-    public void onServerStopping(Object event, Services services) {
-        eu.avalanche7.paradigm.configs.CooldownConfigHandler.saveCooldowns();
-    }
 }

@@ -1,6 +1,7 @@
 package eu.avalanche7.paradigm.modules.tickets;
 
 import java.util.List;
+import java.util.function.BooleanSupplier;
 
 import eu.avalanche7.paradigm.configs.TicketsConfigHandler;
 import eu.avalanche7.paradigm.core.Services;
@@ -121,7 +122,13 @@ public class TicketNotifier {
     }
 
     public void remoteEvent(Ticket ticket, TicketEvent event) {
-        onServerThread(() -> remoteEventOnServer(ticket, event));
+        remoteEvent(ticket, event, () -> true);
+    }
+
+    void remoteEvent(Ticket ticket, TicketEvent event, BooleanSupplier current) {
+        onServerThread(() -> {
+            if (current.getAsBoolean()) remoteEventOnServer(ticket, event);
+        });
     }
 
     private void remoteEventOnServer(Ticket ticket, TicketEvent event) {

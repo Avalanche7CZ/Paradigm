@@ -7,22 +7,29 @@ public interface ParadigmModule {
 
     boolean isEnabled(Services services);
 
-    void onLoad(Object event, Services services, Object modEventBus);
+    default void onLoad(Object event, Services services, Object modEventBus) {
+    }
 
-    void onServerStarting(Object event, Services services);
+    default void onServerStarting(Object event, Services services) {
+    }
 
-    void onEnable(Services services);
+    default void onEnable(Services services) {
+    }
 
-    void onDisable(Services services);
+    default void onDisable(Services services) {
+    }
 
-    void onServerStopping(Object event, Services services);
+    default void onServerStopping(Object event, Services services) {
+    }
 
     default void onServerStopped(Object event, Services services) {
     }
 
-    void registerCommands(Object dispatcher, Object registryAccess, Services services);
+    default void registerCommands(Object dispatcher, Object registryAccess, Services services) {
+    }
 
-    void registerEventListeners(Object eventBus, Services services);
+    default void registerEventListeners(Object eventBus, Services services) {
+    }
 
     default IEventSystem moduleEvents(Services services) {
         return ModuleEventListeners.gated(services, this);

@@ -31,7 +31,6 @@ public class Announcements implements ParadigmModule {
     private int lastBossbarRandomIndex = -1;
     private long scheduleGeneration;
     private String scheduleSettings;
-    private boolean announcementsScheduled = false;
     private ScheduledFuture<?> globalTask = null;
     private ScheduledFuture<?> actionbarTask = null;
     private ScheduledFuture<?> titleTask = null;
@@ -67,29 +66,17 @@ public class Announcements implements ParadigmModule {
 
     @Override
     public void onServerStarting(Object event, Services services) {
-        if (isEnabled(services) && !announcementsScheduled) {
-            services.getDebugLogger().debugLog(NAME + ": Server starting, scheduling announcements if enabled.");
-            scheduleConfiguredAnnouncements();
-        }
+        rescheduleAnnouncements();
     }
 
     @Override
     public void onEnable(Services services) {
-        services.getDebugLogger().debugLog(NAME + ": Module enabled; announcements are scheduled when the server starts.");
+        rescheduleAnnouncements();
     }
 
     @Override
     public void onDisable(Services services) {
-        services.getDebugLogger().debugLog(NAME + ": Module disabled. Cancelling scheduled tasks.");
         cancelAllTasks();
-        announcementsScheduled = false;
-    }
-
-    @Override
-    public void onServerStopping(Object event, Services services) {
-        services.getDebugLogger().debugLog(NAME + ": Server stopping.");
-        cancelAllTasks();
-        announcementsScheduled = false;
     }
 
     @Override
@@ -135,7 +122,7 @@ public class Announcements implements ParadigmModule {
     }
 
     private boolean hasBroadcastPermission(ICommandSource source) {
-        if (source == null) return false;
+        if (source == null || !services.canDispatchModuleEvents(this) || !isEnabled(services)) return false;
         if (source.isConsole()) return true;
 
         IPlayer player = source.getPlayer();
@@ -145,46 +132,42 @@ public class Announcements implements ParadigmModule {
         );
     }
 
-    @Override
-    public void registerEventListeners(Object eventBus, Services services) {}
-
-    private synchronized void scheduleConfiguredAnnouncements() {
-        services.getDebugLogger().debugLog(NAME + ": scheduleConfiguredAnnouncements() called.");
-        if (announcementsScheduled) {
-            services.getDebugLogger().debugLog(NAME + ": Announcements already scheduled, skipping.");
-            return;
-        }
+    public synchronized void rescheduleAnnouncements() {
+        if (services == null || platform == null || services.isStopping() || !isEnabled(services)
+                || services.getTaskScheduler() == null || !services.getTaskScheduler().isServerAvailable()) return;
+        String settings = schedulingSettings();
+        if (settings.equals(scheduleSettings)) return;
         cancelAllTasks();
-        AnnouncementsConfigHandler.Config config = services.getAnnouncementsConfig();
-        if (platform == null) {
-            services.getDebugLogger().debugLog(NAME + ": Cannot schedule announcements, platform adapter is null.");
-            return;
+        var config = services.getAnnouncementsConfig();
+        try {
+            if (config.globalEnable.value) {
+                globalTask = scheduleAnnouncementTask("global", this::broadcastGlobalMessages, config.globalInterval.value);
+            }
+            if (config.actionbarEnable.value) {
+                actionbarTask = scheduleAnnouncementTask("actionbar", this::broadcastActionbarMessages, config.actionbarInterval.value);
+            }
+            if (config.titleEnable.value) {
+                titleTask = scheduleAnnouncementTask("title", this::broadcastTitleMessages, config.titleInterval.value);
+            }
+            if (config.bossbarEnable.value) {
+                bossbarTask = scheduleAnnouncementTask("bossbar", this::broadcastBossbarMessages, config.bossbarInterval.value);
+            }
+            scheduleSettings = settings;
+        } catch (RuntimeException | Error failure) {
+            try {
+                cancelAllTasks();
+            } catch (RuntimeException | Error cleanupFailure) {
+                if (cleanupFailure != failure) failure.addSuppressed(cleanupFailure);
+            }
+            throw failure;
         }
-        if (config.globalEnable.value) {
-            long interval = config.globalInterval.value;
-            globalTask = scheduleAnnouncementTask("global", this::broadcastGlobalMessages, interval);
-        }
-        if (config.actionbarEnable.value) {
-            long interval = config.actionbarInterval.value;
-            actionbarTask = scheduleAnnouncementTask("actionbar", this::broadcastActionbarMessages, interval);
-        }
-        if (config.titleEnable.value) {
-            long interval = config.titleInterval.value;
-            titleTask = scheduleAnnouncementTask("title", this::broadcastTitleMessages, interval);
-        }
-        if (config.bossbarEnable.value) {
-            long interval = config.bossbarInterval.value;
-            bossbarTask = scheduleAnnouncementTask("bossbar", this::broadcastBossbarMessages, interval);
-        }
-        announcementsScheduled = true;
-        scheduleSettings = schedulingSettings();
     }
 
     private Runnable guardSchedule(Runnable task) {
         long expectedGeneration = scheduleGeneration;
         return () -> {
             synchronized (this) {
-                if (expectedGeneration == scheduleGeneration && announcementsScheduled && services.canDispatchModuleEvents(this) && isEnabled(services)) task.run();
+                if (expectedGeneration == scheduleGeneration && scheduleSettings != null && services.canDispatchModuleEvents(this) && isEnabled(services)) task.run();
             }
         };
     }
@@ -202,6 +185,7 @@ public class Announcements implements ParadigmModule {
             return null;
         }
         ScheduledFuture<?> taskHandle = services.getTaskScheduler().scheduleAtFixedRate(guardSchedule(task), intervalSeconds, intervalSeconds, TimeUnit.SECONDS);
+        if (taskHandle.isCancelled()) throw new IllegalStateException("Could not schedule " + type + " announcements.");
         services.getDebugLogger().debugLog(NAME + ": Scheduled " + type + " messages with interval: " + intervalSeconds + " seconds");
         return taskHandle;
     }
@@ -224,8 +208,8 @@ public class Announcements implements ParadigmModule {
         return null;
     }
 
-    public boolean isScheduled() {
-        return announcementsScheduled;
+    public synchronized boolean isScheduled() {
+        return scheduleSettings != null;
     }
 
     private String getNextMessage(List<String> messages, String orderMode, String type) {
@@ -425,18 +409,5 @@ public class Announcements implements ParadigmModule {
 
         platform.sendSuccess(source, platform.createLiteralComponent(type + " broadcasted."), true);
         return 1;
-    }
-
-    public synchronized void rescheduleAnnouncements() {
-        if (services == null) return;
-        if (services.canDispatchModuleEvents(this) && isEnabled(services) && announcementsScheduled && schedulingSettings().equals(scheduleSettings)) return;
-        services.getDebugLogger().debugLog(NAME + ": Rescheduling announcements on config reload.");
-        cancelAllTasks();
-        announcementsScheduled = false;
-        if (!services.canDispatchModuleEvents(this) || !isEnabled(services)) {
-            services.getDebugLogger().debugLog(NAME + ": Module is disabled after reload; announcements will stay unscheduled.");
-            return;
-        }
-        scheduleConfiguredAnnouncements();
     }
 }

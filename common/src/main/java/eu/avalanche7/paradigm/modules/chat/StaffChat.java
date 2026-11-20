@@ -36,14 +36,6 @@ public class StaffChat implements ParadigmModule {
     }
 
     @Override
-    public void onServerStarting(Object event, Services services) {
-    }
-
-    @Override
-    public void onEnable(Services services) {
-    }
-
-    @Override
     public void onDisable(Services services) {
         staffChatEnabledMap.keySet().forEach(uuid -> {
             IPlayer player = platform.getPlayerByUuid(uuid);
@@ -55,15 +47,11 @@ public class StaffChat implements ParadigmModule {
     }
 
     @Override
-    public void onServerStopping(Object event, Services services) {
-        onDisable(services);
-    }
-
-    @Override
     public void registerCommands(Object dispatcher, Object registryAccess, Services services) {
         ICommandBuilder cmd = platform.createCommandBuilder()
                 .literal("sc")
-                .requires(source -> services.getCommandToggleStore().isEnabled("sc") && source.getPlayer() != null &&
+                .requires(source -> services.canDispatchModuleEvents(this) && isEnabled(services)
+                        && services.getCommandToggleStore().isEnabled("sc") && source.getPlayer() != null &&
                         services.getPermissionsHandler().hasPermission(source.getPlayer(), PermissionsHandler.STAFF_CHAT_PERMISSION))
                 .executes(ctx -> {
                     IPlayer player = ctx.getSource().requirePlayer();
