@@ -60,6 +60,7 @@ public final class DiscordService implements DiscordOutbox {
     private volatile ExecutorService httpExecutor;
     private volatile ExecutorService interactionExecutor;
     private volatile ExecutorService ticketReplyExecutor;
+    private volatile ExecutorService relayChannelExecutor;
     private volatile DiscordRestClient rest;
     private volatile DiscordGatewayClient gateway;
     private volatile DiscordDispatcher dispatcher;
@@ -291,11 +292,8 @@ public final class DiscordService implements DiscordOutbox {
             return thread;
         });
         interactionExecutor = interaction;
-        ticketReplyExecutor = new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(256), runnable -> {
-            Thread thread = new Thread(runnable, "paradigm-discord-ticket-replies");
-            thread.setDaemon(true);
-            return thread;
-        });
+        ticketReplyExecutor = inboundWorker("paradigm-discord-ticket-replies");
+        relayChannelExecutor = inboundWorker("paradigm-discord-relay-channels");
 
         String connectionToken = token();
         DebugLogger debugLogger = services.getDebugLogger();
@@ -326,6 +324,14 @@ public final class DiscordService implements DiscordOutbox {
 
         startConsoleRelay(config, pool);
         appliedConnectionSettings = connectionSettings(config);
+    }
+
+    private static ExecutorService inboundWorker(String name) {
+        return new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<>(256), runnable -> {
+            Thread thread = new Thread(runnable, name);
+            thread.setDaemon(true);
+            return thread;
+        });
     }
 
     private void startConsoleRelay(DiscordConfigHandler.Config config, ScheduledExecutorService pool) {
@@ -877,6 +883,11 @@ public final class DiscordService implements DiscordOutbox {
         ScheduledExecutorService pool = executor;
         ExecutorService http = httpExecutor;
         ExecutorService interaction = interactionExecutor;
+        ExecutorService relayChannels = relayChannelExecutor;
+        relayChannelExecutor = null;
+        if (relayChannels != null) {
+            relayChannels.shutdownNow();
+        }
         ExecutorService ticketReplies = ticketReplyExecutor;
         ticketReplyExecutor = null;
         if (ticketReplies != null) {
@@ -1354,46 +1365,91 @@ public final class DiscordService implements DiscordOutbox {
         @Override
         public void onMessage(DiscordInboundMessage message) {
             DiscordConfigHandler.Config cfg = config();
-            LinkingSettings linking = linkingSettings(cfg);
             boolean relayChannel = cfg != null && (relay.ownsConsoleChannel(message.channelId())
                     || relay.matchesRelayChannel(cfg, message));
-            DiscordRestClient client = rest;
-            StorageService storage = services.getStorageService();
-            if (client != null && storage != null && storage.isSqlActive() && linking.guild().equals(message.guildId())
-                    && (relayChannel || (linking.owner() && !message.bot() && !message.webhook() && !message.system()))) {
-                ExecutorService worker = ticketReplyExecutor;
-                if (worker != null) {
-                    try {
-                        worker.execute(() -> routeTicketRoomMessage(message, linking, client, storage, relayChannel));
-                    } catch (RejectedExecutionException overloaded) {
-                        if (ticketReplyExecutor == worker) {
-                            warnTicketRoom("Discord ticket-room message queue is full. Message " + message.messageId()
-                                    + " was not routed.");
-                        }
-                    }
-                }
+            if (relayChannel) {
+                verifyRelayChannel(message.guildId(), message.channelId(),
+                        () -> relayMessage(message), () -> enqueueTicketReply(message));
             } else {
-                relayMessage(message);
+                enqueueTicketReply(message);
             }
         }
 
-        private void routeTicketRoomMessage(DiscordInboundMessage message, LinkingSettings linking,
-                                            DiscordRestClient client, StorageService storage, boolean relayChannel) {
-            if (services.isStopping() || rest != client) {
+        private void verifyRelayChannel(String guildId, String channelId, Runnable regular, Runnable bound) {
+            ExecutorService worker = relayChannelExecutor;
+            if (worker == null) {
                 return;
             }
             try {
-                var replies = new DiscordTicketReplies(storage.discordTicketRooms(), client, DiscordService.this::warnTicketRoom);
-                boolean handled = replies.handle(linking, message, storage.discordAccountLinks(),
-                        services.getTicketService(), DiscordService.this::discordTicketActor,
-                        !inboundCapability.blocksInboundRelay(),
-                        () -> !services.isStopping() && rest == client && linking.equals(linkingSettings(config())));
-                if (!handled && relayChannel && rest == client) {
-                    relayMessage(message);
+                worker.execute(() -> {
+                    if (services.isStopping() || relayChannelExecutor != worker) {
+                        return;
+                    }
+                    boolean ticketRoom;
+                    try {
+                        StorageService storage = services.getStorageService();
+                        if (storage != null && storage.isSqlActive() && DiscordConfigHandler.isGuildId(guildId)) {
+                            ticketRoom = storage.discordTicketRooms().boundTicket(guildId, channelId).isPresent();
+                        } else if (storage != null && StorageProviderType.parse(storage.config().provider) == StorageProviderType.JSON) {
+                            ticketRoom = false;
+                        } else {
+                            warnTicketRoom("Could not verify Discord relay channel " + channelId
+                                    + ": active SQL storage or the message guild ID is unavailable.");
+                            return;
+                        }
+                    } catch (RuntimeException failure) {
+                        warnTicketRoom("Could not verify Discord relay channel " + channelId
+                                + " (" + failure.getClass().getSimpleName() + ").");
+                        return;
+                    }
+                    if (!services.isStopping() && relayChannelExecutor == worker) {
+                        try {
+                            (ticketRoom ? bound : regular).run();
+                        } catch (RuntimeException failure) {
+                            services.getDebugLogger().debugLog("[Discord] Inbound relay routing failed: "
+                                    + failure.getClass().getSimpleName());
+                        }
+                    }
+                });
+            } catch (RejectedExecutionException overloaded) {
+                if (relayChannelExecutor == worker) {
+                    warnTicketRoom("Could not verify Discord relay channel " + channelId + ": relay queue is full.");
                 }
-            } catch (RuntimeException failure) {
-                warnTicketRoom("Could not verify the ticket room for Discord message " + message.messageId()
-                        + " (" + failure.getClass().getSimpleName() + ").");
+            }
+        }
+
+        private void enqueueTicketReply(DiscordInboundMessage message) {
+            LinkingSettings linking = linkingSettings(config());
+            DiscordRestClient client = rest;
+            StorageService storage = services.getStorageService();
+            ExecutorService worker = ticketReplyExecutor;
+            if (worker == null || client == null || storage == null || !storage.isSqlActive()
+                    || !linking.owner() || !linking.guild().equals(message.guildId())
+                    || message.bot() || message.webhook() || message.system()) {
+                return;
+            }
+            try {
+                worker.execute(() -> {
+                    if (services.isStopping() || ticketReplyExecutor != worker || rest != client) {
+                        return;
+                    }
+                    try {
+                        var replies = new DiscordTicketReplies(storage.discordTicketRooms(), client, DiscordService.this::warnTicketRoom);
+                        replies.handle(linking, message, storage.discordAccountLinks(),
+                                services.getTicketService(), DiscordService.this::discordTicketActor,
+                                !inboundCapability.blocksInboundRelay(),
+                                () -> !services.isStopping() && ticketReplyExecutor == worker && rest == client
+                                        && linking.equals(linkingSettings(config())));
+                    } catch (RuntimeException failure) {
+                        warnTicketRoom("Could not verify the ticket room for Discord message " + message.messageId()
+                                + " (" + failure.getClass().getSimpleName() + ").");
+                    }
+                });
+            } catch (RejectedExecutionException overloaded) {
+                if (ticketReplyExecutor == worker) {
+                    warnTicketRoom("Discord ticket-room message queue is full. Message " + message.messageId()
+                            + " was not routed.");
+                }
             }
         }
 
@@ -1412,21 +1468,17 @@ public final class DiscordService implements DiscordOutbox {
 
         @Override
         public void onMessageUpdated(DiscordInboundMessage message) {
-            try {
-                relay.handleInboundEdit(message);
-            } catch (RuntimeException failure) {
-                services.getDebugLogger().debugLog("[Discord] Inbound edit relay failed: "
-                        + failure.getClass().getSimpleName());
+            DiscordConfigHandler.Config cfg = config();
+            if (cfg != null && relay.matchesRelayChannel(cfg, message)) {
+                verifyRelayChannel(message.guildId(), message.channelId(), () -> relay.handleInboundEdit(message), () -> {});
             }
         }
 
         @Override
         public void onMessageDeleted(String messageId, String channelId, String guildId) {
-            try {
-                relay.handleInboundDelete(messageId, channelId);
-            } catch (RuntimeException failure) {
-                services.getDebugLogger().debugLog("[Discord] Inbound delete relay failed: "
-                        + failure.getClass().getSimpleName());
+            DiscordConfigHandler.Config cfg = config();
+            if (cfg != null && DiscordDestination.CHAT.channelId(cfg).equals(channelId)) {
+                verifyRelayChannel(guildId, channelId, () -> relay.handleInboundDelete(messageId, channelId), () -> {});
             }
         }
 
