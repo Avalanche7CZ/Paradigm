@@ -119,7 +119,9 @@ final class PlaytimeJournal implements AutoCloseable {
                 && current.storageIdentity.equals(storageIdentity);
         if (!adoptLegacy) {
             if (current.storageIdentity.startsWith("sql:") || repository == null)
-                throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException("Playtime storage identity conflict; original identity retained. Stop writers and reconcile backups.");
+                throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException(
+                        "Playtime storage identity conflict: journal=" + current.storageIdentity
+                                + ", active=" + target + ". Original journal retained; stop writers and reconcile backups.");
             var states = new java.util.HashMap<String, eu.avalanche7.paradigm.storage.model.StoredPlayerProfileState>();
             boolean evidence = false;
             for (var stream : current.streams.entrySet()) for (var player : stream.getValue().entrySet()) {
@@ -132,7 +134,8 @@ final class PlaytimeJournal implements AutoCloseable {
                     throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException("Playtime storage target changed; pending journal requires an explicit, quiesced migration."
                             + " Journal=" + path + "; server=" + serverId + "; writer=" + stream.getKey() + "; player=" + player.getKey()
                             + "; journal watermark=" + saved + "; target watermark=" + state.playtimeStreams().getOrDefault(stream.getKey(), 0L)
-                            + ". Original identity and pending streams are retained; no replay into the changed target was performed."
+                            + ". Journal identity=" + current.storageIdentity + "; active identity=" + target + "."
+                            + " Original identity and pending streams are retained; no replay into the changed target was performed."
                             + " Stop writers and back up the journal and both storage targets before reconciliation; see README playtime recovery instructions.");
                 evidence |= saved > 0L;
             }

@@ -284,4 +284,61 @@ class PlaytimeShutdownRecoveryTest {
         }
         fail("Shutdown did not reach its persistence wait: " + java.util.Arrays.toString(thread.getStackTrace()));
     }
+
+    @Test void sharedStorageFailureShutdownProducesSingleBoundedDiagnosticWithoutRetryStorm() throws Exception {
+        AtomicInteger submissions = new AtomicInteger();
+        Path path = directory.resolve("shared-failure-journal.json");
+        String second = "00000000-0000-0000-0000-000000000023";
+        String third = "00000000-0000-0000-0000-000000000024";
+        try (var journal = new PlaytimeJournal(path, "original")) {
+            var service = new PlaytimeService(null, journal, () -> null, work -> {
+                submissions.incrementAndGet();
+                return CompletableFuture.failedFuture(new eu.avalanche7.paradigm.storage.StorageException("database connection closed"));
+            }, () -> 1000L);
+            java.lang.reflect.Field field = PlaytimeService.class.getDeclaredField("counters");
+            field.setAccessible(true);
+            @SuppressWarnings("unchecked")
+            var counters = (java.util.Map<String, PlaytimeService.Counter>) field.get(service);
+            for (String id : List.of(UUID, second, third)) {
+                var counter = new PlaytimeService.Counter("Player", 1, 2);
+                counter.measuredMs = 2000L;
+                counters.put(id, counter);
+            }
+            service.stop();
+            assertEquals(2, submissions.get(), "shared storage failure must terminate shutdown without a per-player retry storm");
+            String content = Files.readString(path);
+            assertTrue(content.contains(UUID));
+            assertTrue(content.contains(second));
+            assertTrue(content.contains(third));
+        }
+    }
+
+    @Test void moduleLifecycleTransitionsPreservePlaytimeAccountingAcrossReload() throws Exception {
+        var repository = repository(directory.resolve("reload-test"));
+        Path path = directory.resolve("reload-journal.json");
+        AtomicLong now = new AtomicLong(1000L);
+        IPlayer player = (IPlayer) Proxy.newProxyInstance(IPlayer.class.getClassLoader(), new Class<?>[]{IPlayer.class},
+                (proxy, method, args) -> switch (method.getName()) {
+                    case "getUUID" -> UUID;
+                    case "getName" -> "Alex";
+                    default -> null;
+                });
+        try (var journal = new PlaytimeJournal(path, "original", () -> repository, "default")) {
+            var service = new PlaytimeService(null, journal, () -> repository,
+                    work -> CompletableFuture.completedFuture(work.get()), now::get);
+            service.start();
+            service.beginSession(player);
+            now.addAndGet(5000L);
+            service.stop();
+            assertEquals(5000L, repository.readPlaytime(UUID).profile().playtimeMs());
+
+            // Reload transition: restart service with same repository and journal
+            service.start();
+            service.beginSession(player);
+            now.addAndGet(4000L);
+            service.stop();
+            assertEquals(9000L, repository.readPlaytime(UUID).profile().playtimeMs());
+            assertEquals(9000L, repository.readPlaytime(UUID).localPlaytimeMs("default"));
+        }
+    }
 }

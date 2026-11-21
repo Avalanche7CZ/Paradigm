@@ -59,15 +59,18 @@ public final class PlaytimeService {
     }
 
     public synchronized void start() {
-        if (running || services == null || services.getTaskScheduler() == null) return;
+        if (running) return;
         stopped = false;
         running = true;
-        flushTask = services.getTaskScheduler().scheduleAtFixedRateRaw(this::flushAll, flushIntervalSeconds(), flushIntervalSeconds(), TimeUnit.SECONDS);
+        if (services != null && services.getTaskScheduler() != null) {
+            flushTask = services.getTaskScheduler().scheduleAtFixedRateRaw(this::flushAll, flushIntervalSeconds(), flushIntervalSeconds(), TimeUnit.SECONDS);
+        }
         recoverJournal();
         for (IPlayer player : onlinePlayers()) beginSession(player);
     }
 
     synchronized void recoverJournal() {
+        stopped = false;
         recoveryPending = true;
         requestFlush();
     }
@@ -96,6 +99,7 @@ public final class PlaytimeService {
     public synchronized void beginSession(IPlayer player) {
         String uuid = key(player);
         if (uuid == null) return;
+        stopped = false;
         long now = clock.getAsLong();
         Session old = sessions.remove(uuid);
         if (old != null) old.finish(now);
@@ -147,8 +151,16 @@ public final class PlaytimeService {
 
     public synchronized java.util.Set<String> legacyImportBlockedPlayers() {
         if (recoveryPending) throw new IllegalStateException("Playtime journal recovery is pending; retry after storage recovery.");
-        var blocked = new java.util.HashSet<>(counters.keySet());
-        blocked.addAll(sessions.keySet());
+        if (lastFailure != null) throw new IllegalStateException("Playtime persistence is " + failureStatus
+                + "; resolve the journal/storage conflict before importing world statistics.",
+                new IllegalStateException(lastFailure));
+        var blocked = new java.util.HashSet<>(sessions.keySet());
+        counters.forEach((uuid, counter) -> {
+            synchronized (counter) {
+                if (!counter.loaded || counter.blocked != null || counter.pendingRecoveryMs > 0L
+                        || counter.acknowledgedMs < counter.target()) blocked.add(uuid);
+            }
+        });
         return java.util.Set.copyOf(blocked);
     }
 
@@ -174,6 +186,9 @@ public final class PlaytimeService {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
         for (Map.Entry<String, Counter> entry : counters.entrySet()) {
             Counter counter = entry.getValue();
+            synchronized (counter) {
+                if (counter.loaded && counter.acknowledgedMs >= counter.target() && counter.pendingRecoveryMs == 0L) continue;
+            }
             try {
                 for (;;) {
                     CompletableFuture<StoredPlayerProfileState> future = requestFlush();
@@ -181,20 +196,91 @@ public final class PlaytimeService {
                     synchronized (counter) {
                         if (counter.loaded && counter.acknowledgedMs >= counter.target() && counter.pendingRecoveryMs == 0L) break;
                     }
-                    if (System.nanoTime() >= deadline) throw new java.util.concurrent.TimeoutException();
+                    if (System.nanoTime() >= deadline) throw new java.util.concurrent.TimeoutException("Shutdown persistence timed out waiting for " + entry.getKey());
                     requestFlush();
                 }
             } catch (Exception failure) {
                 if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
-                synchronized (counter) {
-                    long unjournaled = Math.max(0L, counter.target() - counter.journaledMs);
-                    report("shutdown could not acknowledge playtime for " + entry.getKey() + "; pending="
-                            + (Math.max(0L, counter.target() - counter.acknowledgedMs) + counter.pendingRecoveryMs)
-                            + "ms; unjournaled=" + unjournaled + "ms; "
-                            + (unjournaled == 0 ? "local measurements are journaled for retry" : "these unjournaled measurements may be lost on exit"), failure);
+                Throwable cause = failure instanceof java.util.concurrent.ExecutionException ? failure.getCause() : failure;
+                if (cause == null) cause = failure;
+
+                long unjournaledTotal = 0L;
+                long pendingTotal = 0L;
+                int noOutstandingCount = 0;
+                int safelyJournaledCount = 0;
+                int unjournaledCount = 0;
+                for (Counter affected : counters.values()) {
+                    synchronized (affected) {
+                        long unjournaled = Math.max(0L, affected.target() - affected.journaledMs);
+                        long pending = Math.max(0L, affected.target() - affected.acknowledgedMs) + affected.pendingRecoveryMs;
+                        unjournaledTotal = Math.addExact(unjournaledTotal, unjournaled);
+                        pendingTotal = Math.addExact(pendingTotal, pending);
+                        if (pending == 0L && unjournaled == 0L) {
+                            noOutstandingCount++;
+                        } else if (unjournaled == 0L) {
+                            safelyJournaledCount++;
+                        } else {
+                            unjournaledCount++;
+                        }
+                    }
                 }
+                int totalTracked = counters.size();
+                String summary = totalTracked + " tracked players affected ("
+                        + safelyJournaledCount + " safely journaled, "
+                        + unjournaledCount + " unjournaled, "
+                        + noOutstandingCount + " with no outstanding measurements); "
+                        + "pending=" + pendingTotal + "ms; unjournaled local measurements=" + unjournaledTotal + "ms; "
+                        + (unjournaledTotal == 0
+                                ? "local measurements are journaled for retry"
+                                : "unjournaled measurements may be lost on exit");
+
+                if (isStorageCompatibilityFailure(cause)) {
+                    report("shutdown playtime acknowledgment blocked by one shared storage compatibility failure; "
+                            + summary + ". Original journal retained; reconcile storage before restarting.", cause);
+                    return;
+                }
+                if (isTransientStorageFailure(cause)) {
+                    report("shutdown playtime acknowledgment blocked by one shared recoverable storage failure; "
+                            + summary + ". Local journal retained for retry on restart.", cause);
+                    return;
+                }
+                java.util.Set<String> reportedMessages = new java.util.HashSet<>();
+                for (Map.Entry<String, Counter> e : counters.entrySet()) {
+                    Counter c = e.getValue();
+                    synchronized (c) {
+                        long unjournaled = Math.max(0L, c.target() - c.journaledMs);
+                        long pending = Math.max(0L, c.target() - c.acknowledgedMs) + c.pendingRecoveryMs;
+                        if (pending == 0L && unjournaled == 0L) continue;
+                        Throwable playerError = c.blocked != null ? c.blocked : cause;
+                        String errKey = playerError.getClass().getName() + ":" + playerError.getMessage();
+                        if (reportedMessages.add(errKey)) {
+                            report("shutdown could not acknowledge playtime for " + e.getKey() + "; pending="
+                                    + pending + "ms; unjournaled=" + unjournaled + "ms; "
+                                    + (unjournaled == 0 ? "local measurements are journaled for retry" : "these unjournaled measurements may be lost on exit"), playerError);
+                        }
+                    }
+                }
+                return;
             }
         }
+    }
+
+    private static boolean isStorageCompatibilityFailure(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof eu.avalanche7.paradigm.storage.StorageCompatibilityException) return true;
+        }
+        return false;
+    }
+
+    private static boolean isTransientStorageFailure(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof eu.avalanche7.paradigm.storage.StorageException
+                    || cause instanceof java.sql.SQLException
+                    || cause instanceof java.util.concurrent.TimeoutException
+                    || cause instanceof java.util.concurrent.RejectedExecutionException
+                    || cause instanceof java.io.IOException) return true;
+        }
+        return false;
     }
 
     private synchronized CompletableFuture<StoredPlayerProfileState> requestFlush() {
@@ -243,8 +329,12 @@ public final class PlaytimeService {
                         String message = reported.toString();
                         if (!message.equals(lastFailure)) report("unacknowledged playtime retained; recovery/retry required", reported);
                         lastFailure = message;
-                    } else lastFailure = null;
-                    boolean again = flushRequested;
+                    } else {
+                        lastFailure = null;
+                        recoveryPending = false;
+                        failureStatus = "available";
+                    }
+                    boolean again = flushRequested && reported == null;
                     flushRequested = false;
                     batchInFlight = null;
                     if (reported == null) completion.complete(null);
@@ -253,7 +343,10 @@ public final class PlaytimeService {
                 }
             });
         } catch (RuntimeException failure) {
+            flushRequested = false;
             batchInFlight = null;
+            lastFailure = failure.toString();
+            failureStatus = isStorageCompatibilityFailure(failure) ? "identity_conflict" : "submission_rejected";
             completion.completeExceptionally(failure);
             report("playtime submission rejected; pending measurements retained", failure);
         }
@@ -309,7 +402,6 @@ public final class PlaytimeService {
         if (recoveryPending) {
             recoveredData.streams.forEach((writer, players) -> players.forEach((uuid, entry) -> counters.computeIfAbsent(uuid,
                     ignored -> new Counter(entry.name(), recoveredData.streamServers.get(writer).isEmpty() ? 0L : entry.firstSeenMs(), recoveredData.streamServers.get(writer).isEmpty() ? 0L : entry.lastSeenMs()))));
-            recoveryPending = false;
         }
         var attempted = new java.util.LinkedHashMap<>(counters);
         var entries = new java.util.LinkedHashMap<String, PlaytimeJournal.Entry>();

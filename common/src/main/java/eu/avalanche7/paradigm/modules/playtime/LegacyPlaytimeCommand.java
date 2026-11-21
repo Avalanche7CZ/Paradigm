@@ -44,6 +44,13 @@ public final class LegacyPlaytimeCommand {
             send(source, "Import unavailable: active SQL storage required (JSON/fallback is unsupported). Nothing imported.");
             return 0;
         }
+        String persistence = services.getPlaytimeService().recoveryStatus(null);
+        if (!"available".equals(persistence)) {
+            busy.set(false);
+            send(source, "Import unavailable: playtime persistence is " + persistence
+                    + ". Resolve pending journal recovery before importing. Nothing imported.");
+            return 0;
+        }
         Path directory;
         try {
             directory = services.getPlatformAdapter().getPlayerStatisticsDirectory();
@@ -66,7 +73,13 @@ public final class LegacyPlaytimeCommand {
                 services.getPlatformAdapter().getOnlinePlayers().forEach(p -> blocked.add(p.getUUID().toLowerCase(java.util.Locale.ROOT)));
                 storage.runAsync("legacy-playtime.import", () -> {
                     if (!storage.isSqlActive()) throw new IllegalStateException("SQL storage is no longer active.");
-                    return LegacyPlaytimeImport.process(scan, storage.players(), blocked, apply);
+                    String status = services.getPlaytimeService().recoveryStatus(null);
+                    if (!"available".equals(status))
+                        throw new IllegalStateException("Playtime persistence changed to " + status
+                                + " during the import scan; no import was applied.");
+                    var stillBlocked = new HashSet<>(blocked);
+                    stillBlocked.addAll(services.getPlaytimeService().legacyImportBlockedPlayers());
+                    return LegacyPlaytimeImport.process(scan, storage.players(), stillBlocked, apply);
                 }, services.getTaskScheduler(), report -> {
                     busy.set(false);
                     report.lines(apply).forEach(line -> send(source, line));
