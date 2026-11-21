@@ -932,18 +932,22 @@ public class DashboardService implements AutoCloseable {
     }
 
     public CompletableFuture<Object> permissionUserAsync(String uuidOrName) {
-        return resolveUuidAsync(uuidOrName).thenApplyAsync(uuid -> {
+        return resolveUuidAsync(uuidOrName).thenCompose(uuid -> {
             if (uuid == null) {
-                return (Object) java.util.Collections.singletonMap("user", null);
+                return CompletableFuture.completedFuture(java.util.Collections.singletonMap("user", null));
             }
-            var info = services.getPermissionsHandler().getPlayerPermissionInfo(uuid);
-            Map<String, Object> data = new LinkedHashMap<>();
-            data.put("uuid", uuid.toString());
-            data.put("info", permissionUserInfo(info));
-            data.put("displayGroup", services.getPermissionsHandler().displayGroupPreference(uuid));
-            data.put("availableDisplayGroups", services.getPermissionsHandler().availableDisplayGroups(uuid));
-            return (Object) Map.of("user", data);
-        }, executor);
+            return ServerThreadCalls.supply(services, () -> {
+                var permissions = services.getPermissionsHandler();
+                var online = services.getPlatformAdapter().getPlayerByUuid(uuid.toString());
+                var info = permissions.getPlayerPermissionInfo(uuid, online);
+                Map<String, Object> data = new LinkedHashMap<>();
+                data.put("uuid", uuid.toString());
+                data.put("info", permissionUserInfo(info));
+                data.put("displayGroup", permissions.displayGroupPreference(uuid));
+                data.put("availableDisplayGroups", permissions.availableDisplayGroups(uuid));
+                return (Object) Map.of("user", data);
+            });
+        });
     }
 
     static Map<String, Object> permissionUserInfo(PermissionAPI.UserInfo info) {
@@ -953,6 +957,10 @@ public class DashboardService implements AutoCloseable {
         directlyAssigned.addAll(info.permanentGroups());
         for (PermissionAPI.TemporaryGroupInfo group : info.temporaryGroups()) {
             if (group != null && group.group() != null) directlyAssigned.add(group.group());
+        }
+
+        for (var assignment : info.groupAssignments()) {
+            if (!assignment.expired()) directlyAssigned.add(assignment.value());
         }
 
         List<String> implicitGroups = info.meta() == null ? List.of() : info.meta().groups().stream()

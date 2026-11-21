@@ -11,6 +11,7 @@ import eu.avalanche7.paradigm.modules.permissions.PermissionDisplayFormatter;
 import eu.avalanche7.paradigm.modules.permissions.PermissionNodeRegistry;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 
 public final class PermissionPanelRenderer {
     private PermissionPanelRenderer() {
@@ -152,12 +153,12 @@ public final class PermissionPanelRenderer {
                         translation(services, "permission.panel.tooltip.back_to_group", "Back to group detail"), "94A3B8")));
     }
 
-    public static int sendUserInfo(ICommandSource source, Services services, UUID uuid, String label) {
+    public static int sendUserInfo(ICommandSource source, Services services, UUID uuid, String label, IPlayer online) {
         if (uuid == null) {
-            sendGroupMessage(source, services, "group.manage.user_invalid", "Player must be online name or UUID.");
+            sendGroupMessage(source, services, "group.manage.user_not_found", "Player not found. Use a known player name or UUID.");
             return 0;
         }
-        PermissionAPI.UserInfo info = services.getPermissionsHandler().getPlayerPermissionInfo(uuid);
+        PermissionAPI.UserInfo info = services.getPermissionsHandler().getPlayerPermissionInfo(uuid, online);
         if (info == null) {
             sendGroupMessage(source, services, "group.manage.user_empty", "No groups assigned.");
             return 1;
@@ -172,13 +173,13 @@ public final class PermissionPanelRenderer {
         sendUiLine(source, services, row(services)
                 .append(text(services, translation(services, "permission.panel.groups", "groups") + ": " + (groupAssignments.isEmpty() ? "-" : groupAssignments.size()), "CBD5E1"))
                 .append(space(services))
-                .append(button(services, "[+]", "/paradigm group user add " + playerLabel + " ", false,
+                .append(button(services, "[+]", "/paradigm group user add " + uuid + " ", false,
                         translation(services, "permission.panel.tooltip.add_group", "Prepare group assignment"), "34D399")));
         for (PermissionAssignment assignment : groupAssignments) {
             sendUiLine(source, services, groupAssignmentRow(
                     services,
                     assignment,
-                    "/paradigm group user remove-id " + playerLabel + " " + assignment.id(),
+                    "/paradigm group user remove-id " + uuid + " " + assignment.id(),
                     translation(services, "permission.assignment.remove_tooltip", "Remove this assignment")
             ));
         }
@@ -190,23 +191,23 @@ public final class PermissionPanelRenderer {
             sendUiLine(source, services, assignmentRow(
                     services,
                     assignment,
-                    "/paradigm group user perm remove-id " + playerLabel + " " + assignment.id(),
+                    "/paradigm group user perm remove-id " + uuid + " " + assignment.id(),
                     translation(services, "permission.assignment.remove_tooltip", "Remove this assignment")
             ));
         }
         sendUiLine(source, services, row(services)
-                .append(button(services, addLabel(services, "permission.panel.permissions_short", "perm"), "/paradigm group user perm add " + playerLabel + " ", false,
+                .append(button(services, addLabel(services, "permission.panel.permissions_short", "perm"), "/paradigm group user perm add " + uuid + " ", false,
                         translation(services, "permission.panel.tooltip.add_direct_permission", "Prepare direct permission"), "34D399"))
                 .append(space(services))
-                .append(button(services, bracket(services, "permission.panel.deny", "deny"), "/paradigm group user perm deny " + playerLabel + " ", false,
+                .append(button(services, bracket(services, "permission.panel.deny", "deny"), "/paradigm group user perm deny " + uuid + " ", false,
                         translation(services, "permission.panel.tooltip.deny_direct_permission", "Prepare direct deny"), "F87171"))
                 .append(space(services))
-                .append(button(services, bracket(services, "permission.panel.check", "check"), "/paradigm permission check " + playerLabel + " ", false,
+                .append(button(services, bracket(services, "permission.panel.check", "check"), "/paradigm permission check " + uuid + " ", false,
                         translation(services, "permission.panel.tooltip.check_permission", "Prepare permission check"), "FBBF24")));
         return 1;
     }
 
-    public static void sendPermissionExplain(ICommandSource source, Services services, String playerInput, String permission, PermissionAPI.PermissionExplain explain) {
+    public static void sendPermissionExplain(ICommandSource source, Services services, UUID uuid, String label, String permission, PermissionAPI.PermissionExplain explain) {
         String stateKey = explain.allowed() == null
                 ? "permission.panel.undefined"
                 : (explain.allowed() ? "permission.panel.allowed" : "permission.panel.denied");
@@ -214,20 +215,20 @@ public final class PermissionPanelRenderer {
         String color = explain.allowed() == null ? "FBBF24" : (explain.allowed() ? "34D399" : "F87171");
         sendUiLine(source, services, header(services, translation(services, "permission.panel.check_title", "Check")));
         sendUiLine(source, services, row(services)
-                .append(text(services, playerInput + " -> " + permission + ": ", "CBD5E1"))
+                .append(text(services, label + " -> " + permission + ": ", "CBD5E1"))
                 .append(text(services, translation(services, stateKey, stateFallback), color)));
         sendUiLine(source, services, text(services,
                 translation(services, "permission.panel.match", "match") + ": " + blankDash(explain.sourceType()) + " " + blankDash(explain.sourceName()) + " " + blankDash(explain.rule()), "94A3B8"));
         sendUiLine(source, services, text(services,
                 translation(services, "permission.panel.groups", "groups") + ": " + (explain.groupsChecked().isEmpty() ? "-" : String.join(", ", explain.groupsChecked())), "94A3B8"));
         sendUiLine(source, services, row(services)
-                .append(button(services, bracket(services, "permission.panel.user", "user"), "/paradigm group user info " + playerInput, true,
+                .append(button(services, bracket(services, "permission.panel.user", "user"), "/paradigm group user info " + uuid, true,
                         translation(services, "permission.panel.tooltip.open_user_permissions", "Open user permissions"), "60A5FA"))
                 .append(space(services))
-                .append(button(services, bracket(services, "permission.panel.allow", "allow"), "/paradigm group user perm add " + playerInput + " " + permission, true,
+                .append(button(services, bracket(services, "permission.panel.allow", "allow"), "/paradigm group user perm add " + uuid + " " + permission, true,
                         translation(services, "permission.panel.tooltip.add_direct_allow", "Add direct allow"), "34D399"))
                 .append(space(services))
-                .append(button(services, bracket(services, "permission.panel.deny", "deny"), "/paradigm group user perm deny " + playerInput + " " + permission, true,
+                .append(button(services, bracket(services, "permission.panel.deny", "deny"), "/paradigm group user perm deny " + uuid + " " + permission, true,
                         translation(services, "permission.panel.tooltip.add_direct_deny", "Add direct deny"), "F87171")));
     }
 

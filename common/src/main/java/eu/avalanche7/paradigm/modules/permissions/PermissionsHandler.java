@@ -1161,9 +1161,21 @@ public class PermissionsHandler {
         return internalPermissionApi.getUserInfo(playerUuid);
     }
 
+    public PermissionAPI.UserInfo getPlayerPermissionInfo(UUID playerUuid, IPlayer online) {
+        if (!isInternalPermissionsEnabled()) return null;
+        return online != null ? internalPermissionApi.getUserInfo(playerUuid, permissionContextResolver.resolve(online))
+                : getPlayerPermissionInfo(playerUuid);
+    }
+
     public PermissionAPI.PermissionExplain explainPlayerPermission(UUID playerUuid, String permissionNode) {
         if (!isInternalPermissionsEnabled()) return null;
         return internalPermissionApi.explainPermission(playerUuid, permissionNode);
+    }
+
+    public PermissionAPI.PermissionExplain explainPlayerPermission(UUID playerUuid, String permissionNode, IPlayer online) {
+        if (!isInternalPermissionsEnabled()) return null;
+        return online != null ? internalPermissionApi.explainPermission(playerUuid, permissionNode, permissionContextResolver.resolve(online))
+                : explainPlayerPermission(playerUuid, permissionNode);
     }
 
     public boolean isInternalPermissionsEnabled() {

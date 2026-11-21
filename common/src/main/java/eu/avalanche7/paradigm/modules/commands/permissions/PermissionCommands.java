@@ -9,8 +9,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.ToIntBiFunction;
 
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.commands.permissions.PermissionCommandArguments.PlayerTarget;
+import eu.avalanche7.paradigm.modules.commands.shared.StorageCommandSupport;
 import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
 import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.modules.permissions.PermissionAPI;
@@ -23,9 +26,11 @@ import eu.avalanche7.paradigm.modules.permissions.context.PermissionMutationArgu
 import eu.avalanche7.paradigm.modules.permissions.migration.LuckPermsMigrationReport;
 import eu.avalanche7.paradigm.modules.permissions.migration.LuckPermsMigrationService;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandBuilder;
+import eu.avalanche7.paradigm.platform.Interfaces.ICommandContext;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.utils.PlayerConnection;
 
 public final class PermissionCommands {
     private PermissionCommands() {
@@ -127,14 +132,14 @@ public final class PermissionCommands {
     private static ICommandBuilder buildRankBranch(IPlatformAdapter platform, Services services, String action) {
         return platform.createCommandBuilder().literal(action)
                 .requires(source -> hasGroupManagePermission(source, services))
-                .then(platform.createCommandBuilder().argument("player", ICommandBuilder.ArgumentType.WORD)
+                .then(playerArgument(platform, services)
                         .then(platform.createCommandBuilder().argument("track", ICommandBuilder.ArgumentType.WORD)
                                 .suggests((context, input) -> trackSuggestions(services, input))
-                                .executes(context -> mutateRank(context.getSource(), services, action,
-                                        context.getStringArgument("player"), context.getStringArgument("track"), ""))
+                                .executes(forPlayer(services, (context, target) -> mutateRank(context.getSource(), services, action,
+                                        target, context.getStringArgument("track"), "")))
                                 .then(platform.createCommandBuilder().argument("flags", ICommandBuilder.ArgumentType.GREEDY_STRING)
-                                        .executes(context -> mutateRank(context.getSource(), services, action,
-                                                context.getStringArgument("player"), context.getStringArgument("track"), context.getStringArgument("flags"))))));
+                                        .executes(forPlayer(services, (context, target) -> mutateRank(context.getSource(), services, action,
+                                                target, context.getStringArgument("track"), context.getStringArgument("flags")))))));
     }
 
     private static ICommandBuilder buildHomeBranch(IPlatformAdapter platform, Services services) {
@@ -206,13 +211,12 @@ public final class PermissionCommands {
     }
 
     private static ICommandBuilder buildPermissionCheckArguments(IPlatformAdapter platform, Services services) {
-        return platform.createCommandBuilder()
-                .argument("player", ICommandBuilder.ArgumentType.WORD)
+        return playerArgument(platform, services)
                 .then(platform.createCommandBuilder()
                         .argument("permission", ICommandBuilder.ArgumentType.STRING)
                         .suggests((context, input) -> permissionSuggestions(services, input))
-                        .executes(context -> explainPermission(context.getSource(), services,
-                                context.getStringArgument("player"), context.getStringArgument("permission"))));
+                        .executes(forPlayer(services, (context, target) -> explainPermission(context.getSource(), services,
+                                target, context.getStringArgument("permission")))));
     }
 
     private static ICommandBuilder buildPermissionNodesBranch(IPlatformAdapter platform, Services services) {
@@ -409,53 +413,47 @@ public final class PermissionCommands {
                 .then(platform.createCommandBuilder()
                         .argument("unit", ICommandBuilder.ArgumentType.WORD)
                         .suggests(List.of("days", "weeks", "months"))
-                        .executes(context -> assignUserGroup(context.getSource(), services,
-                                context.getStringArgument("player"), context.getStringArgument("group"),
-                                context.getIntArgument("amount"), context.getStringArgument("unit"))));
+                        .executes(forPlayer(services, (context, target) -> assignUserGroup(context.getSource(), services,
+                                target, context.getStringArgument("group"),
+                                context.getIntArgument("amount"), context.getStringArgument("unit")))));
         ICommandBuilder userAdd = platform.createCommandBuilder()
                 .argument("group", ICommandBuilder.ArgumentType.WORD)
                 .suggests((context, input) -> services.getPermissionsHandler().listPermissionGroups())
-                .executes(context -> assignUserGroup(context.getSource(), services,
-                        context.getStringArgument("player"), context.getStringArgument("group"), 0, ""))
+                .executes(forPlayer(services, (context, target) -> assignUserGroup(context.getSource(), services,
+                        target, context.getStringArgument("group"), 0, "")))
                 .then(userAddDuration)
                 .then(platform.createCommandBuilder().argument("flags", ICommandBuilder.ArgumentType.GREEDY_STRING)
-                        .executes(context -> assignUserGroupWithFlags(context.getSource(), services,
-                                context.getStringArgument("player"), context.getStringArgument("group"), context.getStringArgument("flags"))));
+                        .executes(forPlayer(services, (context, target) -> assignUserGroupWithFlags(context.getSource(), services,
+                                target, context.getStringArgument("group"), context.getStringArgument("flags")))));
 
         ICommandBuilder userRemove = platform.createCommandBuilder()
                 .argument("group", ICommandBuilder.ArgumentType.WORD)
                 .suggests((context, input) -> services.getPermissionsHandler().listPermissionGroups())
-                .executes(context -> removeUserGroup(context.getSource(), services,
-                        PermissionCommandArguments.resolvePlayerUuid(services, context.getStringArgument("player")),
-                        context.getStringArgument("group"), ""))
+                .executes(forPlayer(services, (context, target) -> removeUserGroup(context.getSource(), services,
+                        target,
+                        context.getStringArgument("group"), "")))
                 .then(platform.createCommandBuilder().argument("flags", ICommandBuilder.ArgumentType.GREEDY_STRING)
-                        .executes(context -> removeUserGroup(context.getSource(), services,
-                                PermissionCommandArguments.resolvePlayerUuid(services, context.getStringArgument("player")),
-                                context.getStringArgument("group"), context.getStringArgument("flags"))));
+                        .executes(forPlayer(services, (context, target) -> removeUserGroup(context.getSource(), services,
+                                target,
+                                context.getStringArgument("group"), context.getStringArgument("flags")))));
 
         ICommandBuilder userPermission = buildUserPermissionBranch(platform, services);
-        ICommandBuilder removeUserGroupId = platform.createCommandBuilder()
-                .argument("player", ICommandBuilder.ArgumentType.WORD)
+        ICommandBuilder removeUserGroupId = playerArgument(platform, services)
                 .then(platform.createCommandBuilder().argument("assignmentId", ICommandBuilder.ArgumentType.WORD)
-                        .executes(context -> removeUserGroupById(context.getSource(), services,
-                                context.getStringArgument("player"), context.getStringArgument("assignmentId"))));
+                        .executes(forPlayer(services, (context, target) -> removeUserGroupById(context.getSource(), services,
+                                target, context.getStringArgument("assignmentId")))));
 
         return platform.createCommandBuilder()
                 .literal("user")
-                .then(platform.createCommandBuilder().literal("add").then(platform.createCommandBuilder()
-                        .argument("player", ICommandBuilder.ArgumentType.WORD).then(userAdd)))
-                .then(platform.createCommandBuilder().literal("remove").then(platform.createCommandBuilder()
-                        .argument("player", ICommandBuilder.ArgumentType.WORD).then(userRemove)))
+                .then(platform.createCommandBuilder().literal("add").then(playerArgument(platform, services).then(userAdd)))
+                .then(platform.createCommandBuilder().literal("remove").then(playerArgument(platform, services).then(userRemove)))
                 .then(platform.createCommandBuilder().literal("remove-id").then(removeUserGroupId))
-                .then(platform.createCommandBuilder().literal("info").then(platform.createCommandBuilder()
-                        .argument("player", ICommandBuilder.ArgumentType.WORD)
-                        .executes(context -> showUserInfo(context.getSource(), services, context.getStringArgument("player")))))
-                .then(platform.createCommandBuilder().literal("list").then(platform.createCommandBuilder()
-                        .argument("player", ICommandBuilder.ArgumentType.WORD)
-                        .executes(context -> showUserInfo(context.getSource(), services, context.getStringArgument("player")))))
-                .then(platform.createCommandBuilder().literal("showtracks").then(platform.createCommandBuilder()
-                        .argument("player", ICommandBuilder.ArgumentType.WORD)
-                        .executes(context -> showUserTracks(context.getSource(), platform, services, context.getStringArgument("player")))))
+                .then(platform.createCommandBuilder().literal("info").then(playerArgument(platform, services)
+                        .executes(forPlayer(services, (context, target) -> showUserInfo(context.getSource(), services, target)))))
+                .then(platform.createCommandBuilder().literal("list").then(playerArgument(platform, services)
+                        .executes(forPlayer(services, (context, target) -> showUserInfo(context.getSource(), services, target)))))
+                .then(platform.createCommandBuilder().literal("showtracks").then(playerArgument(platform, services)
+                        .executes(forPlayer(services, (context, target) -> showUserTracks(context.getSource(), platform, services, target)))))
                 .then(userTrackOperation(platform, services, "promote"))
                 .then(userTrackOperation(platform, services, "demote"))
                 .then(userTrackOperation(platform, services, "cleartrack"))
@@ -469,43 +467,39 @@ public final class PermissionCommands {
         if ("settrack".equals(action)) {
             track.then(platform.createCommandBuilder().argument("group", ICommandBuilder.ArgumentType.WORD)
                     .suggests((context, input) -> trackGroupSuggestions(services, context.getStringArgument("track"), input))
-                    .executes(context -> mutateUserTrack(context.getSource(), services, action, context.getStringArgument("player"),
-                            context.getStringArgument("track"), context.getStringArgument("group"), ""))
+                    .executes(forPlayer(services, (context, target) -> mutateUserTrack(context.getSource(), services, action, target,
+                            context.getStringArgument("track"), context.getStringArgument("group"), "")))
                     .then(platform.createCommandBuilder().argument("flags", ICommandBuilder.ArgumentType.GREEDY_STRING)
-                            .executes(context -> mutateUserTrack(context.getSource(), services, action, context.getStringArgument("player"),
-                                    context.getStringArgument("track"), context.getStringArgument("group"), context.getStringArgument("flags")))));
+                            .executes(forPlayer(services, (context, target) -> mutateUserTrack(context.getSource(), services, action, target,
+                                    context.getStringArgument("track"), context.getStringArgument("group"), context.getStringArgument("flags"))))));
         } else {
-            track.executes(context -> mutateUserTrack(context.getSource(), services, action, context.getStringArgument("player"),
-                    context.getStringArgument("track"), null, ""))
+            track.executes(forPlayer(services, (context, target) -> mutateUserTrack(context.getSource(), services, action, target,
+                    context.getStringArgument("track"), null, "")))
                     .then(platform.createCommandBuilder().argument("flags", ICommandBuilder.ArgumentType.GREEDY_STRING)
-                            .executes(context -> mutateUserTrack(context.getSource(), services, action, context.getStringArgument("player"),
-                                    context.getStringArgument("track"), null, context.getStringArgument("flags"))));
+                            .executes(forPlayer(services, (context, target) -> mutateUserTrack(context.getSource(), services, action, target,
+                                    context.getStringArgument("track"), null, context.getStringArgument("flags")))));
         }
-        return platform.createCommandBuilder().literal(action).then(platform.createCommandBuilder()
-                .argument("player", ICommandBuilder.ArgumentType.WORD).then(track));
+        return platform.createCommandBuilder().literal(action).then(playerArgument(platform, services).then(track));
     }
 
     private static ICommandBuilder buildUserPermissionBranch(IPlatformAdapter platform, Services services) {
         ICommandBuilder add = userPermissionArgument(platform, services, false);
         ICommandBuilder deny = userPermissionArgument(platform, services, true);
-        ICommandBuilder remove = platform.createCommandBuilder()
-                .argument("player", ICommandBuilder.ArgumentType.WORD)
+        ICommandBuilder remove = playerArgument(platform, services)
                 .then(platform.createCommandBuilder()
                         .argument("permission", ICommandBuilder.ArgumentType.STRING)
                         .suggests((context, input) -> userPermissionSuggestions(services, context.getStringArgument("player"), input))
-                        .executes(context -> removeUserPermission(context.getSource(), services, context.getStringArgument("player"),
-                                context.getStringArgument("permission"), ""))
+                        .executes(forPlayer(services, (context, target) -> removeUserPermission(context.getSource(), services, target,
+                                context.getStringArgument("permission"), "")))
                         .then(platform.createCommandBuilder().argument("flags", ICommandBuilder.ArgumentType.GREEDY_STRING)
-                                .executes(context -> removeUserPermission(context.getSource(), services, context.getStringArgument("player"),
-                                        context.getStringArgument("permission"), context.getStringArgument("flags")))));
-        ICommandBuilder removeId = platform.createCommandBuilder()
-                .argument("player", ICommandBuilder.ArgumentType.WORD)
+                                .executes(forPlayer(services, (context, target) -> removeUserPermission(context.getSource(), services, target,
+                                        context.getStringArgument("permission"), context.getStringArgument("flags"))))));
+        ICommandBuilder removeId = playerArgument(platform, services)
                 .then(platform.createCommandBuilder().argument("assignmentId", ICommandBuilder.ArgumentType.WORD)
-                        .executes(context -> removeUserPermissionById(context.getSource(), services,
-                                context.getStringArgument("player"), context.getStringArgument("assignmentId"))));
-        ICommandBuilder list = platform.createCommandBuilder()
-                .argument("player", ICommandBuilder.ArgumentType.WORD)
-                .executes(context -> showUserInfo(context.getSource(), services, context.getStringArgument("player")));
+                        .executes(forPlayer(services, (context, target) -> removeUserPermissionById(context.getSource(), services,
+                                target, context.getStringArgument("assignmentId")))));
+        ICommandBuilder list = playerArgument(platform, services)
+                .executes(forPlayer(services, (context, target) -> showUserInfo(context.getSource(), services, target)));
         return platform.createCommandBuilder()
                 .literal("perm")
                 .then(platform.createCommandBuilder().literal("add").then(add))
@@ -516,16 +510,15 @@ public final class PermissionCommands {
     }
 
     private static ICommandBuilder userPermissionArgument(IPlatformAdapter platform, Services services, boolean denied) {
-        return platform.createCommandBuilder()
-                .argument("player", ICommandBuilder.ArgumentType.WORD)
+        return playerArgument(platform, services)
                 .then(platform.createCommandBuilder()
                         .argument("permission", ICommandBuilder.ArgumentType.STRING)
                         .suggests((context, input) -> permissionSuggestions(services, input))
-                        .executes(context -> addUserPermission(context.getSource(), services, context.getStringArgument("player"),
-                                context.getStringArgument("permission"), denied, ""))
+                        .executes(forPlayer(services, (context, target) -> addUserPermission(context.getSource(), services, target,
+                                context.getStringArgument("permission"), denied, "")))
                         .then(platform.createCommandBuilder().argument("flags", ICommandBuilder.ArgumentType.GREEDY_STRING)
-                                .executes(context -> addUserPermission(context.getSource(), services, context.getStringArgument("player"),
-                                        context.getStringArgument("permission"), denied, context.getStringArgument("flags")))));
+                                .executes(forPlayer(services, (context, target) -> addUserPermission(context.getSource(), services, target,
+                                        context.getStringArgument("permission"), denied, context.getStringArgument("flags"))))));
     }
 
     private static ICommandBuilder buildGroupTextMetadataCommand(IPlatformAdapter platform, Services services, String literal, String field) {
@@ -617,12 +610,61 @@ public final class PermissionCommands {
         return 1;
     }
 
-    private static int addUserPermission(ICommandSource source, Services services, String playerInput, String permission, boolean denied, String flags) {
-        UUID uuid = PermissionCommandArguments.resolvePlayerUuid(services, playerInput);
-        if (uuid == null) {
-            PermissionCommandMessages.send(source, services, "group.manage.user_invalid", "Player must be online name or UUID.");
-            return 0;
-        }
+    private static ICommandBuilder playerArgument(IPlatformAdapter platform, Services services) {
+        return platform.createCommandBuilder().argument("player", ICommandBuilder.ArgumentType.WORD)
+                .suggests((context, input) -> {
+                    ICommandSource source = context.getSource();
+                    List<String> targets = new ArrayList<>(source.isConsole()
+                            ? platform.getOnlinePlayers().stream().map(IPlayer::getName).toList()
+                            : platform.getVisiblePlayerNames(source.getPlayer()));
+                    if (input != null && !input.isBlank()) {
+                        services.getPermissionsHandler().listPermissionUsers().forEach(uuid -> targets.add(uuid.toString()));
+                    }
+                    return filterSuggestions(targets, input);
+                });
+    }
+
+    private static ICommandBuilder.CommandExecutor forPlayer(Services services, ToIntBiFunction<ICommandContext, PlayerTarget> action) {
+        return context -> {
+            ICommandSource source = context.getSource();
+            if (!hasGroupManagePermission(source, services)) return 0;
+            String input = context.getStringArgument("player");
+            PlayerTarget immediate = PermissionCommandArguments.resolveImmediatePlayer(services, input);
+            if (immediate != null) return action.applyAsInt(context, immediate);
+            if (input == null || input.isBlank()) return unknownPlayer(source, services);
+
+            IPlayer actor = source.getPlayer();
+            PlayerConnection connection = actor != null ? new PlayerConnection(actor) : null;
+            String actorUuid = actor != null ? actor.getUUID() : null;
+            return StorageCommandSupport.runForSource(services, source, "permissions.lookup_player",
+                    () -> services.getPlayerProfileService().matchingNames(input), matches -> {
+                        if (services.isStopping() || !hasGroupManagePermission(source, services)) return;
+                        if (connection != null && !connection.matches(services.getPlatformAdapter().getPlayerByUuid(actorUuid))) return;
+
+                        if (matches.size() > 1) {
+                            PermissionCommandMessages.send(source, services, "group.manage.user_ambiguous",
+                                    "Multiple stored players use that name. Use the player's UUID.");
+                            return;
+                        }
+                        PlayerTarget target = matches.isEmpty() ? null
+                                : PermissionCommandArguments.resolveStoredPlayer(services, input, matches.get(0));
+                        if (target == null) {
+                            unknownPlayer(source, services);
+                            return;
+                        }
+                        action.applyAsInt(context, target);
+                    });
+        };
+    }
+
+    private static int unknownPlayer(ICommandSource source, Services services) {
+        PermissionCommandMessages.send(source, services, "group.manage.user_not_found",
+                "Player not found. Use a known player name or UUID.");
+        return 0;
+    }
+
+    private static int addUserPermission(ICommandSource source, Services services, PlayerTarget target, String permission, boolean denied, String flags) {
+        UUID uuid = target.uuid();
         PermissionMutationArgumentParser.Result arguments = PermissionCommandArguments.parse(source, services, flags, true);
         if (!arguments.valid()) return PermissionCommandMessages.argumentError(source, services, arguments.code(), arguments.message());
         PermissionMutationResult result = mutate(source, services,
@@ -634,15 +676,11 @@ public final class PermissionCommands {
         PermissionCommandMessages.send(source, services, "group.manage.user_perm_add_context_ok", "Added permission {permission} to player ({context}, {expiry}).",
                 "{permission}", denied ? "-" + stripDeny(permission) : stripDeny(permission),
                 "{context}", contextLabel(services, arguments.contexts()), "{expiry}", expiryLabel(services, arguments.expiresAtMs()));
-        return showUserInfo(source, services, playerInput);
+        return showUserInfo(source, services, target);
     }
 
-    private static int removeUserPermission(ICommandSource source, Services services, String playerInput, String permission, String flags) {
-        UUID uuid = PermissionCommandArguments.resolvePlayerUuid(services, playerInput);
-        if (uuid == null) {
-            PermissionCommandMessages.send(source, services, "group.manage.user_invalid", "Player must be online name or UUID.");
-            return 0;
-        }
+    private static int removeUserPermission(ICommandSource source, Services services, PlayerTarget target, String permission, String flags) {
+        UUID uuid = target.uuid();
         PermissionMutationArgumentParser.Result arguments = PermissionCommandArguments.parse(source, services, flags, false);
         if (!arguments.valid()) return PermissionCommandMessages.argumentError(source, services, arguments.code(), arguments.message());
         PermissionMutationResult result = mutate(source, services,
@@ -657,28 +695,20 @@ public final class PermissionCommands {
         }
         PermissionCommandMessages.send(source, services, "group.manage.user_perm_remove_context_ok", "Removed permission {permission} from player ({context}).",
                 "{permission}", permission, "{context}", contextLabel(services, arguments.contexts()));
-        return showUserInfo(source, services, playerInput);
+        return showUserInfo(source, services, target);
     }
 
-    private static int removeUserPermissionById(ICommandSource source, Services services, String playerInput, String assignmentId) {
-        UUID uuid = PermissionCommandArguments.resolvePlayerUuid(services, playerInput);
-        if (uuid == null) {
-            PermissionCommandMessages.send(source, services, "group.manage.user_invalid", "Player must be online name or UUID.");
-            return 0;
-        }
+    private static int removeUserPermissionById(ICommandSource source, Services services, PlayerTarget target, String assignmentId) {
+        UUID uuid = target.uuid();
         PermissionMutationRequest request = request("user_permission_remove", null, null, null, uuid.toString(), false, PermissionContextSet.empty(), null);
         request.assignmentId = assignmentId;
         PermissionMutationResult result = mutate(source, services, request);
         if (!result.applied()) return PermissionCommandMessages.assignmentNotFound(source, services, assignmentId);
-        return showUserInfo(source, services, playerInput);
+        return showUserInfo(source, services, target);
     }
 
-    private static int assignUserGroup(ICommandSource source, Services services, String playerInput, String group, int amount, String unit) {
-        UUID uuid = PermissionCommandArguments.resolvePlayerUuid(services, playerInput);
-        if (uuid == null) {
-            PermissionCommandMessages.send(source, services, "group.manage.user_invalid", "Player must be online name or UUID.");
-            return 0;
-        }
+    private static int assignUserGroup(ICommandSource source, Services services, PlayerTarget target, String group, int amount, String unit) {
+        UUID uuid = target.uuid();
         if (amount <= 0) return applyUserGroupMutation(source, services, uuid, group, PermissionContextSet.empty(), null);
 
         long expiresAtMs = computeLegacyExpiry(amount, unit);
@@ -689,12 +719,8 @@ public final class PermissionCommands {
         return applyUserGroupMutation(source, services, uuid, group, PermissionContextSet.empty(), expiresAtMs);
     }
 
-    private static int assignUserGroupWithFlags(ICommandSource source, Services services, String playerInput, String group, String flags) {
-        UUID uuid = PermissionCommandArguments.resolvePlayerUuid(services, playerInput);
-        if (uuid == null) {
-            PermissionCommandMessages.send(source, services, "group.manage.user_invalid", "Player must be online name or UUID.");
-            return 0;
-        }
+    private static int assignUserGroupWithFlags(ICommandSource source, Services services, PlayerTarget target, String group, String flags) {
+        UUID uuid = target.uuid();
         PermissionMutationArgumentParser.Result arguments = PermissionCommandArguments.parse(source, services, flags, true);
         if (!arguments.valid()) return PermissionCommandMessages.argumentError(source, services, arguments.code(), arguments.message());
         return applyUserGroupMutation(source, services, uuid, group, arguments.contexts(), arguments.expiresAtMs());
@@ -713,11 +739,8 @@ public final class PermissionCommands {
         return 1;
     }
 
-    private static int removeUserGroup(ICommandSource source, Services services, UUID uuid, String group, String flags) {
-        if (uuid == null) {
-            PermissionCommandMessages.send(source, services, "group.manage.user_invalid", "Player must be online name or UUID.");
-            return 0;
-        }
+    private static int removeUserGroup(ICommandSource source, Services services, PlayerTarget target, String group, String flags) {
+        UUID uuid = target.uuid();
         PermissionMutationArgumentParser.Result arguments = PermissionCommandArguments.parse(source, services, flags, false);
         if (!arguments.valid()) return PermissionCommandMessages.argumentError(source, services, arguments.code(), arguments.message());
         PermissionMutationResult result = mutate(source, services,
@@ -735,41 +758,29 @@ public final class PermissionCommands {
         return 1;
     }
 
-    private static int removeUserGroupById(ICommandSource source, Services services, String playerInput, String assignmentId) {
-        UUID uuid = PermissionCommandArguments.resolvePlayerUuid(services, playerInput);
-        if (uuid == null) {
-            PermissionCommandMessages.send(source, services, "group.manage.user_invalid", "Player must be online name or UUID.");
-            return 0;
-        }
+    private static int removeUserGroupById(ICommandSource source, Services services, PlayerTarget target, String assignmentId) {
+        UUID uuid = target.uuid();
         PermissionMutationRequest request = request("user_group_remove", null, null, null, uuid.toString(), false, PermissionContextSet.empty(), null);
         request.assignmentId = assignmentId;
         PermissionMutationResult result = mutate(source, services, request);
         if (!result.applied()) return PermissionCommandMessages.assignmentNotFound(source, services, assignmentId);
-        return showUserInfo(source, services, playerInput);
+        return showUserInfo(source, services, target);
     }
 
-    private static int showUserInfo(ICommandSource source, Services services, String playerInput) {
-        UUID uuid = PermissionCommandArguments.resolvePlayerUuid(services, playerInput);
-        if (uuid == null) {
-            PermissionCommandMessages.send(source, services, "group.manage.user_invalid", "Player must be online name or UUID.");
-            return 0;
-        }
-        return PermissionPanelRenderer.sendUserInfo(source, services, uuid,
-                PermissionCommandArguments.resolvePlayerLabel(services, uuid, playerInput));
+    private static int showUserInfo(ICommandSource source, Services services, PlayerTarget target) {
+        IPlayer online = services.getPlatformAdapter().getPlayerByUuid(target.uuid().toString());
+        return PermissionPanelRenderer.sendUserInfo(source, services, target.uuid(), target.label(online), online);
     }
 
-    private static int explainPermission(ICommandSource source, Services services, String playerInput, String permission) {
-        UUID uuid = PermissionCommandArguments.resolvePlayerUuid(services, playerInput);
-        if (uuid == null) {
-            PermissionCommandMessages.send(source, services, "group.manage.user_invalid", "Player must be online name or UUID.");
-            return 0;
-        }
-        PermissionAPI.PermissionExplain explain = services.getPermissionsHandler().explainPlayerPermission(uuid, permission);
+    private static int explainPermission(ICommandSource source, Services services, PlayerTarget target, String permission) {
+        UUID uuid = target.uuid();
+        IPlayer online = services.getPlatformAdapter().getPlayerByUuid(uuid.toString());
+        PermissionAPI.PermissionExplain explain = services.getPermissionsHandler().explainPlayerPermission(uuid, permission, online);
         if (explain == null) {
             PermissionCommandMessages.send(source, services, "group.manage.permission_check_fail", "Could not check permission {permission}.", "{permission}", permission);
             return 0;
         }
-        PermissionPanelRenderer.sendPermissionExplain(source, services, playerInput, permission, explain);
+        PermissionPanelRenderer.sendPermissionExplain(source, services, uuid, target.label(online), permission, explain);
         return 1;
     }
 
@@ -791,12 +802,8 @@ public final class PermissionCommands {
         return 1;
     }
 
-    private static int mutateRank(ICommandSource source, Services services, String action, String player, String track, String flags) {
-        UUID uuid = PermissionCommandArguments.resolvePlayerUuid(services, player);
-        if (uuid == null) {
-            PermissionCommandMessages.send(source, services, "group.manage.user_invalid", "Player must be online name or UUID.");
-            return 0;
-        }
+    private static int mutateRank(ICommandSource source, Services services, String action, PlayerTarget target, String track, String flags) {
+        UUID uuid = target.uuid();
         PermissionMutationArgumentParser.Result arguments = PermissionCommandArguments.parse(source, services, flags, true, true);
         if (!arguments.valid()) return PermissionCommandMessages.argumentError(source, services, arguments.code(), arguments.message());
         String invalid = invalidTrackArguments(action, arguments);
@@ -815,12 +822,8 @@ public final class PermissionCommands {
         return 1;
     }
 
-    private static int mutateUserTrack(ICommandSource source, Services services, String action, String player, String track, String group, String flags) {
-        UUID uuid = PermissionCommandArguments.resolvePlayerUuid(services, player);
-        if (uuid == null) {
-            PermissionCommandMessages.send(source, services, "group.manage.user_invalid", "Player must be online name or UUID.");
-            return 0;
-        }
+    private static int mutateUserTrack(ICommandSource source, Services services, String action, PlayerTarget target, String track, String group, String flags) {
+        UUID uuid = target.uuid();
         PermissionMutationArgumentParser.Result arguments = PermissionCommandArguments.parse(source, services, flags, true, true);
         if (!arguments.valid()) return PermissionCommandMessages.argumentError(source, services, arguments.code(), arguments.message());
         String invalid = invalidTrackArguments(action, arguments);
@@ -850,12 +853,8 @@ public final class PermissionCommands {
         return 1;
     }
 
-    private static int showUserTracks(ICommandSource source, IPlatformAdapter platform, Services services, String player) {
-        UUID uuid = PermissionCommandArguments.resolvePlayerUuid(services, player);
-        if (uuid == null) {
-            platform.sendFailure(source, platform.createLiteralComponent("Player must be online name or UUID."));
-            return 0;
-        }
+    private static int showUserTracks(ICommandSource source, IPlatformAdapter platform, Services services, PlayerTarget target) {
+        UUID uuid = target.uuid();
         PermissionAPI.UserInfo info = services.getPermissionsHandler().getPlayerPermissionInfo(uuid);
         List<String> direct = info != null ? info.groupAssignments().stream()
                 .filter(assignment -> assignment.kind() == PermissionAssignment.Kind.USER_GROUP && !assignment.expired())
@@ -977,9 +976,9 @@ public final class PermissionCommands {
     }
 
     private static List<String> userPermissionSuggestions(Services services, String playerInput, String input) {
-        UUID uuid = PermissionCommandArguments.resolvePlayerUuid(services, playerInput);
-        if (uuid == null) return permissionSuggestions(services, input);
-        PermissionAPI.UserInfo info = services.getPermissionsHandler().getPlayerPermissionInfo(uuid);
+        PlayerTarget target = PermissionCommandArguments.resolveImmediatePlayer(services, playerInput);
+        if (target == null) return permissionSuggestions(services, input);
+        PermissionAPI.UserInfo info = services.getPermissionsHandler().getPlayerPermissionInfo(target.uuid());
         if (info == null) return permissionSuggestions(services, input);
         List<String> nodes = new ArrayList<>();
         for (PermissionAssignment assignment : info.assignments()) nodes.add(assignment.value());

@@ -15,6 +15,11 @@ public interface PlayerRepository {
     default void setNickname(String uuid, String nickname) { throw new UnsupportedOperationException("Nicknames are unsupported by this provider."); }
 
     List<StoredPlayerProfile> listProfiles();
+
+    /** Returns up to two exact account-name matches so callers can detect ambiguous identities. */
+    default List<StoredPlayerProfile> matchingProfileNames(String name) {
+        return listProfiles().stream().filter(profile -> name.equalsIgnoreCase(profile.name())).limit(2).toList();
+    }
     Optional<StoredPlayerProfile> getProfile(String uuid);
     void upsertProfile(StoredPlayerProfile profile);
 

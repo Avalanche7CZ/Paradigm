@@ -1,6 +1,7 @@
 package eu.avalanche7.paradigm.modules.tab;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.BooleanSupplier;
 import java.util.function.LongSupplier;
@@ -100,7 +101,8 @@ public final class TablistMetadataResolver implements TablistMetadataProvider {
 
     private static TablistMetadata resolveMetadata(PermissionsHandler handler, IPlayer player, TablistMetadata.Source source) {
         PermissionAPI.PermissionMeta meta = handler.resolvePlayerMetadata(player);
-        return meta == null ? TablistMetadata.EMPTY : new TablistMetadata(meta.primaryGroup(), meta.prefix(), meta.suffix(), meta.weight(), source, meta.chatNameFormat());
+        return meta == null ? TablistMetadata.EMPTY : new TablistMetadata(meta.primaryGroup(), meta.prefix(), meta.suffix(),
+                meta.weight(), source, meta.chatNameFormat(), source == TablistMetadata.Source.PARADIGM ? meta.groups() : List.of());
     }
 
     private record CacheEntry(TablistMetadata metadata, boolean internalSource, long stateVersion, long timestamp) {

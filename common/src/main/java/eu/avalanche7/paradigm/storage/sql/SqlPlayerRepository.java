@@ -78,6 +78,17 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
     }
 
     @Override
+    public List<StoredPlayerProfile> matchingProfileNames(String name) {
+        String nameKey = "mysql".equals(sql.dialectName()) ? "BINARY LOWER(name)" : "LOWER(name)";
+        return sql.query("SELECT uuid, name, first_seen_ms, last_seen_ms, playtime_ms FROM players WHERE "
+                + nameKey + " = ? LIMIT 2", ps -> ps.setString(1, name.toLowerCase(Locale.ROOT)), rs -> {
+            List<StoredPlayerProfile> matches = new ArrayList<>(2);
+            while (rs.next()) matches.add(readProfile(rs));
+            return List.copyOf(matches);
+        });
+    }
+
+    @Override
     public Optional<StoredPlayerProfile> getProfile(String uuid) {
         String normalizedUuid = normalize(uuid);
         return sql.query("SELECT uuid, name, first_seen_ms, last_seen_ms, playtime_ms FROM players WHERE uuid = ?", ps -> ps.setString(1, normalizedUuid), rs -> {

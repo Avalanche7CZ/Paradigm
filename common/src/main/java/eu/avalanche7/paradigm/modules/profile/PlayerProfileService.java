@@ -1,5 +1,6 @@
 package eu.avalanche7.paradigm.modules.profile;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -36,6 +37,13 @@ public final class PlayerProfileService {
                 .filter(profile -> profile != null && hasData(profile)
                         && (value.equalsIgnoreCase(profile.uuid()) || value.equalsIgnoreCase(profile.name())))
                 .findFirst();
+    }
+
+    public List<StoredPlayerProfile> matchingNames(String name) {
+        if (name == null || name.isBlank() || services == null || services.getStorageService() == null) {
+            return List.of();
+        }
+        return services.getStorageService().players().matchingProfileNames(name.trim());
     }
 
     public static boolean hasData(StoredPlayerProfile profile) {

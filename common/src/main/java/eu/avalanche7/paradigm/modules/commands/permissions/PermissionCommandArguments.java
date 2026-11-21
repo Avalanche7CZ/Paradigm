@@ -6,6 +6,7 @@ import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.permissions.context.PermissionMutationArgumentParser;
 import eu.avalanche7.paradigm.platform.Interfaces.ICommandSource;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
 
 public final class PermissionCommandArguments {
     private PermissionCommandArguments() {
@@ -21,29 +22,42 @@ public final class PermissionCommandArguments {
                 ? services.getStorageService().context().serverIdentity() : null).parse(flags, source, allowExpiry, allowTrackFlags);
     }
 
-    public static UUID resolvePlayerUuid(Services services, String input) {
+    static PlayerTarget resolveImmediatePlayer(Services services, String input) {
         if (input == null || input.isBlank()) return null;
+        String value = input.trim();
+        UUID uuid = parseUuid(value);
+        if (uuid != null) return new PlayerTarget(uuid, null);
+        IPlayer player = services.getPlatformAdapter().getPlayerByName(value);
+        UUID onlineUuid = player != null ? parseUuid(player.getUUID()) : null;
+        return onlineUuid != null ? new PlayerTarget(onlineUuid, player.getName()) : null;
+    }
+
+    static PlayerTarget resolveStoredPlayer(Services services, String input, StoredPlayerProfile profile) {
+        UUID uuid = parseUuid(profile.uuid());
+        if (uuid == null) return null;
+        var platform = services.getPlatformAdapter();
+        IPlayer onlineByName = platform.getPlayerByName(input.trim());
+        if (onlineByName != null && !uuid.equals(parseUuid(onlineByName.getUUID()))) return null;
+        IPlayer onlineByUuid = platform.getPlayerByUuid(uuid.toString());
+        if (onlineByUuid != null && !input.trim().equalsIgnoreCase(onlineByUuid.getName())) return null;
+        return new PlayerTarget(uuid, profile.name());
+    }
+
+    private static UUID parseUuid(String value) {
+        if (value == null || value.length() != 36) return null;
         try {
-            return UUID.fromString(input.trim());
-        } catch (IllegalArgumentException ignored) {
-        }
-        IPlayer player = services.getPlatformAdapter().getPlayerByName(input.trim());
-        if (player == null || player.getUUID() == null || player.getUUID().isBlank()) return null;
-        try {
-            return UUID.fromString(player.getUUID());
+            UUID uuid = UUID.fromString(value);
+            return value.equalsIgnoreCase(uuid.toString()) ? uuid : null;
         } catch (IllegalArgumentException ignored) {
             return null;
         }
     }
 
-    public static String resolvePlayerLabel(Services services, UUID uuid, String fallback) {
-        if (uuid != null) {
-            IPlayer player = services.getPlatformAdapter().getPlayerByUuid(uuid.toString());
-            if (player != null && player.getName() != null && !player.getName().isBlank()) {
-                return player.getName();
-            }
-            return uuid.toString();
+    record PlayerTarget(UUID uuid, String name) {
+        String label(IPlayer player) {
+            if (name != null && !name.isBlank()) return name;
+            return player != null && player.getName() != null && !player.getName().isBlank()
+                    ? player.getName() : uuid.toString();
         }
-        return fallback != null && !fallback.isBlank() ? fallback.trim() : "-";
     }
 }

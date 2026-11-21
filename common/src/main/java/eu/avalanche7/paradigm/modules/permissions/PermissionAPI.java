@@ -1,6 +1,8 @@
 package eu.avalanche7.paradigm.modules.permissions;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -12,6 +14,7 @@ import java.util.UUID;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiConsumer;
+import java.util.function.Function;
 
 import org.slf4j.Logger;
 
@@ -1245,6 +1248,11 @@ public class PermissionAPI {
     }
 
     public UserInfo getUserInfo(UUID playerUuid) {
+        PermissionContextResolver resolver = this.contextResolver;
+        return getUserInfo(playerUuid, resolver != null ? resolver.currentServer() : PermissionContextSet.empty());
+    }
+
+    public UserInfo getUserInfo(UUID playerUuid, PermissionContextSet currentContext) {
         if (playerUuid == null) {
             return null;
         }
@@ -1258,7 +1266,7 @@ public class PermissionAPI {
             List<PermissionAssignment> groupAssignments = user != null
                     ? groupAssignments(uuid, user) : List.of();
             UserGroupsInfo groups = getUserGroups(playerUuid);
-            PermissionMeta meta = resolveMeta(playerUuid);
+            PermissionMeta meta = resolveMeta(playerUuid, currentContext);
             return new UserInfo(
                     directPermissions,
                     groupAssignments,
@@ -1319,48 +1327,58 @@ public class PermissionAPI {
             PermissionDataStore.PermissionState snapshot = this.state;
             String normalizedUuid = playerUuid.toString().toLowerCase(Locale.ROOT);
             PermissionDataStore.UserEntry user = snapshot.users.get(normalizedUuid);
-            List<String> groupNames = resolvePlayerGroups(snapshot, normalizedUuid, user, currentContext);
-            if (groupNames.isEmpty()) {
-                return null;
-            }
+            List<String> roots = resolvePlayerGroups(snapshot, normalizedUuid, user, currentContext);
+            List<String> effectiveGroups = effectiveGroups(snapshot, roots);
+            if (effectiveGroups.isEmpty()) return null;
 
-            String primary = null;
-            int bestWeight = Integer.MIN_VALUE;
-            String prefix = "";
-            String suffix = "";
-            List<String> resolvedGroups = new ArrayList<>();
-
-            for (String groupName : new LinkedHashSet<>(groupNames)) {
-                PermissionDataStore.GroupEntry group = snapshot.groups.get(groupName);
-                if (group == null) {
-                    continue;
-                }
-
-                resolvedGroups.add(groupName);
-                int weight = group.weight;
-                if (primary == null || weight > bestWeight || weight == bestWeight && groupName.compareTo(primary) < 0) {
-                    primary = groupName;
-                    bestWeight = weight;
-                    prefix = group.prefix != null ? group.prefix : "";
-                    suffix = group.suffix != null ? group.suffix : "";
-                }
-            }
-
-            if (primary == null) {
-                return null;
-            }
-
+            Comparator<String> priority = Comparator.<String>comparingInt(name -> snapshot.groups.get(name).weight)
+                    .reversed().thenComparing(Comparator.naturalOrder());
+            List<String> rankedGroups = effectiveGroups.stream().sorted(priority).toList();
+            String primary = rankedGroups.get(0);
+            Set<String> metadataOrder = new LinkedHashSet<>();
             if (user != null && activeDisplayGroups(snapshot, normalizedUuid, user, currentContext).contains(user.displayGroup)) {
                 primary = user.displayGroup;
-                PermissionDataStore.GroupEntry selected = snapshot.groups.get(primary);
-                prefix = selected.prefix;
-                suffix = selected.suffix;
+                metadataOrder.add(primary);
+                effectiveGroups(snapshot, List.of(primary)).stream().sorted(priority).forEach(metadataOrder::add);
             }
-            PermissionDataStore.GroupEntry selected = snapshot.groups.get(primary);
-            return new PermissionMeta(primary, prefix, suffix, List.copyOf(resolvedGroups), selected.chatNameFormat, selected.chatMessageFormat, selected.weight);
+            metadataOrder.addAll(rankedGroups);
+            List<PermissionDataStore.GroupEntry> candidates = metadataOrder.stream().map(snapshot.groups::get).toList();
+            return new PermissionMeta(primary, firstMetadata(candidates, group -> group.prefix),
+                    firstMetadata(candidates, group -> group.suffix), effectiveGroups,
+                    firstMetadata(candidates, group -> group.chatNameFormat),
+                    firstMetadata(candidates, group -> group.chatMessageFormat), snapshot.groups.get(primary).weight);
         } finally {
             stateLock.readLock().unlock();
         }
+    }
+
+    private static List<String> effectiveGroups(PermissionDataStore.PermissionState snapshot, List<String> roots) {
+        Set<String> visited = new LinkedHashSet<>();
+        ArrayDeque<String> pending = new ArrayDeque<>();
+        for (String root : roots) {
+            if (snapshot.groups.containsKey(root) && visited.add(root)) pending.addLast(root);
+        }
+        // Visit the shortest path to each group so a deep branch cannot hide a shallower one.
+        for (int depth = 0; depth < MAX_INHERITANCE_DEPTH && !pending.isEmpty(); depth++) {
+            for (int remaining = pending.size(); remaining > 0; remaining--) {
+                PermissionDataStore.GroupEntry group = snapshot.groups.get(pending.removeFirst());
+                if (group.inherits == null) continue;
+                for (String parent : group.inherits) {
+                    String name = normalizeGroupName(parent);
+                    if (name != null && snapshot.groups.containsKey(name) && visited.add(name)) pending.addLast(name);
+                }
+            }
+        }
+        return List.copyOf(visited);
+    }
+
+    private static String firstMetadata(List<PermissionDataStore.GroupEntry> candidates,
+                                        Function<PermissionDataStore.GroupEntry, String> field) {
+        for (PermissionDataStore.GroupEntry candidate : candidates) {
+            String value = field.apply(candidate);
+            if (value != null && !value.isBlank()) return value;
+        }
+        return "";
     }
 
     private List<String> activeDisplayGroups(PermissionDataStore.PermissionState snapshot, String uuid,
@@ -1486,6 +1504,11 @@ public class PermissionAPI {
     }
 
     public PermissionExplain explainPermission(UUID playerUuid, String permissionNode) {
+        PermissionContextResolver resolver = this.contextResolver;
+        return explainPermission(playerUuid, permissionNode, resolver != null ? resolver.currentServer() : PermissionContextSet.empty());
+    }
+
+    public PermissionExplain explainPermission(UUID playerUuid, String permissionNode, PermissionContextSet currentContext) {
         if (playerUuid == null || permissionNode == null || permissionNode.isBlank()) {
             return new PermissionExplain(null, "invalid", "", "", List.of());
         }
@@ -1496,8 +1519,6 @@ public class PermissionAPI {
             String normalizedNode = permissionNode.trim().toLowerCase(Locale.ROOT);
             String normalizedUuid = playerUuid.toString().toLowerCase(Locale.ROOT);
             PermissionDataStore.UserEntry user = snapshot.users.get(normalizedUuid);
-            PermissionContextResolver resolver = this.contextResolver;
-            PermissionContextSet currentContext = resolver != null ? resolver.currentServer() : PermissionContextSet.empty();
             List<String> groups = resolvePlayerGroups(snapshot, normalizedUuid, user, currentContext);
 
             RuleDecision userDecision = bestRuleMatch(user != null ? user.permissions : List.of(), normalizedNode, "user", normalizedUuid, currentContext, 20);

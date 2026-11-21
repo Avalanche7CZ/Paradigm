@@ -108,3 +108,14 @@ ForgeAnnoucements-1.0.0/plugin.yml
 !/Forge-1.7.10/src/test/java/eu/avalanche7/paradigm/platform/TpCommandTest.java
 !/NeoForge-26.1.2/src/test/java/eu/avalanche7/paradigm/platform/InteractiveChatTest.java
 !/NeoForge-26.1.2/src/test/java/eu/avalanche7/paradigm/platform/TeleportOperationsTest.java
+
+# Permission presentation and offline command regression coverage.
+!/common/src/test/java/eu/avalanche7/paradigm/modules/permissions/PermissionPresentationTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/modules/chat/ChatFormatterTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/modules/dashboard/DashboardServiceSharedPermissionServicesTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/modules/tab/TablistMetadataResolverTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/modules/commands/permissions/PermissionCommandsRegistrationTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/support/TestComponent.java
+!/common/src/test/java/eu/avalanche7/paradigm/support/TestPlatformAdapter.java
+!/common/src/test/java/eu/avalanche7/paradigm/support/TestPlayer.java
+!/common/src/test/java/eu/avalanche7/paradigm/support/TestStyle.java
