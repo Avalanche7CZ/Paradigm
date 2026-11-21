@@ -6,9 +6,13 @@ import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 import eu.avalanche7.paradigm.platform.Interfaces.*;
+import eu.avalanche7.paradigm.utils.formatting.ChatUrls;
 import eu.avalanche7.paradigm.utils.*;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundClearTitlesPacket;
 import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
@@ -966,39 +970,35 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public Object createStyleWithClickEvent(Object baseStyle, String action, String value) {
-        if (!(baseStyle instanceof net.minecraft.network.chat.Style style)) return baseStyle;
-        net.minecraft.network.chat.ClickEvent.Action a;
-        try {
-            a = net.minecraft.network.chat.ClickEvent.Action.valueOf(String.valueOf(action).toUpperCase(java.util.Locale.ROOT));
-        } catch (Throwable t) {
-            return baseStyle;
-        }
-        String text = String.valueOf(value);
-        net.minecraft.network.chat.ClickEvent event = switch (a) {
-            case RUN_COMMAND -> new net.minecraft.network.chat.ClickEvent.RunCommand(text);
-            case SUGGEST_COMMAND -> new net.minecraft.network.chat.ClickEvent.SuggestCommand(text);
-            case OPEN_URL -> new net.minecraft.network.chat.ClickEvent.OpenUrl(java.net.URI.create(text));
-            case COPY_TO_CLIPBOARD -> new net.minecraft.network.chat.ClickEvent.CopyToClipboard(text);
-            case CHANGE_PAGE -> new net.minecraft.network.chat.ClickEvent.ChangePage(Integer.parseInt(text));
+        Style style = baseStyle instanceof Style existing ? existing : Style.EMPTY;
+        if (action == null || value == null) return style;
+        ClickEvent event = switch (action.toUpperCase(java.util.Locale.ROOT)) {
+            case "OPEN_URL" -> {
+                var uri = ChatUrls.httpUri(value);
+                yield uri == null ? null : new ClickEvent.OpenUrl(uri);
+            }
+            case "RUN_COMMAND", "RUN_CMD", "RUN_COMMAND_ALT" -> new ClickEvent.RunCommand(value);
+            case "SUGGEST_COMMAND" -> new ClickEvent.SuggestCommand(value);
+            case "COPY_TO_CLIPBOARD" -> new ClickEvent.CopyToClipboard(value);
+            case "CHANGE_PAGE" -> {
+                try {
+                    int page = Integer.parseInt(value);
+                    yield page > 0 ? new ClickEvent.ChangePage(page) : null;
+                } catch (NumberFormatException invalid) {
+                    yield null;
+                }
+            }
             default -> null;
         };
-        return event != null ? style.withClickEvent(event) : baseStyle;
+        return event == null ? style : style.withClickEvent(event);
     }
 
     @Override
     public Object createStyleWithHoverEvent(Object baseStyle, Object hoverText) {
-        if (!(baseStyle instanceof net.minecraft.network.chat.Style style)) return baseStyle;
-
-        net.minecraft.network.chat.Component hover;
-        if (hoverText instanceof net.minecraft.network.chat.Component c) {
-            hover = c;
-        } else if (hoverText instanceof IComponent ic && ic.getOriginalText() instanceof net.minecraft.network.chat.Component c2) {
-            hover = c2;
-        } else {
-            hover = net.minecraft.network.chat.Component.literal(String.valueOf(hoverText));
-        }
-
-        return style.withHoverEvent(new net.minecraft.network.chat.HoverEvent.ShowText(hover));
+        Style style = baseStyle instanceof Style existing ? existing : Style.EMPTY;
+        Object text = hoverText instanceof IComponent wrapped ? wrapped.getOriginalText() : hoverText;
+        Component hover = text instanceof Component component ? component : Component.literal(String.valueOf(hoverText));
+        return style.withHoverEvent(new HoverEvent.ShowText(hover));
     }
 
     @Override

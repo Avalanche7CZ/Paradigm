@@ -17,7 +17,6 @@ public class FormattingParser {
     private final IPlatformAdapter platformAdapter;
     private final Placeholders placeholders;
     private final Pattern hexPattern = Pattern.compile("&#([A-Fa-f0-9]{6})");
-    private final Pattern urlPattern = Pattern.compile("https?://\\S+");
 
     private static class TagState {
         Tag tag;
@@ -196,7 +195,7 @@ public class FormattingParser {
         }
 
         int currentIndex = 0;
-        Matcher urlMatcher = urlPattern.matcher(text);
+        Matcher urlMatcher = ChatUrls.IN_TEXT.matcher(text);
 
         while (currentIndex < text.length()) {
             boolean urlFound = false;
@@ -222,11 +221,12 @@ public class FormattingParser {
 
             if (urlFound) {
                 String url = urlMatcher.group(0);
-                String fullUrl = url.startsWith("http://") || url.startsWith("https://") ? url : "https://" + url;
-
                 IComponent urlComponent = platformAdapter.createComponentFromLiteral(url);
-                Object urlStyle = platformAdapter.createStyleWithClickEvent(context.getCurrentStyle(), "open_url", fullUrl);
-                urlComponent.setStyle(urlStyle);
+                Object style = context.getCurrentStyle();
+                if (ChatUrls.httpUri(url) != null) {
+                    style = platformAdapter.createStyleWithClickEvent(style, "open_url", url);
+                }
+                if (style != null) urlComponent.setStyle(style);
                 parent.append(urlComponent);
                 currentIndex = urlMatcher.end();
             } else {

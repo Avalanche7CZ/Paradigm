@@ -90,6 +90,10 @@ public final class DiscordSanitizer {
         return truncate(result, MAX_MINECRAFT_VALUE_LENGTH);
     }
 
+    static String forMinecraftLiteral(String value) {
+        return truncate(collapseWhitespace(ComponentSlots.strip(value).replace("§", "")), MAX_MINECRAFT_VALUE_LENGTH);
+    }
+
     public static String resolveMentions(String content, Map<String, String> mentionNames) {
         if (content == null || content.isEmpty()) {
             return "";

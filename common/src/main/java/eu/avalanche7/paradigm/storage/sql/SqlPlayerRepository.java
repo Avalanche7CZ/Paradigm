@@ -1,5 +1,6 @@
 package eu.avalanche7.paradigm.storage.sql;
 
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -8,6 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import eu.avalanche7.paradigm.storage.identity.StorageContext;
 import eu.avalanche7.paradigm.storage.model.LegacyPlaytimeResult;
@@ -20,8 +22,15 @@ import eu.avalanche7.paradigm.storage.model.StoredServerPlaytime;
 import eu.avalanche7.paradigm.storage.repository.PlayerRepository;
 
 public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerRepository {
+    private final String databaseIdentity;
+
     public SqlPlayerRepository(SqlExecutor sql, StorageContext context) {
+        this(sql, context, null);
+    }
+
+    SqlPlayerRepository(SqlExecutor sql, StorageContext context, String databaseIdentity) {
         super(sql, context);
+        this.databaseIdentity = databaseIdentity;
         sql.query("SELECT uuid, name, first_seen_ms, last_seen_ms, playtime_ms FROM players WHERE 1 = 0", null, rs -> null);
         sql.query("SELECT uuid, writer_id, cumulative_ms FROM player_playtime_legacy_streams WHERE 1 = 0", null, rs -> null);
         sql.query("SELECT unattributed_playtime_ms FROM players WHERE 1 = 0", null, rs -> null);
@@ -123,8 +132,21 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
         return new StoredPlayerProfileState(profile, streams, legacy, servers, scopes);
     }
 
+    private <T> T playtimeTransaction(Supplier<T> work) {
+        Integer isolation = "mysql".equals(sql.dialectName()) ? Connection.TRANSACTION_REPEATABLE_READ : null;
+        return sql.transaction(isolation, work);
+    }
+
+    private void verifyPlaytimeDatabase() {
+        if (databaseIdentity == null) return;
+        SqlStorageProvider.requirePlaytimeIdentity(databaseIdentity, SqlStorageProvider.readPlaytimeStorageIdentity(sql));
+    }
+
     @Override public StoredPlayerProfileState readPlaytime(String uuid) {
-        return sql.transaction(() -> readState(normalize(uuid)));
+        return playtimeTransaction(() -> {
+            verifyPlaytimeDatabase();
+            return readState(normalize(uuid));
+        });
     }
 
     @Override public List<StoredServerPlaytime> listServerPlaytime(String server) {
@@ -137,11 +159,7 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
 
     @Override
     public StoredPlayerProfileState getProfileState(String uuid) {
-        return sql.transaction(() -> {
-            String key = normalize(uuid);
-            if ("mysql".equals(sql.dialectName())) lockPlayer(key);
-            return readState(key);
-        });
+        return readPlaytime(uuid);
     }
 
     private void writeProfile(StoredPlayerProfile profile) { writeProfile(profile, true); }
@@ -200,9 +218,10 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
     }
 
     @Override public void importProfileState(StoredPlayerProfileState state) {
-        sql.transaction(() -> {
+        playtimeTransaction(() -> {
             String uuid = normalize(state.profile().uuid());
             lockPlayer(uuid);
+            verifyPlaytimeDatabase();
             var existing = readState(uuid);
             PlayerProfileMutation.requireCompatibleImport(existing, state);
             writeProfile(PlayerProfileMutation.merge(existing.profile(), state.profile(), false), false);
@@ -213,6 +232,7 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
                 if (scope.isEmpty()) writeStream(uuid, writer, value);
                 else writeScopedStream(uuid, writer, scope, value);
             });
+            return null;
         });
     }
 
@@ -223,9 +243,10 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
     @Override public StoredPlayerProfileState recordPlaytime(StoredPlayerProfile update, String scope, String writerId, long cumulativeMs) {
         if (cumulativeMs < 0L || writerId == null || writerId.isBlank() || scope == null) throw new IllegalArgumentException("Invalid playtime counter.");
         if (!scope.isEmpty() && !scope.equals(serverId())) throw new IllegalArgumentException("Playtime server identity differs from repository identity.");
-        return sql.transaction(() -> {
+        return playtimeTransaction(() -> {
             String uuid = normalize(update.uuid());
             lockPlayer(uuid);
+            verifyPlaytimeDatabase();
             var existing = readState(uuid);
             if (existing.playtimeStreams().containsKey(writerId) && !scope.equals(existing.streamServers().getOrDefault(writerId, "")))
                 throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException("Playtime writer reused across server identities: " + writerId);
@@ -250,8 +271,9 @@ public class SqlPlayerRepository extends SqlRepositorySupport implements PlayerR
         String key = java.util.UUID.fromString(uuid).toString();
         if (!key.equalsIgnoreCase(uuid) || historicalMs <= 0 || historicalMs > Integer.MAX_VALUE * 50L || historicalMs % 50L != 0)
             throw new IllegalArgumentException("Invalid legacy UUID or tick count.");
-        return sql.transaction(() -> {
+        return playtimeTransaction(() -> {
             if (apply) lockPlayer(key);
+            verifyPlaytimeDatabase();
             var state = readState(key);
             long local = state.localPlaytimeMs(serverId());
             String writer = LegacyPlaytimeResult.writerId(serverId());

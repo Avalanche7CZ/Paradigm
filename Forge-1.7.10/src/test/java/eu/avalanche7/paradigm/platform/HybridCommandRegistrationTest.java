@@ -405,6 +405,7 @@ public class HybridCommandRegistrationTest {
         when(playtime.onlinePlaytimeMs(any())).thenReturn(60_000L);
         when(playtime.sessionMs(any())).thenReturn(10_000L);
         when(playtime.isPlaytimeLoaded(anyString())).thenReturn(true);
+        when(playtime.recoveryStatus(any())).thenReturn("available");
         List<String> messages = new ArrayList<>();
         doAnswer(call -> {
             String rendered = call.getArgument(3);
@@ -447,6 +448,7 @@ public class HybridCommandRegistrationTest {
         assertEquals(before + 1, messages.size());
         when(playtime.isPlaytimeLoaded(anyString())).thenReturn(false);
         when(playtime.recoveryStatus(any())).thenReturn("sql_unavailable");
+        when(playtime.recoverySummary(any())).thenReturn("sql_unavailable. Startup journal verification is incomplete.");
         manager.forward("playtime", player);
         assertTrue(messages.get(messages.size() - 1).contains("Historical playtime is unavailable"));
         manager.forward("playtime", player, "status");

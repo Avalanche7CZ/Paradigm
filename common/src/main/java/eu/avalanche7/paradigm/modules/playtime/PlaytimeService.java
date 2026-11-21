@@ -1,18 +1,24 @@
 package eu.avalanche7.paradigm.modules.playtime;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.storage.StorageCompatibilityException;
+import eu.avalanche7.paradigm.storage.model.LegacyPlaytimeResult;
 import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
 import eu.avalanche7.paradigm.storage.model.StoredPlayerProfileState;
 import eu.avalanche7.paradigm.storage.repository.PlayerRepository;
@@ -27,17 +33,19 @@ public final class PlaytimeService {
     private final Function<Supplier<StoredPlayerProfileState>, CompletableFuture<StoredPlayerProfileState>> submit;
     private final PlaytimeJournal journal;
     private final String serverId;
-    private volatile ScheduledFuture<?> flushTask;
+    private ScheduledFuture<?> flushTask;
     private volatile boolean running;
     private boolean stopped;
+    private boolean stopping;
     private boolean recoveryPending = true;
+    private long recoveryGeneration;
     private boolean flushRequested;
     private CompletableFuture<StoredPlayerProfileState> batchInFlight;
-    private String lastFailure;
-    private volatile String failureStatus = "recovery_pending";
+    private final Map<String, Long> reportedFailures = new LinkedHashMap<>();
+    private String failureStatus;
 
     public PlaytimeService(Services services) {
-        this(services, new PlaytimeJournal(services.getStorageService().playtimeJournalPath(), services.getStorageService().playtimeStorageIdentity(), () -> services.getStorageService().players(), services.getStorageService().context().serverId(), () -> services.getStorageService().authoritativePlaytimeStorageIdentity()),
+        this(services, new PlaytimeJournal(services.getStorageService().playtimeJournalPath(), services.getStorageService().knownPlaytimeStorageIdentity(), () -> services.getStorageService().players(), services.getStorageService().context().serverId(), () -> services.getStorageService().authoritativePlaytimeStorageIdentity()),
                 () -> services.getStorageService().players(), work -> services.getStorageService().submitAcknowledged(work), monotonicClock());
         services.getStorageService().registerStorageResource(journal);
     }
@@ -59,47 +67,63 @@ public final class PlaytimeService {
     }
 
     public synchronized void start() {
-        if (running) return;
+        if (running || stopping) return;
         stopped = false;
         running = true;
+        recoveryPending = true;
+        recoveryGeneration++;
+        for (IPlayer player : onlinePlayers()) {
+            String uuid = key(player);
+            if (uuid != null) attachSession(player, uuid);
+        }
         if (services != null && services.getTaskScheduler() != null) {
             flushTask = services.getTaskScheduler().scheduleAtFixedRateRaw(this::flushAll, flushIntervalSeconds(), flushIntervalSeconds(), TimeUnit.SECONDS);
         }
-        recoverJournal();
-        for (IPlayer player : onlinePlayers()) beginSession(player);
-    }
-
-    synchronized void recoverJournal() {
-        stopped = false;
-        recoveryPending = true;
         requestFlush();
     }
 
+    synchronized void recoverJournal() {
+        if (!stopped && !stopping) requestFlush();
+    }
+
     public void stop() {
+        CompletableFuture<StoredPlayerProfileState> existing;
         synchronized (this) {
-            if (stopped) return;
+            if (stopped || stopping) return;
+            stopping = true;
             running = false;
             if (flushTask != null) flushTask.cancel(false);
             flushTask = null;
             long now = clock.getAsLong();
             sessions.values().forEach(session -> session.finish(now));
             sessions.clear();
+            existing = batchInFlight;
         }
         try {
-            journalMeasurements();
-        } catch (eu.avalanche7.paradigm.storage.StorageException failure) {
-            report("could not journal final shutdown measurements; persistence will still be attempted", failure);
+            try {
+                if (journal.canSaveMeasurements()) journalMeasurements();
+            } catch (RuntimeException failure) {
+                synchronized (this) { reportFailure("recovery_failed", null, failure); }
+            }
+            awaitFlush(existing);
+        } finally {
+            synchronized (this) {
+                stopped = true;
+                stopping = false;
+            }
         }
-        flushAllBlocking();
-        synchronized (this) { stopped = true; }
     }
 
     public boolean isRunning() { return running; }
 
     public synchronized void beginSession(IPlayer player) {
         String uuid = key(player);
-        if (uuid == null) return;
-        stopped = false;
+        if (uuid == null || stopped || stopping) return;
+        attachSession(player, uuid);
+        requestFlush();
+    }
+
+    private void attachSession(IPlayer player, String uuid) {
         long now = clock.getAsLong();
         Session old = sessions.remove(uuid);
         if (old != null) old.finish(now);
@@ -110,7 +134,6 @@ public final class PlaytimeService {
             counter.lastSeenMs = Math.max(counter.lastSeenMs, now);
         }
         sessions.put(uuid, new Session(counter, now));
-        requestFlush();
     }
 
     public synchronized void endSession(IPlayer player) {
@@ -136,32 +159,50 @@ public final class PlaytimeService {
     public boolean isTracking(String uuid) { return uuid != null && sessions.containsKey(uuid.toLowerCase(Locale.ROOT)); }
 
     public synchronized boolean isPlaytimeLoaded(String uuid) {
+        return hasLoadedHistory(uuid) && "available".equals(recoveryStatus(uuid));
+    }
+
+    private boolean hasLoadedHistory(String uuid) {
         Counter counter = uuid != null ? counters.get(uuid.toLowerCase(Locale.ROOT)) : null;
         if (counter == null) return false;
-        synchronized (counter) { return !recoveryPending && counter.loaded && counter.blocked == null && !"identity_conflict".equals(recoveryStatus(uuid)); }
+        synchronized (counter) { return counter.loaded; }
     }
 
     public synchronized String recoveryStatus(String uuid) {
+        if (failureStatus != null) return failureStatus;
+        if (recoveryPending) return "recovery_pending";
+        if (stopped || stopping || services != null && !running) return "disabled";
         Counter counter = uuid != null ? counters.get(uuid.toLowerCase(Locale.ROOT)) : null;
-        if (counter != null) synchronized (counter) { if (counter.blocked != null) return "recovery_failed"; }
-        if (lastFailure != null) return failureStatus;
-        if (recoveryPending || counter != null && !counter.loaded) return "recovery_pending";
+        if (counter != null && !hasLoadedHistory(uuid)) return "recovery_pending";
         return "available";
     }
 
-    public synchronized java.util.Set<String> legacyImportBlockedPlayers() {
-        if (recoveryPending) throw new IllegalStateException("Playtime journal recovery is pending; retry after storage recovery.");
-        if (lastFailure != null) throw new IllegalStateException("Playtime persistence is " + failureStatus
-                + "; resolve the journal/storage conflict before importing world statistics.",
-                new IllegalStateException(lastFailure));
-        var blocked = new java.util.HashSet<>(sessions.keySet());
-        counters.forEach((uuid, counter) -> {
-            synchronized (counter) {
-                if (!counter.loaded || counter.blocked != null || counter.pendingRecoveryMs > 0L
-                        || counter.acknowledgedMs < counter.target()) blocked.add(uuid);
-            }
-        });
-        return java.util.Set.copyOf(blocked);
+    public synchronized String recoverySummary(String uuid) {
+        String key = uuid != null ? uuid.toLowerCase(Locale.ROOT) : null;
+        Measurements measurements = measurements(key);
+        return recoveryStatus(uuid) + ". "
+                + (key != null ? "Historical total loaded: " + (hasLoadedHistory(key) ? "yes" : "no") + ". " : "")
+                + "Sampled time awaiting confirmation: " + measurements.journaled() + "ms journaled, "
+                + measurements.unjournaled() + "ms unjournaled."
+                + (recoveryPending ? " Startup journal verification is incomplete." : "");
+    }
+
+    synchronized void requireHealthyImport() {
+        String status = recoveryStatus(null);
+        if (!"available".equals(status)) throw new IllegalStateException(
+                "Playtime persistence is " + status + "; enable tracking and resolve journal recovery before importing.");
+    }
+
+    synchronized boolean legacyImportBlocked(String uuid) {
+        if (sessions.containsKey(uuid)) return true;
+        Counter counter = counters.get(uuid);
+        return counter != null && !settled(counter);
+    }
+
+    synchronized LegacyPlaytimeResult importLegacyEntry(LegacyPlaytimeImport.Entry entry, long expectedLocalMs, boolean apply) {
+        requireHealthyImport();
+        if (legacyImportBlocked(entry.uuid())) return null;
+        return repository.get().importLegacyPlaytime(entry.uuid(), entry.milliseconds(), expectedLocalMs, apply);
     }
 
     public long totalPlaytimeMs(String uuid, String input) {
@@ -176,196 +217,227 @@ public final class PlaytimeService {
     }
 
     public synchronized void flushAll() {
-        long now = clock.getAsLong();
-        sessions.values().forEach(session -> session.measure(now));
+        if (stopped || stopping) return;
+        measureSessions();
         requestFlush();
     }
 
+    private void measureSessions() {
+        long now = clock.getAsLong();
+        sessions.values().forEach(session -> session.measure(now));
+    }
+
     public void flushAllBlocking() {
-        flushAll();
+        CompletableFuture<StoredPlayerProfileState> existing;
+        synchronized (this) {
+            if (stopped || stopping) return;
+            measureSessions();
+            existing = batchInFlight;
+        }
+        awaitFlush(existing);
+    }
+
+    private void awaitFlush(CompletableFuture<StoredPlayerProfileState> existing) {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
-        for (Map.Entry<String, Counter> entry : counters.entrySet()) {
-            Counter counter = entry.getValue();
-            synchronized (counter) {
-                if (counter.loaded && counter.acknowledgedMs >= counter.target() && counter.pendingRecoveryMs == 0L) continue;
+        try {
+            if (existing != null) {
+                try {
+                    existing.get(Math.max(1L, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+                } catch (ExecutionException failure) {
+                }
             }
-            try {
-                for (;;) {
-                    CompletableFuture<StoredPlayerProfileState> future = requestFlush();
-                    future.get(Math.max(1L, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
-                    synchronized (counter) {
-                        if (counter.loaded && counter.acknowledgedMs >= counter.target() && counter.pendingRecoveryMs == 0L) break;
-                    }
-                    if (System.nanoTime() >= deadline) throw new java.util.concurrent.TimeoutException("Shutdown persistence timed out waiting for " + entry.getKey());
-                    requestFlush();
-                }
-            } catch (Exception failure) {
-                if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
-                Throwable cause = failure instanceof java.util.concurrent.ExecutionException ? failure.getCause() : failure;
-                if (cause == null) cause = failure;
-
-                long unjournaledTotal = 0L;
-                long pendingTotal = 0L;
-                int noOutstandingCount = 0;
-                int safelyJournaledCount = 0;
-                int unjournaledCount = 0;
-                for (Counter affected : counters.values()) {
-                    synchronized (affected) {
-                        long unjournaled = Math.max(0L, affected.target() - affected.journaledMs);
-                        long pending = Math.max(0L, affected.target() - affected.acknowledgedMs) + affected.pendingRecoveryMs;
-                        unjournaledTotal = Math.addExact(unjournaledTotal, unjournaled);
-                        pendingTotal = Math.addExact(pendingTotal, pending);
-                        if (pending == 0L && unjournaled == 0L) {
-                            noOutstandingCount++;
-                        } else if (unjournaled == 0L) {
-                            safelyJournaledCount++;
-                        } else {
-                            unjournaledCount++;
-                        }
-                    }
-                }
-                int totalTracked = counters.size();
-                String summary = totalTracked + " tracked players affected ("
-                        + safelyJournaledCount + " safely journaled, "
-                        + unjournaledCount + " unjournaled, "
-                        + noOutstandingCount + " with no outstanding measurements); "
-                        + "pending=" + pendingTotal + "ms; unjournaled local measurements=" + unjournaledTotal + "ms; "
-                        + (unjournaledTotal == 0
-                                ? "local measurements are journaled for retry"
-                                : "unjournaled measurements may be lost on exit");
-
-                if (isStorageCompatibilityFailure(cause)) {
-                    report("shutdown playtime acknowledgment blocked by one shared storage compatibility failure; "
-                            + summary + ". Original journal retained; reconcile storage before restarting.", cause);
-                    return;
-                }
-                if (isTransientStorageFailure(cause)) {
-                    report("shutdown playtime acknowledgment blocked by one shared recoverable storage failure; "
-                            + summary + ". Local journal retained for retry on restart.", cause);
-                    return;
-                }
-                java.util.Set<String> reportedMessages = new java.util.HashSet<>();
-                for (Map.Entry<String, Counter> e : counters.entrySet()) {
-                    Counter c = e.getValue();
-                    synchronized (c) {
-                        long unjournaled = Math.max(0L, c.target() - c.journaledMs);
-                        long pending = Math.max(0L, c.target() - c.acknowledgedMs) + c.pendingRecoveryMs;
-                        if (pending == 0L && unjournaled == 0L) continue;
-                        Throwable playerError = c.blocked != null ? c.blocked : cause;
-                        String errKey = playerError.getClass().getName() + ":" + playerError.getMessage();
-                        if (reportedMessages.add(errKey)) {
-                            report("shutdown could not acknowledge playtime for " + e.getKey() + "; pending="
-                                    + pending + "ms; unjournaled=" + unjournaled + "ms; "
-                                    + (unjournaled == 0 ? "local measurements are journaled for retry" : "these unjournaled measurements may be lost on exit"), playerError);
-                        }
-                    }
-                }
-                return;
-            }
+            CompletableFuture<StoredPlayerProfileState> finalBatch;
+            synchronized (this) { finalBatch = batchInFlight != null ? batchInFlight : requestFlush(false); }
+            finalBatch.get(Math.max(1L, deadline - System.nanoTime()), TimeUnit.NANOSECONDS);
+        } catch (ExecutionException failure) {
+        } catch (InterruptedException | TimeoutException failure) {
+            if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
+            synchronized (this) { reportFailure("acknowledgment_wait", null, failure); }
         }
     }
 
-    private static boolean isStorageCompatibilityFailure(Throwable failure) {
+    private static boolean isIdentityConflict(Throwable failure) {
         for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
-            if (cause instanceof eu.avalanche7.paradigm.storage.StorageCompatibilityException) return true;
+            if (cause instanceof StorageCompatibilityException) return true;
         }
         return false;
     }
 
-    private static boolean isTransientStorageFailure(Throwable failure) {
-        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
-            if (cause instanceof eu.avalanche7.paradigm.storage.StorageException
-                    || cause instanceof java.sql.SQLException
-                    || cause instanceof java.util.concurrent.TimeoutException
-                    || cause instanceof java.util.concurrent.RejectedExecutionException
-                    || cause instanceof java.io.IOException) return true;
+    private static boolean settled(Counter counter) {
+        synchronized (counter) {
+            return counter.loaded && counter.blocked == null && counter.acknowledgedMs >= counter.target()
+                    && counter.pendingRecoveryMs == 0L;
         }
-        return false;
     }
 
-    private synchronized CompletableFuture<StoredPlayerProfileState> requestFlush() {
+    private void requestFlush() {
         if (batchInFlight != null) {
             flushRequested = true;
-            return batchInFlight;
+        } else {
+            requestFlush(true);
         }
-        counters.forEach((uuid, counter) -> {
-            synchronized (counter) {
-                if (!sessions.containsKey(uuid) && counter.loaded && counter.acknowledgedMs >= counter.target()
-                        && counter.pendingRecoveryMs == 0L) counters.remove(uuid, counter);
-            }
-        });
-        if (!recoveryPending && counters.values().stream().allMatch(counter -> {
-            synchronized (counter) { return counter.loaded && counter.acknowledgedMs >= counter.target() && counter.pendingRecoveryMs == 0L; }
-        })) return CompletableFuture.completedFuture(null);
+    }
+
+    private CompletableFuture<StoredPlayerProfileState> requestFlush(boolean allowFailureRetry) {
+        counters.entrySet().removeIf(entry -> !sessions.containsKey(entry.getKey()) && settled(entry.getValue()));
+        flushRequested = false;
+        if (failureStatus == null && !recoveryPending && counters.values().stream().allMatch(PlaytimeService::settled)) {
+            return CompletableFuture.completedFuture(null);
+        }
+
         var completion = new CompletableFuture<StoredPlayerProfileState>();
+        var batch = new Batch(recoveryGeneration);
         batchInFlight = completion;
-        var results = new java.util.LinkedHashMap<String, StoredPlayerProfileState>();
-        var attempted = new java.util.LinkedHashMap<String, Counter>();
-        var failures = new java.util.LinkedHashMap<String, RuntimeException>();
         try {
             submit.apply(() -> {
-                persistBatch(results, attempted, failures);
-                return null;
-            }).whenComplete((ignored, failure) -> {
-                synchronized (PlaytimeService.this) {
-                    if (failure == null) {
-                        results.forEach((uuid, state) -> {
-                            Counter counter = attempted.get(uuid);
-                            synchronized (counter) {
-                                long watermark = state.playtimeStreams().getOrDefault(counter.writerId, 0L);
-                                counter.loaded = true;
-                                counter.acknowledgedMs = Math.max(counter.acknowledgedMs, watermark);
-                                counter.pendingRecoveryMs = journal.pendingMs(uuid, state, false);
-                                counter.otherBaseMs = Math.max(counter.otherBaseMs, state.localPlaytimeMs(serverId) - watermark + journal.pendingMs(uuid, state, true));
-                                if (!sessions.containsKey(uuid) && counter.acknowledgedMs >= counter.target() && counter.pendingRecoveryMs == 0L) counters.remove(uuid, counter);
-                            }
-                        });
-                    }
-                    Throwable reported = failure != null ? failure : failures.values().stream().findFirst().orElse(null);
-                    if (reported != null) {
-                        if (attempted.values().stream().anyMatch(counter -> counter.blocked != null)) failureStatus = "recovery_failed";
-                        for (Throwable cause = reported; cause != null; cause = cause.getCause())
-                            if (cause instanceof eu.avalanche7.paradigm.storage.StorageCompatibilityException) failureStatus = "identity_conflict";
-                        String message = reported.toString();
-                        if (!message.equals(lastFailure)) report("unacknowledged playtime retained; recovery/retry required", reported);
-                        lastFailure = message;
-                    } else {
-                        lastFailure = null;
-                        recoveryPending = false;
-                        failureStatus = "available";
-                    }
-                    boolean again = flushRequested && reported == null;
-                    flushRequested = false;
-                    batchInFlight = null;
-                    if (reported == null) completion.complete(null);
-                    else completion.completeExceptionally(reported);
-                    if (again) requestFlush();
+                batch.started = true;
+                try {
+                    persistBatch(batch);
+                    return null;
+                } finally {
+                    batch.finished = true;
                 }
-            });
+            }).whenComplete((ignored, failure) -> finishBatch(completion, batch, failure, allowFailureRetry));
         } catch (RuntimeException failure) {
-            flushRequested = false;
-            batchInFlight = null;
-            lastFailure = failure.toString();
-            failureStatus = isStorageCompatibilityFailure(failure) ? "identity_conflict" : "submission_rejected";
-            completion.completeExceptionally(failure);
-            report("playtime submission rejected; pending measurements retained", failure);
+            finishBatch(completion, batch, failure, allowFailureRetry);
         }
         return completion;
     }
 
-    private void persistBatch(Map<String, StoredPlayerProfileState> results, Map<String, Counter> attempted,
-                              Map<String, RuntimeException> failures) {
-        failureStatus = "recovery_failed";
-        attempted.putAll(journalMeasurements());
-        failureStatus = "sql_unavailable";
+    private synchronized void finishBatch(CompletableFuture<StoredPlayerProfileState> completion,
+                                          Batch batch, Throwable failure, boolean allowFailureRetry) {
+        if (batchInFlight != completion) return;
+        Throwable firstFailure = failure;
+        boolean finished = batch.finished;
+        if (!finished && firstFailure == null) {
+            firstFailure = new IllegalStateException("Playtime storage acknowledged a batch before its work completed.");
+        }
+        if (finished) {
+            batch.results.forEach(this::acknowledge);
+            if (firstFailure == null) firstFailure = batch.failures.values().stream().findFirst().orElse(null);
+        }
+        if (firstFailure == null) {
+            if (batch.generation == recoveryGeneration) recoveryPending = false;
+            failureStatus = null;
+            reportedFailures.clear();
+        } else {
+            failureStatus = failureCategory(batch, firstFailure);
+            if (failure != null || !finished || batch.failures.isEmpty()) reportFailure(failureStatus, null, firstFailure);
+            if (finished) batch.failures.forEach((uuid, error) -> reportFailure(failureCategory(batch, error),
+                    isConnectionFailure(error) ? null : uuid, error));
+        }
+
+        boolean followUp = flushRequested && (!batch.started || finished)
+                && (firstFailure == null || allowFailureRetry && !isIdentityConflict(firstFailure));
+        batchInFlight = null;
+        if (followUp) requestFlush(false);
+        if (firstFailure == null) completion.complete(null);
+        else completion.completeExceptionally(firstFailure);
+    }
+
+    private void acknowledge(String uuid, Acknowledgement acknowledgement) {
+        Counter counter = acknowledgement.counter();
+        synchronized (counter) {
+            counter.loaded = true;
+            counter.acknowledgedMs = Math.max(counter.acknowledgedMs, acknowledgement.watermark());
+            counter.pendingRecoveryMs = acknowledgement.pendingMs();
+            counter.otherBaseMs = Math.max(counter.otherBaseMs, acknowledgement.otherBaseMs());
+        }
+        if (!sessions.containsKey(uuid) && settled(counter)) counters.remove(uuid, counter);
+    }
+
+    private static String failureCategory(Batch batch, Throwable failure) {
+        if (isIdentityConflict(failure)) return "identity_conflict";
+        if (failure instanceof RejectedExecutionException) return "submission_rejected";
+        return batch.phase;
+    }
+
+    private static boolean isConnectionFailure(Throwable failure) {
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause instanceof java.sql.SQLException sql && sql.getSQLState() != null && sql.getSQLState().startsWith("08")) return true;
+        }
+        return false;
+    }
+
+    private void reportFailure(String category, String uuid, Throwable failure) {
+        Throwable root = failure;
+        while (root.getCause() != null) root = root.getCause();
+        String key = category + ":" + uuid + ":" + root;
+        Measurements measurements = measurements(uuid);
+        Long previouslyUnjournaled = reportedFailures.putIfAbsent(key, measurements.unjournaled());
+        if (previouslyUnjournaled != null) {
+            if (!stopping || measurements.unjournaled() <= previouslyUnjournaled) return;
+            reportedFailures.put(key, measurements.unjournaled());
+        }
+        report(category + (uuid != null ? " for " + uuid : "") + "; affected players=" + measurements.affected()
+                + "; pending or unconfirmed=" + (measurements.journaled() + measurements.unjournaled())
+                + "ms; durably journaled, awaiting confirmation=" + measurements.journaled()
+                + "ms; unjournaled=" + measurements.unjournaled() + "ms"
+                + (measurements.unjournaled() > 0L ? " may be lost on exit" : "")
+                + (recoveryPending ? "; startup journal remains unverified" : "")
+                + (isIdentityConflict(failure) ? "; retain the original journal and reconcile storage before replay"
+                        : "; retain the journal for retry"), failure);
+    }
+
+    private Measurements measurements(String uuid) {
+        long journaled = 0;
+        long unjournaled = 0;
+        int affected = 0;
+        for (Map.Entry<String, Counter> entry : counters.entrySet()) {
+            if (uuid != null && !uuid.equals(entry.getKey())) continue;
+            Counter counter = entry.getValue();
+            synchronized (counter) {
+                long localPending = Math.max(0L, counter.target() - counter.acknowledgedMs);
+                long localUnjournaled = Math.max(0L, counter.target() - Math.max(counter.journaledMs, counter.acknowledgedMs));
+                journaled += localPending - localUnjournaled + counter.pendingRecoveryMs;
+                unjournaled += localUnjournaled;
+                if (!settled(counter)) affected++;
+            }
+        }
+        return new Measurements(journaled, unjournaled, affected);
+    }
+
+    private record Measurements(long journaled, long unjournaled, int affected) {}
+
+    private static final class Batch {
+        final Map<String, Acknowledgement> results = new LinkedHashMap<>();
+        final Map<String, RuntimeException> failures = new LinkedHashMap<>();
+        final long generation;
+        volatile String phase = "submission_rejected";
+        volatile boolean started;
+        volatile boolean finished;
+
+        Batch(long generation) { this.generation = generation; }
+    }
+
+    private record Acknowledgement(Counter counter, StoredPlayerProfileState state, long watermark, long pendingMs, long otherBaseMs) {}
+
+    private Acknowledgement acknowledged(String uuid, Counter counter, StoredPlayerProfileState state) {
+        long watermark = state.playtimeStreams().getOrDefault(counter.writerId, 0L);
+        long pending = journal.pendingMs(uuid, state, false);
+        long other = Math.addExact(state.localPlaytimeMs(serverId) - watermark, journal.pendingMs(uuid, state, true));
+        return new Acknowledgement(counter, state, watermark, pending, other);
+    }
+
+    private void persistBatch(Batch batch) {
+        batch.phase = "recovery_failed";
+        discoverRecoveredPlayers();
+        Map<String, Counter> attempted = journal.canSaveMeasurements() ? journalMeasurements() : null;
+        batch.phase = "sql_unavailable";
         journal.verifyTarget();
+        if (attempted == null) {
+            batch.phase = "recovery_failed";
+            attempted = journalMeasurements();
+            batch.phase = "sql_unavailable";
+        }
         var data = journal.open();
+        PlayerRepository players = repository.get();
         for (var item : attempted.entrySet()) {
             String uuid = item.getKey();
             Counter counter = item.getValue();
             try {
                 synchronized (counter) { if (counter.blocked != null) throw counter.blocked; }
-                var state = repository.get().getProfileState(uuid);
+                var state = players.getProfileState(uuid);
                 for (var stream : data.streams.entrySet()) {
                     var saved = stream.getValue().get(uuid);
                     if (saved == null) continue;
@@ -382,27 +454,38 @@ public final class PlaytimeService {
                         }
                     }
                 }
-                results.put(uuid, state);
+                batch.results.put(uuid, acknowledged(uuid, counter, state));
                 for (var stream : data.streams.entrySet()) {
                     var saved = stream.getValue().get(uuid);
                     if (saved == null || saved.cumulativeMs() == 0L || state.playtimeStreams().containsKey(stream.getKey())
                             && state.playtimeStreams().get(stream.getKey()) == saved.cumulativeMs()) continue;
-                    state = repository.get().recordPlaytime(new StoredPlayerProfile(uuid, saved.name(), saved.firstSeenMs(), saved.lastSeenMs(), 0L),
+                    state = players.recordPlaytime(new StoredPlayerProfile(uuid, saved.name(), saved.firstSeenMs(), saved.lastSeenMs(), 0L),
                             data.streamServers.get(stream.getKey()), stream.getKey(), saved.cumulativeMs());
-                    results.put(uuid, state);
+                    batch.results.put(uuid, acknowledged(uuid, counter, state));
                 }
-            } catch (RuntimeException failure) { failures.put(uuid, failure); }
+            } catch (RuntimeException failure) { batch.failures.put(uuid, failure); }
         }
-        try { journal.compact(results); }
-        catch (RuntimeException failure) { failureStatus = "recovery_failed"; throw failure; }
+        batch.phase = "recovery_failed";
+        var states = new LinkedHashMap<String, StoredPlayerProfileState>();
+        batch.results.forEach((uuid, result) -> states.put(uuid, result.state()));
+        journal.compact(states);
+        batch.phase = attempted.values().stream().anyMatch(counter -> counter.blocked != null) ? "recovery_failed" : "sql_unavailable";
+    }
+
+    private synchronized void discoverRecoveredPlayers() {
+        if (!recoveryPending) return;
+        var recovered = journal.open();
+        recovered.streams.forEach((writer, players) -> players.forEach((uuid, entry) ->
+                counters.computeIfAbsent(uuid, ignored -> new Counter(entry.name(), 0L, 0L))));
+        counters.forEach((uuid, counter) -> {
+            synchronized (counter) {
+                if (!counter.loaded) counter.pendingRecoveryMs = journal.pendingMs(uuid, null, false);
+            }
+        });
     }
 
     private synchronized Map<String, Counter> journalMeasurements() {
         PlaytimeJournal.Data recoveredData = journal.open();
-        if (recoveryPending) {
-            recoveredData.streams.forEach((writer, players) -> players.forEach((uuid, entry) -> counters.computeIfAbsent(uuid,
-                    ignored -> new Counter(entry.name(), recoveredData.streamServers.get(writer).isEmpty() ? 0L : entry.firstSeenMs(), recoveredData.streamServers.get(writer).isEmpty() ? 0L : entry.lastSeenMs()))));
-        }
         var attempted = new java.util.LinkedHashMap<>(counters);
         var entries = new java.util.LinkedHashMap<String, PlaytimeJournal.Entry>();
         for (var item : attempted.entrySet()) {

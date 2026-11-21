@@ -1687,11 +1687,12 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
         }
         if (player.dimension != destination.provider.dimensionId) {
             int previousDimension = player.dimension;
-            player.setLocationAndAngles(location.getX(), location.getY(), location.getZ(),
-                    location.getYaw(), location.getPitch());
             server.getConfigurationManager().transferPlayerToDimension(player,
                     destination.provider.dimensionId, new DestinationTeleporter(destination, location));
+            if (player.dimension != destination.provider.dimensionId || player.worldObj != destination) return false;
             if (previousDimension == 1) {
+                player.setLocationAndAngles(location.getX(), location.getY(), location.getZ(),
+                        location.getYaw(), location.getPitch());
                 destination.spawnEntityInWorld(player);
                 destination.updateEntityWithOptionalForce(player, false);
             }

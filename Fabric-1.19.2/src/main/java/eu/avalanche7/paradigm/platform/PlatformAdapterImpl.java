@@ -874,7 +874,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         ServerWorld target = server.getWorld(RegistryKey.of(Registry.WORLD_KEY, id));
         if (target == null) return false;
         mp.getHandle().teleport(target, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
-        return true;
+        return mp.getHandle().getWorld() == target;
     }
 
     @Override

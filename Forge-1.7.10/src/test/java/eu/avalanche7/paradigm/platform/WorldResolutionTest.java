@@ -44,7 +44,19 @@ class WorldResolutionTest {
         handle.fallDistance = 4;
         when(handle.isEntityAlive()).thenReturn(true);
         server.worldServers = new WorldServer[] {origin};
-        when(server.getConfigurationManager()).thenReturn(mock(ServerConfigurationManager.class));
+        var manager = mock(ServerConfigurationManager.class);
+        when(server.getConfigurationManager()).thenReturn(manager);
+        doAnswer(call -> {
+            int dimension = call.getArgument(1);
+            for (WorldServer loaded : server.worldServers) {
+                if (loaded != null && loaded.provider.dimensionId == dimension) {
+                    handle.dimension = dimension;
+                    handle.worldObj = loaded;
+                    break;
+                }
+            }
+            return null;
+        }).when(manager).transferPlayerToDimension(eq(handle), anyInt(), any(Teleporter.class));
         platform.setMinecraftServer(server);
     }
 
@@ -111,7 +123,10 @@ class WorldResolutionTest {
             when(server.worldServerForDimension(7)).thenReturn(fallback);
             assertRejected("DIM7");
             WorldServer destination = world(7, "target", "DIM7");
-            when(server.worldServerForDimension(7)).thenReturn(destination);
+            when(server.worldServerForDimension(7)).thenAnswer(call -> {
+                server.worldServers = new WorldServer[] {(WorldServer) handle.worldObj, destination};
+                return destination;
+            });
             assertTrue(platform.teleportPlayer(player, location("DIM7")));
             dimensions.verify(() -> DimensionManager.isDimensionRegistered(7), times(3));
             verify(server, times(3)).worldServerForDimension(7);
@@ -183,11 +198,12 @@ class WorldResolutionTest {
     }
 
     private void assertRejected(String identifier) {
+        int originalDimension = handle.dimension;
         assertFalse(platform.teleportPlayer(player, location(identifier)));
         assertEquals(1.25, handle.posX);
         assertEquals(64, handle.posY);
         assertEquals(-3.5, handle.posZ);
-        assertEquals(0, handle.dimension);
+        assertEquals(originalDimension, handle.dimension);
         assertEquals(-2, handle.motionY);
         assertEquals(4, handle.fallDistance);
         verifyNoInteractions(handle.playerNetServerHandler, server.getConfigurationManager());

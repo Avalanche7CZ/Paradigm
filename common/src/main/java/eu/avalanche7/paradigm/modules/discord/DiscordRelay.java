@@ -16,7 +16,7 @@ import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
-import eu.avalanche7.paradigm.utils.MessageParser;
+import eu.avalanche7.paradigm.utils.formatting.ChatUrls;
 import eu.avalanche7.paradigm.utils.formatting.ComponentSlots;
 
 public final class DiscordRelay implements ParadigmEvents.Listener {
@@ -24,7 +24,6 @@ public final class DiscordRelay implements ParadigmEvents.Listener {
     private static final int RELAYED_AUTHOR_MEMORY = 256;
     private static final int REPLY_QUOTE_LENGTH = 64;
     private static final int EMBED_DESCRIPTION_LENGTH = 300;
-    private static final String ATTACHMENT_TOKEN_PREFIX = "DISCORD_ATTACH_";
 
     private static final String DEFAULT_CHAT_FORMAT =
             "<color:dark_gray>[</color><color:blue>Discord</color><color:dark_gray>]</color> "
@@ -543,7 +542,7 @@ public final class DiscordRelay implements ParadigmEvents.Listener {
         ComponentSlots.Builder slotsBuilder = ComponentSlots.builder();
         String extras = showAttachments ? renderRichExtras(message, slotsBuilder) : "";
         ComponentSlots slots = slotsBuilder.build();
-        String marked = slots.mark(formatted + extras);
+        String marked = ComponentSlots.strip(formatted) + slots.mark(extras);
 
         rememberRelayedAuthor(message);
         broadcast(marked, slots);
@@ -682,14 +681,12 @@ public final class DiscordRelay implements ParadigmEvents.Listener {
 
         java.util.List<DiscordInboundMessage.Attachment> attachments = message.attachments();
         for (int index = 0; index < attachments.size(); index++) {
-            DiscordInboundMessage.Attachment attachment = attachments.get(index);
-            if (attachment.url() == null || attachment.url().isBlank()) {
-                continue;
-            }
-            String token = ATTACHMENT_TOKEN_PREFIX + index;
-            String linkText = "📎 " + DiscordSanitizer.forMinecraft(attachment.filename());
-            String url = attachment.url();
-            slotsBuilder.add(token, style -> renderAttachmentLink(linkText, url, style));
+            var attachment = attachments.get(index);
+            String token = "{discord_attachment_" + index + "}";
+            String filename = DiscordSanitizer.forMinecraftLiteral(attachment.filename());
+            String label = "📎 " + (filename.isBlank() ? "attachment" : filename);
+            var target = ChatUrls.httpUri(attachment.url());
+            slotsBuilder.add(token, style -> renderAttachmentLink(label, target, style));
             text.append(index == 0 ? "\n" : "  ").append(token);
         }
 
@@ -709,12 +706,16 @@ public final class DiscordRelay implements ParadigmEvents.Listener {
         return text.toString();
     }
 
-    private IComponent renderAttachmentLink(String linkText, String url, Object surroundingStyle) {
+    private IComponent renderAttachmentLink(String label, java.net.URI target, Object style) {
         IPlatformAdapter platform = services.getPlatformAdapter();
-        MessageParser parser = services.getMessageParser();
-        Object style = platform.createStyleWithClickEvent(surroundingStyle, "open_url", url);
-        style = platform.createStyleWithHoverEvent(style, url);
-        return parser.parseNested(linkText, null, style);
+        IComponent link = platform.createComponentFromLiteral(label);
+        if (target != null) {
+            String url = target.toString();
+            style = platform.createStyleWithClickEvent(style, "open_url", url);
+            style = platform.createStyleWithHoverEvent(style, url);
+        }
+        if (style != null) link.setStyle(style);
+        return link;
     }
 
     private String renderEmbedLine(DiscordInboundMessage.EmbedSummary embed) {

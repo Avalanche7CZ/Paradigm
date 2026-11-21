@@ -5,10 +5,12 @@ import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.platform.Interfaces.*;
+import eu.avalanche7.paradigm.utils.formatting.ChatUrls;
 import eu.avalanche7.paradigm.utils.*;
 import net.minecraft.advancements.*;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundClearTitlesPacket;
 import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
@@ -485,131 +487,35 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public Object createStyleWithClickEvent(Object baseStyle, String action, String value) {
-        net.minecraft.network.chat.Style style = baseStyle instanceof net.minecraft.network.chat.Style s ? s : net.minecraft.network.chat.Style.EMPTY;
-        String val = value != null ? value : "";
-
-        try {
-            String a = action != null ? action.toUpperCase() : "";
-            Object click;
-            switch (a) {
-                case "OPEN_URL" -> {
-                    String url = val.startsWith("http://") || val.startsWith("https://") ? val : "https://" + val;
-                    click = instantiateNested(ClickEvent.class, "OpenUrl", java.net.URI.class, java.net.URI.create(url));
-                }
-                case "RUN_COMMAND", "RUN_CMD", "RUN_COMMAND_ALT" -> click = instantiateNested(ClickEvent.class, "RunCommand", String.class, val);
-                case "SUGGEST_COMMAND" -> click = instantiateNested(ClickEvent.class, "SuggestCommand", String.class, val);
-                case "CHANGE_PAGE" -> {
-                    int page;
-                    try { page = Integer.parseInt(val); } catch (NumberFormatException e) { page = 1; }
-                    click = instantiateNested(ClickEvent.class, "ChangePage", int.class, page);
-                }
-                case "COPY_TO_CLIPBOARD" -> click = instantiateNested(ClickEvent.class, "CopyToClipboard", String.class, val);
-                default -> click = instantiateNested(ClickEvent.class, "SuggestCommand", String.class, val);
+        Style style = baseStyle instanceof Style existing ? existing : Style.EMPTY;
+        if (action == null || value == null) return style;
+        ClickEvent event = switch (action.toUpperCase(java.util.Locale.ROOT)) {
+            case "OPEN_URL" -> {
+                var uri = ChatUrls.httpUri(value);
+                yield uri == null ? null : new ClickEvent.OpenUrl(uri);
             }
-            if (click instanceof ClickEvent ce) {
-                return style.withClickEvent(ce);
+            case "RUN_COMMAND", "RUN_CMD", "RUN_COMMAND_ALT" -> new ClickEvent.RunCommand(value);
+            case "SUGGEST_COMMAND" -> new ClickEvent.SuggestCommand(value);
+            case "COPY_TO_CLIPBOARD" -> new ClickEvent.CopyToClipboard(value);
+            case "CHANGE_PAGE" -> {
+                try {
+                    int page = Integer.parseInt(value);
+                    yield page > 0 ? new ClickEvent.ChangePage(page) : null;
+                } catch (NumberFormatException invalid) {
+                    yield null;
+                }
             }
-        } catch (Throwable ignored) {}
-
-        try {
-            ClickEvent.Action clickAction = switch (action != null ? action.toUpperCase() : "") {
-                case "OPEN_URL" -> ClickEvent.Action.OPEN_URL;
-                case "RUN_COMMAND", "RUN_CMD", "RUN_COMMAND_ALT" -> ClickEvent.Action.RUN_COMMAND;
-                case "SUGGEST_COMMAND" -> ClickEvent.Action.SUGGEST_COMMAND;
-                case "CHANGE_PAGE" -> ClickEvent.Action.CHANGE_PAGE;
-                case "COPY_TO_CLIPBOARD" -> ClickEvent.Action.COPY_TO_CLIPBOARD;
-                default -> ClickEvent.Action.SUGGEST_COMMAND;
-            };
-            ClickEvent clickEvent = createClickEvent(clickAction, val);
-            return clickEvent != null ? style.withClickEvent(clickEvent) : style;
-        } catch (Throwable t) {
-            return style;
-        }
+            default -> null;
+        };
+        return event == null ? style : style.withClickEvent(event);
     }
 
     @Override
     public Object createStyleWithHoverEvent(Object baseStyle, Object hoverText) {
-        net.minecraft.network.chat.Style style = baseStyle instanceof net.minecraft.network.chat.Style s ? s : net.minecraft.network.chat.Style.EMPTY;
-        Component hover = hoverText instanceof Component c ? c : Component.literal(String.valueOf(hoverText));
-
-        try {
-            Object showText = instantiateNested(HoverEvent.class, "ShowText", Component.class, hover);
-            if (showText instanceof HoverEvent he) {
-                return style.withHoverEvent(he);
-            }
-        } catch (Throwable ignored) {}
-
-        HoverEvent hoverEvent = createShowTextHoverEvent(hover);
-        return hoverEvent != null ? style.withHoverEvent(hoverEvent) : style;
-    }
-
-    private static Object instantiateNested(Class<?> outer, String simpleName, Class<?> paramType, Object arg) throws Exception {
-        for (Class<?> c : outer.getDeclaredClasses()) {
-            if (c.getSimpleName().equals(simpleName)) {
-                var ctor = c.getDeclaredConstructor(paramType);
-                ctor.setAccessible(true);
-                return ctor.newInstance(arg);
-            }
-        }
-        throw new ClassNotFoundException(outer.getName() + "$" + simpleName);
-    }
-
-    private static ClickEvent createClickEvent(ClickEvent.Action action, String value) {
-        String simpleName = switch (action) {
-            case RUN_COMMAND -> "RunCommand";
-            case SUGGEST_COMMAND -> "SuggestCommand";
-            case OPEN_URL -> "OpenUrl";
-            case COPY_TO_CLIPBOARD -> "CopyToClipboard";
-            case CHANGE_PAGE -> "ChangePage";
-            default -> null;
-        };
-        if (simpleName == null) return null;
-
-        try {
-            for (Class<?> nested : ClickEvent.class.getDeclaredClasses()) {
-                if (!nested.getSimpleName().equals(simpleName)) continue;
-                try {
-                    var ctor = nested.getDeclaredConstructor(String.class);
-                    ctor.setAccessible(true);
-                    Object instance = ctor.newInstance(value);
-                    if (instance instanceof ClickEvent clickEvent) {
-                        return clickEvent;
-                    }
-                } catch (ReflectiveOperationException ignored) {
-                }
-                try {
-                    var ctor = nested.getDeclaredConstructor(java.net.URI.class);
-                    ctor.setAccessible(true);
-                    Object instance = ctor.newInstance(java.net.URI.create(value));
-                    if (instance instanceof ClickEvent clickEvent) {
-                        return clickEvent;
-                    }
-                } catch (ReflectiveOperationException ignored) {
-                }
-                try {
-                    var ctor = nested.getDeclaredConstructor(int.class);
-                    ctor.setAccessible(true);
-                    Object instance = ctor.newInstance(Integer.parseInt(value));
-                    if (instance instanceof ClickEvent clickEvent) {
-                        return clickEvent;
-                    }
-                } catch (ReflectiveOperationException | NumberFormatException ignored) {
-                }
-            }
-        } catch (Throwable ignored) {
-        }
-        return null;
-    }
-
-    private static HoverEvent createShowTextHoverEvent(Component hover) {
-        try {
-            Object showText = instantiateNested(HoverEvent.class, "ShowText", Component.class, hover);
-            if (showText instanceof HoverEvent hoverEvent) {
-                return hoverEvent;
-            }
-        } catch (Throwable ignored) {
-        }
-        return null;
+        Style style = baseStyle instanceof Style existing ? existing : Style.EMPTY;
+        Object text = hoverText instanceof IComponent wrapped ? wrapped.getOriginalText() : hoverText;
+        Component hover = text instanceof Component component ? component : Component.literal(String.valueOf(hoverText));
+        return style.withHoverEvent(new HoverEvent.ShowText(hover));
     }
 
     private static boolean hasPermissionLevel(Object permissionSet, int level) {
@@ -625,17 +531,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         } catch (Throwable ignored) {
         }
         return false;
-    }
-
-    private static Object instantiateNested(Class<?> outer, String simpleName, Class<?> paramType, int arg) throws Exception {
-        for (Class<?> c : outer.getDeclaredClasses()) {
-            if (c.getSimpleName().equals(simpleName)) {
-                var ctor = c.getDeclaredConstructor(paramType);
-                ctor.setAccessible(true);
-                return ctor.newInstance(arg);
-            }
-        }
-        throw new ClassNotFoundException(outer.getName() + "$" + simpleName);
     }
 
     @Override

@@ -6,6 +6,7 @@ import eu.avalanche7.paradigm.data.PlayerDataStore;
 import com.mojang.brigadier.CommandDispatcher;
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.platform.Interfaces.*;
+import eu.avalanche7.paradigm.utils.formatting.ChatUrls;
 import eu.avalanche7.paradigm.utils.*;
 import net.minecraft.entity.boss.BossBar;
 import net.minecraft.entity.boss.ServerBossBar;
@@ -1130,8 +1131,8 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
         ClickEvent clickEvent = switch (action != null ? action.toUpperCase() : "") {
             case "OPEN_URL" -> {
-                String url = val.startsWith("http://") || val.startsWith("https://") ? val : "https://" + val;
-                yield new ClickEvent.OpenUrl(java.net.URI.create(url));
+                var uri = ChatUrls.httpUri(val);
+                yield uri == null ? null : new ClickEvent.OpenUrl(uri);
             }
             case "RUN_COMMAND", "RUN_CMD", "RUN_COMMAND_ALT" -> new ClickEvent.RunCommand(val);
             case "SUGGEST_COMMAND" -> new ClickEvent.SuggestCommand(val);
@@ -1144,7 +1145,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
             default -> new ClickEvent.SuggestCommand(val);
         };
 
-        return style.withClickEvent(clickEvent);
+        return clickEvent == null ? style : style.withClickEvent(clickEvent);
     }
 
     @Override

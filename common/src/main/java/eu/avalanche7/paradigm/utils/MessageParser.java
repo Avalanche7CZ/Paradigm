@@ -9,6 +9,7 @@ import java.util.regex.Pattern;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.utils.formatting.ChatUrls;
 import eu.avalanche7.paradigm.utils.formatting.ComponentSlots;
 import eu.avalanche7.paradigm.utils.formatting.FormattingParser;
 
@@ -91,7 +92,8 @@ public class MessageParser {
                 protectedText.append(current);
             }
         }
-        text = protectedText.toString();
+        text = ChatUrls.IN_TEXT.matcher(protectedText).replaceAll(match ->
+                Matcher.quoteReplacement(match.group().replace('&', literalAmpersand)));
         text = text.replace("&", "§");
         text = text.replace(literalAmpersand, '&');
 

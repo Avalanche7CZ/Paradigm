@@ -321,6 +321,11 @@ public class StorageService implements AutoCloseable {
         };
     }
 
+    public String knownPlaytimeStorageIdentity() {
+        StorageProvider provider = activeProvider;
+        return provider instanceof SqlStorageProvider sql ? sql.initializedPlaytimeIdentity() : playtimeStorageIdentity();
+    }
+
     public void recoverConfiguredSql() {
         if (pendingSqlProvider == null) return;
         try {

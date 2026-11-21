@@ -1,6 +1,7 @@
 package eu.avalanche7.paradigm.utils.formatting.tags;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
+import eu.avalanche7.paradigm.utils.formatting.ChatUrls;
 import eu.avalanche7.paradigm.utils.formatting.FormattingContext;
 
 public class ClickTag implements Tag {
@@ -86,7 +87,14 @@ public class ClickTag implements Tag {
             value = "/" + value;
         }
 
-        Object newStyle = platformAdapter.createStyleWithClickEvent(context.getCurrentStyle(), action.getActionName(), value);
+        Object newStyle = context.getCurrentStyle();
+        if (action == ClickAction.OPEN_URL) {
+            var uri = ChatUrls.httpUri(value);
+            if (uri == null && value.indexOf(':') < 0) uri = ChatUrls.httpUri("https://" + value);
+            if (uri != null) newStyle = platformAdapter.createStyleWithClickEvent(newStyle, action.getActionName(), uri.toString());
+        } else {
+            newStyle = platformAdapter.createStyleWithClickEvent(newStyle, action.getActionName(), value);
+        }
         context.pushStyle(newStyle);
     }
 

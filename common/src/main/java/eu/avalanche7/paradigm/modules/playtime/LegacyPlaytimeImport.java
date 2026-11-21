@@ -13,6 +13,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiFunction;
 
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonToken;
@@ -162,13 +163,19 @@ public final class LegacyPlaytimeImport {
     }
 
     public static Report process(Scan scan, PlayerRepository repository, Set<String> blocked, boolean apply) {
+        return process(scan, (entry, expected) -> blocked.contains(entry.uuid())
+                ? null : repository.importLegacyPlaytime(entry.uuid(), entry.milliseconds(), expected, apply));
+    }
+
+    static Report process(Scan scan, BiFunction<Entry, Long, LegacyPlaytimeResult> importEntry) {
         List<LegacyPlaytimeResult> results = new ArrayList<>();
         List<String> errors = new ArrayList<>();
         int skipped = 0;
         for (Entry entry : scan.entries()) {
-            if (blocked.contains(entry.uuid())) { skipped++; continue; }
             try {
-                results.add(repository.importLegacyPlaytime(entry.uuid(), entry.milliseconds(), scan.localAtStart().getOrDefault(entry.uuid(), 0L), apply));
+                var result = importEntry.apply(entry, scan.localAtStart().getOrDefault(entry.uuid(), 0L));
+                if (result == null) skipped++;
+                else results.add(result);
             } catch (RuntimeException failure) {
                 errors.add(entry.uuid() + ": " + failure.getMessage());
                 break;

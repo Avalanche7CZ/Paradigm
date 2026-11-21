@@ -143,6 +143,23 @@ class PlatformAdapterImplTest {
     }
 
     @Test
+    void legacyAttachmentEventsSurviveLitComponentCompositionAndCopy() {
+        String url = "https://cdn.example/image.png?token=abc&expires=123";
+        ChatStyle style = (ChatStyle) adapter.createStyleWithClickEvent(null, "open_url", url);
+        style.setBold(true).setUnderlined(true);
+        style = (ChatStyle) adapter.createStyleWithHoverEvent(style, url);
+        var label = adapter.createComponentFromLiteral("image.png");
+        label.setStyle(style);
+        var root = (MinecraftComponent) adapter.createComponentFromLiteral("").append(label).copy();
+        var eventStyle = ((net.minecraft.util.IChatComponent) root.getHandle().getSiblings().get(0)).getChatStyle();
+        assertEquals(url, eventStyle.getChatClickEvent().getValue());
+        assertEquals(net.minecraft.event.ClickEvent.Action.OPEN_URL, eventStyle.getChatClickEvent().getAction());
+        assertHoverText(url, eventStyle);
+        assertTrue(eventStyle.getBold());
+        assertTrue(eventStyle.getUnderlined());
+    }
+
+    @Test
     void hoverStyleAcceptsPlainTextAndNativeComponents() {
         ChatStyle base = new ChatStyle();
         assertHoverText("plain", adapter.createStyleWithHoverEvent(base, "plain"));

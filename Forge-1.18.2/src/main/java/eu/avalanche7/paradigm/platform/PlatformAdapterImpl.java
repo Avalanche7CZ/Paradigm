@@ -12,6 +12,9 @@ import eu.avalanche7.paradigm.utils.*;
 import net.minecraft.Util;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.ChatType;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.TextComponent;
@@ -789,7 +792,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
                 world -> world.dimension().location().toString());
         if (level == null) return false;
         mp.getHandle().teleportTo(level, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
-        return true;
+        return mp.getHandle().getLevel() == level;
     }
 
     @Override
@@ -913,25 +916,25 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public Object createStyleWithClickEvent(Object baseStyle, String action, String value) {
-        if (baseStyle instanceof net.minecraft.network.chat.Style s) {
-            net.minecraft.network.chat.ClickEvent.Action act;
-            try {
-                act = net.minecraft.network.chat.ClickEvent.Action.valueOf(action.toUpperCase(java.util.Locale.ROOT));
-            } catch (Exception e) {
-                act = net.minecraft.network.chat.ClickEvent.Action.RUN_COMMAND;
-            }
-            return s.withClickEvent(new net.minecraft.network.chat.ClickEvent(act, value));
-        }
-        return baseStyle;
+        Style style = baseStyle instanceof Style existing ? existing : Style.EMPTY;
+        if (action == null || value == null) return style;
+        ClickEvent.Action type = switch (action.toUpperCase(java.util.Locale.ROOT)) {
+            case "OPEN_URL" -> ClickEvent.Action.OPEN_URL;
+            case "RUN_COMMAND", "RUN_CMD", "RUN_COMMAND_ALT" -> ClickEvent.Action.RUN_COMMAND;
+            case "SUGGEST_COMMAND" -> ClickEvent.Action.SUGGEST_COMMAND;
+            case "CHANGE_PAGE" -> ClickEvent.Action.CHANGE_PAGE;
+            case "COPY_TO_CLIPBOARD" -> ClickEvent.Action.COPY_TO_CLIPBOARD;
+            default -> null;
+        };
+        return type == null ? style : style.withClickEvent(new ClickEvent(type, value));
     }
 
     @Override
     public Object createStyleWithHoverEvent(Object baseStyle, Object hoverText) {
-        if (baseStyle instanceof net.minecraft.network.chat.Style s) {
-            Component hover = hoverText instanceof Component c ? c : new TextComponent(String.valueOf(hoverText));
-            return s.withHoverEvent(new net.minecraft.network.chat.HoverEvent(net.minecraft.network.chat.HoverEvent.Action.SHOW_TEXT, hover));
-        }
-        return baseStyle;
+        Style style = baseStyle instanceof Style existing ? existing : Style.EMPTY;
+        Object text = hoverText instanceof IComponent wrapped ? wrapped.getOriginalText() : hoverText;
+        Component hover = text instanceof Component component ? component : new TextComponent(String.valueOf(hoverText));
+        return style.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hover));
     }
 
     @Override

@@ -69,6 +69,7 @@ tasks.register('prepareTestWorkspace', Sync) {
 test {
     useJUnitPlatform()
     inputs.property('regressionMariaDb', providers.environmentVariable('PARADIGM_REGRESSION_MARIADB').orElse('false'))
+    inputs.property('playtimeMariaDb', providers.environmentVariable('PARADIGM_PLAYTIME_MARIADB').orElse('false'))
     dependsOn tasks.named('prepareTestWorkspace')
     workingDir isolatedTestWork
     systemProperty 'vanish.source.root', projectDir.parentFile.absolutePath

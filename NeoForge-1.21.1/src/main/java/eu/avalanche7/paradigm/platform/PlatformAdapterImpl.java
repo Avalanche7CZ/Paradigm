@@ -9,6 +9,9 @@ import eu.avalanche7.paradigm.platform.Interfaces.*;
 import eu.avalanche7.paradigm.utils.*;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundClearTitlesPacket;
 import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
@@ -958,30 +961,25 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public Object createStyleWithClickEvent(Object baseStyle, String action, String value) {
-        if (!(baseStyle instanceof net.minecraft.network.chat.Style style)) return baseStyle;
-        net.minecraft.network.chat.ClickEvent.Action a;
-        try {
-            a = net.minecraft.network.chat.ClickEvent.Action.valueOf(String.valueOf(action).toUpperCase(java.util.Locale.ROOT));
-        } catch (Throwable t) {
-            return baseStyle;
-        }
-        return style.withClickEvent(new net.minecraft.network.chat.ClickEvent(a, String.valueOf(value)));
+        Style style = baseStyle instanceof Style existing ? existing : Style.EMPTY;
+        if (action == null || value == null) return style;
+        ClickEvent.Action type = switch (action.toUpperCase(java.util.Locale.ROOT)) {
+            case "OPEN_URL" -> ClickEvent.Action.OPEN_URL;
+            case "RUN_COMMAND", "RUN_CMD", "RUN_COMMAND_ALT" -> ClickEvent.Action.RUN_COMMAND;
+            case "SUGGEST_COMMAND" -> ClickEvent.Action.SUGGEST_COMMAND;
+            case "CHANGE_PAGE" -> ClickEvent.Action.CHANGE_PAGE;
+            case "COPY_TO_CLIPBOARD" -> ClickEvent.Action.COPY_TO_CLIPBOARD;
+            default -> null;
+        };
+        return type == null ? style : style.withClickEvent(new ClickEvent(type, value));
     }
 
     @Override
     public Object createStyleWithHoverEvent(Object baseStyle, Object hoverText) {
-        if (!(baseStyle instanceof net.minecraft.network.chat.Style style)) return baseStyle;
-
-        net.minecraft.network.chat.Component hover;
-        if (hoverText instanceof net.minecraft.network.chat.Component c) {
-            hover = c;
-        } else if (hoverText instanceof IComponent ic && ic.getOriginalText() instanceof net.minecraft.network.chat.Component c2) {
-            hover = c2;
-        } else {
-            hover = net.minecraft.network.chat.Component.literal(String.valueOf(hoverText));
-        }
-
-        return style.withHoverEvent(new net.minecraft.network.chat.HoverEvent(net.minecraft.network.chat.HoverEvent.Action.SHOW_TEXT, hover));
+        Style style = baseStyle instanceof Style existing ? existing : Style.EMPTY;
+        Object text = hoverText instanceof IComponent wrapped ? wrapped.getOriginalText() : hoverText;
+        Component hover = text instanceof Component component ? component : Component.literal(String.valueOf(hoverText));
+        return style.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hover));
     }
 
     @Override
@@ -1113,7 +1111,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
                 world -> world.dimension().location().toString());
         if (level == null) return false;
         mp.getHandle().teleportTo(level, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
-        return true;
+        return mp.getHandle().serverLevel() == level;
     }
 
     @Override

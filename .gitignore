@@ -80,7 +80,7 @@ ForgeAnnoucements-1.0.0/plugin.yml
 !/common/src/test/java/eu/avalanche7/paradigm/modules/commands/moderation/ExpiryTaskLifecycleTest.java
 !/common/src/test/java/eu/avalanche7/paradigm/modules/discord/DiscordTicketRoomsTest.java
 !/common/src/test/java/eu/avalanche7/paradigm/modules/moderation/PunishmentServiceLifecycleTest.java
-!/common/src/test/java/eu/avalanche7/paradigm/modules/playtime/PlaytimeShutdownRecoveryTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/modules/playtime/*Test.java
 !/common/src/test/java/eu/avalanche7/paradigm/modules/tab/TablistLifecycleTest.java
 !/common/src/test/java/eu/avalanche7/paradigm/modules/tickets/SqlTicketRepositoryTest.java
 !/common/src/test/java/eu/avalanche7/paradigm/modules/tickets/TicketTestData.java
@@ -102,3 +102,9 @@ ForgeAnnoucements-1.0.0/plugin.yml
 /NeoForge-26.1.2/src/test/**
 !/NeoForge-26.1.2/src/test/**/
 !/NeoForge-26.1.2/src/test/java/eu/avalanche7/paradigm/platform/InventoryPreviewTest.java
+
+!/common/src/test/java/eu/avalanche7/paradigm/utils/formatting/ChatUrlsTest.java
+!/Forge-1.7.10/src/test/java/eu/avalanche7/paradigm/platform/LocationOperationsTest.java
+!/Forge-1.7.10/src/test/java/eu/avalanche7/paradigm/platform/TpCommandTest.java
+!/NeoForge-26.1.2/src/test/java/eu/avalanche7/paradigm/platform/InteractiveChatTest.java
+!/NeoForge-26.1.2/src/test/java/eu/avalanche7/paradigm/platform/TeleportOperationsTest.java

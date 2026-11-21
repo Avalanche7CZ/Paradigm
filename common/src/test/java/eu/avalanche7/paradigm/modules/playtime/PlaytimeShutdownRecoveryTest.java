@@ -6,9 +6,11 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Proxy;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -16,6 +18,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import eu.avalanche7.paradigm.core.CommonRuntime;
@@ -25,6 +28,7 @@ import eu.avalanche7.paradigm.modules.StorageLifecycle;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import eu.avalanche7.paradigm.storage.StorageCompatibilityException;
+import eu.avalanche7.paradigm.storage.StorageException;
 import eu.avalanche7.paradigm.storage.StorageService;
 import eu.avalanche7.paradigm.storage.json.JsonPlayerRepository;
 import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
@@ -305,7 +309,7 @@ class PlaytimeShutdownRecoveryTest {
                 counters.put(id, counter);
             }
             service.stop();
-            assertEquals(2, submissions.get(), "shared storage failure must terminate shutdown without a per-player retry storm");
+            assertEquals(1, submissions.get(), "shared storage failure must terminate shutdown without a per-player retry storm");
             String content = Files.readString(path);
             assertTrue(content.contains(UUID));
             assertTrue(content.contains(second));
@@ -313,32 +317,194 @@ class PlaytimeShutdownRecoveryTest {
         }
     }
 
-    @Test void moduleLifecycleTransitionsPreservePlaytimeAccountingAcrossReload() throws Exception {
-        var repository = repository(directory.resolve("reload-test"));
-        Path path = directory.resolve("reload-journal.json");
-        AtomicLong now = new AtomicLong(1000L);
-        IPlayer player = (IPlayer) Proxy.newProxyInstance(IPlayer.class.getClassLoader(), new Class<?>[]{IPlayer.class},
+    @Test void aNewFlushDuringAFailingWritePersistsTheLaterIntervalWithoutWaitingForATick() throws Exception {
+        var repo = repository(directory.resolve("players"));
+        var failedWrite = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var retryCommitted = new CountDownLatch(1);
+        var attempts = new AtomicInteger();
+        var now = new AtomicLong(1_000);
+        var worker = Executors.newSingleThreadExecutor();
+        IPlayer player = player(UUID);
+        try (var journal = new PlaytimeJournal(directory.resolve("overlap.json"), "identity")) {
+            var faulted = intercept(repo, (method, args) -> {
+                if (method.equals("recordPlaytime") && attempts.incrementAndGet() == 1) {
+                    failedWrite.countDown();
+                    assertTrue(release.await(5, TimeUnit.SECONDS));
+                    throw new StorageException("first write failed");
+                }
+            }, (method, args) -> {
+                if (method.equals("recordPlaytime")) retryCommitted.countDown();
+            });
+            var service = new PlaytimeService(null, journal, () -> faulted,
+                    action -> CompletableFuture.supplyAsync(action, worker), now::get);
+            service.beginSession(player);
+            worker.submit(() -> {}).get(5, TimeUnit.SECONDS);
+            assertTrue(service.isPlaytimeLoaded(UUID));
+            now.set(6_000);
+            service.flushAll();
+            assertTrue(failedWrite.await(5, TimeUnit.SECONDS));
+            now.set(8_000);
+            service.endSession(player);
+            assertTrue(service.legacyImportBlocked(UUID));
+            release.countDown();
+            assertTrue(retryCommitted.await(5, TimeUnit.SECONDS), "the coalesced logout flush must run after the failure");
+            worker.submit(() -> {}).get(5, TimeUnit.SECONDS);
+            assertEquals(2, attempts.get());
+            assertFalse(service.legacyImportBlocked(UUID));
+            assertEquals("available", service.recoveryStatus(null));
+            assertEquals(7_000, repository(directory.resolve("players")).readPlaytime(UUID).profile().playtimeMs());
+        } finally {
+            release.countDown();
+            worker.shutdownNow();
+        }
+    }
+
+    @Test void shutdownDeduplicatesConnectionOutageAndReportsDurableMeasurements() throws Exception {
+        assertShutdownDiagnostics(true);
+    }
+
+    @Test void shutdownReportsBothDistinctPlayerFailures() throws Exception {
+        assertShutdownDiagnostics(false);
+    }
+
+    private void assertShutdownDiagnostics(boolean shared) throws Exception {
+        var warnings = new ArrayList<String>();
+        Logger logger = (Logger) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{Logger.class},
+                (proxy, method, args) -> {
+                    if (method.getName().equals("warn")) warnings.add(String.valueOf(args[1]));
+                    return null;
+                });
+        var services = new Services(logger, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null);
+        String other = "00000000-0000-0000-0000-000000000023";
+        var repo = repository(directory.resolve("players"));
+        var now = new AtomicLong(1000);
+        var faulted = intercept(repo, (method, args) -> {
+            if (method.equals("recordPlaytime")) {
+                String uuid = ((StoredPlayerProfile) args[0]).uuid();
+                if (shared) throw new StorageException("write failed", new java.sql.SQLException("connection closed", "08006"));
+                throw new StorageException("failed for " + uuid);
+            }
+        }, (method, args) -> {});
+        try (var journal = new PlaytimeJournal(directory.resolve("diagnostics.json"), "identity")) {
+            var service = new PlaytimeService(services, journal, () -> faulted,
+                    work -> CompletableFuture.completedFuture(work.get()), now::get);
+            service.start();
+            service.beginSession(player(UUID));
+            service.beginSession(player(other));
+            now.set(6000);
+            service.flushAll();
+            assertEquals("sql_unavailable", service.recoveryStatus(UUID));
+            assertFalse(service.isPlaytimeLoaded(UUID), "already loaded history must not hide a persistence failure");
+            assertThrows(IllegalStateException.class, service::requireHealthyImport);
+            service.stop();
+            service.stop();
+            assertEquals(shared ? 1 : 2, warnings.size(), warnings.toString());
+            if (shared) {
+                String message = warnings.get(0);
+                assertTrue(message.contains("affected players=2"), message);
+                assertTrue(message.contains("pending or unconfirmed=10000ms"), message);
+                assertTrue(message.contains("awaiting confirmation=10000ms"), message);
+                assertTrue(message.contains("unjournaled=0ms"), message);
+            } else {
+                assertTrue(warnings.stream().anyMatch(message -> message.contains(UUID)));
+                assertTrue(warnings.stream().anyMatch(message -> message.contains(other)));
+            }
+            for (String uuid : List.of(UUID, other)) {
+                assertEquals(5000L, journal.open().players.get(uuid).cumulativeMs());
+                assertEquals(0L, repo.readPlaytime(uuid).profile().playtimeMs());
+            }
+        }
+    }
+
+    private IPlayer player(String uuid) {
+        return (IPlayer) Proxy.newProxyInstance(IPlayer.class.getClassLoader(), new Class<?>[]{IPlayer.class},
                 (proxy, method, args) -> switch (method.getName()) {
-                    case "getUUID" -> UUID;
+                    case "getUUID" -> uuid;
                     case "getName" -> "Alex";
                     default -> null;
                 });
-        try (var journal = new PlaytimeJournal(path, "original", () -> repository, "default")) {
-            var service = new PlaytimeService(null, journal, () -> repository,
+    }
+
+    @FunctionalInterface
+    private interface Invocation {
+        void run(String method, Object[] args) throws Exception;
+    }
+
+    private PlayerRepository intercept(PlayerRepository repo, Invocation before, Invocation after) {
+        return (PlayerRepository) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{PlayerRepository.class},
+                (proxy, method, args) -> {
+                    before.run(method.getName(), args);
+                    Object result;
+                    try { result = method.invoke(repo, args); }
+                    catch (InvocationTargetException failure) { throw failure.getCause(); }
+                    after.run(method.getName(), args);
+                    return result;
+                });
+    }
+
+    @Test void anUnidentifiedSqlJournalCannotReplayAfterAnOutageAndRestart() throws Exception {
+        Path path = directory.resolve("unidentified.json");
+        String locator = "sqlite:/same/path/paradigm.db";
+        String logical = "sql:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        var repo = repository(directory.resolve("replacement"));
+        try (var journal = new PlaytimeJournal(path, locator, () -> repo, "default", () -> {
+            throw new StorageException("SQL was never reached");
+        })) {
+            journal.save(UUID, new PlaytimeJournal.Entry("Alex", 1, 2, 5000));
+            assertThrows(StorageException.class, journal::verifyTarget);
+        }
+        byte[] before = Files.readAllBytes(path);
+        try (var journal = new PlaytimeJournal(path, locator, () -> repo, "default", () -> logical)) {
+            var now = new AtomicLong(1000);
+            var service = new PlaytimeService(null, journal, () -> repo,
                     work -> CompletableFuture.completedFuture(work.get()), now::get);
             service.start();
-            service.beginSession(player);
-            now.addAndGet(5000L);
+            service.beginSession(player(UUID));
+            now.set(6000);
             service.stop();
-            assertEquals(5000L, repository.readPlaytime(UUID).profile().playtimeMs());
+            assertEquals("identity_conflict", service.recoveryStatus(null));
+            assertArrayEquals(before, Files.readAllBytes(path));
+            assertEquals(0L, repo.readPlaytime(UUID).profile().playtimeMs());
+        }
+    }
 
-            // Reload transition: restart service with same repository and journal
-            service.start();
+    @Test void moduleLifecycleTransitionsPreservePlaytimeAccountingAcrossReload() throws Exception {
+        var repo = repository(directory.resolve("reload-test"));
+        Path path = directory.resolve("reload-journal.json");
+        AtomicLong now = new AtomicLong(1000L);
+        var serviceRef = new java.util.concurrent.atomic.AtomicReference<PlaytimeService>();
+        var services = new Services(null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, null, null, null, null, null) {
+            @Override public eu.avalanche7.paradigm.configs.MainConfigHandler.Config getMainConfig() { return null; }
+            @Override public PlaytimeService getPlaytimeService() { return serviceRef.get(); }
+        };
+        var module = new PlaytimeModule();
+        IPlayer player = player(UUID);
+        try (var journal = new PlaytimeJournal(path, "original", () -> repo, "default")) {
+            var service = new PlaytimeService(services, journal, () -> repo,
+                    work -> CompletableFuture.completedFuture(work.get()), now::get);
+            serviceRef.set(service);
+
+            module.onEnable(services);
+            service.beginSession(player);
+            now.addAndGet(2000L);
+            module.onEnable(services);
+            assertEquals(2000L, service.sessionMs(player));
+            now.addAndGet(3000L);
+            module.onDisable(services);
+            module.onDisable(services);
+            assertEquals("disabled", service.recoveryStatus(null));
+            assertEquals(5000L, repo.readPlaytime(UUID).profile().playtimeMs());
+
+            now.addAndGet(10000L);
+            module.onEnable(services);
             service.beginSession(player);
             now.addAndGet(4000L);
-            service.stop();
-            assertEquals(9000L, repository.readPlaytime(UUID).profile().playtimeMs());
-            assertEquals(9000L, repository.readPlaytime(UUID).localPlaytimeMs("default"));
+            module.onDisable(services);
+            assertEquals(9000L, repo.readPlaytime(UUID).profile().playtimeMs());
+            assertEquals(9000L, repo.readPlaytime(UUID).localPlaytimeMs("default"));
         }
     }
 }

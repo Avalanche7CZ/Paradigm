@@ -267,13 +267,19 @@ public class TpaCommand implements ParadigmModule {
 
         if (request.type() == TeleportRequestService.RequestType.TPA) {
             PlayerDataStore.StoredLocation previous = platform.getPlayerLocation(requester).orElse(null);
-            if (!teleportPlayer(requester, accepter)) return 0;
+            if (!teleportPlayer(requester, accepter)) {
+                send(accepter, "home.teleport_failed", "Teleport failed.");
+                return 0;
+            }
             if (previous != null) {
                 saveBackLocationAsync(requester, previous);
             }
         } else {
             PlayerDataStore.StoredLocation previous = platform.getPlayerLocation(accepter).orElse(null);
-            if (!teleportPlayer(accepter, requester)) return 0;
+            if (!teleportPlayer(accepter, requester)) {
+                send(accepter, "home.teleport_failed", "Teleport failed.");
+                return 0;
+            }
             if (previous != null) {
                 saveBackLocationAsync(accepter, previous);
             }

@@ -8,6 +8,7 @@ import eu.avalanche7.paradigm.modules.discord.DiscordAccountLinks;
 import eu.avalanche7.paradigm.modules.discord.DiscordTicketRoomStore;
 import eu.avalanche7.paradigm.modules.tickets.SqlTicketRepository;
 import eu.avalanche7.paradigm.modules.tickets.TicketRepository;
+import eu.avalanche7.paradigm.storage.StorageCompatibilityException;
 import eu.avalanche7.paradigm.storage.StorageConfig;
 import eu.avalanche7.paradigm.storage.StorageProvider;
 import eu.avalanche7.paradigm.storage.StorageProviderType;
@@ -34,6 +35,7 @@ public class SqlStorageProvider implements StorageProvider {
     private final SqlExecutor executor;
 
     private PlayerRepository players;
+    private String initializedPlaytimeIdentity;
     private WarpRepository warps;
     private final PermissionRepository permissions;
     private ModerationRepository moderation;
@@ -67,7 +69,8 @@ public class SqlStorageProvider implements StorageProvider {
     @Override
     public void initialize() {
         migrations.runAvailableMigrations();
-        this.players = new SqlPlayerRepository(executor, context);
+        initializedPlaytimeIdentity = playtimeStorageIdentity();
+        this.players = new SqlPlayerRepository(executor, context, initializedPlaytimeIdentity);
         this.warps = new SqlWarpRepository(executor, context);
         this.moderation = new SqlModerationRepository(executor, context);
         this.adminState = new SqlAdminStateRepository(executor, context);
@@ -116,10 +119,23 @@ public class SqlStorageProvider implements StorageProvider {
         return serverRegistered;
     }
 
+    public String initializedPlaytimeIdentity() { return initializedPlaytimeIdentity; }
+
     public String playtimeStorageIdentity() {
+        String actual = readPlaytimeStorageIdentity(executor);
+        requirePlaytimeIdentity(initializedPlaytimeIdentity, actual);
+        return actual;
+    }
+
+    static void requirePlaytimeIdentity(String expected, String actual) {
+        if (expected != null && !expected.equals(actual)) throw new StorageCompatibilityException(
+                "Playtime SQL target changed from " + expected + " to " + actual + "; stop writers and reconcile storage.");
+    }
+
+    static String readPlaytimeStorageIdentity(SqlExecutor executor) {
         return executor.query("SELECT metadata_value FROM storage_metadata WHERE metadata_key = 'database_id'", null, rs -> {
             if (!rs.next() || rs.getString(1) == null || !rs.getString(1).matches("(?i)([0-9a-f]{32}|[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12})"))
-                throw new eu.avalanche7.paradigm.storage.StorageCompatibilityException("SQL database identity is missing or invalid; restore storage metadata from backup.");
+                throw new StorageCompatibilityException("SQL database identity is missing or invalid; restore storage metadata from backup.");
             return "sql:" + rs.getString(1).toLowerCase(java.util.Locale.ROOT);
         });
     }

@@ -1,6 +1,7 @@
 package eu.avalanche7.paradigm.platform;
 
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
+import eu.avalanche7.paradigm.utils.formatting.ChatUrls;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.Component;
@@ -147,35 +148,35 @@ public class MinecraftComponent implements IComponent {
 
     @Override
     public IComponent onClickRunCommand(String command) {
-        ClickEvent clickEvent = createClickEvent("RunCommand", command != null ? command : "");
-        return new MinecraftComponent(component.copy().withStyle(s -> clickEvent != null ? s.withClickEvent(clickEvent) : s));
+        return new MinecraftComponent(component.copy().withStyle(s -> s.withClickEvent(
+                new ClickEvent.RunCommand(command != null ? command : ""))));
     }
 
     @Override
     public IComponent onClickSuggestCommand(String command) {
-        ClickEvent clickEvent = createClickEvent("SuggestCommand", command != null ? command : "");
-        return new MinecraftComponent(component.copy().withStyle(s -> clickEvent != null ? s.withClickEvent(clickEvent) : s));
+        return new MinecraftComponent(component.copy().withStyle(s -> s.withClickEvent(
+                new ClickEvent.SuggestCommand(command != null ? command : ""))));
     }
 
     @Override
     public IComponent onClickOpenUrl(String url) {
-        String u = url == null ? "" : (url.startsWith("http://") || url.startsWith("https://") ? url : "https://" + url);
-        ClickEvent clickEvent = createClickEvent("OpenUrl", u);
-        return new MinecraftComponent(component.copy().withStyle(s -> clickEvent != null ? s.withClickEvent(clickEvent) : s));
+        var uri = ChatUrls.httpUri(url);
+        if (uri == null && url != null && !url.contains("://")) uri = ChatUrls.httpUri("https://" + url);
+        if (uri == null) return copy();
+        var event = new ClickEvent.OpenUrl(uri);
+        return new MinecraftComponent(component.copy().withStyle(s -> s.withClickEvent(event)));
     }
 
     @Override
     public IComponent onClickCopyToClipboard(String text) {
-        String val = text != null ? text : "";
-        ClickEvent clickEvent = createClickEvent("CopyToClipboard", val);
-        return new MinecraftComponent(component.copy().withStyle(s -> clickEvent != null ? s.withClickEvent(clickEvent) : s));
+        return new MinecraftComponent(component.copy().withStyle(s -> s.withClickEvent(
+                new ClickEvent.CopyToClipboard(text != null ? text : ""))));
     }
 
     @Override
     public IComponent onHoverText(String text) {
         Component hover = Component.literal(text != null ? text : "");
-        HoverEvent hoverEvent = createShowTextHoverEvent(hover);
-        return new MinecraftComponent(component.copy().withStyle(s -> hoverEvent != null ? s.withHoverEvent(hoverEvent) : s));
+        return new MinecraftComponent(component.copy().withStyle(s -> s.withHoverEvent(new HoverEvent.ShowText(hover))));
     }
 
     @Override
@@ -186,52 +187,7 @@ public class MinecraftComponent implements IComponent {
         } else {
             hover = Component.literal(comp != null ? comp.getRawText() : "");
         }
-        HoverEvent hoverEvent = createShowTextHoverEvent(hover);
-        return new MinecraftComponent(component.copy().withStyle(s -> hoverEvent != null ? s.withHoverEvent(hoverEvent) : s));
-    }
-
-    private static ClickEvent createClickEvent(String simpleName, String value) {
-        try {
-            for (Class<?> nested : ClickEvent.class.getDeclaredClasses()) {
-                if (!nested.getSimpleName().equals(simpleName)) continue;
-                try {
-                    var ctor = nested.getDeclaredConstructor(String.class);
-                    ctor.setAccessible(true);
-                    Object instance = ctor.newInstance(value);
-                    if (instance instanceof ClickEvent clickEvent) {
-                        return clickEvent;
-                    }
-                } catch (ReflectiveOperationException ignored) {
-                }
-                try {
-                    var ctor = nested.getDeclaredConstructor(java.net.URI.class);
-                    ctor.setAccessible(true);
-                    Object instance = ctor.newInstance(java.net.URI.create(value));
-                    if (instance instanceof ClickEvent clickEvent) {
-                        return clickEvent;
-                    }
-                } catch (ReflectiveOperationException ignored) {
-                }
-            }
-        } catch (Throwable ignored) {
-        }
-        return null;
-    }
-
-    private static HoverEvent createShowTextHoverEvent(Component hover) {
-        try {
-            for (Class<?> nested : HoverEvent.class.getDeclaredClasses()) {
-                if (!nested.getSimpleName().equals("ShowText")) continue;
-                var ctor = nested.getDeclaredConstructor(Component.class);
-                ctor.setAccessible(true);
-                Object instance = ctor.newInstance(hover);
-                if (instance instanceof HoverEvent hoverEvent) {
-                    return hoverEvent;
-                }
-            }
-        } catch (Throwable ignored) {
-        }
-        return null;
+        return new MinecraftComponent(component.copy().withStyle(s -> s.withHoverEvent(new HoverEvent.ShowText(hover))));
     }
 
     @Override

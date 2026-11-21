@@ -69,8 +69,10 @@ public final class PlaytimeModule implements ParadigmModule {
                 .then(services.getPlatformAdapter().createCommandBuilder().literal("status")
                         .executes(ctx -> {
                             var source = ctx.getSource();
-                            CommandMessages.source(services, source, "Playtime", "playtime.recovery.status", "Playtime persistence: {status}.",
-                                    "{status}", services.getPlaytimeService().recoveryStatus(source.getPlayer() != null ? source.getPlayer().getUUID() : null));
+                            var playtime = services.getPlaytimeService();
+                            String uuid = source.getPlayer() != null ? source.getPlayer().getUUID() : null;
+                            CommandMessages.source(services, source, "Playtime", "playtime.recovery.status",
+                                    "Playtime persistence: {summary}", "{summary}", playtime.recoverySummary(uuid));
                             return 1;
                         }))
                 .then(services.getPlatformAdapter().createCommandBuilder().literal("network")
@@ -133,9 +135,7 @@ public final class PlaytimeModule implements ParadigmModule {
             return 0;
         }
         if (!services.getPlaytimeService().isPlaytimeLoaded(player.getUUID())) {
-            CommandMessages.source(services, source, "Playtime", "playtime.recovery.pending", "Historical playtime is unavailable ({status}). New measurements are tracked; use /playtime status.",
-                    "{status}", services.getPlaytimeService().recoveryStatus(player.getUUID()));
-            return 0;
+            return unavailable(source, services.getPlaytimeService().recoveryStatus(player.getUUID()));
         }
         long total = services.getPlaytimeService().onlinePlaytimeMs(player);
         long session = services.getPlaytimeService().sessionMs(player);
@@ -175,7 +175,16 @@ public final class PlaytimeModule implements ParadigmModule {
         return lookup(source, source.getPlayer().getUUID(), true);
     }
 
+    private int unavailable(ICommandSource source, String status) {
+        CommandMessages.source(services, source, "Playtime", "playtime.recovery.pending",
+                "Historical playtime is unavailable ({status}). Use /playtime status.",
+                "{status}", status);
+        return 0;
+    }
+
     private int lookup(ICommandSource source, String query, boolean network) {
+        String status = services.getPlaytimeService().recoveryStatus(null);
+        if (!"available".equals(status)) return unavailable(source, status);
         return StorageCommandSupport.runForSource(services, source, "playtime.lookup",
                 () -> services.getPlayerProfileService().findByNameOrUuid(query)
                         .map(profile -> services.getStorageService().players().readPlaytime(profile.uuid())).orElse(null),
@@ -186,6 +195,11 @@ public final class PlaytimeModule implements ParadigmModule {
         if (!allowed(source, ParadigmPermissions.PLAYTIME)) return;
         boolean self = source.getPlayer() != null && (query.equalsIgnoreCase(source.getPlayer().getUUID()) || query.equalsIgnoreCase(source.getPlayer().getName()));
         if (!self && !allowed(source, ParadigmPermissions.PLAYTIME_OTHERS)) return;
+        String status = services.getPlaytimeService().recoveryStatus(state != null ? state.profile().uuid() : null);
+        if (!"available".equals(status)) {
+            unavailable(source, status);
+            return;
+        }
         if (state == null) {
             CommandMessages.source(services, source, "Playtime", "playtime.unknown", "No playtime data for {player}.", "{player}", query);
             return;

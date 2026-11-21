@@ -1,8 +1,9 @@
 package eu.avalanche7.paradigm.modules.playtime;
 
 import java.nio.file.Path;
-import java.util.HashSet;
+import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
@@ -69,17 +70,15 @@ public final class LegacyPlaytimeCommand {
         }, services.getTaskScheduler(), scan -> {
             try {
                 if (!allowed(source)) { busy.set(false); return; }
-                var blocked = new HashSet<>(services.getPlaytimeService().legacyImportBlockedPlayers());
-                services.getPlatformAdapter().getOnlinePlayers().forEach(p -> blocked.add(p.getUUID().toLowerCase(java.util.Locale.ROOT)));
+                var playtime = services.getPlaytimeService();
+                var online = services.getPlatformAdapter().getOnlinePlayers().stream()
+                        .map(player -> player.getUUID().toLowerCase(Locale.ROOT))
+                        .collect(Collectors.toSet());
                 storage.runAsync("legacy-playtime.import", () -> {
                     if (!storage.isSqlActive()) throw new IllegalStateException("SQL storage is no longer active.");
-                    String status = services.getPlaytimeService().recoveryStatus(null);
-                    if (!"available".equals(status))
-                        throw new IllegalStateException("Playtime persistence changed to " + status
-                                + " during the import scan; no import was applied.");
-                    var stillBlocked = new HashSet<>(blocked);
-                    stillBlocked.addAll(services.getPlaytimeService().legacyImportBlockedPlayers());
-                    return LegacyPlaytimeImport.process(scan, storage.players(), stillBlocked, apply);
+                    playtime.requireHealthyImport();
+                    return LegacyPlaytimeImport.process(scan, (entry, expected) -> online.contains(entry.uuid())
+                            ? null : playtime.importLegacyEntry(entry, expected, apply));
                 }, services.getTaskScheduler(), report -> {
                     busy.set(false);
                     report.lines(apply).forEach(line -> send(source, line));

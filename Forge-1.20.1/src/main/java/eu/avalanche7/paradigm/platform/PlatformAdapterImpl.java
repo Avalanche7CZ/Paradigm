@@ -11,6 +11,7 @@ import eu.avalanche7.paradigm.platform.Interfaces.*;
 import eu.avalanche7.paradigm.utils.*;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Style;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
@@ -481,86 +482,25 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public Object createStyleWithClickEvent(Object baseStyle, String action, String value) {
-        net.minecraft.network.chat.Style style = baseStyle instanceof net.minecraft.network.chat.Style s ? s : net.minecraft.network.chat.Style.EMPTY;
-        String val = value != null ? value : "";
-
-        try {
-            String a = action != null ? action.toUpperCase() : "";
-            Object click;
-            switch (a) {
-                case "OPEN_URL" -> {
-                    String url = val.startsWith("http://") || val.startsWith("https://") ? val : "https://" + val;
-                    click = instantiateNested(ClickEvent.class, "OpenUrl", java.net.URI.class, java.net.URI.create(url));
-                }
-                case "RUN_COMMAND", "RUN_CMD", "RUN_COMMAND_ALT" -> click = instantiateNested(ClickEvent.class, "RunCommand", String.class, val);
-                case "SUGGEST_COMMAND" -> click = instantiateNested(ClickEvent.class, "SuggestCommand", String.class, val);
-                case "CHANGE_PAGE" -> {
-                    int page;
-                    try { page = Integer.parseInt(val); } catch (NumberFormatException e) { page = 1; }
-                    click = instantiateNested(ClickEvent.class, "ChangePage", int.class, page);
-                }
-                case "COPY_TO_CLIPBOARD" -> click = instantiateNested(ClickEvent.class, "CopyToClipboard", String.class, val);
-                default -> click = instantiateNested(ClickEvent.class, "SuggestCommand", String.class, val);
-            }
-            if (click instanceof ClickEvent ce) {
-                return style.withClickEvent(ce);
-            }
-        } catch (Throwable ignored) {}
-
-        try {
-            ClickEvent.Action clickAction = switch (action != null ? action.toUpperCase() : "") {
-                case "OPEN_URL" -> ClickEvent.Action.OPEN_URL;
-                case "RUN_COMMAND", "RUN_CMD", "RUN_COMMAND_ALT" -> ClickEvent.Action.RUN_COMMAND;
-                case "SUGGEST_COMMAND" -> ClickEvent.Action.SUGGEST_COMMAND;
-                case "CHANGE_PAGE" -> ClickEvent.Action.CHANGE_PAGE;
-                case "COPY_TO_CLIPBOARD" -> ClickEvent.Action.COPY_TO_CLIPBOARD;
-                default -> ClickEvent.Action.SUGGEST_COMMAND;
-            };
-            return style.withClickEvent(new ClickEvent(clickAction, val));
-        } catch (Throwable t) {
-            return style;
-        }
+        Style style = baseStyle instanceof Style existing ? existing : Style.EMPTY;
+        if (action == null || value == null) return style;
+        ClickEvent.Action type = switch (action.toUpperCase(java.util.Locale.ROOT)) {
+            case "OPEN_URL" -> ClickEvent.Action.OPEN_URL;
+            case "RUN_COMMAND", "RUN_CMD", "RUN_COMMAND_ALT" -> ClickEvent.Action.RUN_COMMAND;
+            case "SUGGEST_COMMAND" -> ClickEvent.Action.SUGGEST_COMMAND;
+            case "CHANGE_PAGE" -> ClickEvent.Action.CHANGE_PAGE;
+            case "COPY_TO_CLIPBOARD" -> ClickEvent.Action.COPY_TO_CLIPBOARD;
+            default -> null;
+        };
+        return type == null ? style : style.withClickEvent(new ClickEvent(type, value));
     }
 
     @Override
     public Object createStyleWithHoverEvent(Object baseStyle, Object hoverText) {
-        net.minecraft.network.chat.Style style = baseStyle instanceof net.minecraft.network.chat.Style s ? s : net.minecraft.network.chat.Style.EMPTY;
-        Component hover = hoverText instanceof Component c ? c : Component.literal(String.valueOf(hoverText));
-
-        try {
-            Object showText = instantiateNested(HoverEvent.class, "ShowText", Component.class, hover);
-            if (showText instanceof HoverEvent he) {
-                return style.withHoverEvent(he);
-            }
-        } catch (Throwable ignored) {}
-
-        try {
-            return style.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hover));
-        } catch (Throwable t) {
-            return style;
-        }
-    }
-
-    private static Object instantiateNested(Class<?> outer, String simpleName, Class<?> paramType, Object arg) throws Exception {
-        for (Class<?> c : outer.getDeclaredClasses()) {
-            if (c.getSimpleName().equals(simpleName)) {
-                var ctor = c.getDeclaredConstructor(paramType);
-                ctor.setAccessible(true);
-                return ctor.newInstance(arg);
-            }
-        }
-        throw new ClassNotFoundException(outer.getName() + "$" + simpleName);
-    }
-
-    private static Object instantiateNested(Class<?> outer, String simpleName, Class<?> paramType, int arg) throws Exception {
-        for (Class<?> c : outer.getDeclaredClasses()) {
-            if (c.getSimpleName().equals(simpleName)) {
-                var ctor = c.getDeclaredConstructor(paramType);
-                ctor.setAccessible(true);
-                return ctor.newInstance(arg);
-            }
-        }
-        throw new ClassNotFoundException(outer.getName() + "$" + simpleName);
+        Style style = baseStyle instanceof Style existing ? existing : Style.EMPTY;
+        Object text = hoverText instanceof IComponent wrapped ? wrapped.getOriginalText() : hoverText;
+        Component hover = text instanceof Component component ? component : Component.literal(String.valueOf(hoverText));
+        return style.withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, hover));
     }
 
     @Override
@@ -1185,7 +1125,7 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
                 world -> world.dimension().location().toString());
         if (level == null) return false;
         mp.getHandle().teleportTo(level, location.getX(), location.getY(), location.getZ(), location.getYaw(), location.getPitch());
-        return true;
+        return mp.getHandle().serverLevel() == level;
     }
 
     @Override
