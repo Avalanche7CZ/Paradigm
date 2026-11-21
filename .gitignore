@@ -119,3 +119,5 @@ ForgeAnnoucements-1.0.0/plugin.yml
 !/common/src/test/java/eu/avalanche7/paradigm/support/TestPlatformAdapter.java
 !/common/src/test/java/eu/avalanche7/paradigm/support/TestPlayer.java
 !/common/src/test/java/eu/avalanche7/paradigm/support/TestStyle.java
+
+!/common/src/test/java/eu/avalanche7/paradigm/modules/commands/AutomaticSpawnPlacementTest.java

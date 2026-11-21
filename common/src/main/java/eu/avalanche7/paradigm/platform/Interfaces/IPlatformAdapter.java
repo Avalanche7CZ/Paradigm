@@ -276,6 +276,15 @@ public interface IPlatformAdapter {
         return Optional.of(new PlayerDataStore.StoredLocation(worldId, x, y, z, yaw != null ? yaw : 0.0f, pitch != null ? pitch : 0.0f));
     }
 
+    default Optional<PlayerDataStore.StoredLocation> getLocationForGlobalSpawn(IPlayer player) {
+        return getPlayerLocation(player);
+    }
+
+    default boolean isSpawnWorldAvailable(String worldId) {
+        var worlds = getWorldNames();
+        return worlds.contains(worldId) || !worldId.contains(":") && worlds.contains("minecraft:" + worldId);
+    }
+
     default boolean teleportPlayer(IPlayer player, PlayerDataStore.StoredLocation location) {
         return false;
     }

@@ -50,6 +50,13 @@ public final class ModuleEventListeners {
         }
 
         @Override
+        public void onPlayerJoinAfterInitialPlacement(PlayerJoinEventListener listener) {
+            delegate.onPlayerJoinAfterInitialPlacement(event -> {
+                if (active()) listener.onPlayerJoin(event);
+            });
+        }
+
+        @Override
         public void onPlayerLeave(PlayerLeaveEventListener listener) {
             delegate.onPlayerLeave(event -> {
                 if (active()) listener.onPlayerLeave(event);

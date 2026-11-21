@@ -12,6 +12,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 public class MinecraftEventSystem implements IEventSystem {
     private static final Logger LOGGER = LogUtils.getLogger();
+    private final CopyOnWriteArrayList<PlayerJoinEventListener> joinPlacementListeners = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<PlayerJoinEventListener> joinListeners = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<PlayerLeaveEventListener> leaveListeners = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<PlayerDeathEventListener> deathListeners = new CopyOnWriteArrayList<>();
@@ -50,6 +51,23 @@ public class MinecraftEventSystem implements IEventSystem {
                 }
             }
         });
+    }
+
+    @Override
+    public void onPlayerJoinAfterInitialPlacement(PlayerJoinEventListener listener) {
+        joinPlacementListeners.add(listener);
+    }
+
+    public void dispatchJoinAfterInitialPlacement(ServerPlayerEntity player) {
+        if (joinPlacementListeners.isEmpty() || player.networkHandler == null || !player.networkHandler.getConnection().isOpen()) return;
+        MinecraftPlayerJoinEvent event = new MinecraftPlayerJoinEvent(player);
+        for (PlayerJoinEventListener listener : joinPlacementListeners) {
+            try {
+                listener.onPlayerJoin(event);
+            } catch (RuntimeException failure) {
+                LOGGER.error("[Paradigm] Player lifecycle: initial placement listener failed.", failure);
+            }
+        }
     }
 
     public void dispatchLeave(ServerPlayerEntity player) {
@@ -164,6 +182,11 @@ public class MinecraftEventSystem implements IEventSystem {
         @Override
         public IPlayer getPlayer() {
             return player;
+        }
+
+        @Override
+        public boolean hasCustomJoinPlacement() {
+            return player.getTeleportSequence() > 1;
         }
 
         @Override

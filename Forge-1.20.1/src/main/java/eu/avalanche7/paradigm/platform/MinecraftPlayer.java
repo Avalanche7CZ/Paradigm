@@ -3,6 +3,8 @@ package eu.avalanche7.paradigm.platform;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
 import net.minecraft.server.level.ServerPlayer;
 
+import eu.avalanche7.paradigm.mixin.PlayerTeleportSequenceAccess;
+
 public class MinecraftPlayer implements IPlayer {
     private final ServerPlayer player;
 
@@ -12,6 +14,11 @@ public class MinecraftPlayer implements IPlayer {
 
     public ServerPlayer getHandle() {
         return player;
+    }
+
+    @Override
+    public int getTeleportSequence() {
+        return player.connection instanceof PlayerTeleportSequenceAccess connection ? connection.paradigm$teleportSequence() : 0;
     }
 
     @Override

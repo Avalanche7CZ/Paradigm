@@ -1,6 +1,7 @@
 package eu.avalanche7.paradigm.platform.Interfaces;
 
 public interface IEventSystem {
+    enum FirstJoinStatus { FIRST_JOIN, CHECK_PLAYER_DATA, RETURNING, UNAVAILABLE }
     interface ChatEvent {
         IPlayer getPlayer();
         String getMessage();
@@ -15,6 +16,14 @@ public interface IEventSystem {
 
         default boolean isFirstJoin(IPlatformAdapter platform) {
             return platform.isFirstJoin(getPlayer());
+        }
+
+        default FirstJoinStatus firstJoinStatus(IPlatformAdapter platform) {
+            return isFirstJoin(platform) ? FirstJoinStatus.CHECK_PLAYER_DATA : FirstJoinStatus.RETURNING;
+        }
+
+        default boolean hasCustomJoinPlacement() {
+            return false;
         }
     }
     interface PlayerLeaveEvent {
@@ -62,6 +71,10 @@ public interface IEventSystem {
     void onPlayerChat(ChatEventListener listener);
 
     void onPlayerJoin(PlayerJoinEventListener listener);
+
+    default void onPlayerJoinAfterInitialPlacement(PlayerJoinEventListener listener) {
+        onPlayerJoin(listener);
+    }
 
     void onPlayerLeave(PlayerLeaveEventListener listener);
 

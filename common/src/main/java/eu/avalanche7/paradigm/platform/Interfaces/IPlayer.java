@@ -1,6 +1,10 @@
 package eu.avalanche7.paradigm.platform.Interfaces;
 
 public interface IPlayer {
+    default int getTeleportSequence() {
+        return 0;
+    }
+
     String getName();
     String getUUID();
     Object getOriginalPlayer();

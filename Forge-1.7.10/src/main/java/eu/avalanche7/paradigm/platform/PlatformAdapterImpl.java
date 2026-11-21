@@ -1073,6 +1073,25 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public Optional<PlayerDataStore.StoredLocation> getLocationForGlobalSpawn(IPlayer player) {
+        var location = getPlayerLocation(player);
+        EntityPlayerMP handle = operationPlayer(player);
+        if (handle == null || !CrucibleWorldTeleport.isBukkitDimension(handle.dimension)) return location;
+        String name = handle.worldObj.getWorldInfo().getWorldName();
+        var resolved = NativeWorldCatalog.resolve(name, inspectLoadedWorlds(server));
+        if (resolved.status() != NativeWorldCatalog.Status.RESOLVED || resolved.dimensionId() != handle.dimension) {
+            return Optional.empty();
+        }
+        return location.map(value -> new PlayerDataStore.StoredLocation(name, value.getX(), value.getY(),
+                value.getZ(), value.getYaw(), value.getPitch()));
+    }
+
+    @Override
+    public boolean isSpawnWorldAvailable(String worldId) {
+        return NativeWorldCatalog.resolve(worldId, inspectLoadedWorlds(server)).status() == NativeWorldCatalog.Status.RESOLVED;
+    }
+
+    @Override
     public Optional<Double> findSafeRtpY(IPlayer player, double x, double z) {
         EntityPlayerMP handle = operationPlayer(player);
         return handle != null && handle.worldObj instanceof WorldServer world
@@ -1679,6 +1698,9 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
         WorldServer destination = resolve(server, location.getWorldId());
         if (destination == null || location.getY() < 0 || location.getY() >= destination.getHeight()) {
             return false;
+        }
+        if (CrucibleWorldTeleport.isBukkitDimension(destination.provider.dimensionId)) {
+            return CrucibleWorldTeleport.teleport(player, destination, location);
         }
         destination.getChunkFromChunkCoords((int) Math.floor(location.getX()) >> 4,
                 (int) Math.floor(location.getZ()) >> 4);

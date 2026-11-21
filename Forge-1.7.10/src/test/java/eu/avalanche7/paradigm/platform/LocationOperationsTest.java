@@ -25,6 +25,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 import eu.avalanche7.paradigm.data.PlayerDataStore;
+import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem.FirstJoinStatus;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 import eu.avalanche7.paradigm.utils.Placeholders;
 import eu.avalanche7.paradigm.utils.TaskScheduler;
@@ -46,6 +47,15 @@ class LocationOperationsTest {
         when(handle.isEntityAlive()).thenReturn(true);
         server.worldServers = new WorldServer[] {world};
         platform.setMinecraftServer(server);
+    }
+
+    @Test
+    void legacyLoginRequiresMissingPlayerDataAndNoPriorJoinHistory() {
+        assertEquals(FirstJoinStatus.FIRST_JOIN, MinecraftEventSystem.classifyJoin(false, true));
+        assertEquals(FirstJoinStatus.RETURNING, MinecraftEventSystem.classifyJoin(true, true));
+        assertEquals(FirstJoinStatus.RETURNING, MinecraftEventSystem.classifyJoin(false, false));
+        assertEquals(FirstJoinStatus.UNAVAILABLE, MinecraftEventSystem.classifyJoin(null, true));
+        assertEquals(FirstJoinStatus.UNAVAILABLE, MinecraftEventSystem.classifyJoin(false, null));
     }
 
     @Test

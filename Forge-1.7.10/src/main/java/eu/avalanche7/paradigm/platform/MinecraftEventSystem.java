@@ -1,9 +1,11 @@
 package eu.avalanche7.paradigm.platform;
 
+import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -28,6 +30,7 @@ import net.minecraftforge.event.world.WorldEvent;
 
 import eu.avalanche7.paradigm.Paradigm;
 import eu.avalanche7.paradigm.core.Services;
+import eu.avalanche7.paradigm.modules.commands.AutomaticSpawnPlacement;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IEventSystem;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
@@ -47,6 +50,8 @@ public final class MinecraftEventSystem implements IEventSystem {
     private static volatile MinecraftEventSystem active;
     private static final String JOINED = "paradigmJoined";
     private final Map<EntityPlayerMP, Boolean> existingPlayerData = new WeakHashMap<>();
+    private final Map<EntityPlayerMP, JoinPlacement> nativeJoinPlacements = new WeakHashMap<>();
+    private final Set<EntityPlayerMP> customJoinPlacements = Collections.newSetFromMap(new WeakHashMap<>());
     private final Map<EntityPlayerMP, IChatComponent> pendingJoins = new IdentityHashMap<>();
     private final Map<EntityPlayerMP, IChatComponent> pendingLeaves = new IdentityHashMap<>();
     private final List<ChatEventListener> chatListeners = new CopyOnWriteArrayList<>();
@@ -63,6 +68,9 @@ public final class MinecraftEventSystem implements IEventSystem {
 
     public void unregister() {
         if (active == this) active = null;
+        existingPlayerData.clear();
+        nativeJoinPlacements.clear();
+        customJoinPlacements.clear();
         pendingJoins.clear();
         pendingLeaves.clear();
         MinecraftForge.EVENT_BUS.unregister(this);
@@ -176,7 +184,36 @@ public final class MinecraftEventSystem implements IEventSystem {
     public static void captureLoadedPlayerData(EntityPlayerMP player, boolean exists) {
         MinecraftEventSystem system = active;
         if (system != null) {
-            system.existingPlayerData.put(player, exists);
+            system.existingPlayerData.merge(player, exists, (before, loaded) -> before || loaded);
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void playerDataLoaded(net.minecraftforge.event.entity.player.PlayerEvent.LoadFromFile event) {
+        if (event.entityPlayer instanceof EntityPlayerMP player && event.playerDirectory != null
+                && player.getUniqueID().toString().equals(event.playerUUID)) {
+            existingPlayerData.merge(player,
+                    !AutomaticSpawnPlacement.noSavedPlayerData(event.playerDirectory.toPath(), event.playerUUID),
+                    (before, exists) -> before || exists);
+        }
+    }
+
+    public static void captureJoinPlacement(EntityPlayerMP player) {
+        MinecraftEventSystem system = active;
+        if (system != null) system.nativeJoinPlacements.put(player, JoinPlacement.capture(player));
+    }
+
+    public static void checkJoinPlacement(EntityPlayerMP player) {
+        MinecraftEventSystem system = active;
+        if (system == null) return;
+        JoinPlacement before = system.nativeJoinPlacements.remove(player);
+        if (before != null && !before.equals(JoinPlacement.capture(player))) system.customJoinPlacements.add(player);
+    }
+
+    private record JoinPlacement(Object world, double x, double y, double z, float yaw, float pitch, int teleportSequence) {
+        static JoinPlacement capture(EntityPlayerMP player) {
+            return new JoinPlacement(player.worldObj, player.posX, player.posY, player.posZ,
+                    player.rotationYaw, player.rotationPitch, new MinecraftPlayer(player).getTeleportSequence());
         }
     }
 
@@ -184,8 +221,11 @@ public final class MinecraftEventSystem implements IEventSystem {
     public void joined(PlayerEvent.PlayerLoggedInEvent forge) {
         if (forge.player instanceof EntityPlayerMP player) {
             boolean announce = pendingJoins.containsKey(player) && visible(player);
-            boolean first = Boolean.FALSE.equals(existingPlayerData.remove(player)) && firstJoin(player);
-            JoinLeaveEvent event = new JoinLeaveEvent(new MinecraftPlayer(player), pendingJoins.remove(player), first);
+            Boolean existingData = existingPlayerData.remove(player);
+            FirstJoinStatus status = classifyJoin(existingData,
+                    Boolean.FALSE.equals(existingData) ? noJoinHistory(player) : null);
+            JoinLeaveEvent event = new JoinLeaveEvent(new MinecraftPlayer(player), pendingJoins.remove(player),
+                    status, customJoinPlacements.remove(player));
             for (PlayerJoinEventListener listener : joinListeners) {
                 listener.onPlayerJoin(event);
             }
@@ -198,7 +238,7 @@ public final class MinecraftEventSystem implements IEventSystem {
     public void left(PlayerEvent.PlayerLoggedOutEvent forge) {
         if (forge.player instanceof EntityPlayerMP player) {
             boolean announce = pendingLeaves.containsKey(player) && visible(player);
-            JoinLeaveEvent event = new JoinLeaveEvent(new MinecraftPlayer(player), pendingLeaves.remove(player), false);
+            JoinLeaveEvent event = new JoinLeaveEvent(new MinecraftPlayer(player), pendingLeaves.remove(player), FirstJoinStatus.RETURNING, false);
             for (PlayerLeaveEventListener listener : leaveListeners) {
                 listener.onPlayerLeave(event);
             }
@@ -279,9 +319,19 @@ public final class MinecraftEventSystem implements IEventSystem {
         }
     }
 
+    static FirstJoinStatus classifyJoin(Boolean existingData, Boolean noJoinHistory) {
+        if (Boolean.TRUE.equals(existingData) || Boolean.FALSE.equals(noJoinHistory)) return FirstJoinStatus.RETURNING;
+        return existingData == null || noJoinHistory == null ? FirstJoinStatus.UNAVAILABLE : FirstJoinStatus.FIRST_JOIN;
+    }
+
     static boolean firstJoin(EntityPlayerMP player) {
-        return !player.getEntityData().getCompoundTag(EntityPlayer.PERSISTED_NBT_TAG).getBoolean(JOINED)
-                && player.func_147099_x().writeStat(StatList.leaveGameStat) == 0;
+        return Boolean.TRUE.equals(noJoinHistory(player));
+    }
+
+    private static Boolean noJoinHistory(EntityPlayerMP player) {
+        if (player.getEntityData().getCompoundTag(EntityPlayer.PERSISTED_NBT_TAG).getBoolean(JOINED)) return false;
+        var statistics = player.func_147099_x();
+        return statistics != null ? statistics.writeStat(StatList.leaveGameStat) == 0 : null;
     }
 
     private static void markJoined(EntityPlayerMP player) {
@@ -294,11 +344,13 @@ public final class MinecraftEventSystem implements IEventSystem {
     private static final class JoinLeaveEvent implements PlayerJoinEvent, PlayerLeaveEvent {
         private final IPlayer player;
         private IComponent message;
-        private final boolean firstJoin;
+        private final FirstJoinStatus firstJoinStatus;
+        private final boolean customJoinPlacement;
 
-        private JoinLeaveEvent(IPlayer player, IChatComponent message, boolean firstJoin) {
+        private JoinLeaveEvent(IPlayer player, IChatComponent message, FirstJoinStatus firstJoinStatus, boolean customJoinPlacement) {
             this.player = player;
-            this.firstJoin = firstJoin;
+            this.firstJoinStatus = firstJoinStatus;
+            this.customJoinPlacement = customJoinPlacement;
             this.message = message != null ? new MinecraftComponent(message) : null;
         }
 
@@ -309,7 +361,17 @@ public final class MinecraftEventSystem implements IEventSystem {
 
         @Override
         public boolean isFirstJoin(eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter platform) {
-            return firstJoin;
+            return firstJoinStatus == FirstJoinStatus.FIRST_JOIN;
+        }
+
+        @Override
+        public FirstJoinStatus firstJoinStatus(eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter platform) {
+            return firstJoinStatus;
+        }
+
+        @Override
+        public boolean hasCustomJoinPlacement() {
+            return customJoinPlacement;
         }
 
         @Override

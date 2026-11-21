@@ -35,6 +35,16 @@ public abstract class ServerConfigurationManagerMixin {
         MinecraftEventSystem.captureLoadedPlayerData(player, callback.getReturnValue() != null);
     }
 
+    @Inject(method = "playerLoggedIn", at = @At("HEAD"))
+    private void paradigm$beforeNativeJoin(EntityPlayerMP player, CallbackInfo callback) {
+        MinecraftEventSystem.captureJoinPlacement(player);
+    }
+
+    @Inject(method = "playerLoggedIn", at = @At("RETURN"))
+    private void paradigm$afterNativeJoin(EntityPlayerMP player, CallbackInfo callback) {
+        MinecraftEventSystem.checkJoinPlacement(player);
+    }
+
     @Redirect(method = "removeAllPlayers", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/network/NetHandlerPlayServer;kickPlayerFromServer(Ljava/lang/String;)V"))
     private void paradigm$shutdownReason(NetHandlerPlayServer handler, String reason) {

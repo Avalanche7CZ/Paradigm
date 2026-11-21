@@ -12,6 +12,11 @@ public final class MinecraftPlayer implements IPlayer {
     }
 
     @Override
+    public int getTeleportSequence() {
+        return player.playerNetServerHandler instanceof PlayerTeleportSequence connection ? connection.paradigm$teleportSequence() : 0;
+    }
+
+    @Override
     public String getName() {
         return player.getCommandSenderName();
     }

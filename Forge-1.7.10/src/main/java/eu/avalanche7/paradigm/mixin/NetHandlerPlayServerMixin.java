@@ -4,29 +4,40 @@ import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraft.network.NetHandlerPlayServer;
 import net.minecraft.network.Packet;
 import net.minecraft.network.play.client.C15PacketClientSettings;
+import net.minecraft.network.play.server.S08PacketPlayerPosLook;
 import net.minecraft.network.play.server.S38PacketPlayerListItem;
 import net.minecraft.network.play.server.S3EPacketTeams;
 import net.minecraft.server.management.ServerConfigurationManager;
 import net.minecraft.util.IChatComponent;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import eu.avalanche7.paradigm.platform.MinecraftEventSystem;
+import eu.avalanche7.paradigm.platform.PlayerTeleportSequence;
 import eu.avalanche7.paradigm.platform.visual.LegacyClientCapabilities;
 import eu.avalanche7.paradigm.platform.visual.LegacyVisualController;
 
 @Mixin(NetHandlerPlayServer.class)
-public abstract class NetHandlerPlayServerMixin {
+public abstract class NetHandlerPlayServerMixin implements PlayerTeleportSequence {
+    @Unique private int paradigm$teleportSequence;
+
+    @Override
+    public int paradigm$teleportSequence() {
+        return paradigm$teleportSequence;
+    }
+
     @Shadow
     public EntityPlayerMP playerEntity;
     @org.spongepowered.asm.mixin.Unique private final java.util.Set<String> paradigm$listed = new java.util.HashSet<>();
 
     @Inject(method = "sendPacket", at = @At("HEAD"), cancellable = true)
     private void paradigm$playerList(Packet packet, CallbackInfo callback) {
+        if (packet instanceof S08PacketPlayerPosLook) paradigm$teleportSequence++;
         LegacyVisualController visuals = LegacyVisualController.current();
         if (visuals != null && packet instanceof S3EPacketTeams) {
             TeamPacketAccess team = (TeamPacketAccess) packet;

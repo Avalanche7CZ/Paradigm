@@ -6,6 +6,7 @@ import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.platform.Interfaces.IComponent;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlatformAdapter;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.platform.MinecraftEventSystem;
 import net.minecraft.network.ClientConnection;
 import net.minecraft.server.PlayerManager;
 import net.minecraft.server.network.ConnectedClientData;
@@ -50,6 +51,10 @@ public class PlayerManagerMixin {
     @Inject(method = "onPlayerConnect", at = @At("RETURN"))
     private void paradigm$clearJoinSuppression(ClientConnection connection, ServerPlayerEntity player, ConnectedClientData clientData, CallbackInfo ci) {
         SUPPRESS_JOIN_BROADCAST.remove();
+        Services services = ParadigmAPI.getServices();
+        if (services != null && services.getPlatformAdapter().getEventSystem() instanceof MinecraftEventSystem events) {
+            events.dispatchJoinAfterInitialPlacement(player);
+        }
     }
 
     @Inject(method = "broadcast(Lnet/minecraft/text/Text;Z)V", at = @At("HEAD"), cancellable = true)

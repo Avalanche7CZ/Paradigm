@@ -40,8 +40,9 @@ public class SpawnCommand implements ParadigmModule {
     public void registerEventListeners(Object eventBus, Services services) {
         AutomaticSpawnPlacement placement = services.getAutomaticSpawnPlacement();
         var platform = services.getPlatformAdapter();
-        platform.getEventSystem().onPlayerJoin(event ->
-                placement.joined(event.getPlayer(), event.isFirstJoin(platform)));
+        platform.getEventSystem().onPlayerJoinAfterInitialPlacement(event ->
+                placement.joined(event.getPlayer(), event.firstJoinStatus(platform), event.hasCustomJoinPlacement(),
+                        services.moduleActivationGuard(this)));
     }
 
     private void registerSpawn() {
@@ -102,7 +103,7 @@ public class SpawnCommand implements ParadigmModule {
                         return 0;
                     }
 
-                    PlayerDataStore.StoredLocation location = services.getPlatformAdapter().getPlayerLocation(player).orElse(null);
+                    PlayerDataStore.StoredLocation location = services.getPlatformAdapter().getLocationForGlobalSpawn(player).orElse(null);
                     if (location == null || location.getWorldId() == null || location.getWorldId().isBlank()) {
                         send(player, "spawn.location_unavailable", "Unable to read your current location.");
                         return 0;
