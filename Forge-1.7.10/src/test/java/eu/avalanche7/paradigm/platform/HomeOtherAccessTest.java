@@ -7,6 +7,7 @@ import static org.mockito.Mockito.*;
 import java.util.*;
 import java.util.function.*;
 
+import net.minecraft.entity.player.EntityPlayerMP;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -23,13 +24,14 @@ import eu.avalanche7.paradigm.utils.*;
 
 class HomeOtherAccessTest {
     final Services services = mock(Services.class);
-    final IPlatformAdapter platform = mock(IPlatformAdapter.class);
+    final PlatformAdapterImpl platform = mock(PlatformAdapterImpl.class);
     final StorageService storage = mock(StorageService.class);
     final PlayerRepository players = mock(PlayerRepository.class);
     final PermissionsHandler permissions = mock(PermissionsHandler.class);
     final PlayerProfileService profiles = mock(PlayerProfileService.class);
     final IPlayer actor = mock(IPlayer.class);
-    final ICommandSource source = mock(ICommandSource.class);
+    final EntityPlayerMP sender = mock(EntityPlayerMP.class);
+    final String actorId = UUID.randomUUID().toString();
     final List<ForgeCommandBuilder> roots = new ArrayList<>();
     final List<Runnable> callbacks = new ArrayList<>();
     final List<String> messages = new ArrayList<>();
@@ -45,15 +47,16 @@ class HomeOtherAccessTest {
         when(services.getPermissionsHandler()).thenReturn(permissions);
         when(services.getPlayerProfileService()).thenReturn(profiles);
         when(storage.players()).thenReturn(players);
-        when(actor.getUUID()).thenReturn("actor-id");
-        when(source.getPlayer()).thenReturn(actor);
-        when(platform.getPlayerByUuid("actor-id")).thenReturn(actor);
+        when(actor.getUUID()).thenReturn(actorId);
+        when(actor.getOriginalPlayer()).thenReturn(sender);
+        when(sender.getUniqueID()).thenReturn(UUID.fromString(actorId));
+        when(platform.getPlayerByUuid(actorId)).thenReturn(actor);
         when(platform.getPlayerLocation(actor)).thenReturn(Optional.empty());
         when(platform.teleportPlayer(eq(actor), any(PlayerDataStore.StoredLocation.class))).thenReturn(true);
         var toggles = mock(CommandToggleStore.class);
         when(services.getCommandToggleStore()).thenReturn(toggles);
         when(toggles.isEnabled(anyString())).thenAnswer(i -> enabled);
-        when(permissions.hasPermission(eq(actor), any(PermissionDefinition.class))).thenAnswer(i -> i.getArgument(1) != ParadigmPermissions.HOME_OTHERS || others);
+        when(permissions.hasPermission(any(IPlayer.class), any(PermissionDefinition.class))).thenAnswer(i -> i.getArgument(1) != ParadigmPermissions.HOME_OTHERS || others);
         when(profiles.findByNameOrUuid(anyString())).thenReturn(Optional.of(new StoredPlayerProfile("owner-id", "Steve", 1, 1, 0)));
         when(players.listHomes("owner-id")).thenReturn(List.of(home));
         var lang = mock(Lang.class);
@@ -61,7 +64,7 @@ class HomeOtherAccessTest {
         when(lang.getTranslation(anyString())).thenAnswer(i -> i.getArgument(0));
         var parser = mock(MessageParser.class);
         when(services.getMessageParser()).thenReturn(parser);
-        when(parser.parseMessage(anyString(), eq(actor))).thenAnswer(i -> { messages.add(i.getArgument(0)); return mock(IComponent.class); });
+        when(parser.parseMessage(anyString(), any(IPlayer.class))).thenAnswer(i -> { messages.add(i.getArgument(0)); return mock(IComponent.class); });
         when(platform.createCommandBuilder()).thenAnswer(i -> new ForgeCommandBuilder());
         doAnswer(i -> { roots.add(i.getArgument(0)); return null; }).when(platform).registerCommand(any());
         doAnswer(i -> {
@@ -74,8 +77,14 @@ class HomeOtherAccessTest {
         command.onLoad(null, services, null);
         command.registerCommands(null, null, services);
     }
-    ForgeCommandBuilder argument() { return roots.stream().filter(r -> r.literalName().equals("home")).findFirst().orElseThrow().children().stream().filter(c -> "name".equals(c.argumentName())).findFirst().orElseThrow(); }
-    void run(String input) throws Exception { argument().executor().execute(new ForgeCommandContext(source, Map.of("name",input), "home " + input)); }
+    ForgeCommand homeCommand() {
+        var root = roots.stream().filter(r -> r.literalName().equals("home")).findFirst().orElseThrow();
+        return new ForgeCommand(root, platform);
+    }
+
+    void run(String input) {
+        homeCommand().processCommand(sender, input.split(" "));
+    }
 
     @Test void offlineListWithOneHomeDoesNotTeleport() throws Exception {
         run("Steve:");
@@ -113,18 +122,18 @@ class HomeOtherAccessTest {
         verify(platform, never()).teleportPlayer(any(), any(PlayerDataStore.StoredLocation.class));
     }
     @Test void ownNamedHomesKeepTheirOwner() throws Exception {
-        when(players.getHome("actor-id", "base")).thenReturn(Optional.of(home));
+        when(players.getHome(actorId, "base")).thenReturn(Optional.of(home));
         run("base");
-        verify(players).getHome("actor-id", "base");
+        verify(players).getHome(actorId, "base");
         verifyNoInteractions(profiles);
         verify(platform).teleportPlayer(eq(actor), any(PlayerDataStore.StoredLocation.class));
     }
     @Test void tabCompletionRequiresPrivilegeAndSupportsOfflineHomes() {
-        when(platform.getVisiblePlayerNames(actor)).thenReturn(List.of("Steve"));
-        var context = new ForgeCommandContext(source, Map.of(), "home ");
-        assertTrue(argument().suggestions().getSuggestions(context, "").contains("Steve:"));
-        assertEquals(List.of("Steve:base"), argument().suggestions().getSuggestions(context, "Steve:"));
+        when(platform.getVisiblePlayerNames(any(IPlayer.class))).thenReturn(List.of("Steve"));
+        var command = homeCommand();
+        assertTrue(command.addTabCompletionOptions(sender, new String[]{"St"}).contains("Steve:"));
+        assertEquals(List.of("Steve:base"), command.addTabCompletionOptions(sender, new String[]{"Steve:"}));
         others = false;
-        assertFalse(argument().suggestions().getSuggestions(context, "Steve:").contains("Steve:base"));
+        assertFalse(command.addTabCompletionOptions(sender, new String[]{"Steve:"}).contains("Steve:base"));
     }
 }

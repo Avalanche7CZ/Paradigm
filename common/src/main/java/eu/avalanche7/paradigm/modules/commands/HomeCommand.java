@@ -172,7 +172,7 @@ public class HomeCommand implements ParadigmModule {
                         .requires(source -> canBack(source.getPlayer()))
                         .executes(ctx -> executeBack(ctx.getSource().getPlayer())))
                 .then(platform.createCommandBuilder()
-                        .argument("name", ICommandBuilder.ArgumentType.WORD)
+                        .argument("name", ICommandBuilder.ArgumentType.GREEDY_STRING)
                         .suggests((c, input) -> teleportHomeSuggestions(c.getSource().getPlayer(), input))
                         .executes(ctx -> canUseHome(ctx.getSource().getPlayer())
                                 ? executeHome(ctx.getSource().getPlayer(), ctx.getStringArgument("name"))
@@ -308,24 +308,23 @@ public class HomeCommand implements ParadigmModule {
 
         if (homeName != null && homeName.contains(":")) return executeOtherHome(player, homeName);
 
-        String normalized = normalizeInputName(homeName, "home");
-        if (normalized == null) {
+        if (homeName == null || !SAFE_NAME.matcher(homeName).matches()) {
             send(player, "home.invalid_name", "Invalid home name. Use letters, numbers, _ or -.");
             return 0;
         }
-        String homeKey = PlayerDataStore.normalizeHomeKey(normalized);
+        String homeKey = PlayerDataStore.normalizeHomeKey(homeName);
         String playerUuid = player.getUUID();
         var activation = services.moduleActivationGuard(this);
         return StorageCommandSupport.runForPlayer(services, player, "home.load", () ->
                 homeKey != null ? services.getStorageService().players().getHome(playerUuid, homeKey).orElse(null) : null,
                 activation, (current, home) -> {
                     if (home == null || home.location() == null) {
-                        send(current, "home.home_not_found", "Home {home} was not found.", "{home}", normalized);
+                        send(current, "home.home_not_found", "Home {home} was not found.", "{home}", homeName);
                         return;
                     }
                     PlayerDataStore.StoredLocation destination = toDataLocation(home.location());
                     CommandCooldowns.run(services, current, "home", activation, fresh ->
-                            canUseHome(fresh) ? teleportHome(fresh, normalized, destination) : 0);
+                            canUseHome(fresh) ? teleportHome(fresh, homeName, destination) : 0);
                 },
                 "home.error_load");
     }

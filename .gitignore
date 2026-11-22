@@ -108,6 +108,7 @@ ForgeAnnoucements-1.0.0/plugin.yml
 !/Forge-1.7.10/src/test/java/eu/avalanche7/paradigm/platform/TpCommandTest.java
 !/NeoForge-26.1.2/src/test/java/eu/avalanche7/paradigm/platform/InteractiveChatTest.java
 !/NeoForge-26.1.2/src/test/java/eu/avalanche7/paradigm/platform/TeleportOperationsTest.java
+!/NeoForge-26.1.2/src/test/java/eu/avalanche7/paradigm/platform/HomeCommandBrigadierTest.java
 
 # Permission presentation and offline command regression coverage.
 !/common/src/test/java/eu/avalanche7/paradigm/modules/permissions/PermissionPresentationTest.java
