@@ -126,6 +126,7 @@ public interface IPlatformAdapter {
     boolean openWorkbench(IPlayer player);
     boolean openEnderChest(IPlayer player);
     boolean setPlayerInvulnerable(IPlayer player, boolean enabled);
+    default void closeMenuForVanishChange(IPlayer player) {}
     boolean setPlayerVanished(IPlayer player, boolean enabled);
 
     default void refreshVanishVisibility(IPlayer viewer, IPlayer target) {}

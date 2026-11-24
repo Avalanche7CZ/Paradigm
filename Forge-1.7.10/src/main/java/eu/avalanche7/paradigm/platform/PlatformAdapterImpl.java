@@ -768,6 +768,13 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public void closeMenuForVanishChange(IPlayer player) {
+        if (player.getOriginalPlayer() instanceof EntityPlayerMP target && target.openContainer != target.inventoryContainer) {
+            target.closeScreen();
+        }
+    }
+
+    @Override
     public boolean setPlayerVanished(IPlayer player, boolean enabled) {
         EntityPlayerMP handle = operationPlayer(player);
         if (handle == null || visuals == null || Thread.currentThread() != serverThread) return false;

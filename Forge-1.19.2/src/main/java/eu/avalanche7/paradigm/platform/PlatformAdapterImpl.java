@@ -456,6 +456,13 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public void closeMenuForVanishChange(IPlayer player) {
+        if (player.getOriginalPlayer() instanceof ServerPlayer target && target.containerMenu != target.inventoryMenu) {
+            target.closeContainer();
+        }
+    }
+
+    @Override
     public boolean setPlayerVanished(IPlayer player, boolean enabled) {
         if (!(player instanceof MinecraftPlayer) || server == null || !server.isSameThread()) return false;
         for (IPlayer viewer : getOnlinePlayers()) refreshVanishVisibility(viewer, player);

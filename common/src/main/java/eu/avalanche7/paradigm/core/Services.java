@@ -131,10 +131,10 @@ public class Services {
         return nicknameService;
     }
 
-    private volatile eu.avalanche7.paradigm.modules.vanish.VanishService vanishService;
+    private final eu.avalanche7.paradigm.modules.vanish.VanishService vanishService =
+            new eu.avalanche7.paradigm.modules.vanish.VanishService(this);
 
-    public synchronized eu.avalanche7.paradigm.modules.vanish.VanishService getVanishService() {
-        if (vanishService == null) vanishService = new eu.avalanche7.paradigm.modules.vanish.VanishService(this);
+    public eu.avalanche7.paradigm.modules.vanish.VanishService getVanishService() {
         return vanishService;
     }
 

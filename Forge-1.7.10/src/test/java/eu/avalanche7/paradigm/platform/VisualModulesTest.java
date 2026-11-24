@@ -214,6 +214,41 @@ class VisualModulesTest {
         verifyNoInteractions(state);
     }
 
+    @Test void menuClosureSeesThePreviousStateOnToggleAndDisable() {
+        var vanish = services.getVanishService();
+        List<Boolean> statesAtClose = new ArrayList<>();
+        doAnswer(call -> {
+            statesAtClose.add(vanish.isHidden(player.getUUID()));
+            return null;
+        }).when(platform).closeMenuForVanishChange(player);
+
+        vanish.toggle(player, () -> true);
+        assertTrue(vanish.isHidden(player.getUUID()));
+        vanish.disable();
+
+        assertFalse(vanish.isHidden(player.getUUID()));
+        assertEquals(List.of(false, true), statesAtClose);
+    }
+
+    @Test void persistenceRollbackClosesTheMenuUsingTheTentativeState() {
+        var vanish = services.getVanishService();
+        List<Boolean> statesAtClose = new ArrayList<>();
+        doAnswer(call -> {
+            statesAtClose.add(vanish.isHidden(player.getUUID()));
+            return null;
+        }).when(platform).closeMenuForVanishChange(player);
+
+        var result = vanish.toggle(player, () -> true);
+        assertTrue(vanish.isHidden(player.getUUID()));
+        var failure = org.mockito.ArgumentCaptor.forClass(Consumer.class);
+        verify(storage).runAsync(eq("vanish.persist"), any(), any(), any(), failure.capture());
+        failure.getValue().accept(new IllegalStateException("write failed"));
+
+        assertTrue(result.isCompletedExceptionally());
+        assertFalse(vanish.isHidden(player.getUUID()));
+        assertEquals(List.of(false, true), statesAtClose);
+    }
+
     @Test void pendingVanishEnableCallbackCannotHideAfterModuleDisable() {
         VanishCommand module = new VanishCommand();
         services.getVanishService().disable();

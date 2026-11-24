@@ -40,11 +40,15 @@ public final class VanishService {
     }
 
     public void disable() {
+        Set<String> applied = Set.copyOf(hidden);
+        for (String uuid : applied) {
+            IPlayer player = services.getPlatformAdapter().getPlayerByUuid(uuid);
+            if (player != null) closeMenu(player);
+        }
         active = false;
         generation++;
         if (refresh != null) refresh.cancel(false);
         refresh = null;
-        Set<String> applied = Set.copyOf(hidden);
         hidden.clear();
         admissions.clear();
         tokens.clear();
@@ -138,8 +142,19 @@ public final class VanishService {
                 && current != null && current.getOriginalPlayer() == player.getOriginalPlayer();
     }
 
+    private boolean closeMenu(IPlayer player) {
+        try {
+            services.getPlatformAdapter().closeMenuForVanishChange(player);
+            return true;
+        } catch (RuntimeException failure) {
+            services.getLogger().error("Unable to close menu for Vanish change for {}", player.getUUID(), failure);
+            return false;
+        }
+    }
+
     private boolean apply(IPlayer player, boolean enabled) {
         boolean previous = hidden.contains(player.getUUID());
+        if (previous != enabled && !closeMenu(player)) return false;
         if (enabled) hidden.add(player.getUUID()); else hidden.remove(player.getUUID());
         try {
             if (services.getPlatformAdapter().setPlayerVanished(player, enabled)) return true;
