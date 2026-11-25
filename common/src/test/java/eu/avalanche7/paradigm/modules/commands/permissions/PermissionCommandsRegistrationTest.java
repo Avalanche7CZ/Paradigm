@@ -493,7 +493,13 @@ class PermissionCommandsRegistrationTest {
             var lang = new Lang(logger, null, parser, platform);
             lang.loadLanguage("en");
             services = new Services(logger, null, null, null, null, null, null, null, null, debug, lang,
-                    parser, permissions, placeholders, scheduler, null, null, null, storage, null, platform);
+                    parser, permissions, placeholders, scheduler, null, null, null, storage, null, platform) {
+                private final AuditService audit = new AuditService(this, Runnable::run);
+
+                @Override public AuditService getAuditService() {
+                    return audit;
+                }
+            };
             PermissionCommands.register(root, platform, services);
         }
 
