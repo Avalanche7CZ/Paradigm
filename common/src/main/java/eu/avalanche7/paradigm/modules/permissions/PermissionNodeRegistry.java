@@ -122,6 +122,44 @@ public class PermissionNodeRegistry {
         }
     }
 
+    public record CommandNode(String node, String description, int defaultLevel) {}
+
+    int replaceCommandNodes(String source, Collection<CommandNode> nodes) {
+        Map<String, CommandNode> snapshot = new TreeMap<>();
+        for (CommandNode node : nodes) {
+            String normalized = normalizeNode(node.node());
+            if (normalized != null) snapshot.putIfAbsent(normalized, node);
+        }
+        synchronized (lock) {
+            int before = state.nodes.size();
+            state.nodes.values().removeIf(existing -> source.equals(existing.source)
+                    && !snapshot.containsKey(existing.node));
+            int changed = before - state.nodes.size();
+            long now = System.currentTimeMillis();
+            for (var item : snapshot.entrySet()) {
+                String key = item.getKey();
+                CommandNode node = item.getValue();
+                DiscoveredPermission existing = state.nodes.get(key);
+                if (existing != null) {
+                    if (!source.equals(existing.source)) continue;
+                    if (existing.defaultLevel == node.defaultLevel() && existing.description.equals(node.description())) continue;
+                } else {
+                    existing = new DiscoveredPermission();
+                    existing.node = key;
+                    existing.firstSeen = now;
+                    state.nodes.put(key, existing);
+                }
+                existing.source = source;
+                existing.description = node.description();
+                existing.defaultLevel = node.defaultLevel();
+                existing.lastSeen = now;
+                changed++;
+            }
+            if (changed > 0) saveLocked();
+            return changed;
+        }
+    }
+
     public Map<String, String> knownNodes() {
         synchronized (lock) {
             Map<String, String> result = new LinkedHashMap<>();

@@ -256,12 +256,13 @@ public final class MinecraftEventSystem implements IEventSystem {
         }
     }
 
+    static PlatformAdapterImpl activePlatform() {
+        MinecraftEventSystem system = active;
+        return system == null ? null : system.platform;
+    }
+
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void command(CommandEvent forge) {
-        if (platform != null) {
-            platform.guardHybridCommandOwnership(forge);
-            if (forge.isCanceled()) return;
-        }
         if (!(forge.sender instanceof EntityPlayerMP player)) {
             return;
         }

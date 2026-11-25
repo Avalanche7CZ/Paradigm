@@ -7,6 +7,7 @@ import org.jetbrains.annotations.Nullable;
 
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 import eu.avalanche7.paradigm.utils.CommandPriority;
 import eu.avalanche7.paradigm.utils.MessageParser;
 import eu.avalanche7.paradigm.utils.TaskScheduler;
@@ -71,6 +72,16 @@ public interface IPlatformAdapter {
     }
 
     default boolean refreshRegisteredCommandContributors() {
+        return false;
+    }
+
+    default int discoverCommandPermissions(PermissionsHandler permissions, Object server) {
+        Object dispatcher = getCommandDispatcher();
+        return dispatcher != null ? permissions.discoverCommandTree(dispatcher)
+                : permissions.discoverCommandTreeFromServer(server);
+    }
+
+    default boolean guardsExternalCommandsNatively() {
         return false;
     }
 

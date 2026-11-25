@@ -281,6 +281,7 @@ public final class CommonRuntime {
 
     private static void registerExternalCommandGuard(Services services) {
         CommandNodeAccessGate.install(services.getPermissionsHandler());
+        if (services.getPlatformAdapter().guardsExternalCommandsNatively()) return;
         IEventSystem events = eventSystemOrNull(services, "external command guard");
         if (events == null) {
             return;

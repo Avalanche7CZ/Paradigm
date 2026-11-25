@@ -1,5 +1,6 @@
 package eu.avalanche7.paradigm.modules.permissions;
 
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -9,6 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
 
 import org.slf4j.Logger;
 
@@ -440,6 +442,12 @@ public class PermissionsHandler {
         return changed;
     }
 
+    public int replaceDiscoveredCommandNodes(String source, Collection<PermissionNodeRegistry.CommandNode> nodes) {
+        int changed = permissionNodeRegistry.replaceCommandNodes(source, nodes);
+        if (changed > 0) registerPermissionsWithLuckPerms();
+        return changed;
+    }
+
     public void registerExternalPermissionNode(String node, String source, String description, int defaultLevel) {
         if (node == null || node.isBlank()) {
             return;
@@ -463,15 +471,29 @@ public class PermissionsHandler {
         if (player == null || commandLine == null || commandLine.isBlank()) {
             return CommandGuardResult.allowed(commandLine, null, "empty");
         }
-
         Set<String> candidates = permissionNodeRegistry.commandCandidates(commandLine);
         if (candidates.isEmpty()) {
             return CommandGuardResult.allowed(commandLine, null, "no_candidates");
         }
+        return evaluateCommandPermission(player, commandLine, candidates, () -> {
+            if (platform == null) return false;
+            String root = PermissionNodeRegistry.commandTokens(commandLine).get(0);
+            return CommandPriority.ownsRootLiteral(platform.getCommandDispatcher(), root)
+                    || platform.ownsRegisteredCommandRoot(root);
+        }, true);
+    }
 
+    public CommandGuardResult evaluateCommandPermission(IPlayer player, String commandLine, Set<String> candidates,
+            BooleanSupplier ownedCommand, boolean allowGrants) {
+        if (!isExternalCommandPermissionsEnabled()) {
+            return CommandGuardResult.allowed(commandLine, null, "disabled");
+        }
+        if (player == null || commandLine == null || commandLine.isBlank()) {
+            return CommandGuardResult.allowed(commandLine, null, "empty");
+        }
         for (String node : candidates) {
             Boolean explicit = queryDefinedPermission(player, node);
-            if (explicit != null) {
+            if (explicit != null && (!explicit || allowGrants)) {
                 return explicit
                         ? CommandGuardResult.allowed(commandLine, node, "explicit_allow")
                         : CommandGuardResult.denied(commandLine, node, "explicit_deny");
@@ -479,10 +501,7 @@ public class PermissionsHandler {
         }
 
         if (isExternalCommandStrictMode()) {
-            List<String> tokens = PermissionNodeRegistry.commandTokens(commandLine);
-            if (!tokens.isEmpty() && platform != null
-                    && (CommandPriority.ownsRootLiteral(platform.getCommandDispatcher(), tokens.get(0))
-                            || platform.ownsRegisteredCommandRoot(tokens.get(0)))) {
+            if (ownedCommand.getAsBoolean()) {
                 return CommandGuardResult.allowed(commandLine, firstCandidate(candidates), "paradigm_owned");
             }
             if (hasOperatorBypass(player)) {

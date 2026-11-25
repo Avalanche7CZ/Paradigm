@@ -43,7 +43,6 @@ import net.minecraft.world.Teleporter;
 import net.minecraft.world.WorldServer;
 import net.minecraft.world.WorldSettings.GameType;
 import net.minecraftforge.common.DimensionManager;
-import net.minecraftforge.event.CommandEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -51,6 +50,7 @@ import eu.avalanche7.paradigm.core.ParadigmModule;
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.data.CustomCommand;
 import eu.avalanche7.paradigm.data.PlayerDataStore;
+import eu.avalanche7.paradigm.mixin.PlayerCommandAccess;
 import eu.avalanche7.paradigm.modules.commands.Help;
 import eu.avalanche7.paradigm.modules.commands.shared.CommandCatalog;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
@@ -89,6 +89,19 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     private final Set<EntityPlayerMP> invulnerablePlayers = Collections.newSetFromMap(new WeakHashMap<>());
     private final Set<UUID> invulnerablePlayerIds = new HashSet<>();
     private CommandToggleStore commandToggles;
+    private static final ClassValue<Boolean> CRUCIBLE_COMMAND_MANAGER = new ClassValue<>() {
+        @Override
+        protected Boolean computeValue(Class<?> type) {
+            try {
+                type.getMethod("registerCommand", ICommand.class, String.class);
+                return true;
+            } catch (NoSuchMethodException unavailable) {
+                return false;
+            }
+        }
+    };
+    private Map<String, ICommand> discoveredCommands;
+    private int commandDiscoveryTicks;
     private MinecraftServer server;
     private volatile Thread serverThread;
     private MessageParser parser;
@@ -118,6 +131,10 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     public void tick() {
+        if (++commandDiscoveryTicks >= 100) {
+            commandDiscoveryTicks = 0;
+            refreshLegacyCommandPermissions(permissionsHandler, false);
+        }
         if (visuals != null) visuals.tick();
         hologramPlatform.tick();
         for (EntityPlayerMP player : invulnerablePlayers) {
@@ -155,6 +172,7 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
         displacedCommands.clear();
         priorityWarnings.clear();
         registeringContributor = null;
+        discoveredCommands = null;
         server = null;
         serverThread = null;
     }
@@ -241,6 +259,7 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     @Override
     public void setMinecraftServer(Object value) {
         if (server == value && visuals != null) return;
+        discoveredCommands = null;
         server = (MinecraftServer) value;
         serverThread = value != null ? Thread.currentThread() : null;
         if (server != null) {
@@ -424,10 +443,20 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
 
     @Override
     public void executeCommandAs(ICommandSource source, String command) {
-        if (server == null || !(source.getOriginalSource() instanceof ICommandSender))
+        if (server == null || !(source.getOriginalSource() instanceof ICommandSender sender)) {
             throw new IllegalStateException("No active command source");
-        server.getCommandManager().executeCommand(
-                (ICommandSender) source.getOriginalSource(), stripSlash(command));
+        }
+        String line = stripSlash(command.trim());
+        if (line.isEmpty()) return;
+        if (sender instanceof EntityPlayerMP player && isCrucibleCommandManager()) {
+            if (!(player.playerNetServerHandler instanceof PlayerCommandAccess connection)) {
+                LegacyCommandPermissions.deny(player, null);
+                return;
+            }
+            connection.paradigm$handleSlashCommand("/" + line);
+            return;
+        }
+        server.getCommandManager().executeCommand(sender, line);
     }
 
 
@@ -1370,6 +1399,7 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
         if (occupied instanceof ForgeCommand own && own.ownedBy(this)) {
             commandCollisions.remove(name);
             own.addRoot(root, contributor);
+            discoveredCommands = null;
             claimHybridPrimaryRoot(name, primaryCommands);
             return;
         }
@@ -1394,6 +1424,7 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
         relaxHybridCommandPermissions(command);
         commandCollisions.remove(name);
         ownedCommands.add(command);
+        discoveredCommands = null;
         claimHybridPrimaryRoot(name, primaryCommands);
     }
 
@@ -1486,24 +1517,51 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
         hybridCommandWrappers.remove(command);
     }
 
-    void guardHybridCommandOwnership(CommandEvent event) {
-        if (event.command instanceof ForgeCommand own && own.ownedBy(this)) return;
-        if (server == null || !(server.getCommandManager() instanceof CommandHandler manager)) return;
-        // A later mod registration can replace the native root while our Bukkit wrapper survives.
-        // Crucible skips native permission checks, so restore that check for this handoff only.
-        for (ForgeCommand command : hybridCommandWrappers.keySet()) {
-            if (manager.getCommands().get(command.getCommandName()) == event.command
-                    && !event.command.canCommandSenderUseCommand(event.sender)) {
-                event.setCanceled(true);
-                return;
-            }
-        }
-    }
-
     @Override
     public boolean hasRegisteredCommandRoot(String rootLiteral) {
         return server != null && server.getCommandManager() instanceof CommandHandler manager
                 && manager.getCommands().containsKey(rootLiteral);
+    }
+
+    boolean displacedCommand(String root, ICommand command) {
+        return command != null && displacedCommands.get(root) == command;
+    }
+
+    PermissionsHandler commandPermissions() {
+        return permissionsHandler;
+    }
+
+    boolean isCrucibleCommandManager() {
+        Object manager = getCommandDispatcher();
+        return manager != null && CRUCIBLE_COMMAND_MANAGER.get(manager.getClass());
+    }
+
+    @Override
+    public boolean guardsExternalCommandsNatively() {
+        return true;
+    }
+
+    @Override
+    public int discoverCommandPermissions(PermissionsHandler permissions, Object server) {
+        return refreshLegacyCommandPermissions(permissions, true);
+    }
+
+    @SuppressWarnings("unchecked")
+    private int refreshLegacyCommandPermissions(PermissionsHandler permissions, boolean refresh) {
+        if (permissions == null || !permissions.isExternalCommandPermissionsEnabled()
+                || !(getCommandDispatcher() instanceof CommandHandler manager)) {
+            discoveredCommands = null;
+            return 0;
+        }
+        Map<String, ICommand> commands = manager.getCommands();
+        if (!refresh && discoveredCommands != null && discoveredCommands.size() == commands.size()
+                && commands.entrySet().stream().allMatch(entry -> discoveredCommands.get(entry.getKey()) == entry.getValue())) {
+            return 0;
+        }
+        Map<String, ICommand> snapshot = new LinkedHashMap<>(commands);
+        int changed = LegacyCommandPermissions.discover(permissions, snapshot);
+        discoveredCommands = snapshot;
+        return changed;
     }
 
     @Override
@@ -1527,6 +1585,7 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
         ICommand occupied = (ICommand) manager.getCommands().get(rootLiteral);
         if (!(occupied instanceof ForgeCommand command) || !command.ownedBy(this)
                 || !command.hasContributor(contributor)) return false;
+        discoveredCommands = null;
         if (command.removeContributor(contributor)) {
             removeNativeCommand(manager, rootLiteral, command);
             ownedCommands.remove(command);
@@ -1579,6 +1638,7 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
             }
         }
         commandContributors.forEach(this::registerContributor);
+        discoveredCommands = null;
         return true;
     }
 

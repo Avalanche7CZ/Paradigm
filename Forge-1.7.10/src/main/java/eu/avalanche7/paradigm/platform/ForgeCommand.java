@@ -66,6 +66,35 @@ final class ForgeCommand extends CommandBase {
         return platform == owner;
     }
 
+    List<String> literalPath(String[] args, int limit) {
+        List<String> path = new ArrayList<>();
+        List<ForgeCommandBuilder> current = roots.stream().map(Contribution::root).toList();
+        for (int i = 0; i < args.length && i < limit; i++) {
+            String token = args[i];
+            current = current.stream().flatMap(node -> node.children().stream())
+                    .filter(node -> token.equals(node.literalName())).toList();
+            if (current.isEmpty()) break;
+            path.add(token.toLowerCase(Locale.ROOT));
+        }
+        return path;
+    }
+
+    Set<String> literalPaths(int limit) {
+        Set<String> paths = new LinkedHashSet<>();
+        for (Contribution root : roots) collectLiterals(root.root(), "", limit, paths);
+        return paths;
+    }
+
+    private static void collectLiterals(ForgeCommandBuilder root, String prefix, int limit, Set<String> paths) {
+        if (limit == 0) return;
+        for (ForgeCommandBuilder child : root.children()) {
+            if (child.literalName() == null) continue;
+            String path = prefix + child.literalName().toLowerCase(Locale.ROOT);
+            paths.add(path);
+            collectLiterals(child, path + ".", limit - 1, paths);
+        }
+    }
+
     @Override
     public String getCommandName() {
         return name;

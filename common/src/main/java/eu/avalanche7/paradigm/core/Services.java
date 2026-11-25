@@ -236,9 +236,8 @@ public class Services {
         if (this.permissionsHandlerInstance == null) {
             return 0;
         }
-        Object dispatcher = this.platformAdapter != null ? this.platformAdapter.getCommandDispatcher() : null;
-        int changed = dispatcher != null
-                ? this.permissionsHandlerInstance.discoverCommandTree(dispatcher)
+        int changed = this.platformAdapter != null
+                ? this.platformAdapter.discoverCommandPermissions(this.permissionsHandlerInstance, this.server)
                 : this.permissionsHandlerInstance.discoverCommandTreeFromServer(this.server);
         if (this.platformAdapter != null) {
             try {
