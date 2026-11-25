@@ -182,6 +182,7 @@ public interface IPlatformAdapter {
     }
 
     default boolean setPlayerListOrder(List<IPlayer> sortedPlayers) { return false; }
+    default eu.avalanche7.paradigm.modules.tab.ScoreboardConnection getScoreboardConnection(IPlayer viewer) { return null; }
     default boolean hasPlayerListTeam(IPlayer player) { return true; }
     default boolean sendPlayerListOrderTeam(IPlayer viewer, String team, String subject, boolean create) { return false; }
 

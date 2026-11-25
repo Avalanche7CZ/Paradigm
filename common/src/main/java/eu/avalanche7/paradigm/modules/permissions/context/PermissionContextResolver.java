@@ -16,8 +16,9 @@ public class PermissionContextResolver {
 
     public PermissionContextSet resolve(IPlayer player) {
         Map<String, String> contexts = baseContexts();
-        if (player != null && player.getWorldId() != null && !player.getWorldId().isBlank()) {
-            String world = player.getWorldId().trim();
+        String worldId = player != null ? player.getWorldId() : null;
+        if (worldId != null && !worldId.isBlank()) {
+            String world = worldId.trim();
             contexts.put(PermissionContextType.WORLD.key(), world);
             contexts.put(PermissionContextType.DIMENSION.key(), world);
         }

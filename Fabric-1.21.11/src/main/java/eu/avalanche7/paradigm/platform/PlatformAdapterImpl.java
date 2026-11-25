@@ -1079,11 +1079,9 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
                 (java.util.function.Predicate<net.minecraft.server.command.ServerCommandSource>) eu.avalanche7.paradigm.modules.permissions.CommandNodeAccessGate.getRequirement(node);
         if (original != null) {
             java.util.function.Predicate<net.minecraft.server.command.ServerCommandSource> wrapped = source -> {
-                java.util.UUID uuid = paradigm$rewireSourceUuid(source);
-                if (uuid == null) {
-                    return original.test(source);
-                }
-                Boolean decision = eu.avalanche7.paradigm.modules.permissions.CommandNodeAccessGate.decide(path, uuid);
+                IPlayer player = source.getEntity() instanceof net.minecraft.server.network.ServerPlayerEntity nativePlayer
+                        ? new MinecraftPlayer(nativePlayer) : null;
+                Boolean decision = eu.avalanche7.paradigm.modules.permissions.CommandNodeAccessGate.decideForPlayer(path, player);
                 if (decision == null) {
                     return original.test(source);
                 }
@@ -1103,11 +1101,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         for (com.mojang.brigadier.tree.CommandNode<net.minecraft.server.command.ServerCommandSource> child : node.getChildren()) {
             paradigm$rewireCommandNode(child, path, depth + 1);
         }
-    }
-
-    private static java.util.UUID paradigm$rewireSourceUuid(net.minecraft.server.command.ServerCommandSource source) {
-        net.minecraft.entity.Entity entity = source.getEntity();
-        return entity instanceof net.minecraft.server.network.ServerPlayerEntity player ? player.getUuid() : null;
     }
 
     @Override

@@ -26,14 +26,18 @@ public class JsonPermissionRepository implements PermissionRepository {
         this.playerDataStore = playerDataStore;
     }
 
+    void completeTemporaryGroupMigration() {
+        permissionStore.load(playerDataStore);
+    }
+
     @Override
     public Definitions definitions() {
-        return new Definitions(listGroups(), listTracks(), new DefinitionVersions(java.util.Map.of(), java.util.Map.of()), permissionStore.load().defaultGroup);
+        return new Definitions(listGroups(), listTracks(), new DefinitionVersions(java.util.Map.of(), java.util.Map.of()), permissionStore.readSnapshot().defaultGroup);
     }
 
     @Override
     public void setDefaultGroup(String group) {
-        var state = permissionStore.load();
+        var state = permissionStore.load(playerDataStore);
         if (!group.isEmpty() && !state.groups.containsKey(group)) throw new IllegalArgumentException("Default group was not found");
         state.defaultGroup = group;
         permissionStore.saveOrThrow(state);
@@ -41,7 +45,7 @@ public class JsonPermissionRepository implements PermissionRepository {
 
     @Override
     public List<StoredPermissionGroup> listGroups() {
-        PermissionDataStore.PermissionState state = permissionStore.load();
+        PermissionDataStore.PermissionState state = permissionStore.readSnapshot();
         List<StoredPermissionGroup> result = new ArrayList<>();
         for (String group : state.groups.keySet()) {
             getGroup(group).ifPresent(result::add);
@@ -53,7 +57,7 @@ public class JsonPermissionRepository implements PermissionRepository {
     public Optional<StoredPermissionGroup> getGroup(String groupName) {
         String key = normalize(groupName);
         if (key == null) return Optional.empty();
-        PermissionDataStore.PermissionState state = permissionStore.load();
+        PermissionDataStore.PermissionState state = permissionStore.readSnapshot();
         PermissionDataStore.GroupEntry entry = state.groups.get(key);
         if (entry == null) return Optional.empty();
         List<StoredPermissionNode> permissions = new ArrayList<>();
@@ -69,7 +73,7 @@ public class JsonPermissionRepository implements PermissionRepository {
     @Override
     public void saveGroup(StoredPermissionGroup group) {
         if (group == null || normalize(group.name()) == null) return;
-        PermissionDataStore.PermissionState state = permissionStore.load();
+        PermissionDataStore.PermissionState state = permissionStore.load(playerDataStore);
         PermissionDataStore.GroupEntry entry = new PermissionDataStore.GroupEntry();
         entry.description = group.description() != null ? group.description() : "";
         entry.prefix = group.prefix() != null ? group.prefix() : "";
@@ -88,14 +92,14 @@ public class JsonPermissionRepository implements PermissionRepository {
         entry.normalize();
         state.groups.put(normalize(group.name()), entry);
         state.normalize();
-        permissionStore.save(state);
+        permissionStore.saveOrThrow(state);
     }
 
     @Override
     public boolean deleteGroup(String groupName) {
         String key = normalize(groupName);
         if (key == null) return false;
-        PermissionDataStore.PermissionState state = permissionStore.load();
+        PermissionDataStore.PermissionState state = permissionStore.load(playerDataStore);
         boolean changed = state.groups.remove(key) != null;
         if (key.equals(state.defaultGroup)) state.defaultGroup = "";
 
@@ -118,24 +122,16 @@ public class JsonPermissionRepository implements PermissionRepository {
             if (track != null) changed |= track.removeIf(member -> key.equals(normalize(member)));
         }
 
-        if (playerDataStore != null) {
-            for (PlayerDataStore.PlayerEntry player : playerDataStore.listPlayerEntries()) {
-                if (player != null && player.getUuid() != null) {
-                    changed |= playerDataStore.removeTemporaryGroup(player.getUuid(), key);
-                }
-            }
-        }
-
         if (changed) {
             state.normalize();
-            permissionStore.save(state);
+            permissionStore.saveOrThrow(state);
         }
         return changed;
     }
 
     @Override
     public List<StoredPermissionTrack> listTracks() {
-        PermissionDataStore.PermissionState state = permissionStore.load();
+        PermissionDataStore.PermissionState state = permissionStore.readSnapshot();
         List<StoredPermissionTrack> result = new ArrayList<>();
         for (var entry : state.tracks.entrySet()) result.add(new StoredPermissionTrack(entry.getKey(), entry.getValue()));
         return result;
@@ -145,7 +141,7 @@ public class JsonPermissionRepository implements PermissionRepository {
     public Optional<StoredPermissionTrack> getTrack(String trackName) {
         String key = normalize(trackName);
         if (key == null) return Optional.empty();
-        PermissionDataStore.PermissionState state = permissionStore.load();
+        PermissionDataStore.PermissionState state = permissionStore.readSnapshot();
         List<String> groups = state.tracks.get(key);
         return groups == null ? Optional.empty() : Optional.of(new StoredPermissionTrack(key, groups));
     }
@@ -153,19 +149,19 @@ public class JsonPermissionRepository implements PermissionRepository {
     @Override
     public void saveTrack(StoredPermissionTrack track) {
         if (track == null || normalize(track.name()) == null) return;
-        PermissionDataStore.PermissionState state = permissionStore.load();
+        PermissionDataStore.PermissionState state = permissionStore.load(playerDataStore);
         state.tracks.put(normalize(track.name()), new ArrayList<>(track.groups()));
         state.normalize();
-        permissionStore.save(state);
+        permissionStore.saveOrThrow(state);
     }
 
     @Override
     public boolean deleteTrack(String trackName) {
         String key = normalize(trackName);
         if (key == null) return false;
-        PermissionDataStore.PermissionState state = permissionStore.load();
+        PermissionDataStore.PermissionState state = permissionStore.load(playerDataStore);
         boolean changed = state.tracks.remove(key) != null;
-        if (changed) permissionStore.save(state);
+        if (changed) permissionStore.saveOrThrow(state);
         return changed;
     }
 
@@ -174,11 +170,11 @@ public class JsonPermissionRepository implements PermissionRepository {
         String group = normalize(groupName);
         String parent = normalize(parentName);
         if (group == null || parent == null) return;
-        PermissionDataStore.PermissionState state = permissionStore.load();
+        PermissionDataStore.PermissionState state = permissionStore.load(playerDataStore);
         PermissionDataStore.GroupEntry entry = state.groups.get(group);
         if (entry == null) return;
         if (!entry.inherits.contains(parent)) entry.inherits.add(parent);
-        permissionStore.save(state);
+        permissionStore.saveOrThrow(state);
     }
 
     @Override
@@ -186,10 +182,10 @@ public class JsonPermissionRepository implements PermissionRepository {
         String group = normalize(groupName);
         String parent = normalize(parentName);
         if (group == null || parent == null) return false;
-        PermissionDataStore.PermissionState state = permissionStore.load();
+        PermissionDataStore.PermissionState state = permissionStore.load(playerDataStore);
         PermissionDataStore.GroupEntry entry = state.groups.get(group);
         boolean changed = entry != null && entry.inherits.remove(parent);
-        if (changed) permissionStore.save(state);
+        if (changed) permissionStore.saveOrThrow(state);
         return changed;
     }
 
@@ -197,12 +193,12 @@ public class JsonPermissionRepository implements PermissionRepository {
     public void addGroupPermission(String groupName, StoredPermissionNode permission) {
         String group = normalize(groupName);
         if (group == null || permission == null) return;
-        PermissionDataStore.PermissionState state = permissionStore.load();
+        PermissionDataStore.PermissionState state = permissionStore.load(playerDataStore);
         PermissionDataStore.GroupEntry entry = state.groups.get(group);
         if (entry == null) return;
         String rule = fromNode(permission);
         if (!entry.permissions.contains(rule)) entry.permissions.add(rule);
-        permissionStore.save(state);
+        permissionStore.saveOrThrow(state);
     }
 
     @Override
@@ -210,89 +206,57 @@ public class JsonPermissionRepository implements PermissionRepository {
         String group = normalize(groupName);
         String node = normalizePermission(permission);
         if (group == null || node == null) return false;
-        PermissionDataStore.PermissionState state = permissionStore.load();
+        PermissionDataStore.PermissionState state = permissionStore.load(playerDataStore);
         PermissionDataStore.GroupEntry entry = state.groups.get(group);
         boolean changed = entry != null && entry.permissions.removeIf(value -> node.equals(normalizePermission(stripDeny(value))));
         if (entry != null && entry.contextualPermissions != null) {
             changed |= entry.contextualPermissions.removeIf(value -> node.equals(normalizePermission(value.permission)));
         }
-        if (changed) permissionStore.save(state);
+        if (changed) permissionStore.saveOrThrow(state);
         return changed;
     }
 
     @Override
     public List<StoredUserPermissionData> listUsers() {
-        PermissionDataStore.PermissionState state = permissionStore.load();
-        List<StoredUserPermissionData> result = new ArrayList<>();
-        for (String uuid : state.users.keySet()) {
-            getUser(uuid).ifPresent(result::add);
-        }
-        if (playerDataStore != null) {
-            for (PlayerDataStore.PlayerEntry player : playerDataStore.listPlayerEntries()) {
-                if (player == null || player.getUuid() == null || state.users.containsKey(normalize(player.getUuid()))) continue;
-                getUser(player.getUuid()).ifPresent(result::add);
-            }
-        }
-        return result;
+        PermissionDataStore.PermissionState state = permissionStore.readWithLegacyTemporaryGroups(playerDataStore);
+        return state.users.entrySet().stream().map(entry -> toStoredUser(entry.getKey(), entry.getValue())).toList();
     }
 
     @Override
     public Optional<StoredUserPermissionData> getUser(String uuid) {
         String key = normalize(uuid);
         if (key == null) return Optional.empty();
-        PermissionDataStore.PermissionState state = permissionStore.load();
-        PermissionDataStore.UserEntry entry = state.users.get(key);
-        List<PlayerDataStore.TemporaryGroupEntry> temporaryGroups = playerDataStore != null
-                ? playerDataStore.getTemporaryGroups(key)
-                : List.of();
-        if (entry == null && temporaryGroups.isEmpty()) {
-            return Optional.empty();
-        }
+        var entry = permissionStore.readWithLegacyTemporaryGroups(playerDataStore).users.get(key);
+        return entry == null ? Optional.empty() : Optional.of(toStoredUser(key, entry));
+    }
 
+    private static StoredUserPermissionData toStoredUser(String uuid, PermissionDataStore.UserEntry entry) {
         List<StoredUserPermissionData.GroupAssignment> groups = new ArrayList<>();
-        if (entry != null) {
-            for (String group : entry.groups) {
-                groups.add(new StoredUserPermissionData.GroupAssignment(group, null, "", 0L));
-            }
-            for (PermissionDataStore.GroupAssignmentEntry group : entry.contextualGroups) {
-                groups.add(new StoredUserPermissionData.GroupAssignment(group.group, group.expiresAtMs, group.assignedBy, group.assignedAtMs, group.contextSet(), group.assignmentId));
-            }
+        for (String group : entry.groups) {
+            groups.add(new StoredUserPermissionData.GroupAssignment(group, null, "", 0L));
         }
-        for (PlayerDataStore.TemporaryGroupEntry temp : temporaryGroups) {
-            groups.add(new StoredUserPermissionData.GroupAssignment(temp.getGroup(), temp.getExpiresAtMs(), temp.getAssignedBy(), temp.getAssignedAtMs()));
+        for (PermissionDataStore.GroupAssignmentEntry group : entry.contextualGroups) {
+            groups.add(new StoredUserPermissionData.GroupAssignment(group.group, group.expiresAtMs, group.assignedBy,
+                    group.assignedAtMs, group.contextSet(), group.assignmentId));
         }
 
         List<StoredPermissionNode> permissions = new ArrayList<>();
-        if (entry != null) {
-            for (String permission : entry.permissions) {
-                permissions.add(toNode(permission, null));
-            }
-            for (PermissionDataStore.PermissionRuleEntry permission : entry.contextualPermissions) {
-                permissions.add(toNode(permission));
-            }
-        }
-        return Optional.of(new StoredUserPermissionData(key, "", groups, permissions, entry.displayGroup));
+        for (String permission : entry.permissions) permissions.add(toNode(permission, null));
+        for (PermissionDataStore.PermissionRuleEntry permission : entry.contextualPermissions) permissions.add(toNode(permission));
+        return new StoredUserPermissionData(uuid, "", groups, permissions, entry.displayGroup);
     }
 
     @Override
     public void saveUser(StoredUserPermissionData user) {
         if (user == null || normalize(user.uuid()) == null) return;
         String userKey = normalize(user.uuid());
-        PermissionDataStore.PermissionState state = permissionStore.load();
+        PermissionDataStore.PermissionState state = permissionStore.load(playerDataStore);
         PermissionDataStore.UserEntry entry = new PermissionDataStore.UserEntry();
         entry.displayGroup = user.displayGroup();
-
-        if (playerDataStore != null) {
-            for (PlayerDataStore.TemporaryGroupEntry temp : playerDataStore.getTemporaryGroups(userKey)) {
-                playerDataStore.removeTemporaryGroup(userKey, temp.getGroup());
-            }
-        }
 
         for (StoredUserPermissionData.GroupAssignment group : user.groups()) {
             if (group.assignmentId() == null && group.contextSet().isEmpty() && group.expiresAtMs() == null) {
                 entry.groups.add(group.groupName());
-            } else if (group.assignmentId() == null && group.contextSet().isEmpty() && group.expiresAtMs() != null && playerDataStore != null) {
-                playerDataStore.setTemporaryGroup(userKey, group.groupName(), group.expiresAtMs(), group.assignedAtMs(), group.assignedBy());
             } else {
                 entry.contextualGroups.add(new PermissionDataStore.GroupAssignmentEntry(group.assignmentId(), group.groupName(), group.contextSet(), group.expiresAtMs(), group.assignedAtMs(), group.assignedBy()));
             }
@@ -306,45 +270,40 @@ public class JsonPermissionRepository implements PermissionRepository {
         }
         entry.normalize();
         state.users.put(userKey, entry);
-        permissionStore.save(state);
+        permissionStore.saveOrThrow(state);
     }
 
     @Override
     public boolean deleteUser(String uuid) {
         String user = normalize(uuid);
         if (user == null) return false;
-        PermissionDataStore.PermissionState state = permissionStore.load();
+        PermissionDataStore.PermissionState state = permissionStore.load(playerDataStore);
         boolean changed = state.users.remove(user) != null;
-        if (playerDataStore != null) {
-            for (PlayerDataStore.TemporaryGroupEntry temp : playerDataStore.getTemporaryGroups(user)) {
-                changed |= playerDataStore.removeTemporaryGroup(user, temp.getGroup());
-            }
-        }
-        if (changed) permissionStore.save(state);
+        if (changed) permissionStore.saveOrThrow(state);
         return changed;
     }
 
     @Override
     public void addUserGroup(String uuid, StoredUserPermissionData.GroupAssignment assignment) {
         if (assignment == null) return;
-        if (assignment.contextSet().isEmpty() && assignment.expiresAtMs() != null && playerDataStore != null) {
-            playerDataStore.setTemporaryGroup(uuid, assignment.groupName(), assignment.expiresAtMs(), assignment.assignedAtMs(), assignment.assignedBy());
-            return;
-        }
         String user = normalize(uuid);
         if (user == null) return;
-        PermissionDataStore.PermissionState state = permissionStore.load();
+        PermissionDataStore.PermissionState state = permissionStore.load(playerDataStore);
         PermissionDataStore.UserEntry entry = state.users.computeIfAbsent(user, ignored -> new PermissionDataStore.UserEntry());
         String group = normalize(assignment.groupName());
-        if (group != null && assignment.contextSet().isEmpty() && assignment.expiresAtMs() == null) {
+        if (group == null) return;
+        if (assignment.contextSet().isEmpty()) {
+            entry.contextualGroups.removeIf(existing -> group.equals(existing.group) && existing.contextSet().isEmpty());
+        }
+        if (assignment.contextSet().isEmpty() && assignment.expiresAtMs() == null) {
             if (!entry.groups.contains(group)) entry.groups.add(group);
-        } else if (group != null) {
+        } else {
             String assignmentId = PermissionAssignmentId.ensure(assignment.assignmentId(), "user_group", user, group, false,
                     assignment.contextSet(), assignment.expiresAtMs(), assignment.assignedBy() + "@" + assignment.assignedAtMs());
             entry.contextualGroups.removeIf(existing -> existing != null && assignmentId.equals(existing.assignmentId));
             entry.contextualGroups.add(new PermissionDataStore.GroupAssignmentEntry(assignmentId, group, assignment.contextSet(), assignment.expiresAtMs(), assignment.assignedAtMs(), assignment.assignedBy()));
         }
-        permissionStore.save(state);
+        permissionStore.saveOrThrow(state);
     }
 
     @Override
@@ -352,14 +311,13 @@ public class JsonPermissionRepository implements PermissionRepository {
         String user = normalize(uuid);
         String group = normalize(groupName);
         if (user == null || group == null) return false;
-        PermissionDataStore.PermissionState state = permissionStore.load();
+        PermissionDataStore.PermissionState state = permissionStore.load(playerDataStore);
         PermissionDataStore.UserEntry entry = state.users.get(user);
         boolean changed = entry != null && entry.groups.remove(group);
         if (entry != null && entry.contextualGroups != null) {
             changed |= entry.contextualGroups.removeIf(value -> group.equals(normalize(value.group)));
         }
-        if (playerDataStore != null) changed |= playerDataStore.removeTemporaryGroup(user, group);
-        if (changed) permissionStore.save(state);
+        if (changed) permissionStore.saveOrThrow(state);
         return changed;
     }
 
@@ -367,7 +325,7 @@ public class JsonPermissionRepository implements PermissionRepository {
     public void addUserPermission(String uuid, StoredPermissionNode permission) {
         String user = normalize(uuid);
         if (user == null || permission == null) return;
-        PermissionDataStore.PermissionState state = permissionStore.load();
+        PermissionDataStore.PermissionState state = permissionStore.load(playerDataStore);
         PermissionDataStore.UserEntry entry = state.users.computeIfAbsent(user, ignored -> new PermissionDataStore.UserEntry());
         String rule = fromNode(permission);
         if (permission.contextSet().isEmpty() && permission.expiresAtMs() == null) {
@@ -378,7 +336,7 @@ public class JsonPermissionRepository implements PermissionRepository {
             entry.contextualPermissions.removeIf(existing -> existing != null && assignmentId.equals(existing.assignmentId));
             entry.contextualPermissions.add(new PermissionDataStore.PermissionRuleEntry(assignmentId, permission.permission(), permission.denied(), permission.contextSet(), permission.expiresAtMs()));
         }
-        permissionStore.save(state);
+        permissionStore.saveOrThrow(state);
     }
 
     @Override
@@ -386,13 +344,13 @@ public class JsonPermissionRepository implements PermissionRepository {
         String user = normalize(uuid);
         String node = normalizePermission(permission);
         if (user == null || node == null) return false;
-        PermissionDataStore.PermissionState state = permissionStore.load();
+        PermissionDataStore.PermissionState state = permissionStore.load(playerDataStore);
         PermissionDataStore.UserEntry entry = state.users.get(user);
         boolean changed = entry != null && entry.permissions.removeIf(value -> node.equals(normalizePermission(stripDeny(value))));
         if (entry != null && entry.contextualPermissions != null) {
             changed |= entry.contextualPermissions.removeIf(value -> node.equals(normalizePermission(value.permission)));
         }
-        if (changed) permissionStore.save(state);
+        if (changed) permissionStore.saveOrThrow(state);
         return changed;
     }
 

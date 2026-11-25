@@ -17,13 +17,17 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
 import org.slf4j.Logger;
 
+import eu.avalanche7.paradigm.data.PlayerDataStore;
 import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
 import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
+import eu.avalanche7.paradigm.storage.StorageException;
+import eu.avalanche7.paradigm.storage.StorageTransactionException;
 import eu.avalanche7.paradigm.utils.AtomicFileIO;
 import eu.avalanche7.paradigm.utils.DebugLogger;
 
 public class PermissionDataStore {
     private static final String FILE_NAME = "paradigm/permissions.json";
+    static final int TEMPORARY_GROUPS_VERSION = 2;
 
     private final Logger logger;
     private final DebugLogger debugLogger;
@@ -76,6 +80,61 @@ public class PermissionDataStore {
         }
     }
 
+    public PermissionState load(PlayerDataStore players) {
+        if (players == null) return load();
+
+        // The runtime API and JSON migration repository use the same player store.
+        synchronized (players) {
+            PermissionState loaded = readSnapshot();
+            if (loaded.version < TEMPORARY_GROUPS_VERSION) {
+                if (resolvePath() == null) throw new StorageException("Cannot resolve permissions.json for temporary group migration.");
+                importTemporaryGroups(loaded, players);
+                loaded.version = TEMPORARY_GROUPS_VERSION;
+                saveOrThrow(loaded);
+            }
+            return loaded;
+        }
+    }
+
+    public PermissionState readWithLegacyTemporaryGroups(PlayerDataStore players) {
+        PermissionState snapshot = readSnapshot();
+        if (players != null && snapshot.version < TEMPORARY_GROUPS_VERSION) importTemporaryGroups(snapshot, players);
+        return snapshot;
+    }
+
+    public PermissionState readSnapshot() {
+        Path path = resolvePath();
+        if (path == null || Files.notExists(path)) return PermissionState.createDefault();
+        try (Reader reader = Files.newBufferedReader(path, StandardCharsets.UTF_8)) {
+            PermissionState loaded = gson.fromJson(reader, PermissionState.class);
+            if (loaded == null) throw new StorageException("permissions.json is empty.");
+            loaded.normalize();
+            return loaded;
+        } catch (Exception failure) {
+            throw new StorageException("Cannot read permissions.json; the original file was preserved.", failure);
+        }
+    }
+
+    private static void importTemporaryGroups(PermissionState state, PlayerDataStore players) {
+        long now = System.currentTimeMillis();
+        PermissionContextSet global = PermissionContextSet.empty();
+        for (var player : players.listPlayerEntriesForPermissionMigration()) {
+            String uuid = player.getUuid();
+            for (var temporary : player.getTempGroups()) {
+                String group = temporary.getGroup();
+                long expiry = temporary.getExpiresAtMs();
+                if (expiry <= now || !state.groups.containsKey(group)) continue;
+                var user = state.users.computeIfAbsent(uuid, ignored -> new UserEntry());
+                if (user.groups.contains(group) || user.contextualGroups.stream()
+                        .anyMatch(assignment -> group.equals(assignment.group) && assignment.contextSet().isEmpty())) continue;
+                long assignedAt = temporary.getAssignedAtMs();
+                String assignedBy = temporary.getAssignedBy() != null ? temporary.getAssignedBy() : "";
+                String id = PermissionAssignmentId.deterministic("USER_GROUP", uuid, group, false, global, expiry, assignedBy + "@" + assignedAt);
+                user.contextualGroups.add(new GroupAssignmentEntry(id, group, global, expiry, assignedAt, assignedBy));
+            }
+        }
+    }
+
     public void save(PermissionState state) {
         try {
             saveOrThrow(state);
@@ -88,9 +147,13 @@ public class PermissionDataStore {
         Path path = resolvePath();
         if (path == null || state == null) return;
         try {
-            AtomicFileIO.writeUtf8Atomic(path, writer -> gson.toJson(state, writer));
+            AtomicFileIO.writeUtf8Durable(path, writer -> gson.toJson(state, writer));
         } catch (java.io.IOException failure) {
-            throw new eu.avalanche7.paradigm.storage.StorageException("Failed to save permissions.json", failure);
+            if (failure instanceof AtomicFileIO.DurableWriteException durable && durable.replacementCompleted()) {
+                throw new StorageTransactionException("Could not confirm durability of permissions.json; reload before retrying.",
+                        failure, StorageTransactionException.Outcome.UNKNOWN);
+            }
+            throw new StorageException("Failed to save permissions.json", failure);
         }
     }
 
@@ -241,7 +304,7 @@ public class PermissionDataStore {
             }
         }
 
-        private static void ensureUserAssignmentIds(String uuid, UserEntry entry) {
+        static void ensureUserAssignmentIds(String uuid, UserEntry entry) {
             for (PermissionRuleEntry rule : entry.contextualPermissions) {
                 rule.assignmentId = PermissionAssignmentId.ensure(rule.assignmentId, "user_permission", uuid,
                         rule.permission, rule.denied, rule.contextSet(), rule.expiresAtMs, "");

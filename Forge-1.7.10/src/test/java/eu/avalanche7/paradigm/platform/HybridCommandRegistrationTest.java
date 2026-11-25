@@ -37,6 +37,9 @@ import eu.avalanche7.paradigm.mixin.PlayerCommandAccess;
 import eu.avalanche7.paradigm.modules.commands.FlyCommand;
 import eu.avalanche7.paradigm.modules.commands.HomeCommand;
 import eu.avalanche7.paradigm.modules.commands.shared.CommandCatalog;
+import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
+import eu.avalanche7.paradigm.modules.permissions.PermissionAdminService;
+import eu.avalanche7.paradigm.modules.permissions.PermissionMutationRequest;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 import eu.avalanche7.paradigm.utils.CommandToggleStore;
 import eu.avalanche7.paradigm.utils.DebugLogger;
@@ -718,6 +721,41 @@ public class HybridCommandRegistrationTest {
         manager.wrappers.get("tp").setPermission("plugin.tp");
         manager.forward("tp", player);
         assertEquals(1, executions.get());
+    }
+
+    @Test void discoveredAnonymousClassNodeCanBeAssignedAndEvaluatedLiterally() {
+        SimulatedCrucible manager = hybrid();
+        var command = external("tokens");
+        manager.registerCommand(command, "network.arcturus.tokens.forge17.ArcturusTokensMod$1");
+        assertTrue(platform.discoverCommandPermissions(permissions, platform.getMinecraftServer()) > 0);
+        String node = "network.arcturus.tokens.forge17.arcturustokensmod$1";
+        var discovered = permissions.listDiscoveredPermissionNodes(node, 10).get(0);
+        assertEquals(node, discovered.node);
+
+        EntityPlayerMP player = player(false);
+        MainConfigHandler.getConfig().externalCommandPermissionMode.value = "strict";
+        when(command.canCommandSenderUseCommand(player)).thenReturn(true);
+        manager.forward("tokens", player, "arbitrary");
+        verify(command, never()).processCommand(eq(player), any(String[].class));
+
+        Services services = mock(Services.class);
+        when(services.getPermissionsHandler()).thenReturn(permissions);
+        var admin = new PermissionAdminService(services, null);
+        var actor = new DashboardPrincipal(null, "Console", true);
+        var request = new PermissionMutationRequest();
+        request.action = "user_permission_add";
+        request.user = player.getUniqueID().toString();
+        request.permission = discovered.node;
+        assertTrue(admin.mutate(actor, request).applied());
+        assertEquals(Boolean.TRUE, permissions.queryDefinedPermission(player.getUniqueID(), node));
+        assertNull(permissions.queryDefinedPermission(player.getUniqueID(), node.replace("$", "")));
+        manager.forward("tokens", player, "arbitrary");
+        verify(command).processCommand(eq(player), any(String[].class));
+        assertTrue(permissions.listDiscoveredPermissionNodes("command.tokens.arbitrary", 10).isEmpty());
+
+        request.action = "user_permission_remove";
+        assertTrue(admin.mutate(actor, request).applied());
+        assertNull(permissions.queryDefinedPermission(player.getUniqueID(), node));
     }
 
     @Test void discoveryUsesCanonicalPathsAndRefreshesOnlyChangedNodes() {

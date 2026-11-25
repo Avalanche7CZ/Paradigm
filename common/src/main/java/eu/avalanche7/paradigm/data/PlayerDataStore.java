@@ -327,12 +327,20 @@ public class PlayerDataStore {
     }
 
     public List<PlayerEntry> listPlayerEntries() {
+        return listPlayerEntries(false);
+    }
+
+    public List<PlayerEntry> listPlayerEntriesForPermissionMigration() {
+        return listPlayerEntries(true);
+    }
+
+    private List<PlayerEntry> listPlayerEntries(boolean strict) {
         synchronized (lock) {
-            migrateLegacyIfNeededLocked();
+            migrateLegacyIfNeededLocked(strict);
             Map<String, PlayerEntry> result = new LinkedHashMap<>();
 
             Path directory = config != null ? config.resolveConfigPath(PLAYERDATA_DIR) : null;
-            if (directory != null && Files.isDirectory(directory)) {
+            if (directory != null && !Files.notExists(directory)) {
                 try (var paths = Files.list(directory)) {
                     paths.filter(path -> path.getFileName() != null && path.getFileName().toString().endsWith(".json"))
                             .forEach(path -> {
@@ -346,6 +354,7 @@ public class PlayerDataStore {
                                 result.put(uuid, entry);
                             });
                 } catch (Exception e) {
+                    if (strict) throw new StorageException("Cannot read legacy temporary group assignments.", e);
                     logger.warn("Paradigm: Failed to list playerdata entries: {}", e.getMessage());
                     debugLogger.debugLog("PlayerDataStore: list failed", e);
                 }
@@ -651,6 +660,10 @@ public class PlayerDataStore {
     }
 
     private void migrateLegacyIfNeededLocked() {
+        migrateLegacyIfNeededLocked(false);
+    }
+
+    private void migrateLegacyIfNeededLocked(boolean strict) {
         if (migrationChecked || config == null) {
             migrationChecked = true;
             return;
@@ -658,7 +671,7 @@ public class PlayerDataStore {
         migrationChecked = true;
 
         Path legacyPath = config.resolveConfigPath(LEGACY_FILE);
-        if (legacyPath == null || !Files.exists(legacyPath)) {
+        if (legacyPath == null || Files.notExists(legacyPath)) {
             return;
         }
 
@@ -688,8 +701,7 @@ public class PlayerDataStore {
             }
 
             if (!complete) {
-                logger.warn("Paradigm: Legacy playerdata.json migration was incomplete; original file was kept for a future retry.");
-                return;
+                throw new StorageException("Legacy playerdata.json migration was incomplete; original file was kept for a future retry.");
             }
 
             Path archived = AtomicFileIO.archive(legacyPath, "migrated");
@@ -699,6 +711,8 @@ public class PlayerDataStore {
                 logger.warn("Paradigm: Legacy playerdata.json was migrated but could not be archived; existing per-player files will be kept on future starts.");
             }
         } catch (Exception e) {
+            migrationChecked = false;
+            if (strict) throw new StorageException("Cannot migrate legacy playerdata.json.", e);
             logger.warn("Paradigm: Failed to migrate legacy playerdata.json: {}", e.getMessage());
             debugLogger.debugLog("PlayerDataStore: migration failed", e);
         }

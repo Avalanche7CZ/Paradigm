@@ -63,7 +63,7 @@ export function contextLabel(contexts: Record<string, string>) {
   );
 }
 export function nodeValid(node: string) {
-  return node.length > 0 && node.length <= 255 && /^[a-z0-9_.*:-]+$/.test(node);
+  return node.length > 0 && node.length <= 255 && /^[a-z0-9_.*:$-]+$/.test(node);
 }
 export function subjectValid(name: string) {
   return name.length > 0 && name.length <= 64 && /^[A-Za-z0-9_.-]+$/.test(name);

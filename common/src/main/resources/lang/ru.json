@@ -99,6 +99,7 @@
       "user_temp_line": "Временная {group} до {until}",
       "duration_invalid": "Недопустимая длительность. Используйте days/weeks/months и amount > 0.",
       "metadata_ok": "Поле {field} для {group} обновлено.",
+      "persistence_pending": "Изменение действует на сервере. Сохранение ещё не подтверждено.",
       "metadata_fail": "Не удалось обновить {field} для {group}.",
       "perm_add_ok": "Permission {permission} добавлен к {group}.",
       "perm_add_fail": "Не удалось добавить permission {permission} к {group}.",

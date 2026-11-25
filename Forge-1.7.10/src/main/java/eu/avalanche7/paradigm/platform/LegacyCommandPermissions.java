@@ -23,6 +23,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import eu.avalanche7.paradigm.modules.permissions.PermissionNodeRegistry.CommandNode;
+import eu.avalanche7.paradigm.modules.permissions.PermissionNodeSyntax;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler.CommandGuardResult;
 
@@ -207,7 +208,7 @@ final class LegacyCommandPermissions {
         if (value == null || value.isEmpty()) return List.of();
         return java.util.Arrays.stream(value.split(";"))
                 .map(part -> part.toLowerCase(Locale.ROOT))
-                .filter(node -> node.matches("[a-z0-9_.$:-]+")).toList();
+                .filter(PermissionNodeSyntax::validDiscoveredLiteral).toList();
     }
 
     private static String segment(String label) {

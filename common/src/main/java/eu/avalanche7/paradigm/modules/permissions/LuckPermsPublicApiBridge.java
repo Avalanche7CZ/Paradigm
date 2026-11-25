@@ -7,6 +7,7 @@ import java.util.UUID;
 import net.luckperms.api.LuckPerms;
 import net.luckperms.api.LuckPermsProvider;
 import net.luckperms.api.context.ImmutableContextSet;
+import net.luckperms.api.model.user.User;
 import net.luckperms.api.query.QueryOptions;
 import net.luckperms.api.util.Tristate;
 
@@ -16,18 +17,19 @@ final class LuckPermsPublicApiBridge {
     private LuckPermsPublicApiBridge() {
     }
 
-    static Boolean query(UUID playerUuid, String permission, PermissionContextSet context) {
-        var user = LuckPermsProvider.get().getUserManager().getUser(playerUuid);
+    static Boolean query(User user, String permission, PermissionContextSet context) {
         if (user == null) return null;
-        return query(user, permission, context);
+        var cached = user.getCachedData();
+        Tristate state = context == null
+                ? cached.getPermissionData().checkPermission(permission)
+                : cached.getPermissionData(contextualOptions(context)).checkPermission(permission);
+        return state == Tristate.UNDEFINED ? null : state.asBoolean();
     }
 
-    static Boolean query(net.luckperms.api.model.user.User user, String permission, PermissionContextSet context) {
+    private static QueryOptions contextualOptions(PermissionContextSet context) {
         ImmutableContextSet.Builder contexts = ImmutableContextSet.builder();
         context.asMap().forEach(contexts::add);
-        QueryOptions options = QueryOptions.contextual(contexts.build());
-        Tristate state = user.getCachedData().getPermissionData(options).checkPermission(permission);
-        return state == Tristate.UNDEFINED ? null : state.asBoolean();
+        return QueryOptions.contextual(contexts.build());
     }
 
     static PermissionAPI.PermissionMeta metadata(UUID playerUuid) {

@@ -1,20 +1,21 @@
 package eu.avalanche7.paradigm.platform.visual;
 
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.network.NetworkManager;
+import net.minecraft.network.play.server.S38PacketPlayerListItem;
 import net.minecraft.network.play.server.S3EPacketTeams;
 import net.minecraft.scoreboard.ScorePlayerTeam;
 import net.minecraft.scoreboard.Scoreboard;
 import net.minecraft.server.MinecraftServer;
+
+import eu.avalanche7.paradigm.modules.tab.ScoreboardConnection;
 
 public final class LegacyTablistController {
     private static final Pattern FORMAT_RUN = Pattern.compile("(?i)(?:§[0-9a-fk-or])+");
@@ -22,67 +23,61 @@ public final class LegacyTablistController {
     private final MinecraftServer server;
     private final LegacyVanishController vanish;
     private final Scoreboard scoreboard = new Scoreboard();
-    private final Map<UUID, ScorePlayerTeam> teams = new HashMap<>();
-    private final Map<UUID, Set<String>> sent = new HashMap<>();
-    private final Map<UUID, Map<String, Set<String>>> foreignTeams = new HashMap<>();
-    private final Map<UUID, Set<String>> dirtyMembers = new HashMap<>();
-    private final ThreadLocal<Boolean> sending = new ThreadLocal<>();
+    private final Map<NetworkManager, ScorePlayerTeam> teams = new HashMap<>();
+    private final Map<ScoreboardConnection, List<String>> rebuilding = new java.util.WeakHashMap<>();
     private long sequence;
-    private final Map<UUID, List<String>> listed = new HashMap<>();
-    private final Map<UUID, Set<String>> rebuilding = new HashMap<>();
 
-    public synchronized void listPacketSent(EntityPlayerMP viewer, String name, boolean online) {
-        List<String> entries = listed.computeIfAbsent(viewer.getUniqueID(), ignored -> new java.util.ArrayList<>());
-        if (!online) entries.remove(name);
-        else if (!entries.contains(name)) entries.add(name);
+    public LegacyTablistController(MinecraftServer server, LegacyVanishController vanish) {
+        this.server = server;
+        this.vanish = vanish;
     }
 
     public synchronized boolean order(List<EntityPlayerMP> sorted) {
         boolean applied = true;
         for (EntityPlayerMP viewer : players()) {
-            List<String> current = listed.computeIfAbsent(viewer.getUniqueID(), ignored -> new java.util.ArrayList<>());
-            Set<String> pending = rebuilding.getOrDefault(viewer.getUniqueID(), Set.of());
-            List<EntityPlayerMP> visible = sorted.stream().filter(player -> vanish.listed(player.getCommandSenderName(), viewer)).toList();
+            var connection = connection(viewer);
+            if (connection == null || !connection.view().ready()) { applied = false; continue; }
+            var visible = sorted.stream().filter(player -> vanish.listed(player.getCommandSenderName(), viewer)).toList();
             List<String> desired = visible.stream().map(EntityPlayerMP::getCommandSenderName).toList();
-            if (desired.stream().anyMatch(name -> !current.contains(name) && !pending.contains(name))) { applied = false; continue; }
-            List<String> actual = current.stream().filter(desired::contains).toList();
-            if (actual.equals(desired)) { rebuilding.remove(viewer.getUniqueID()); continue; }
-            rebuilding.put(viewer.getUniqueID(), new HashSet<>(desired));
+            var listed = connection.view().listed();
+            var actual = listed.stream().filter(desired::contains).toList();
+            if (actual.equals(desired)) { rebuilding.remove(connection); continue; }
+            var eligible = new HashSet<>(listed);
+            eligible.addAll(rebuilding.getOrDefault(connection, List.of()));
+            if (!eligible.containsAll(desired)) { applied = false; continue; }
+            rebuilding.put(connection, desired);
             for (EntityPlayerMP player : visible) {
-                String name = player.getCommandSenderName();
-                if (current.contains(name)) viewer.playerNetServerHandler.sendPacket(new net.minecraft.network.play.server.S38PacketPlayerListItem(name, false, player.ping));
+                if (listed.contains(player.getCommandSenderName())) viewer.playerNetServerHandler.sendPacket(
+                        new S38PacketPlayerListItem(player.getCommandSenderName(), false, player.ping));
             }
-            for (EntityPlayerMP player : visible) viewer.playerNetServerHandler.sendPacket(new net.minecraft.network.play.server.S38PacketPlayerListItem(player.getCommandSenderName(), true, player.ping));
-            if (current.stream().filter(desired::contains).toList().equals(desired)) rebuilding.remove(viewer.getUniqueID());
-            else applied = false;
+            for (EntityPlayerMP player : visible) viewer.playerNetServerHandler.sendPacket(
+                    new S38PacketPlayerListItem(player.getCommandSenderName(), true, player.ping));
+            applied &= connection.view().listed().stream().filter(desired::contains).toList().equals(desired);
         }
         return applied;
     }
 
-    public synchronized void resetOrder() { if (!listed.isEmpty()) order(players()); }
-
-
-    public LegacyTablistController(MinecraftServer server, LegacyVanishController vanish) { this.server = server; this.vanish = vanish; }
+    public synchronized void resetOrder() { order(players()); }
 
     public synchronized boolean display(EntityPlayerMP player, String text) {
-        if (player == null) return false;
+        NetworkManager transport = transport(player);
+        if (transport == null) return false;
         if (text == null) { reset(player); return true; }
         NameParts parts = parts(player.getCommandSenderName(), text);
         if (parts == null) { reset(player); return false; }
-        ScorePlayerTeam team = teams.get(player.getUniqueID());
-        boolean changed = team == null || !team.getColorPrefix().equals(parts.prefix()) || !team.getColorSuffix().equals(parts.suffix());
+        ScorePlayerTeam team = teams.get(transport);
         if (team == null) {
             String id;
             do { id = "pg" + Long.toString(++sequence, 36); }
             while (player.worldObj.getScoreboard().getTeam(id) != null || foreignTeamName(id));
             team = scoreboard.createTeam(id);
             scoreboard.func_151392_a(player.getCommandSenderName(), id);
-            teams.put(player.getUniqueID(), team);
+            teams.put(transport, team);
         }
         team.setNamePrefix(parts.prefix());
         team.setNameSuffix(parts.suffix());
         boolean applied = false;
-        for (EntityPlayerMP viewer : players()) applied |= send(viewer, player, team, changed);
+        for (EntityPlayerMP viewer : players()) applied |= send(viewer, player, team);
         return applied;
     }
 
@@ -165,125 +160,97 @@ public final class LegacyTablistController {
     }
 
     public synchronized void joined(EntityPlayerMP viewer) {
-        sent.remove(viewer.getUniqueID());
-        for (EntityPlayerMP player : players()) {
-            ScorePlayerTeam team = teams.get(player.getUniqueID());
-            if (team != null) send(viewer, player, team, false);
-        }
+        for (EntityPlayerMP subject : players()) send(viewer, subject, teams.get(transport(subject)));
     }
 
-    public synchronized void visibilityChanged(EntityPlayerMP player) {
-        ScorePlayerTeam team = teams.get(player.getUniqueID());
-        if (team != null) for (EntityPlayerMP viewer : players()) send(viewer, player, team, false);
+    public synchronized void visibilityChanged(EntityPlayerMP subject) {
+        ScorePlayerTeam team = teams.get(transport(subject));
+        if (team != null) for (EntityPlayerMP viewer : players()) send(viewer, subject, team);
     }
 
-    public synchronized void visibilityChanged(EntityPlayerMP viewer, EntityPlayerMP player) {
-        ScorePlayerTeam team = teams.get(player.getUniqueID());
-        if (team != null) send(viewer, player, team, false);
+    public synchronized void visibilityChanged(EntityPlayerMP viewer, EntityPlayerMP subject) {
+        send(viewer, subject, teams.get(transport(subject)));
     }
 
-    public synchronized void reset(EntityPlayerMP player) {
-        ScorePlayerTeam team = teams.remove(player.getUniqueID());
+    public synchronized void reset(EntityPlayerMP subject) {
+        ScorePlayerTeam team = teams.remove(transport(subject));
         if (team == null) return;
-        for (EntityPlayerMP viewer : players()) {
-            Set<String> known = sent.get(viewer.getUniqueID());
-            if (known != null && known.remove(team.getRegisteredName())) {
-                if (!foreignTeams.getOrDefault(viewer.getUniqueID(), Map.of()).containsKey(team.getRegisteredName()))
-                    packet(viewer, new S3EPacketTeams(team, 1));
-            }
-            Set<String> dirty = dirtyMembers.get(viewer.getUniqueID());
-            if (dirty != null) dirty.remove(player.getCommandSenderName());
-        }
+        for (EntityPlayerMP viewer : players()) remove(viewer, subject, team);
         scoreboard.removeTeam(team);
     }
 
     public synchronized void disconnected(EntityPlayerMP player) {
         reset(player);
-        listed.remove(player.getUniqueID());
-        rebuilding.remove(player.getUniqueID());
-        sent.remove(player.getUniqueID());
-        foreignTeams.remove(player.getUniqueID());
-        dirtyMembers.remove(player.getUniqueID());
+        rebuilding.remove(connection(player));
     }
 
     public synchronized void tick() {
-        for (EntityPlayerMP player : players()) {
-            ScorePlayerTeam team = teams.get(player.getUniqueID());
-            if (team != null) for (EntityPlayerMP viewer : players()) send(viewer, player, team, false);
+        for (EntityPlayerMP subject : players()) {
+            ScorePlayerTeam team = teams.get(transport(subject));
+            if (team != null) for (EntityPlayerMP viewer : players()) send(viewer, subject, team);
         }
     }
 
     public synchronized void clear() {
-        for (EntityPlayerMP player : players()) reset(player);
-        listed.clear();
+        for (EntityPlayerMP viewer : players()) {
+            var connection = connection(viewer);
+            if (connection != null) connection.clearOwned();
+        }
+        for (ScorePlayerTeam team : teams.values()) scoreboard.removeTeam(team);
         rebuilding.clear();
         teams.clear();
-        sent.clear();
-        foreignTeams.clear();
-        dirtyMembers.clear();
     }
 
-    private boolean send(EntityPlayerMP viewer, EntityPlayerMP player, ScorePlayerTeam team, boolean changed) {
+    private boolean send(EntityPlayerMP viewer, EntityPlayerMP player, ScorePlayerTeam team) {
+        var connection = connection(viewer);
+        if (team == null || connection == null || !connection.view().ready()) return false;
+        String name = team.getRegisteredName();
         String subject = player.getCommandSenderName();
-        Map<String, Set<String>> foreign = foreignTeams.getOrDefault(viewer.getUniqueID(), Map.of());
-        Set<String> known = sent.computeIfAbsent(viewer.getUniqueID(), ignored -> new HashSet<>());
-        Set<String> dirty = dirtyMembers.get(viewer.getUniqueID());
-        boolean membershipChanged = dirty != null && dirty.remove(subject);
-        if (!vanish.listed(subject, viewer) || player.getTeam() != null
-                || foreign.containsKey(team.getRegisteredName())
-                || foreign.values().stream().anyMatch(members -> members.contains(subject))) {
-            if (known.remove(team.getRegisteredName()) && !foreign.containsKey(team.getRegisteredName()))
-                packet(viewer, new S3EPacketTeams(team, 1));
+        var view = connection.view();
+        if (!vanish.listed(subject, viewer) || player.getTeam() != null || !view.allows(name, subject)) {
+            // A CREATE may still be in the transport queue. The journal validates this REMOVE when it reaches it.
+            if (!view.foreignNames().contains(name)) remove(viewer, player, team);
             return false;
         }
-        if (!known.contains(team.getRegisteredName())) {
-            packet(viewer, new S3EPacketTeams(team, 0));
-            known.add(team.getRegisteredName());
+        var appearance = new NameParts(team.getColorPrefix(), team.getColorSuffix());
+        var present = view.owned().get(name);
+        if (present == null) {
+            connection.sendOwned(new S3EPacketTeams(team, ScoreboardConnection.CREATE), subject, appearance,
+                    viewer.playerNetServerHandler::sendPacket);
         } else {
-            if (changed) packet(viewer, new S3EPacketTeams(team, 2));
-            if (membershipChanged) packet(viewer, new S3EPacketTeams(team, List.of(subject), 3));
-        }
-        return true;
-    }
-
-    /** Observe outbound teams, including per-viewer Bukkit and packet-only plugin teams. */
-    public synchronized void packetSent(EntityPlayerMP viewer, String name, int mode, Collection<String> members) {
-        if (Boolean.TRUE.equals(sending.get()) || mode == 2) return;
-        Set<String> known = sent.get(viewer.getUniqueID());
-        if ((mode == 0 || mode == 1) && known != null && known.remove(name) && mode == 0) {
-            // Make room before a plugin creates the same id: duplicate team creation crashes 1.7.10 clients.
-            ScorePlayerTeam own = scoreboard.getTeam(name);
-            if (own != null) packet(viewer, new S3EPacketTeams(own, 1));
-        }
-        Map<String, Set<String>> foreign = foreignTeams.computeIfAbsent(viewer.getUniqueID(), ignored -> new HashMap<>());
-        Set<String> affected = new HashSet<>(foreign.getOrDefault(name, Set.of()));
-        affected.addAll(members);
-        if (mode == 0 || mode == 3) {
-            for (Set<String> previous : foreign.values()) previous.removeAll(members);
-            if (mode == 0) foreign.put(name, new HashSet<>(members));
-            else foreign.computeIfAbsent(name, ignored -> new HashSet<>()).addAll(members);
-        } else if (mode == 1) foreign.remove(name);
-        else if (mode == 4 && foreign.containsKey(name)) foreign.get(name).removeAll(members);
-
-        for (ScorePlayerTeam own : teams.values()) {
-            for (Object member : own.getMembershipCollection()) {
-                if (affected.contains(member)) dirtyMembers.computeIfAbsent(viewer.getUniqueID(), ignored -> new HashSet<>()).add((String) member);
+            if (!appearance.equals(present.appearance())) {
+                connection.sendOwned(new S3EPacketTeams(team, ScoreboardConnection.UPDATE), subject, appearance,
+                        viewer.playerNetServerHandler::sendPacket);
+            }
+            if (!present.containsSubject()) {
+                connection.sendOwned(new S3EPacketTeams(team, List.of(subject), ScoreboardConnection.ADD), subject, appearance,
+                        viewer.playerNetServerHandler::sendPacket);
             }
         }
+        var applied = connection.view().owned().get(name);
+        return applied != null && applied.containsSubject() && appearance.equals(applied.appearance());
     }
 
-    private void packet(EntityPlayerMP viewer, S3EPacketTeams packet) {
-        sending.set(true);
-        try {
-            viewer.playerNetServerHandler.sendPacket(packet);
-        } finally {
-            sending.remove();
-        }
+    private static void remove(EntityPlayerMP viewer, EntityPlayerMP subject, ScorePlayerTeam team) {
+        var connection = connection(viewer);
+        if (connection != null) connection.sendOwned(new S3EPacketTeams(team, ScoreboardConnection.REMOVE),
+                subject.getCommandSenderName(), "", viewer.playerNetServerHandler::sendPacket);
     }
 
     private boolean foreignTeamName(String name) {
-        for (Map<String, Set<String>> board : foreignTeams.values()) if (board.containsKey(name)) return true;
+        for (EntityPlayerMP viewer : players()) {
+            var connection = connection(viewer);
+            if (connection != null && connection.view().foreignNames().contains(name)) return true;
+        }
         return false;
+    }
+
+    public static ScoreboardConnection connection(EntityPlayerMP player) {
+        return ScoreboardConnection.of(transport(player));
+    }
+
+    private static NetworkManager transport(EntityPlayerMP player) {
+        return player == null || player.playerNetServerHandler == null ? null : player.playerNetServerHandler.netManager;
     }
 
     @SuppressWarnings("unchecked")

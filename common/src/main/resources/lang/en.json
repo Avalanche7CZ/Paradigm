@@ -99,6 +99,7 @@
       "user_temp_line": "Temporary {group} until {until}",
       "duration_invalid": "Invalid duration. Use days/weeks/months with amount > 0.",
       "metadata_ok": "Updated {field} for {group}.",
+      "persistence_pending": "Accepted into runtime. Persistence is pending.",
       "metadata_fail": "Could not update {field} for {group}.",
       "perm_add_ok": "Added permission {permission} to {group}.",
       "perm_add_fail": "Could not add permission {permission} to {group}.",

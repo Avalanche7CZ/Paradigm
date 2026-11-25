@@ -431,6 +431,7 @@ public class StorageService implements AutoCloseable {
         boolean closeTarget = false;
         try {
             if ("json".equals(normalizedSource)) {
+                if (!effectiveOptions.dryRun()) jsonProvider.preparePermissionExport();
                 sourceProvider = jsonProvider;
             } else {
                 sourceProvider = activeProvider != null && activeProvider.type() != StorageProviderType.JSON ? activeProvider : createConfiguredSqlProvider();
@@ -716,7 +717,7 @@ public class StorageService implements AutoCloseable {
         return closing;
     }
 
-    boolean isClosed() {
+    public boolean isClosed() {
         return closed;
     }
 

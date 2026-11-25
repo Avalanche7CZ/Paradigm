@@ -2,6 +2,8 @@ package eu.avalanche7.paradigm.modules.permissions;
 
 import java.util.UUID;
 
+import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+
 public final class CommandNodeAccessGate {
 
     private static volatile PermissionsHandler handler;
@@ -56,15 +58,25 @@ public final class CommandNodeAccessGate {
     }
 
     public static Boolean decide(String commandPath, UUID playerUuid) {
+        return decide(commandPath, playerUuid, null);
+    }
+
+    public static Boolean decideForPlayer(String commandPath, IPlayer player) {
+        return decide(commandPath, null, player);
+    }
+
+    private static Boolean decide(String commandPath, UUID playerUuid, IPlayer player) {
         PermissionsHandler current = handler;
-        if (current == null || commandPath == null || commandPath.isBlank() || playerUuid == null) {
+        if (current == null || commandPath == null || commandPath.isBlank() || (playerUuid == null && player == null)) {
             return null;
         }
         try {
             if (!current.isExternalCommandPermissionsEnabled()) {
                 return null;
             }
-            return current.queryDefinedPermission(playerUuid, "command." + commandPath);
+            String permission = "command." + commandPath;
+            return player != null ? current.queryDefinedPermission(player, permission)
+                    : current.queryDefinedPermission(playerUuid, permission);
         } catch (Throwable ignored) {
             return null;
         }

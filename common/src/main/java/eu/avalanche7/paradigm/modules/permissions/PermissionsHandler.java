@@ -11,6 +11,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 
 import org.slf4j.Logger;
 
@@ -212,7 +213,21 @@ public class PermissionsHandler {
         );
         if (storageService != null && (storageService.isSqlActive() || storageService.isSqlAuthoritative())) {
             this.internalPermissionApi.setPermissionRepository(storageService.permissions());
-            this.internalPermissionApi.setAsyncPersistenceExecutor(storageService::runStorageAsync);
+            this.internalPermissionApi.setStorageClosedCheck(storageService::isClosed);
+            this.internalPermissionApi.setStoragePersistenceExecutor((label, task) -> {
+                var submission = storageService.submitAcknowledged(() -> {
+                    task.run();
+                    return null;
+                });
+                try {
+                    submission.getNow(null);
+                } catch (java.util.concurrent.CompletionException rejected) {
+                    throw new eu.avalanche7.paradigm.storage.StorageException("Permission write could not be queued.", rejected.getCause());
+                }
+                submission.whenComplete((ignored, failure) -> {
+                    if (failure != null && logger != null) logger.warn("Paradigm: Queued permission persistence was not acknowledged.", failure);
+                });
+            });
         }
         this.permissionContextResolver = new PermissionContextResolver(() ->
                 storageService != null && storageService.context() != null ? storageService.context().serverIdentity() : null);
@@ -220,6 +235,19 @@ public class PermissionsHandler {
         this.permissionNodeRegistry = new PermissionNodeRegistry(logger, debugLogger, platform != null ? platform.getConfig() : null);
         Placeholders.setPermissionMetaResolver(this::resolvePermissionMeta);
         Placeholders.setPlayerAdapter(platform != null ? platform::wrapPlayer : null);
+    }
+
+    boolean queuesUserWrites() {
+        return internalPermissionApi.queuesUserWrites();
+    }
+
+    PermissionMutationResult writeDashboardMutation(long authorizedVersion, java.util.function.BooleanSupplier sessionCurrent,
+            Supplier<PermissionMutationResult> mutation, Supplier<PermissionMutationResult> denied) {
+        return internalPermissionApi.writeDashboardMutation(authorizedVersion, sessionCurrent, mutation, denied);
+    }
+
+    long dashboardAuthorizationExpiresAt(UUID actor, long checkedAt) {
+        return internalPermissionApi.authorizationExpiresAt(actor, displayGroupContext(actor), checkedAt);
     }
 
     public void initialize() {
@@ -514,91 +542,51 @@ public class PermissionsHandler {
     }
 
     public Boolean queryDefinedPermission(IPlayer player, String permission) {
-        if (player == null || permission == null || permission.isBlank()) {
+        if (player == null || permission == null || permission.isBlank()) return null;
+        try {
+            return queryCachedPermission(UUID.fromString(player.getUUID()), permission, player, null, true);
+        } catch (RuntimeException failure) {
+            debugLogger.debugLog("[PermissionsHandler] Live permission query failed for '" + permission + "': " + failure);
             return null;
         }
-
-        if (isLuckPermsAvailable()) {
-            try {
-                net.luckperms.api.LuckPerms api = net.luckperms.api.LuckPermsProvider.get();
-                java.util.UUID uuid = java.util.UUID.fromString(player.getUUID());
-                net.luckperms.api.model.user.User user = api.getUserManager().getUser(uuid);
-                if (user != null) {
-                    warmupUserPermissionsOnce(user);
-                    net.luckperms.api.util.Tristate lpState = user.getCachedData().getPermissionData().checkPermission(permission);
-                    if (lpState != net.luckperms.api.util.Tristate.UNDEFINED) {
-                        return lpState.asBoolean();
-                    }
-                }
-            } catch (RuntimeException | LinkageError t) {
-                debugLogger.debugLog("[PermissionsHandler] LuckPerms explicit query failed for '" + permission + "': " + t);
-            }
-        }
-
-        if (isInternalPermissionsEnabled()) {
-            try {
-                return internalPermissionApi.hasPermission(player, permission);
-            } catch (RuntimeException t) {
-                debugLogger.debugLog("[PermissionsHandler] Internal explicit query failed for '" + permission + "': " + t);
-            }
-        }
-
-        return null;
     }
 
     public Boolean queryDefinedPermission(UUID playerUuid, String permission) {
-        if (playerUuid == null || permission == null || permission.isBlank()) {
-            return null;
-        }
-
-        if (isLuckPermsAvailable()) {
-            try {
-                net.luckperms.api.LuckPerms api = net.luckperms.api.LuckPermsProvider.get();
-                net.luckperms.api.model.user.User user = api.getUserManager().getUser(playerUuid);
-                if (user != null) {
-                    warmupUserPermissionsOnce(user);
-                    net.luckperms.api.util.Tristate lpState = user.getCachedData().getPermissionData().checkPermission(permission);
-                    if (lpState != net.luckperms.api.util.Tristate.UNDEFINED) {
-                        return lpState.asBoolean();
-                    }
-                }
-            } catch (RuntimeException | LinkageError t) {
-                debugLogger.debugLog("[PermissionsHandler] LuckPerms UUID explicit query failed for '" + permission + "': " + t);
-            }
-        }
-
-        if (isInternalPermissionsEnabled()) {
-            try {
-                return internalPermissionApi.hasPermission(playerUuid, permission);
-            } catch (RuntimeException t) {
-                debugLogger.debugLog("[PermissionsHandler] Internal UUID explicit query failed for '" + permission + "': " + t);
-            }
-        }
-
-        return null;
+        return queryDefinedPermission(playerUuid, permission, null, true);
     }
 
     public Boolean queryDefinedPermission(UUID playerUuid, String permission, PermissionContextSet context) {
+        return queryDefinedPermission(playerUuid, permission, context != null ? context : PermissionContextSet.empty(), false);
+    }
+
+    private Boolean queryDefinedPermission(UUID playerUuid, String permission, PermissionContextSet context, boolean warmup) {
         if (playerUuid == null || permission == null || permission.isBlank()) return null;
-        PermissionContextSet effectiveContext = context != null ? context : PermissionContextSet.empty();
-
-        if (isLuckPermsAvailable()) {
-            try {
-                Boolean result = LuckPermsPublicApiBridge.query(playerUuid, permission, effectiveContext);
-                if (result != null) return result;
-            } catch (RuntimeException | LinkageError t) {
-                debugLogger.debugLog("[PermissionsHandler] LuckPerms contextual query failed for '" + permission + "': " + t);
-            }
+        try {
+            return queryCachedPermission(playerUuid, permission, null, context, warmup);
+        } catch (RuntimeException failure) {
+            debugLogger.debugLog("[PermissionsHandler] Internal permission query failed for '" + permission + "': " + failure);
+            return null;
         }
+    }
 
-        if (isInternalPermissionsEnabled()) {
-            try {
-                return internalPermissionApi.hasPermission(playerUuid, permission, effectiveContext);
-            } catch (RuntimeException t) {
-                debugLogger.debugLog("[PermissionsHandler] Internal contextual query failed for '" + permission + "': " + t);
-            }
+    private Boolean queryCachedPermission(UUID playerUuid, String permission, IPlayer player,
+                                          PermissionContextSet context, boolean warmup) {
+        Boolean result = queryCachedLuckPerms(playerUuid, permission, context, warmup);
+        if (result != null || !isInternalPermissionsEnabled()) return result;
+        PermissionContextSet internalContext = context != null ? context : permissionContextResolver.resolve(player);
+        return internalPermissionApi.hasPermission(playerUuid, permission, internalContext);
+    }
+
+    private Boolean queryCachedLuckPerms(UUID playerUuid, String permission, PermissionContextSet context, boolean warmup) {
+        if (!isLuckPermsAvailable()) return null;
+        try {
+            var user = net.luckperms.api.LuckPermsProvider.get().getUserManager().getUser(playerUuid);
+            if (warmup) warmupUserPermissionsOnce(user);
+            return LuckPermsPublicApiBridge.query(user, permission, context);
+        } catch (RuntimeException | LinkageError failure) {
+            debugLogger.debugLog("[PermissionsHandler] LuckPerms query failed for '" + permission + "': " + failure);
+            return null;
         }
-        return null;
     }
 
     public boolean hasPermission(UUID playerUuid, String permission, int fallbackLevel, PermissionContextSet context) {
@@ -606,14 +594,7 @@ public class PermissionsHandler {
         Boolean defined = queryDefinedPermission(playerUuid, permission, context);
         if (defined != null) return defined;
         if (fallbackLevel < 0 || platform == null) return false;
-        IPlayer online = platform.getPlayerByUuid(playerUuid.toString());
-        if (online == null) return false;
-        try {
-            return platform.hasPermission(online, permission, fallbackLevel);
-        } catch (RuntimeException failure) {
-            debugLogger.debugLog("[PermissionsHandler] Platform fallback failed for '" + permission + "': " + failure);
-            return false;
-        }
+        return hasNativeFallback(platform.getPlayerByUuid(playerUuid.toString()), fallbackLevel);
     }
 
     private static String firstCandidate(Set<String> candidates) {
@@ -632,138 +613,76 @@ public class PermissionsHandler {
     }
 
     public boolean hasOfflinePermission(UUID uuid, PermissionDefinition permission) {
-        var context = permissionContextResolver.currentServer();
-        if (isLuckPermsAvailable()) {
-            var users = net.luckperms.api.LuckPermsProvider.get().getUserManager();
-            var user = users.getUser(uuid);
-            if (user == null) {
-                user = users.loadUser(uuid).copy().orTimeout(4, java.util.concurrent.TimeUnit.SECONDS).join();
-            }
-            Boolean defined = LuckPermsPublicApiBridge.query(user, permission.node(), context);
-            if (defined != null) return defined;
+        if (uuid == null || permission == null) return false;
+        PermissionContextSet context = permissionContextResolver.currentServer();
+        Boolean defined = queryOfflineLuckPerms(uuid, permission.node(), context);
+        if (defined == null && isInternalPermissionsEnabled()) {
+            defined = internalPermissionApi.hasPermission(uuid, permission.node(), context);
         }
-        if (isInternalPermissionsEnabled()) {
-            Boolean defined = internalPermissionApi.hasPermission(uuid, permission.node(), context);
-            if (defined != null) return defined;
+        return defined != null ? defined : permission.fallbackLevel() == 0;
+    }
+
+    private Boolean queryOfflineLuckPerms(UUID uuid, String permission, PermissionContextSet context) {
+        if (!isLuckPermsAvailable()) return null;
+        net.luckperms.api.LuckPerms api;
+        try {
+            api = net.luckperms.api.LuckPermsProvider.get();
+        } catch (IllegalStateException | LinkageError unavailable) {
+            debugLogger.debugLog("[PermissionsHandler] LuckPerms unavailable for offline permission query: " + unavailable);
+            return null;
         }
-        return permission.fallbackLevel() == 0;
+
+        var users = api.getUserManager();
+        var user = users.getUser(uuid);
+        if (user == null) {
+            user = users.loadUser(uuid).copy().orTimeout(4, TimeUnit.SECONDS).join();
+        }
+        return LuckPermsPublicApiBridge.query(user, permission, context);
     }
 
     public boolean hasPermission(IPlayer player, String permission) {
-        int fallbackLevel = vanillaLevelFor(permission);
-        return hasPermission(player, permission, fallbackLevel);
+        return hasPermission(player, permission, vanillaLevelFor(permission));
     }
 
     public boolean hasPermission(IPlayer player, String permission, int vanillaLevelFallback) {
-        if (player == null) {
-            debugLogger.debugLog("[PermissionsHandler] hasPermission called with null player for: " + permission);
-            return false;
-        }
-        if (permission == null || permission.isBlank()) {
-            debugLogger.debugLog("[PermissionsHandler] hasPermission called with blank permission for player: " + player.getName());
-            return true;
-        }
-
-        debugLogger.debugLog("[PermissionsHandler] Checking permission '" + permission + "' for player: " + player.getName());
-
-        if (isLuckPermsAvailable()) {
-            try {
-                net.luckperms.api.LuckPerms api = net.luckperms.api.LuckPermsProvider.get();
-                java.util.UUID uuid = java.util.UUID.fromString(player.getUUID());
-
-                net.luckperms.api.model.user.User user = api.getUserManager().getUser(uuid);
-                if (user != null) {
-                    warmupUserPermissionsOnce(user);
-                    net.luckperms.api.util.Tristate lpState = user.getCachedData().getPermissionData().checkPermission(permission);
-                    if (lpState != net.luckperms.api.util.Tristate.UNDEFINED) {
-                        boolean lpResult = lpState.asBoolean();
-                        debugLogger.debugLog("[PermissionsHandler] LuckPerms check for '" + permission + "' -> " + lpResult + " (defined)");
-                        return lpResult;
-                    }
-                    debugLogger.debugLog("[PermissionsHandler] LuckPerms check for '" + permission + "' is UNDEFINED, falling back to internal/vanilla.");
-                }
-
-                debugLogger.debugLog("[PermissionsHandler] LuckPerms user not cached yet for player: " + player.getName() + ", continuing with internal/vanilla fallback.");
-            } catch (RuntimeException | LinkageError t) {
-                debugLogger.debugLog("[PermissionsHandler] LuckPerms check failed: " + t);
-            }
-        }
-
-        if (isInternalPermissionsEnabled()) {
-            Boolean internalResult = internalPermissionApi.hasPermission(player, permission);
-            if (internalResult != null) {
-                debugLogger.debugLog("[PermissionsHandler] Internal PermissionAPI check for '" + permission + "' -> " + internalResult);
-                return internalResult;
-            }
-        } else {
-            debugLogger.debugLog("[PermissionsHandler] Internal permissions are disabled, skipping PermissionAPI check.");
-        }
-
-        if (vanillaLevelFallback < 0) {
-            debugLogger.debugLog("[PermissionsHandler] No vanilla fallback level for '" + permission + "', returning false.");
-            return false;
-        }
-
-        debugLogger.debugLog("[PermissionsHandler] Using vanilla fallback for '" + permission + "' with level=" + vanillaLevelFallback);
-        try {
-            boolean vanillaResult = platform.hasVanillaPermissionLevel(player, vanillaLevelFallback);
-            debugLogger.debugLog("[PermissionsHandler] Vanilla check result: " + vanillaResult);
-            return vanillaResult;
-        } catch (RuntimeException | LinkageError t) {
-            debugLogger.debugLog("[PermissionsHandler] Vanilla check failed: " + t);
-        }
-
-        debugLogger.debugLog("[PermissionsHandler] All checks failed for '" + permission + "', returning false");
-        return false;
+        if (player == null) return false;
+        if (permission == null || permission.isBlank()) return true;
+        Boolean defined = queryDefinedPermission(player, permission);
+        return defined != null ? defined : hasNativeFallback(player, vanillaLevelFallback);
     }
 
     public boolean hasPermission(String playerUuid, String permission, int vanillaLevelFallback) {
         if (playerUuid == null || playerUuid.isBlank()) return false;
         IPlayer online = platform != null ? platform.getPlayerByUuid(playerUuid) : null;
         if (online != null) return hasPermission(online, permission, vanillaLevelFallback);
-        java.util.UUID uuid;
-        try { uuid = java.util.UUID.fromString(playerUuid); }
-        catch (IllegalArgumentException ignored) { return false; }
+        if (permission == null || permission.isBlank()) return false;
 
-        if (isLuckPermsAvailable()) {
-            try {
-                var user = net.luckperms.api.LuckPermsProvider.get().getUserManager().getUser(uuid);
-                if (user != null) {
-                    var state = user.getCachedData().getPermissionData().checkPermission(permission);
-                    if (state != net.luckperms.api.util.Tristate.UNDEFINED) return state.asBoolean();
-                }
-            } catch (RuntimeException | LinkageError ignored) { }
-        }
-        if (isInternalPermissionsEnabled()) {
-            Boolean result = internalPermissionApi.hasPermission(uuid, permission);
-            if (result != null) return result;
-        }
-        return false;
+        UUID uuid;
+        try { uuid = UUID.fromString(playerUuid); }
+        catch (IllegalArgumentException ignored) { return false; }
+        return Boolean.TRUE.equals(queryCachedPermission(uuid, permission, null, null, false));
     }
 
     public boolean hasDashboardLoginPermission(String playerUuid, PermissionDefinition permission) {
-        if (storageService == null || !storageService.isMysqlActive() || !isInternalPermissionsEnabled())
+        if (storageService == null || !storageService.isMysqlActive() || !isInternalPermissionsEnabled()) {
             return hasPermission(playerUuid, permission);
-        UUID uuid = UUID.fromString(playerUuid);
-        if (isLuckPermsAvailable()) {
-            try {
-                var user = net.luckperms.api.LuckPermsProvider.get().getUserManager().getUser(uuid);
-                if (user != null) {
-                    var result = user.getCachedData().getPermissionData().checkPermission(permission.node());
-                    if (result != net.luckperms.api.util.Tristate.UNDEFINED) return result.asBoolean();
-                }
-            } catch (RuntimeException | LinkageError failure) {
-                debugLogger.debugLog("[PermissionsHandler] LuckPerms login query failed: " + failure);
-            }
         }
+        UUID uuid = UUID.fromString(playerUuid);
+        Boolean defined = queryCachedLuckPerms(uuid, permission.node(), null, false);
+        if (defined != null) return defined;
+
         IPlayer online = platform != null ? platform.getPlayerByUuid(playerUuid) : null;
-        var contexts = new PermissionContextResolver(() -> storageService.context().serverIdentity()).resolve(online);
-        Boolean result = internalPermissionApi.hasStoredPermission(uuid, permission.node(), contexts);
-        if (result != null) return result;
+        PermissionContextSet contexts = permissionContextResolver.resolve(online);
+        Boolean stored = internalPermissionApi.hasStoredPermission(uuid, permission.node(), contexts);
+        return stored != null ? stored : hasNativeFallback(online, permission.fallbackLevel());
+    }
+
+    private boolean hasNativeFallback(IPlayer player, int level) {
+        if (player == null || level < 0 || platform == null) return false;
         try {
-            return online != null && permission.fallbackLevel() >= 0 && platform.hasVanillaPermissionLevel(online, permission.fallbackLevel());
+            return platform.hasVanillaPermissionLevel(player, level);
         } catch (RuntimeException | LinkageError failure) {
-            debugLogger.debugLog("[PermissionsHandler] Dashboard login platform fallback failed: " + failure);
+            debugLogger.debugLog("[PermissionsHandler] Native permission fallback failed: " + failure);
             return false;
         }
     }
@@ -870,9 +789,16 @@ public class PermissionsHandler {
     public String displayGroupPreference(UUID uuid) { return internalPermissionApi.displayGroupPreference(uuid); }
 
     public boolean setDisplayGroup(UUID uuid, String group) {
-        if (!isInternalPermissionsEnabled()) return false;
+        return uuid != null && isInternalPermissionsEnabled() && internalPermissionApi.setDisplayGroup(uuid, group, displayGroupContext(uuid));
+    }
+
+    boolean setDisplayGroup(UUID uuid, String group, PermissionContextSet context) {
+        return isInternalPermissionsEnabled() && internalPermissionApi.setDisplayGroup(uuid, group, context);
+    }
+
+    PermissionContextSet displayGroupContext(UUID uuid) {
         IPlayer online = platform != null ? platform.getPlayerByUuid(uuid.toString()) : null;
-        return internalPermissionApi.setDisplayGroup(uuid, group, online != null ? permissionContextResolver.resolve(online) : permissionContextResolver.currentServer());
+        return permissionContextResolver.resolve(online);
     }
 
     public long permissionsStateVersion() {
@@ -963,11 +889,15 @@ public class PermissionsHandler {
         return internalPermissionApi.setGroupMetadata(groupName, field, value);
     }
 
+    boolean setPermissionGroupMetadata(String groupName, Map<String, String> metadata) {
+        return isInternalPermissionsEnabled() && internalPermissionApi.setGroupMetadata(groupName, metadata);
+    }
+
     public boolean assignPlayerGroup(UUID playerUuid, String groupName) {
         if (!isInternalPermissionsEnabled()) return false;
         boolean changed = internalPermissionApi.assignGroup(playerUuid, groupName);
         if (changed) {
-            refreshPlayerCommandTree(playerUuid);
+            refreshPlayerPermissionEffects(playerUuid);
         }
         return changed;
     }
@@ -975,7 +905,7 @@ public class PermissionsHandler {
     public boolean changeGlobalGroups(UUID uuid, java.util.List<eu.avalanche7.paradigm.storage.repository.PermissionRepository.GroupChange> changes, Runnable effect) {
         if (!isInternalPermissionsEnabled()) throw new IllegalStateException("Internal permissions are disabled");
         boolean changed = internalPermissionApi.changeGlobalGroups(uuid, changes, effect);
-        if (changed) refreshPlayerCommandTree(uuid);
+        if (changed) refreshPlayerPermissionEffects(uuid);
         return changed;
     }
 
@@ -983,7 +913,7 @@ public class PermissionsHandler {
         if (!isInternalPermissionsEnabled()) return false;
         boolean changed = internalPermissionApi.assignGroup(playerUuid, groupName, expiresAtMs, assignedBy);
         if (changed) {
-            refreshPlayerCommandTree(playerUuid);
+            refreshPlayerPermissionEffects(playerUuid);
         }
         return changed;
     }
@@ -992,7 +922,7 @@ public class PermissionsHandler {
         if (!isInternalPermissionsEnabled()) return false;
         boolean changed = internalPermissionApi.assignGroup(playerUuid, groupName, expiresAtMs != null ? expiresAtMs : 0L, assignedBy, contextSet);
         if (changed) {
-            refreshPlayerCommandTree(playerUuid);
+            refreshPlayerPermissionEffects(playerUuid);
         }
         return changed;
     }
@@ -1011,14 +941,14 @@ public class PermissionsHandler {
     /** Refresh live permission effects after a background assignment. Must run on the server thread. */
     public void refreshPlayerGroupEffects(UUID playerUuid) {
         if (platform != null && !platform.isServerThread()) throw new IllegalStateException("Server thread required");
-        refreshPlayerCommandTree(playerUuid);
+        refreshPlayerPermissionEffects(playerUuid);
     }
 
     public boolean revokePlayerGroup(UUID playerUuid, String groupName) {
         if (!isInternalPermissionsEnabled()) return false;
         boolean changed = internalPermissionApi.revokeGroup(playerUuid, groupName);
         if (changed) {
-            refreshPlayerCommandTree(playerUuid);
+            refreshPlayerPermissionEffects(playerUuid);
         }
         return changed;
     }
@@ -1027,7 +957,7 @@ public class PermissionsHandler {
         if (!isInternalPermissionsEnabled()) return false;
         boolean changed = internalPermissionApi.revokeGroup(playerUuid, groupName, contextSet);
         if (changed) {
-            refreshPlayerCommandTree(playerUuid);
+            refreshPlayerPermissionEffects(playerUuid);
         }
         return changed;
     }
@@ -1035,7 +965,7 @@ public class PermissionsHandler {
     public boolean revokePlayerGroupById(UUID playerUuid, String assignmentId) {
         if (!isInternalPermissionsEnabled()) return false;
         boolean changed = internalPermissionApi.revokeGroupById(playerUuid, assignmentId);
-        if (changed) refreshPlayerCommandTree(playerUuid);
+        if (changed) refreshPlayerPermissionEffects(playerUuid);
         return changed;
     }
 
@@ -1047,7 +977,7 @@ public class PermissionsHandler {
         if (!isInternalPermissionsEnabled()) return false;
         boolean changed = internalPermissionApi.addUserPermission(playerUuid, permissionNode, denied);
         if (changed) {
-            refreshPlayerCommandTree(playerUuid);
+            refreshPlayerPermissionEffects(playerUuid);
         }
         return changed;
     }
@@ -1056,7 +986,7 @@ public class PermissionsHandler {
         if (!isInternalPermissionsEnabled()) return false;
         boolean changed = internalPermissionApi.addUserPermission(playerUuid, permissionNode, denied, contextSet, expiresAtMs);
         if (changed) {
-            refreshPlayerCommandTree(playerUuid);
+            refreshPlayerPermissionEffects(playerUuid);
         }
         return changed;
     }
@@ -1065,7 +995,7 @@ public class PermissionsHandler {
         if (!isInternalPermissionsEnabled()) return false;
         boolean changed = internalPermissionApi.removeUserPermission(playerUuid, permissionNode);
         if (changed) {
-            refreshPlayerCommandTree(playerUuid);
+            refreshPlayerPermissionEffects(playerUuid);
         }
         return changed;
     }
@@ -1074,7 +1004,7 @@ public class PermissionsHandler {
         if (!isInternalPermissionsEnabled()) return false;
         boolean changed = internalPermissionApi.removeUserPermission(playerUuid, permissionNode, contextSet);
         if (changed) {
-            refreshPlayerCommandTree(playerUuid);
+            refreshPlayerPermissionEffects(playerUuid);
         }
         return changed;
     }
@@ -1082,7 +1012,7 @@ public class PermissionsHandler {
     public boolean removePermissionFromPlayerById(UUID playerUuid, String assignmentId) {
         if (!isInternalPermissionsEnabled()) return false;
         boolean changed = internalPermissionApi.removeUserPermissionById(playerUuid, assignmentId);
-        if (changed) refreshPlayerCommandTree(playerUuid);
+        if (changed) refreshPlayerPermissionEffects(playerUuid);
         return changed;
     }
 
@@ -1090,21 +1020,50 @@ public class PermissionsHandler {
         return isInternalPermissionsEnabled() ? internalPermissionApi.countUserPermissionAssignments(playerUuid, permissionNode, contextSet) : 0;
     }
 
-    private void refreshPlayerCommandTree(UUID playerUuid) {
-        if (playerUuid == null || platform == null) {
-            return;
+    private void refreshPlayerPermissionEffects(UUID playerUuid) {
+        if (playerUuid == null || platform == null) return;
+        schedulePermissionRefresh(() -> refreshOnlinePermissionEffects(platform.getPlayerByUuid(playerUuid.toString())));
+    }
+
+    void refreshGroupPermissionEffects(String group) {
+        if (platform == null) return;
+        schedulePermissionRefresh(() -> {
+            for (IPlayer player : platform.getOnlinePlayers()) {
+                UUID uuid = eu.avalanche7.paradigm.modules.profile.PlayerProfileService.parseCanonicalUuid(player.getUUID());
+                if (group == null || (uuid != null && internalPermissionApi.hasEffectiveGroup(uuid, group,
+                        permissionContextResolver.resolve(player)))) {
+                    refreshOnlinePermissionEffects(player);
+                }
+            }
+        });
+    }
+
+    private void schedulePermissionRefresh(Runnable refresh) {
+        try {
+            platform.executeOnServerThread(() -> {
+                try {
+                    refresh.run();
+                } catch (RuntimeException | LinkageError failure) {
+                    debugLogger.debugLog("[PermissionsHandler] Failed to refresh permission effects: " + failure);
+                }
+            });
+        } catch (RuntimeException | LinkageError failure) {
+            debugLogger.debugLog("[PermissionsHandler] Failed to schedule permission refresh: " + failure);
+        }
+    }
+
+    private void refreshOnlinePermissionEffects(IPlayer player) {
+        if (player == null) return;
+        try {
+            platform.refreshPlayerCommandTree(player);
+        } catch (RuntimeException | LinkageError failure) {
+            debugLogger.debugLog("[PermissionsHandler] Failed to refresh command tree: " + failure);
         }
         try {
-            IPlayer online = platform.getPlayerByUuid(playerUuid.toString());
-            if (online != null) {
-                platform.refreshPlayerCommandTree(online);
-                platform.executeOnServerThread(() -> {
-                    var services = eu.avalanche7.paradigm.ParadigmAPI.getServices();
-                    if (services != null) services.getVanishService().refreshViewer(online);
-                });
-            }
-        } catch (RuntimeException t) {
-            debugLogger.debugLog("[PermissionsHandler] Failed to refresh command tree for " + playerUuid + ": " + t);
+            var services = eu.avalanche7.paradigm.ParadigmAPI.getServices();
+            if (services != null) services.getVanishService().refreshViewer(player);
+        } catch (RuntimeException | LinkageError failure) {
+            debugLogger.debugLog("[PermissionsHandler] Failed to refresh Vanish viewer: " + failure);
         }
     }
 
@@ -1150,7 +1109,7 @@ public class PermissionsHandler {
         if (!isInternalPermissionsEnabled()) return PermissionTrackResult.of(false, "storage_unavailable", "Internal permissions are disabled.", track, null, null);
         PermissionTrackResult result = internalPermissionApi.moveUserOnTrack(player, track, contexts, operation,
                 dontAddToFirst, dontRemoveFromFirst, expiry, expiryRequested, actor, targetGroup);
-        if (result.applied()) refreshPlayerCommandTree(player);
+        if (result.applied()) refreshPlayerPermissionEffects(player);
         return result;
     }
 
@@ -1161,7 +1120,7 @@ public class PermissionsHandler {
     public boolean resetInternalPermissionsForMigration() {
         if (!isInternalPermissionsEnabled()) return false;
         internalPermissionApi.resetForMigration();
-        if (platform != null) platform.refreshAllPlayerCommandTrees();
+        refreshGroupPermissionEffects(null);
         return true;
     }
 

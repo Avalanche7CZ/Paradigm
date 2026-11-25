@@ -52,10 +52,12 @@ public final class MinecraftEventSystem implements IEventSystem {
     private final Map<EntityPlayerMP, Boolean> existingPlayerData = new WeakHashMap<>();
     private final Map<EntityPlayerMP, JoinPlacement> nativeJoinPlacements = new WeakHashMap<>();
     private final Set<EntityPlayerMP> customJoinPlacements = Collections.newSetFromMap(new WeakHashMap<>());
+    private final Set<EntityPlayerMP> pendingFirstJoins = Collections.newSetFromMap(new WeakHashMap<>());
     private final Map<EntityPlayerMP, IChatComponent> pendingJoins = new IdentityHashMap<>();
     private final Map<EntityPlayerMP, IChatComponent> pendingLeaves = new IdentityHashMap<>();
     private final List<ChatEventListener> chatListeners = new CopyOnWriteArrayList<>();
     private final List<PlayerJoinEventListener> joinListeners = new CopyOnWriteArrayList<>();
+    private final List<PlayerJoinEventListener> postLoginListeners = new CopyOnWriteArrayList<>();
     private final List<PlayerLeaveEventListener> leaveListeners = new CopyOnWriteArrayList<>();
     private final List<PlayerDeathEventListener> deathListeners = new CopyOnWriteArrayList<>();
     private final List<PlayerCommandEventListener> commandListeners = new CopyOnWriteArrayList<>();
@@ -71,12 +73,14 @@ public final class MinecraftEventSystem implements IEventSystem {
         existingPlayerData.clear();
         nativeJoinPlacements.clear();
         customJoinPlacements.clear();
+        pendingFirstJoins.clear();
         pendingJoins.clear();
         pendingLeaves.clear();
         MinecraftForge.EVENT_BUS.unregister(this);
         FMLCommonHandler.instance().bus().unregister(this);
         chatListeners.clear();
         joinListeners.clear();
+        postLoginListeners.clear();
         leaveListeners.clear();
         deathListeners.clear();
         commandListeners.clear();
@@ -102,6 +106,11 @@ public final class MinecraftEventSystem implements IEventSystem {
     @Override
     public void onPlayerJoin(PlayerJoinEventListener listener) {
         joinListeners.add(Objects.requireNonNull(listener));
+    }
+
+    @Override
+    public void onPlayerJoinAfterInitialPlacement(PlayerJoinEventListener listener) {
+        postLoginListeners.add(Objects.requireNonNull(listener));
     }
 
     @Override
@@ -206,14 +215,43 @@ public final class MinecraftEventSystem implements IEventSystem {
     public static void checkJoinPlacement(EntityPlayerMP player) {
         MinecraftEventSystem system = active;
         if (system == null) return;
-        JoinPlacement before = system.nativeJoinPlacements.remove(player);
-        if (before != null && !before.equals(JoinPlacement.capture(player))) system.customJoinPlacements.add(player);
+        JoinPlacement after = JoinPlacement.capture(player);
+        JoinPlacement before = system.nativeJoinPlacements.put(player, after);
+        if (before != null && !before.equals(after)) system.customJoinPlacements.add(player);
     }
 
-    private record JoinPlacement(Object world, double x, double y, double z, float yaw, float pitch, int teleportSequence) {
+    public static void finishLogin(EntityPlayerMP player) {
+        MinecraftEventSystem system = active;
+        if (system == null) return;
+        boolean firstJoin = system.pendingFirstJoins.remove(player);
+        JoinPlacement beforeSync = system.nativeJoinPlacements.remove(player);
+        boolean joinRelocated = system.customJoinPlacements.remove(player);
+        if (!firstJoin) return;
+        if (beforeSync == null) {
+            debugSpawn(player, "Automatic placement skipped because the native join boundary was not captured");
+            return;
+        }
+        JoinPlacement completed = JoinPlacement.capture(player);
+        boolean lateRelocation = beforeSync.relocatedAfterNativeJoin(completed);
+        debugSpawn(player, "Native login complete on " + Thread.currentThread().getName()
+                + ", dimension=" + player.dimension + ", xyz=" + completed.x() + "," + completed.y() + "," + completed.z()
+                + ", position packets=" + (completed.teleportSequence() - beforeSync.teleportSequence())
+                + ", custom join=" + joinRelocated + ", custom sync/Forge login=" + lateRelocation);
+        JoinLeaveEvent event = new JoinLeaveEvent(new MinecraftPlayer(player), null, FirstJoinStatus.FIRST_JOIN,
+                joinRelocated || lateRelocation);
+        for (PlayerJoinEventListener listener : system.postLoginListeners) listener.onPlayerJoin(event);
+    }
+
+    record JoinPlacement(Object world, double x, double y, double z, float yaw, float pitch, int teleportSequence) {
         static JoinPlacement capture(EntityPlayerMP player) {
             return new JoinPlacement(player.worldObj, player.posX, player.posY, player.posZ,
                     player.rotationYaw, player.rotationPitch, new MinecraftPlayer(player).getTeleportSequence());
+        }
+
+        boolean relocatedAfterNativeJoin(JoinPlacement after) {
+            // initializeConnectionToPlayer sends one normal position packet after playerLoggedIn returns.
+            return world != after.world || x != after.x || y != after.y || z != after.z
+                    || yaw != after.yaw || pitch != after.pitch || after.teleportSequence - teleportSequence > 1;
         }
     }
 
@@ -222,15 +260,27 @@ public final class MinecraftEventSystem implements IEventSystem {
         if (forge.player instanceof EntityPlayerMP player) {
             boolean announce = pendingJoins.containsKey(player) && visible(player);
             Boolean existingData = existingPlayerData.remove(player);
-            FirstJoinStatus status = classifyJoin(existingData,
-                    Boolean.FALSE.equals(existingData) ? noJoinHistory(player) : null);
+            Boolean noHistory = Boolean.FALSE.equals(existingData) ? noJoinHistory(player) : null;
+            FirstJoinStatus status = classifyJoin(existingData, noHistory);
+            if (!postLoginListeners.isEmpty()) {
+                if (status == FirstJoinStatus.FIRST_JOIN) pendingFirstJoins.add(player);
+                debugSpawn(player, "Forge login on " + Thread.currentThread().getName() + " classified " + status
+                        + " (saved player data=" + existingData + ", no joined marker or leave statistic=" + noHistory + ")");
+            }
             JoinLeaveEvent event = new JoinLeaveEvent(new MinecraftPlayer(player), pendingJoins.remove(player),
-                    status, customJoinPlacements.remove(player));
+                    status, customJoinPlacements.contains(player));
             for (PlayerJoinEventListener listener : joinListeners) {
                 listener.onPlayerJoin(event);
             }
             markJoined(player);
             if (announce) broadcast(event.message);
+        }
+    }
+
+    private static void debugSpawn(EntityPlayerMP player, String message) {
+        Services services = Paradigm.getServices();
+        if (services != null && services.getDebugLogger() != null) {
+            services.getDebugLogger().debugLog("[Paradigm/Spawn] " + player.getCommandSenderName() + ": " + message);
         }
     }
 

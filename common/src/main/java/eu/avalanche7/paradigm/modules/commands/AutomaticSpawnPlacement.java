@@ -27,7 +27,15 @@ public final class AutomaticSpawnPlacement {
     }
 
     public void joined(IPlayer player, FirstJoinStatus status, boolean customPlacement, BooleanSupplier activation) {
-        if (player == null || player.getUUID() == null || !enabled(true) || !activation.getAsBoolean() || status == FirstJoinStatus.RETURNING) return;
+        if (player == null || player.getUUID() == null || status == FirstJoinStatus.RETURNING) return;
+        if (!enabled(true)) {
+            debug(player, "First-join placement skipped because disabled or the server is stopping");
+            return;
+        }
+        if (!activation.getAsBoolean()) {
+            debug(player, "First-join placement skipped because the spawn module is inactive");
+            return;
+        }
         if (status == FirstJoinStatus.UNAVAILABLE) {
             debug(player, "First-join classification unavailable");
             return;
@@ -51,7 +59,10 @@ public final class AutomaticSpawnPlacement {
             debug(player, "First-join classification unavailable: " + unavailable.getMessage());
             return;
         }
-        if (!observedFirstJoins.add(uuid)) return;
+        if (!observedFirstJoins.add(uuid)) {
+            debug(player, "First-join event already handled for this UUID");
+            return;
+        }
         debug(player, "First join detected");
         place(player, true, activation);
     }
@@ -121,7 +132,9 @@ public final class AutomaticSpawnPlacement {
             var currentLocation = platform.getPlayerLocation(current).orElse(null);
             if (currentLocation == null || !Objects.equals(nativePlacement.getWorldId(), currentLocation.getWorldId())
                     || (firstJoin ? teleportSequence != current.getTeleportSequence() : !samePosition(nativePlacement, currentLocation))) {
-                debug(player, "Automatic placement cancelled because the player was relocated");
+                debug(player, "Automatic placement cancelled because the player location changed during lookup: "
+                        + describe(nativePlacement) + " -> " + describe(currentLocation)
+                        + ", teleport sequence " + teleportSequence + " -> " + current.getTeleportSequence());
                 return;
             }
             StoredLocation spawn = placement.spawn();
@@ -132,12 +145,14 @@ public final class AutomaticSpawnPlacement {
             }
             debug(player, "Global spawn resolved from storage: " + spawn.worldId() + " at " + spawn.x() + ", " + spawn.y() + ", " + spawn.z());
             try {
-                if (platform.teleportPlayer(current, SpawnCommand.toDataLocation(spawn))) {
-                    debug(player, firstJoin ? "First-join teleport succeeded" : "Death fallback teleport succeeded");
-                } else if (!platform.isSpawnWorldAvailable(spawn.worldId())) {
+                boolean teleported = platform.teleportPlayer(current, SpawnCommand.toDataLocation(spawn));
+                var logger = services.getDebugLogger();
+                if (logger != null && logger.isEnabled()) {
+                    debug(player, (firstJoin ? "First-join" : "Death fallback") + " teleport to '" + spawn.worldId()
+                            + "' returned " + teleported + "; final " + describe(platform.getPlayerLocation(current).orElse(null)));
+                }
+                if (!teleported && !platform.isSpawnWorldAvailable(spawn.worldId())) {
                     warn(player, "Global spawn world '" + spawn.worldId() + "' is unavailable. Load the world or use /setspawn in an available world.");
-                } else {
-                    debug(player, "Teleport API returned failure for global spawn in '" + spawn.worldId() + "'");
                 }
             } catch (RuntimeException failure) {
                 debug(player, "Teleport API failed for global spawn in '" + spawn.worldId() + "': " + failure);
@@ -154,6 +169,11 @@ public final class AutomaticSpawnPlacement {
     }
 
     private record Placement(StoredLocation spawn, boolean jailed) {}
+
+    private static String describe(PlayerDataStore.StoredLocation location) {
+        return location == null ? "unavailable" : location.getWorldId() + " at "
+                + location.getX() + ", " + location.getY() + ", " + location.getZ();
+    }
 
     static boolean valid(StoredLocation location) {
         return location != null && location.worldId() != null && !location.worldId().isBlank()

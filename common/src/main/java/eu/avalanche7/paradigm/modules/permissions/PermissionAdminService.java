@@ -1,9 +1,16 @@
 package eu.avalanche7.paradigm.modules.permissions;
 
+import static eu.avalanche7.paradigm.modules.profile.PlayerProfileService.parseCanonicalUuid;
+
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.function.BooleanSupplier;
+import java.util.function.Supplier;
 
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.audit.AuditActionType;
@@ -15,6 +22,11 @@ import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
 import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextType;
 import eu.avalanche7.paradigm.modules.permissions.context.PermissionExpiryArgumentParser;
 import eu.avalanche7.paradigm.platform.Interfaces.IPlayer;
+import eu.avalanche7.paradigm.storage.StorageConflictException;
+import eu.avalanche7.paradigm.storage.StorageException;
+import eu.avalanche7.paradigm.storage.StorageTransactionException;
+import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
+import eu.avalanche7.paradigm.utils.ServerThreadCalls;
 
 public class PermissionAdminService {
     private final Services services;
@@ -26,21 +38,90 @@ public class PermissionAdminService {
     }
 
     public PermissionMutationResult mutate(DashboardPrincipal actor, PermissionMutationRequest request) {
-        return mutate(actor, request, true);
+        var handler = services.getPermissionsHandler();
+        long version = handler.permissionsStateVersion();
+        BooleanSupplier authorizationCurrent = checkDashboardAuthority(actor, () -> true);
+        if (authorizationCurrent == null) return denied(actor);
+        UUID user = targetsUser(action(request)) ? resolveOnlineUser(text(request.user)) : null;
+        return persistDashboardMutation(actor, request, user, null, version, authorizationCurrent);
     }
 
     public PermissionMutationResult mutateTrusted(DashboardPrincipal actor, PermissionMutationRequest request) {
-        return mutate(actor, request, false);
+        UUID user = targetsUser(action(request)) ? parseCanonicalUuid(text(request.user)) : null;
+        return mutateResolved(actor, request, user, null, true);
     }
 
-    private PermissionMutationResult mutate(DashboardPrincipal actor, PermissionMutationRequest request, boolean enforceDashboardPermission) {
-        if (enforceDashboardPermission && !canManage(actor)) {
-            audit(actor, AuditActionType.PERMISSION_CHANGE, AuditResult.DENIED, "Permission mutation denied.", Map.of("reason", "permission_denied"));
-            return result(false, "permission_denied", "Permission denied.", false);
-        }
+    public CompletableFuture<PermissionMutationResult> mutateAsync(DashboardPrincipal actor, PermissionMutationRequest request, Executor executor) {
+        return mutateAsync(actor, request, executor, () -> true);
+    }
 
+    public CompletableFuture<PermissionMutationResult> mutateAsync(DashboardPrincipal actor, PermissionMutationRequest request,
+            Executor executor, BooleanSupplier sessionCurrent) {
+        return onServer(() -> sessionCurrent.getAsBoolean() && canManage(actor)).thenComposeAsync(allowed -> {
+            if (!allowed) return CompletableFuture.completedFuture(denied(actor));
+            String action = action(request);
+            String userInput = targetsUser(action) ? text(request.user) : "";
+            UUID uuid = parseCanonicalUuid(userInput);
+            boolean lookup = uuid == null && !userInput.isEmpty();
+            boolean display = "user_display_group".equals(action);
+            List<StoredPlayerProfile> matches = lookup ? services.getPlayerProfileService().matchingNames(userInput) : List.of();
+
+            if (actor.console() && !lookup && !display) {
+                return CompletableFuture.completedFuture(persistDashboardMutation(actor, request, uuid, null, -1L, sessionCurrent));
+            }
+            return onServer(() -> {
+                long version = services.getPermissionsHandler().permissionsStateVersion();
+                BooleanSupplier authorizationCurrent = checkDashboardAuthority(actor, sessionCurrent);
+                if (authorizationCurrent == null) return CompletableFuture.completedFuture(denied(actor));
+                if (matches.size() > 1) {
+                    return CompletableFuture.completedFuture(result(false, "player_ambiguous",
+                            "Multiple stored players use that name. Use the player's UUID.", false));
+                }
+                UUID user = lookup ? resolveMatchedUser(userInput, matches) : uuid;
+                PermissionContextSet context = display && user != null
+                        ? services.getPermissionsHandler().displayGroupContext(user) : null;
+                return CompletableFuture.supplyAsync(
+                        () -> persistDashboardMutation(actor, request, user, context, version, authorizationCurrent), executor);
+            }).thenCompose(pending -> pending);
+        }, executor);
+    }
+
+    private PermissionMutationResult persistDashboardMutation(DashboardPrincipal actor, PermissionMutationRequest request,
+            UUID user, PermissionContextSet displayContext, long version, BooleanSupplier authorizationCurrent) {
+        return services.getPermissionsHandler().writeDashboardMutation(actor.console() ? -1L : version, authorizationCurrent,
+                () -> mutateResolved(actor, request, user, displayContext, false), () -> denied(actor));
+    }
+
+    private BooleanSupplier checkDashboardAuthority(DashboardPrincipal actor, BooleanSupplier sessionCurrent) {
+        var handler = services.getPermissionsHandler();
+        boolean internal = handler.isInternalPermissionsEnabled();
+        long checkedAt = System.currentTimeMillis();
+        if (!sessionCurrent.getAsBoolean() || !canManage(actor)) return null;
+        if (actor.console()) return sessionCurrent;
+
+        UUID actorId = parseCanonicalUuid(actor.uuid());
+        long expiresAt = internal && actorId != null ? handler.dashboardAuthorizationExpiresAt(actorId, checkedAt) : Long.MAX_VALUE;
+        return () -> sessionCurrent.getAsBoolean() && internal == handler.isInternalPermissionsEnabled()
+                && System.currentTimeMillis() < expiresAt;
+    }
+
+    private <T> CompletableFuture<T> onServer(Supplier<T> task) {
+        var platform = services.getPlatformAdapter();
+        if (platform == null || platform.isServerThread()) {
+            return CompletableFuture.completedFuture(null).thenApply(ignored -> task.get());
+        }
+        return ServerThreadCalls.supply(services, task);
+    }
+
+    private PermissionMutationResult denied(DashboardPrincipal actor) {
+        audit(actor, AuditActionType.PERMISSION_CHANGE, AuditResult.DENIED, "Permission mutation denied.", Map.of("reason", "permission_denied"));
+        return result(false, "permission_denied", "Permission denied.", false);
+    }
+
+    private PermissionMutationResult mutateResolved(DashboardPrincipal actor, PermissionMutationRequest request, UUID user,
+                                                     PermissionContextSet displayContext, boolean trusted) {
         PermissionMutationRequest safe = request != null ? request : new PermissionMutationRequest();
-        String action = text(safe.action).toLowerCase(java.util.Locale.ROOT);
+        String action = action(safe);
         String group = text(safe.group);
         String parent = text(safe.parent);
         String permission = normalizePermission(safe.permission);
@@ -67,13 +148,8 @@ public class PermissionAdminService {
             if (trackArgumentError != null) {
                 return result(false, trackArgumentError.startsWith("Expiry") ? "invalid_expiry" : "invalid_argument", trackArgumentError, false);
             }
-            PermissionMutationResult trackResult;
-            try { trackResult = mutateTrack(actor, safe, action, contexts, expiresAtMs); }
-            catch (eu.avalanche7.paradigm.storage.StorageException failure) { return persistenceFailure(actor, action, failure); }
-            if (trackResult.applied() && services.getPlatformAdapter() != null) {
-                try { services.getPlatformAdapter().refreshAllPlayerCommandTrees(); } catch (Throwable ignored) { }
-            }
-            return trackResult;
+            try { return mutateTrack(actor, safe, action, user, contexts, expiresAtMs); }
+            catch (StorageException failure) { return persistenceFailure(actor, action, failure); }
         }
 
         if ("group_rename".equals(action)) {
@@ -92,70 +168,68 @@ public class PermissionAdminService {
             return result(false, "confirmation_required", "Confirmation is required for this permission change.", true);
         }
 
-        if (assignmentId.isBlank() && removalIsAmbiguous(action, group, permission, safe.user, contexts)) {
+        if (assignmentId.isBlank() && removalIsAmbiguous(action, group, permission, user, contexts)) {
             return result(false, "assignment_ambiguous", "More than one assignment matches. Remove by assignment id.", false);
         }
 
         boolean changed;
+        var handler = services.getPermissionsHandler();
+        // Existing standalone commands accept group names supported by the storage API.
+        boolean validDefinitionName = trusted || validGroup(group);
         try {
-            var handler = services.getPermissionsHandler();
             changed = switch (action) {
-                case "group_create" -> validGroup(group) && handler.createPermissionGroup(group);
-                case "group_delete" -> validGroup(group) && Boolean.TRUE.equals(safe.confirmed) && handler.deletePermissionGroup(group);
+                case "group_create" -> validDefinitionName && handler.createPermissionGroup(group);
+                case "group_delete" -> validDefinitionName && Boolean.TRUE.equals(safe.confirmed) && handler.deletePermissionGroup(group);
                 case "group_rename" -> validGroup(group) && validGroup(text(safe.target)) && handler.renamePermissionGroup(group, text(safe.target));
-                case "group_update" -> validGroup(group) && updateGroupMetadata(handler, group, safe.metadata);
-                case "group_permission_add" -> validGroup(group) && validPermission(permission) && handler.addPermissionToGroup(group, permission, denied, contexts, expiresAtMs);
+                case "group_update" -> validDefinitionName && (trusted || validDashboardMetadataLength(safe.metadata))
+                        && handler.setPermissionGroupMetadata(group, safe.metadata);
+                case "group_permission_add" -> validGroup(group) && PermissionNodeSyntax.validAssignment(permission) && handler.addPermissionToGroup(group, permission, denied, contexts, expiresAtMs);
                 case "group_permission_remove" -> validGroup(group) && (assignmentId.isBlank()
-                        ? validPermission(permission) && handler.removePermissionFromGroup(group, permission, contexts)
+                        ? PermissionNodeSyntax.validAssignment(permission) && handler.removePermissionFromGroup(group, permission, contexts)
                         : handler.removePermissionFromGroupById(group, assignmentId));
-                case "group_parent_add" -> validGroup(group) && validGroup(parent) && handler.addPermissionGroupParent(group, parent);
-                case "group_parent_remove" -> validGroup(group) && validGroup(parent) && handler.removePermissionGroupParent(group, parent);
-                case "user_permission_add" -> {
-                    UUID uuid = resolveUuid(safe.user);
-                    yield uuid != null && validPermission(permission) && handler.addPermissionToPlayer(uuid, permission, denied, contexts, expiresAtMs);
-                }
-                case "user_permission_remove" -> {
-                    UUID uuid = resolveUuid(safe.user);
-                    yield uuid != null && (assignmentId.isBlank()
-                            ? validPermission(permission) && handler.removePermissionFromPlayer(uuid, permission, contexts)
-                            : handler.removePermissionFromPlayerById(uuid, assignmentId));
-                }
-                case "user_display_group" -> {
-                    UUID uuid = resolveUuid(safe.user);
-                    yield uuid != null && handler.setDisplayGroup(uuid, safe.group);
-                }
-                case "user_group_add" -> {
-                    UUID uuid = resolveUuid(safe.user);
-                    yield uuid != null && validGroup(group) && handler.assignPlayerGroup(uuid, group, contexts, expiresAtMs, actor != null ? actor.name() : "dashboard");
-                }
-                case "user_group_remove" -> {
-                    UUID uuid = resolveUuid(safe.user);
-                    yield uuid != null && (assignmentId.isBlank()
-                            ? validGroup(group) && handler.revokePlayerGroup(uuid, group, contexts)
-                            : handler.revokePlayerGroupById(uuid, assignmentId));
-                }
+                case "group_parent_add" -> validDefinitionName && (trusted || validGroup(parent)) && handler.addPermissionGroupParent(group, parent);
+                case "group_parent_remove" -> validDefinitionName && (trusted || validGroup(parent)) && handler.removePermissionGroupParent(group, parent);
+                case "user_permission_add" -> user != null && PermissionNodeSyntax.validAssignment(permission)
+                        && handler.addPermissionToPlayer(user, permission, denied, contexts, expiresAtMs);
+                case "user_permission_remove" -> user != null && (assignmentId.isBlank()
+                        ? PermissionNodeSyntax.validAssignment(permission) && handler.removePermissionFromPlayer(user, permission, contexts)
+                        : handler.removePermissionFromPlayerById(user, assignmentId));
+                case "user_display_group" -> user != null && (displayContext == null
+                        ? handler.setDisplayGroup(user, safe.group) : handler.setDisplayGroup(user, safe.group, displayContext));
+                case "user_group_add" -> user != null && validGroup(group)
+                        && handler.assignPlayerGroup(user, group, contexts, expiresAtMs, actor != null ? actor.name() : "dashboard");
+                case "user_group_remove" -> user != null && (assignmentId.isBlank()
+                        ? validGroup(group) && handler.revokePlayerGroup(user, group, contexts)
+                        : handler.revokePlayerGroupById(user, assignmentId));
                 default -> false;
             };
-        } catch (eu.avalanche7.paradigm.storage.StorageException failure) {
+        } catch (StorageException failure) {
             return persistenceFailure(actor, action, failure);
         } catch (Throwable t) {
             audit(actor, auditType(action), AuditResult.FAILED, "Permission mutation failed.", Map.of("action", action, "error", t.getClass().getSimpleName()));
             return result(false, "validation_failed", "Permission change failed.", dangerous);
         }
 
+        boolean pending = changed && targetsUser(action) && !"user_display_group".equals(action) && handler.queuesUserWrites();
         audit(actor, auditType(action), changed ? AuditResult.SUCCESS : AuditResult.FAILED,
-                changed ? "Permission mutation applied." : "Permission mutation rejected.",
+                pending ? "Permission mutation accepted into runtime; persistence is pending."
+                        : changed ? "Permission mutation applied." : "Permission mutation rejected.",
                 Map.of("action", action, "group", group, "permission", permission, "assignmentId", assignmentId, "scope", scope.name().toLowerCase(java.util.Locale.ROOT),
-                        "contexts", contexts.canonical(), "expiresAtMs", expiresAtMs != null ? String.valueOf(expiresAtMs) : ""));
-        if (changed && services.getPlatformAdapter() != null) {
-            try {
-                services.getPlatformAdapter().refreshAllPlayerCommandTrees();
-            } catch (Throwable ignored) {
+                        "contexts", contexts.canonical(), "expiresAtMs", expiresAtMs != null ? String.valueOf(expiresAtMs) : "",
+                        "persistence", pending ? "pending" : changed ? "confirmed" : "rejected"));
+        if (changed) {
+            switch (action) {
+                case "group_delete" -> handler.refreshGroupPermissionEffects(null);
+                case "group_rename" -> handler.refreshGroupPermissionEffects(text(safe.target));
+                case "group_permission_add", "group_permission_remove", "group_parent_add", "group_parent_remove" ->
+                        handler.refreshGroupPermissionEffects(group);
+                default -> { }
             }
         }
         if (!changed && !assignmentId.isBlank() && services.getPermissionsHandler().isInternalPermissionsEnabled()
                 && Set.of("group_permission_remove", "user_permission_remove", "user_group_remove").contains(action))
             return result(false, "assignment_not_found", "The original assignment is already absent from the host runtime. No removal was applied.", false);
+        if (pending) return result(true, "persistence_pending", "Permission change accepted into runtime; persistence is pending.", false);
         return result(changed, changed ? "ok" : "validation_failed", changed ? "Permission change applied." : "Permission change was rejected.", dangerous);
     }
 
@@ -172,54 +246,40 @@ public class PermissionAdminService {
         return DashboardAuthorization.canManagePermissions(check);
     }
 
-    private static boolean updateGroupMetadata(eu.avalanche7.paradigm.modules.permissions.PermissionsHandler handler, String group, Map<String, String> metadata) {
-        if (metadata == null || metadata.isEmpty()) return false;
-        boolean changed = false;
-        for (Map.Entry<String, String> entry : metadata.entrySet()) {
-            String field = text(entry.getKey()).toLowerCase(java.util.Locale.ROOT);
-            if (!Set.of("weight", "prefix", "suffix", "description", "chatnameformat", "chatmessageformat").contains(field)) {
-                throw new IllegalArgumentException("Unsupported group metadata field.");
-            }
-            String value = entry.getValue() != null ? entry.getValue() : "";
-            if (value.length() > 512) throw new IllegalArgumentException("Group metadata value is too long.");
-            changed |= handler.setPermissionGroupMetadata(group, field, value);
-        }
-        return changed;
+    private static boolean validDashboardMetadataLength(Map<String, String> metadata) {
+        return metadata != null && metadata.values().stream().allMatch(value -> value == null || value.length() <= 512);
     }
 
-    private boolean removalIsAmbiguous(String action, String group, String permission, String user, PermissionContextSet contexts) {
+    private boolean removalIsAmbiguous(String action, String group, String permission, UUID user, PermissionContextSet contexts) {
         var handler = services.getPermissionsHandler();
         return switch (action) {
             case "group_permission_remove" -> handler.countPermissionAssignmentsInGroup(group, permission, contexts) > 1;
-            case "user_permission_remove" -> {
-                UUID uuid = resolveUuid(user);
-                yield uuid != null && handler.countPermissionAssignmentsForPlayer(uuid, permission, contexts) > 1;
-            }
-            case "user_group_remove" -> {
-                UUID uuid = resolveUuid(user);
-                yield uuid != null && handler.countPlayerGroupAssignments(uuid, group, contexts) > 1;
-            }
+            case "user_permission_remove" -> user != null && handler.countPermissionAssignmentsForPlayer(user, permission, contexts) > 1;
+            case "user_group_remove" -> user != null && handler.countPlayerGroupAssignments(user, group, contexts) > 1;
             default -> false;
         };
     }
 
-    private UUID resolveUuid(String uuidOrName) {
-        String value = text(uuidOrName);
-        if (value.isBlank()) {
-            return null;
-        }
-        try {
-            return UUID.fromString(value);
-        } catch (Throwable ignored) {
-        }
-        try {
-            IPlayer player = services.getPlatformAdapter().getPlayerByName(value);
-            if (player != null && player.getUUID() != null) {
-                return UUID.fromString(player.getUUID());
-            }
-        } catch (Throwable ignored) {
-        }
-        return null;
+    private UUID resolveMatchedUser(String name, List<StoredPlayerProfile> matches) {
+        if (matches.isEmpty()) return resolveOnlineUser(name);
+        UUID user = parseCanonicalUuid(matches.get(0).uuid());
+        return user != null && services.getPlayerProfileService().matchesOnlineIdentity(name, user) ? user : null;
+    }
+
+    private UUID resolveOnlineUser(String input) {
+        UUID uuid = parseCanonicalUuid(input);
+        var platform = services.getPlatformAdapter();
+        if (uuid != null || input.isEmpty() || platform == null) return uuid;
+        IPlayer player = platform.getPlayerByName(input);
+        return player != null && input.equalsIgnoreCase(player.getName()) ? parseCanonicalUuid(player.getUUID()) : null;
+    }
+
+    private static boolean targetsUser(String action) {
+        return action.startsWith("user_") || Set.of("promote", "demote", "settrack", "cleartrack").contains(action);
+    }
+
+    private static String action(PermissionMutationRequest request) {
+        return request == null ? "" : text(request.action).toLowerCase(java.util.Locale.ROOT);
     }
 
     private PermissionContextSet contexts(PermissionScope scope, Map<String, String> custom) {
@@ -280,22 +340,27 @@ public class PermissionAdminService {
         }
     }
 
-    private PermissionMutationResult persistenceFailure(DashboardPrincipal actor, String action, eu.avalanche7.paradigm.storage.StorageException failure) {
+    private PermissionMutationResult persistenceFailure(DashboardPrincipal actor, String action, StorageException failure) {
         audit(actor, auditType(action), AuditResult.FAILED, "Permission persistence was not acknowledged.", Map.of("action", action, "error", failure.getClass().getSimpleName()));
-        if (failure instanceof eu.avalanche7.paradigm.storage.StorageConflictException)
+        if (failure instanceof StorageConflictException)
             return result(false, "persistence_conflict", failure.getMessage(), false);
-        return result(false, "persistence_uncertain", "Runtime state may have changed, but persistence was not confirmed. Inspect and reload before retrying.", false);
+        if (failure instanceof StorageTransactionException transaction) {
+            if (transaction.outcome() == StorageTransactionException.Outcome.COMMITTED) {
+                return result(false, "persistence_committed_recovery", "Storage reported a commit followed by a failure. Reload permissions before retrying.", false);
+            }
+            return result(false, "persistence_uncertain", "Storage could not confirm the outcome. Inspect and reload before retrying.", false);
+        }
+        return result(false, "persistence_failed", "Permission persistence failed. Check storage before retrying.", false);
     }
 
     private PermissionMutationResult mutateTrack(DashboardPrincipal actor, PermissionMutationRequest request, String action,
-                                                 PermissionContextSet contexts, Long expiresAtMs) {
+                                                 UUID user, PermissionContextSet contexts, Long expiresAtMs) {
         String track = text(request.track);
         if (track.isBlank()) track = text(request.group);
         PermissionTrackResult changed;
         if (action.startsWith("track_")) {
             changed = services.getPermissionsHandler().mutatePermissionTrack(action, track, text(request.group), text(request.target), request.position);
         } else {
-            UUID user = resolveUuid(request.user);
             String operation = switch (action) {
                 case "settrack" -> "set";
                 case "cleartrack" -> "clear";
@@ -315,14 +380,17 @@ public class PermissionAdminService {
         auditDetails.put("contexts", contexts.canonical());
         auditDetails.put("expiresAtMs", expiresAtMs != null ? String.valueOf(expiresAtMs) : "");
         if (!changed.conflictingGroups().isEmpty()) auditDetails.put("conflictingGroups", String.join(",", changed.conflictingGroups()));
+        boolean pending = changed.applied() && targetsUser(action) && services.getPermissionsHandler().queuesUserWrites();
+        auditDetails.put("persistence", pending ? "pending" : changed.applied() ? "confirmed" : "rejected");
         audit(actor, AuditActionType.GROUP_CHANGE, changed.applied() ? AuditResult.SUCCESS : AuditResult.FAILED,
-                changed.applied() ? "Track mutation applied." : "Track mutation rejected.", auditDetails);
+                pending ? "Track mutation accepted into runtime; persistence is pending."
+                        : changed.applied() ? "Track mutation applied." : "Track mutation rejected.", auditDetails);
         Map<String, Object> details = new LinkedHashMap<>();
         details.put("track", changed.track());
         details.put("oldPosition", changed.oldPosition());
         details.put("newPosition", changed.newPosition());
         details.put("conflictingGroups", changed.conflictingGroups());
-        return new PermissionMutationResult(changed.applied(), changed.code(), changed.message(), false, details);
+        return new PermissionMutationResult(changed.applied(), pending ? "persistence_pending" : changed.code(), changed.message(), false, details);
     }
 
     private static String trackArgumentError(String action, PermissionMutationRequest request, Long expiresAtMs) {
@@ -349,10 +417,6 @@ public class PermissionAdminService {
 
     private static String normalizePermission(String permission) {
         return text(permission).toLowerCase(java.util.Locale.ROOT);
-    }
-
-    private static boolean validPermission(String permission) {
-        return permission != null && !permission.isBlank() && permission.length() <= 255 && permission.matches("[a-z0-9_.*:-]+");
     }
 
     private static boolean validGroup(String group) {

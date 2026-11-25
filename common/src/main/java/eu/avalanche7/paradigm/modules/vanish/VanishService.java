@@ -156,18 +156,28 @@ public final class VanishService {
         boolean previous = hidden.contains(player.getUUID());
         if (previous != enabled && !closeMenu(player)) return false;
         if (enabled) hidden.add(player.getUUID()); else hidden.remove(player.getUUID());
+        refreshTeamVisibility(player);
         try {
             if (services.getPlatformAdapter().setPlayerVanished(player, enabled)) return true;
         } catch (RuntimeException failure) {
             services.getLogger().error("Native Vanish failed for {}", player.getUUID(), failure);
         }
         if (previous) hidden.add(player.getUUID()); else hidden.remove(player.getUUID());
+        refreshTeamVisibility(player);
         try {
             if (!services.getPlatformAdapter().setPlayerVanished(player, previous)) services.getLogger().error("Unable to roll back native Vanish for {}", player.getUUID());
         } catch (RuntimeException failure) {
             services.getLogger().error("Unable to roll back native Vanish for {}", player.getUUID(), failure);
         }
         return false;
+    }
+
+    private void refreshTeamVisibility(IPlayer subject) {
+        var platform = services.getPlatformAdapter();
+        for (IPlayer viewer : platform.getOnlinePlayers()) {
+            var connection = platform.getScoreboardConnection(viewer);
+            if (connection != null) connection.visibility(subject.getName(), canSee(viewer, subject));
+        }
     }
 
     public CompletableFuture<Boolean> toggle(IPlayer player, BooleanSupplier authorized) {
@@ -223,7 +233,12 @@ public final class VanishService {
         if (previous != null && previous == allowed) return;
         for (String uuid : Set.copyOf(hidden)) {
             IPlayer target = services.getPlatformAdapter().getPlayerByUuid(uuid);
-            if (target != null) services.getPlatformAdapter().refreshVanishVisibility(viewer, target);
+            if (target != null) {
+                var platform = services.getPlatformAdapter();
+                var connection = platform.getScoreboardConnection(viewer);
+                if (connection != null) connection.visibility(target.getName(), canSee(viewer, target));
+                platform.refreshVanishVisibility(viewer, target);
+            }
         }
         viewers.put(viewer.getUUID(), allowed);
     }

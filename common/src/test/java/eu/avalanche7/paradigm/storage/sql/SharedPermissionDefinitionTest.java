@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -399,6 +400,54 @@ class SharedPermissionDefinitionTest {
         }
     }
 
+    @Test void definitionOnlyEditDoesNotDependOnUnrelatedQueuedUserWrite() {
+        try (var provider = provider("first")) {
+            seed(provider.permissions());
+            var actual = provider.permissions();
+            var repository = (PermissionRepository) java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{PermissionRepository.class}, (proxy, method, args) -> {
+                if (method.getName().equals("applyUserChanges")) throw new StorageException("User write unavailable");
+                try { return method.invoke(actual, args); }
+                catch (java.lang.reflect.InvocationTargetException failure) { throw failure.getCause(); }
+            });
+            var api = api(repository);
+            api.setAsyncPersistenceExecutor((key, task) -> {});
+            UUID user = UUID.randomUUID();
+            assertTrue(api.addUserPermission(user, "example.queued", false));
+            assertTrue(api.setGroupMetadata("one", "prefix", "[Updated]"));
+            assertEquals("[Updated]", actual.getGroup("one").orElseThrow().prefix());
+            assertEquals(Boolean.TRUE, api.hasPermission(user, "example.queued"));
+            assertTrue(actual.getUser(user.toString()).isEmpty());
+        }
+    }
+
+    @Test void committedRenameWithFailedReloadRequiresRecovery() {
+        try (var provider = provider("first")) {
+            seed(provider.permissions());
+            var actual = provider.permissions();
+            var unavailable = new java.util.concurrent.atomic.AtomicBoolean();
+            var repository = (PermissionRepository) java.lang.reflect.Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{PermissionRepository.class}, (proxy, method, args) -> {
+                if (method.getName().equals("changesSince") && unavailable.get()) throw new StorageException("Reload unavailable");
+                try {
+                    Object result = method.invoke(actual, args);
+                    if (method.getName().equals("renameGroup")) unavailable.set(true);
+                    return result;
+                } catch (java.lang.reflect.InvocationTargetException failure) { throw failure.getCause(); }
+            });
+            var api = api(repository);
+            var failure = assertThrows(StorageTransactionException.class, () -> api.renameGroup("one", "staff"));
+            assertEquals(StorageTransactionException.Outcome.COMMITTED, failure.outcome());
+            assertTrue(actual.getGroup("staff").isPresent());
+            assertFalse(api.synchronizePermissions());
+            assertThrows(StorageTransactionException.class, () -> api.createGroup("blocked"));
+
+            unavailable.set(false);
+            api.reload();
+            assertNull(api.getGroupInfo("one"));
+            assertNotNull(api.getGroupInfo("staff"));
+            assertTrue(api.createGroup("recovered"));
+        }
+    }
+
     @Test void lostDefinitionCommitAcknowledgementBlocksWritesUntilReload() {
         try (var provider = provider("first")) {
             seed(provider.permissions());
@@ -468,13 +517,20 @@ class SharedPermissionDefinitionTest {
             seed(first.permissions());
             var a = api(first); var b = api(second);
             assertTrue(a.setGroupMetadata("one", "prefix", "[Remote]"));
-            assertThrows(StorageConflictException.class, () -> b.setGroupMetadata("one", "weight", "100"));
+            var metadata = Map.of("weight", "100", "suffix", " [Local]");
+            var before = b.getGroupInfo("one");
+            assertThrows(StorageConflictException.class, () -> b.setGroupMetadata("one", metadata));
+            assertEquals(before, b.getGroupInfo("one"));
             assertEquals("[Remote]", first.permissions().getGroup("one").orElseThrow().prefix());
             assertEquals(0, first.permissions().getGroup("one").orElseThrow().weight());
+            assertEquals("", first.permissions().getGroup("one").orElseThrow().suffix());
             b.reload();
-            assertTrue(b.setGroupMetadata("one", "weight", "100"));
+            long revision = second.permissions().changesSince(-1).revision();
+            assertTrue(b.setGroupMetadata("one", metadata));
+            assertEquals(revision + 1, second.permissions().changesSince(-1).revision());
             assertTrue(b.addGroupPermission("one", "example.new", true));
             assertEquals("[Remote]", first.permissions().getGroup("one").orElseThrow().prefix());
+            assertEquals(" [Local]", first.permissions().getGroup("one").orElseThrow().suffix());
         }
     }
 

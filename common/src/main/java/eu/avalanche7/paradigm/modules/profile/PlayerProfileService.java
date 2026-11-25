@@ -3,6 +3,7 @@ package eu.avalanche7.paradigm.modules.profile;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.UUID;
 
 import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.storage.model.StoredPlayerProfile;
@@ -44,6 +45,25 @@ public final class PlayerProfileService {
             return List.of();
         }
         return services.getStorageService().players().matchingProfileNames(name.trim());
+    }
+
+    public static UUID parseCanonicalUuid(String value) {
+        if (value == null || value.length() != 36) return null;
+        try {
+            UUID uuid = UUID.fromString(value);
+            return value.equalsIgnoreCase(uuid.toString()) ? uuid : null;
+        } catch (IllegalArgumentException invalid) {
+            return null;
+        }
+    }
+
+    public boolean matchesOnlineIdentity(String name, UUID uuid) {
+        var platform = services.getPlatformAdapter();
+        if (platform == null) return true;
+        var onlineByName = platform.getPlayerByName(name);
+        if (onlineByName != null && !uuid.toString().equalsIgnoreCase(onlineByName.getUUID())) return false;
+        var onlineByUuid = platform.getPlayerByUuid(uuid.toString());
+        return onlineByUuid == null || name.equalsIgnoreCase(onlineByUuid.getName());
     }
 
     public static boolean hasData(StoredPlayerProfile profile) {

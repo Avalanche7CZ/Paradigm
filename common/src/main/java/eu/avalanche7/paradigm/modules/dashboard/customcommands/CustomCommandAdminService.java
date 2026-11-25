@@ -31,10 +31,10 @@ import eu.avalanche7.paradigm.modules.actions.ActionRegistry;
 import eu.avalanche7.paradigm.modules.actions.ConditionRegistry;
 import eu.avalanche7.paradigm.modules.actions.PlayerInputService;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardJson;
+import eu.avalanche7.paradigm.modules.permissions.PermissionNodeSyntax;
 
 public final class CustomCommandAdminService {
     private static final Pattern NAME = Pattern.compile("[a-z0-9][a-z0-9_-]{0,31}");
-    private static final Pattern PERMISSION = Pattern.compile("[A-Za-z0-9_*.-]{1,128}");
     private static final String MANAGED_FILE = "dashboard-commands.json";
 
     private final Path directory;
@@ -160,7 +160,7 @@ public final class CustomCommandAdminService {
         if (!name.matches("[a-z0-9_-]{1,32}( [a-z0-9_-]{1,32}){0,7}")) throw new IllegalArgumentException("Command paths must use up to eight literals of 1-32 lowercase letters, numbers, underscores, or dashes.");
         command.addProperty("name", name);
         String permission = text(string(command, "permission"));
-        if (!permission.isBlank() && !PERMISSION.matcher(permission).matches()) throw new IllegalArgumentException("Permission node is invalid.");
+        if (!permission.isBlank() && !PermissionNodeSyntax.validConfigured(permission)) throw new IllegalArgumentException("Permission node is invalid.");
         JsonArray actions = array(command, "actions");
         if (actions.isEmpty()) throw new IllegalArgumentException("Add at least one command action.");
         validateActions(actions, 0);

@@ -1151,6 +1151,11 @@ public final class PlatformAdapterImpl implements IPlatformAdapter {
     }
 
     @Override
+    public eu.avalanche7.paradigm.modules.tab.ScoreboardConnection getScoreboardConnection(IPlayer viewer) {
+        return eu.avalanche7.paradigm.platform.visual.LegacyTablistController.connection(operationPlayer(viewer));
+    }
+
+    @Override
     public boolean setPlayerListOrder(List<IPlayer> sortedPlayers) {
         if (visuals == null || Thread.currentThread() != serverThread) return false;
         var players = new java.util.ArrayList<EntityPlayerMP>();

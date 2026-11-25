@@ -273,7 +273,9 @@ public final class PermissionCommands {
                         .argument("name", ICommandBuilder.ArgumentType.WORD)
                         .executes(context -> {
                             String name = context.getStringArgument("name");
-                            if (!services.getPermissionsHandler().createPermissionGroup(name)) {
+                            var result = mutate(context.getSource(), services,
+                                    request("group_create", name, null, null, null, false, PermissionContextSet.empty(), null));
+                            if (!result.applied()) {
                                 PermissionCommandMessages.send(context.getSource(), services, "group.manage.add_fail", "Could not create group {group}.", "{group}", name);
                                 return 0;
                             }
@@ -288,7 +290,9 @@ public final class PermissionCommands {
                         .suggests((context, input) -> services.getPermissionsHandler().listPermissionGroups())
                         .executes(context -> {
                             String name = context.getStringArgument("name");
-                            if (!services.getPermissionsHandler().deletePermissionGroup(name)) {
+                            var result = mutate(context.getSource(), services,
+                                    request("group_delete", name, null, null, null, false, PermissionContextSet.empty(), null));
+                            if (!result.applied()) {
                                 PermissionCommandMessages.send(context.getSource(), services, "group.manage.remove_fail", "Could not remove group {group}.", "{group}", name);
                                 return 0;
                             }
@@ -534,17 +538,15 @@ public final class PermissionCommands {
     }
 
     private static int mutateParent(ICommandSource source, Services services, String group, String parent, boolean add) {
-        boolean changed = add
-                ? services.getPermissionsHandler().addPermissionGroupParent(group, parent)
-                : services.getPermissionsHandler().removePermissionGroupParent(group, parent);
-        if (!changed) {
+        var result = mutate(source, services, request(add ? "group_parent_add" : "group_parent_remove",
+                group, parent, null, null, false, PermissionContextSet.empty(), null));
+        if (!result.applied()) {
             PermissionCommandMessages.send(source, services,
                     add ? "group.manage.parent_add_fail" : "group.manage.parent_remove_fail",
                     add ? "Could not add parent {parent} to {group}." : "Could not remove parent {parent} from {group}.",
                     "{parent}", parent, "{group}", group);
             return 0;
         }
-        services.getPlatformAdapter().refreshAllPlayerCommandTrees();
         PermissionCommandMessages.send(source, services,
                 add ? "group.manage.parent_add_ok" : "group.manage.parent_remove_ok",
                 add ? "Added parent {parent} to {group}." : "Removed parent {parent} from {group}.",
@@ -593,13 +595,17 @@ public final class PermissionCommands {
         PermissionMutationRequest request = request("group_permission_remove", group, null, null, null, false, PermissionContextSet.empty(), null);
         request.assignmentId = assignmentId;
         PermissionMutationResult result = mutate(source, services, request);
-        if (!result.applied()) return PermissionCommandMessages.assignmentNotFound(source, services, assignmentId);
+        if (!result.applied()) {
+            return result.code().startsWith("persistence_") ? 0 : PermissionCommandMessages.assignmentNotFound(source, services, assignmentId);
+        }
         PermissionPanelRenderer.sendGroupPermissionList(source, services, group);
         return 1;
     }
 
     private static int setGroupMetadata(ICommandSource source, Services services, String group, String field, String value) {
-        if (!services.getPermissionsHandler().setPermissionGroupMetadata(group, field, value)) {
+        var request = request("group_update", group, null, null, null, false, PermissionContextSet.empty(), null);
+        request.metadata = java.util.Collections.singletonMap(field, value);
+        if (!mutate(source, services, request).applied()) {
             PermissionCommandMessages.send(source, services, "group.manage.metadata_fail", "Could not update {field} for {group}.",
                     "{field}", field, "{group}", group);
             return 0;
@@ -703,7 +709,9 @@ public final class PermissionCommands {
         PermissionMutationRequest request = request("user_permission_remove", null, null, null, uuid.toString(), false, PermissionContextSet.empty(), null);
         request.assignmentId = assignmentId;
         PermissionMutationResult result = mutate(source, services, request);
-        if (!result.applied()) return PermissionCommandMessages.assignmentNotFound(source, services, assignmentId);
+        if (!result.applied()) {
+            return result.code().startsWith("persistence_") ? 0 : PermissionCommandMessages.assignmentNotFound(source, services, assignmentId);
+        }
         return showUserInfo(source, services, target);
     }
 
@@ -763,7 +771,9 @@ public final class PermissionCommands {
         PermissionMutationRequest request = request("user_group_remove", null, null, null, uuid.toString(), false, PermissionContextSet.empty(), null);
         request.assignmentId = assignmentId;
         PermissionMutationResult result = mutate(source, services, request);
-        if (!result.applied()) return PermissionCommandMessages.assignmentNotFound(source, services, assignmentId);
+        if (!result.applied()) {
+            return result.code().startsWith("persistence_") ? 0 : PermissionCommandMessages.assignmentNotFound(source, services, assignmentId);
+        }
         return showUserInfo(source, services, target);
     }
 
@@ -785,7 +795,14 @@ public final class PermissionCommands {
     }
 
     private static PermissionMutationResult mutate(ICommandSource source, Services services, PermissionMutationRequest request) {
-        return services.getPermissionAdminService().mutateTrusted(commandPrincipal(source), request);
+        var result = services.getPermissionAdminService().mutateTrusted(commandPrincipal(source), request);
+        if ("persistence_pending".equals(result.code())) {
+            PermissionCommandMessages.send(source, services, "group.manage.persistence_pending",
+                    "Accepted into runtime. Persistence is pending.");
+        } else if (result.code().startsWith("persistence_")) {
+            PermissionCommandMessages.send(source, services, "group.manage." + result.code(), result.message());
+        }
+        return result;
     }
 
     private static int mutateTrack(ICommandSource source, Services services, String action, String track, String group, String target, Integer position) {
@@ -806,8 +823,6 @@ public final class PermissionCommands {
         UUID uuid = target.uuid();
         PermissionMutationArgumentParser.Result arguments = PermissionCommandArguments.parse(source, services, flags, true, true);
         if (!arguments.valid()) return PermissionCommandMessages.argumentError(source, services, arguments.code(), arguments.message());
-        String invalid = invalidTrackArguments(action, arguments);
-        if (invalid != null) return PermissionCommandMessages.argumentError(source, services, "invalid_argument", invalid);
         PermissionMutationRequest request = request(action, null, null, null, uuid.toString(), false, arguments.contexts(), arguments.expiresAtMs());
         applyTrackExpiry(request, arguments);
         request.track = track;
@@ -815,6 +830,9 @@ public final class PermissionCommands {
         request.dontRemoveFromFirst = arguments.dontRemoveFromFirst();
         PermissionMutationResult result = mutate(source, services, request);
         if (!result.applied()) {
+            if ("invalid_argument".equals(result.code()) || "invalid_expiry".equals(result.code())) {
+                return PermissionCommandMessages.argumentError(source, services, "invalid_argument", result.message());
+            }
             PermissionCommandMessages.send(source, services, "group.manage.track_rank_fail", result.message());
             return 0;
         }
@@ -826,8 +844,6 @@ public final class PermissionCommands {
         UUID uuid = target.uuid();
         PermissionMutationArgumentParser.Result arguments = PermissionCommandArguments.parse(source, services, flags, true, true);
         if (!arguments.valid()) return PermissionCommandMessages.argumentError(source, services, arguments.code(), arguments.message());
-        String invalid = invalidTrackArguments(action, arguments);
-        if (invalid != null) return PermissionCommandMessages.argumentError(source, services, "invalid_argument", invalid);
         PermissionMutationRequest request = request(action, group, null, null, uuid.toString(), false, arguments.contexts(), arguments.expiresAtMs());
         applyTrackExpiry(request, arguments);
         request.track = track;
@@ -835,6 +851,9 @@ public final class PermissionCommands {
         request.dontRemoveFromFirst = arguments.dontRemoveFromFirst();
         PermissionMutationResult result = mutate(source, services, request);
         if (!result.applied()) {
+            if ("invalid_argument".equals(result.code()) || "invalid_expiry".equals(result.code())) {
+                return PermissionCommandMessages.argumentError(source, services, "invalid_argument", result.message());
+            }
             PermissionCommandMessages.send(source, services, "group.manage.track_rank_fail", result.message());
             return 0;
         }
@@ -893,19 +912,6 @@ public final class PermissionCommands {
         if (track == null) return List.of();
         return filterSuggestions(services.getPermissionsHandler().listPermissionGroups().stream()
                 .filter(group -> !track.groups().contains(group)).toList(), input);
-    }
-
-    private static String invalidTrackArguments(String action, PermissionMutationArgumentParser.Result arguments) {
-        if (arguments.expirySpecified() && !"promote".equals(action) && !"settrack".equals(action)) {
-            return "Expiry is only valid when assigning a track rank.";
-        }
-        if (arguments.dontAddToFirst() && !"promote".equals(action)) {
-            return "--dont-add-to-first is only valid for promote.";
-        }
-        if (arguments.dontRemoveFromFirst() && !"demote".equals(action)) {
-            return "--dont-remove-from-first is only valid for demote.";
-        }
-        return null;
     }
 
     private static void applyTrackExpiry(PermissionMutationRequest request, PermissionMutationArgumentParser.Result arguments) {

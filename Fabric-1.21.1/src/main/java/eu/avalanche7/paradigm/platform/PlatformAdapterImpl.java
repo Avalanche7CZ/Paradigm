@@ -994,11 +994,9 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
                 (java.util.function.Predicate<net.minecraft.server.command.ServerCommandSource>) eu.avalanche7.paradigm.modules.permissions.CommandNodeAccessGate.getRequirement(node);
         if (original != null) {
             java.util.function.Predicate<net.minecraft.server.command.ServerCommandSource> wrapped = source -> {
-                java.util.UUID uuid = paradigm$rewireSourceUuid(source);
-                if (uuid == null) {
-                    return original.test(source);
-                }
-                Boolean decision = eu.avalanche7.paradigm.modules.permissions.CommandNodeAccessGate.decide(path, uuid);
+                IPlayer player = source.getEntity() instanceof net.minecraft.server.network.ServerPlayerEntity nativePlayer
+                        ? new MinecraftPlayer(nativePlayer) : null;
+                Boolean decision = eu.avalanche7.paradigm.modules.permissions.CommandNodeAccessGate.decideForPlayer(path, player);
                 if (decision == null) {
                     return original.test(source);
                 }
@@ -1018,11 +1016,6 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         for (com.mojang.brigadier.tree.CommandNode<net.minecraft.server.command.ServerCommandSource> child : node.getChildren()) {
             paradigm$rewireCommandNode(child, path, depth + 1);
         }
-    }
-
-    private static java.util.UUID paradigm$rewireSourceUuid(net.minecraft.server.command.ServerCommandSource source) {
-        net.minecraft.entity.Entity entity = source.getEntity();
-        return entity instanceof net.minecraft.server.network.ServerPlayerEntity player ? player.getUuid() : null;
     }
 
     @Override
@@ -1244,14 +1237,22 @@ public class PlatformAdapterImpl implements IPlatformAdapter {
         return eu.avalanche7.paradigm.modules.tab.Tablist.applyTeamOrder(this, sortedPlayers);
     }
     @Override public boolean hasPlayerListTeam(IPlayer player) { return player instanceof MinecraftPlayer mp && mp.getHandle().getScoreboardTeam() != null; }
+    @Override public eu.avalanche7.paradigm.modules.tab.ScoreboardConnection getScoreboardConnection(IPlayer viewer) {
+        return viewer instanceof MinecraftPlayer mp
+                ? eu.avalanche7.paradigm.modules.tab.ScoreboardConnection.of(mp.getHandle().networkHandler) : null;
+    }
+
     @Override public boolean sendPlayerListOrderTeam(IPlayer viewer, String name, String subject, boolean create) {
         if (!(viewer instanceof MinecraftPlayer mp) || server == null) return false;
+        var connection = getScoreboardConnection(viewer);
+        if (connection == null || !connection.view().ready()) return false;
         var team = new net.minecraft.scoreboard.Team(new net.minecraft.scoreboard.Scoreboard(), name);
         team.getPlayerList().add(subject);
-        mp.getHandle().networkHandler.sendPacket(create
+        connection.sendOwned(create
                 ? net.minecraft.network.packet.s2c.play.TeamS2CPacket.updateTeam(team, true)
-                : net.minecraft.network.packet.s2c.play.TeamS2CPacket.updateRemovedTeam(team));
-        return true;
+                : net.minecraft.network.packet.s2c.play.TeamS2CPacket.updateRemovedTeam(team), subject, "", mp.getHandle().networkHandler::sendPacket);
+        var applied = connection.view().owned().get(name);
+        return create ? applied != null && applied.subject().equals(subject) && applied.containsSubject() : applied == null;
     }
 
     @Override public boolean setPlayerListOrder(IPlayer player, int order) { return false; }

@@ -1028,7 +1028,15 @@ public class DashboardService implements AutoCloseable {
     }
 
     public CompletableFuture<Object> permissionMutationAsync(DashboardPrincipal actor, PermissionMutationRequest mutation) {
-        return CompletableFuture.supplyAsync(() -> permissionAdminService.mutate(actor, mutation), executor);
+        return permissionAdminService.mutateAsync(actor, mutation, executor).thenApply(result -> result);
+    }
+
+    public CompletableFuture<Object> permissionMutationAsync(DashboardRequestContext context, PermissionMutationRequest mutation) {
+        var session = context.session();
+        var actor = context.principal();
+        return permissionAdminService.mutateAsync(actor, mutation, executor,
+                () -> session != null ? auth().isSessionCurrent(session) && session.principal().equals(actor)
+                        : actor != null && actor.console() && !config().requireLogin).thenApply(result -> result);
     }
 
     public CompletableFuture<Object> permissionTracksAsync() {

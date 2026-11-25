@@ -59,6 +59,19 @@ class LocationOperationsTest {
     }
 
     @Test
+    void crucibleNativeLoginResendsTheInitialPositionButPluginRelocationSurvives() {
+        var beforeSync = new MinecraftEventSystem.JoinPlacement(world, 10, 64, -5, 0, 0, 2);
+        var nativeSync = new MinecraftEventSystem.JoinPlacement(world, 10, 64, -5, 0, 0, 3);
+        assertFalse(beforeSync.relocatedAfterNativeJoin(nativeSync));
+        var redirectedSync = new MinecraftEventSystem.JoinPlacement(world, 20, 64, -5, 0, 0, 3);
+        assertTrue(beforeSync.relocatedAfterNativeJoin(redirectedSync));
+        var pluginTeleport = new MinecraftEventSystem.JoinPlacement(world, 10, 64, -5, 0, 0, 4);
+        assertTrue(beforeSync.relocatedAfterNativeJoin(pluginTeleport));
+        var differentWorld = new MinecraftEventSystem.JoinPlacement(world(42), 10, 64, -5, 0, 0, 3);
+        assertTrue(beforeSync.relocatedAfterNativeJoin(differentWorld));
+    }
+
+    @Test
     void sameDimensionUsesExactCoordinatesAndOrientationAndResetsMomentum() {
         handle.motionY = -10;
         handle.fallDistance = 12;

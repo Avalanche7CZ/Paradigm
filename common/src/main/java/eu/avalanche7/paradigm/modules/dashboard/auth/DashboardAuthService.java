@@ -122,6 +122,10 @@ public class DashboardAuthService {
         return session;
     }
 
+    public boolean isSessionCurrent(DashboardSession session) {
+        return session != null && !session.expired(clock.getAsLong()) && sessions.get(session.sessionHash()) == session;
+    }
+
     public void logout(String rawSession) {
         if (rawSession != null && !rawSession.isBlank()) {
             sessions.remove(hash(rawSession.trim()));

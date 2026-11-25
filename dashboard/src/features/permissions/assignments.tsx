@@ -310,7 +310,9 @@ export function AssignmentEditor({
     if (!candidates.length) return;
     if (candidates.some((n) => (membership ? !subjectValid(n) : !nodeValid(n)))) {
       setError(
-        'Use valid node names (letters, numbers, dots, underscores, colons, hyphens and wildcards).',
+        membership
+          ? 'Use a valid group name.'
+          : 'Use valid node names (letters, numbers, dots, underscores, colons, hyphens, dollar signs and wildcards).',
       );
       return;
     }

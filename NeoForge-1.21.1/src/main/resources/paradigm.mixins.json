@@ -27,6 +27,7 @@
     "VanishMixin$Tracker",
     "VanishMixin$PlayerInfo",
     "VanishMixin$Connection",
+    "ScoreboardConnectionMixin",
     "VanishMixin$Login",
     "VanishMixin$Lifecycle",
     "VanishMixin$Suggestions",

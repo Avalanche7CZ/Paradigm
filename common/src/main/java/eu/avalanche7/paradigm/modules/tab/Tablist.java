@@ -2,7 +2,6 @@ package eu.avalanche7.paradigm.modules.tab;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -27,7 +26,7 @@ public final class Tablist implements ParadigmModule {
 
     private static volatile Tablist current;
     private final TablistMetadataProvider metadataProvider;
-    private final Map<String, PlayerSnapshot> snapshots = new HashMap<>();
+    private final Map<Object, PlayerSnapshot> snapshots = new java.util.IdentityHashMap<>();
     private Services services;
     private ScheduledFuture<?> refreshTask;
     private ScheduledFuture<?> worldWatchTask;
@@ -96,8 +95,7 @@ public final class Tablist implements ParadigmModule {
                 IPlayer player = event.getPlayer();
                 String uuid = player != null ? player.getUUID() : null;
                 if (uuid != null) {
-                    snapshots.remove(uuid);
-                    teamOrder.disconnected(uuid);
+                    snapshots.remove(playerIdentity(player));
                     if (resolver instanceof TablistMetadataResolver r) r.invalidate(uuid);
                 }
                 scheduleRefresh(0);
@@ -120,11 +118,6 @@ public final class Tablist implements ParadigmModule {
                 (viewer, subject) -> instance.services.getVanishService().canSee(viewer, subject));
     }
 
-    public static void observeSortingTeam(IPlayer viewer, String team, int mode, java.util.Collection<String> members) {
-        Tablist instance = current;
-        if (instance != null && instance.services != null) instance.teamOrder.observe(instance.services.getPlatformAdapter(), viewer, team, mode, members);
-    }
-
     public static Tablist current() {
         return current;
     }
@@ -143,15 +136,15 @@ public final class Tablist implements ParadigmModule {
         Map<String, Integer> orders = new HashMap<>();
         for (int index = 0; index < sorted.size(); index++) orders.put(sorted.get(index).uuid(), index);
 
-        Set<String> online = new HashSet<>();
+        Set<Object> online = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
         for (TablistEntry entry : entries) {
-            online.add(entry.uuid());
+            online.add(playerIdentity(entry.player()));
             apply(entry, config.resolve(entry.worldId()), orders.getOrDefault(entry.uuid(), 0), (int) players.stream().filter(target -> services.getVanishService().canSee(entry.player(), target)).count());
         }
         boolean batchApplied = services.getPlatformAdapter().setPlayerListOrder(sorted.stream().map(TablistEntry::player).toList());
-        orderApplied = batchApplied || sorted.stream().allMatch(entry -> snapshots.get(entry.uuid()) != null
-                && snapshots.get(entry.uuid()).order() == orders.get(entry.uuid()));
-        snapshots.keySet().removeIf(uuid -> !online.contains(uuid));
+        orderApplied = batchApplied || sorted.stream().allMatch(entry -> snapshots.get(playerIdentity(entry.player())) != null
+                && snapshots.get(playerIdentity(entry.player())).order() == orders.get(entry.uuid()));
+        snapshots.keySet().retainAll(online);
     }
 
     boolean isRefreshScheduled() {
@@ -172,7 +165,7 @@ public final class Tablist implements ParadigmModule {
     }
 
     boolean hasSnapshot(String uuid) {
-        return snapshots.containsKey(uuid);
+        return snapshots.values().stream().anyMatch(snapshot -> snapshot.uuid().equals(uuid));
     }
 
     private void start() {
@@ -220,7 +213,7 @@ public final class Tablist implements ParadigmModule {
         for (IPlayer player : services.getPlatformAdapter().getOnlinePlayers()) {
             String uuid = safe(player.getUUID());
             if (uuid.isEmpty()) continue;
-            PlayerSnapshot previous = snapshots.get(uuid);
+            PlayerSnapshot previous = snapshots.get(playerIdentity(player));
             String currentWorld = safe(player.getWorldId());
             if (previous == null || !previous.world().equals(currentWorld)) {
                 refreshNow();
@@ -318,7 +311,7 @@ public final class Tablist implements ParadigmModule {
             name += " <color:gray>" + entry.ping() + "ms</color>";
         }
 
-        PlayerSnapshot previous = snapshots.get(entry.uuid());
+        PlayerSnapshot previous = snapshots.get(playerIdentity(entry.player()));
         // Group placeholders are expanded by MessageParser, after these template comparisons.
         boolean sameContext = previous != null && previous.metadata().equals(entry.metadata()) && previous.world().equals(entry.worldId());
         String appliedHeader = sameContext ? previous.header() : null;
@@ -340,14 +333,19 @@ public final class Tablist implements ParadigmModule {
         if (previous == null || previous.order() != order) {
             if (services.getPlatformAdapter().setPlayerListOrder(entry.player(), order)) appliedOrder = order;
         }
-        snapshots.put(entry.uuid(), new PlayerSnapshot(appliedHeader, appliedFooter, appliedName, appliedOrder, entry.worldId(), entry.ping(), entry.metadata()));
+        snapshots.put(playerIdentity(entry.player()), new PlayerSnapshot(entry.uuid(), appliedHeader, appliedFooter, appliedName, appliedOrder, entry.worldId(), entry.ping(), entry.metadata()));
     }
 
     private static String safe(String value) {
         return value != null ? value : "";
     }
 
-    private record PlayerSnapshot(String header, String footer, String displayName, int order, String world,
+    private static Object playerIdentity(IPlayer player) {
+        Object nativePlayer = player.getOriginalPlayer();
+        return nativePlayer == null ? player : nativePlayer;
+    }
+
+    private record PlayerSnapshot(String uuid, String header, String footer, String displayName, int order, String world,
                                   int ping, TablistMetadata metadata) {
     }
 }

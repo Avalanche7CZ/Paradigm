@@ -14,10 +14,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.slf4j.LoggerFactory;
 
+import eu.avalanche7.paradigm.modules.dashboard.auth.DashboardPrincipal;
+import eu.avalanche7.paradigm.modules.permissions.ParadigmPermissions;
 import eu.avalanche7.paradigm.modules.permissions.PermissionAPI;
+import eu.avalanche7.paradigm.modules.permissions.PermissionAdminService;
+import eu.avalanche7.paradigm.modules.permissions.PermissionMutationRequest;
+import eu.avalanche7.paradigm.modules.permissions.PermissionsHandler;
 import eu.avalanche7.paradigm.modules.permissions.context.PermissionContextSet;
+import eu.avalanche7.paradigm.platform.Interfaces.IConfig;
 import eu.avalanche7.paradigm.storage.StorageConfig;
 import eu.avalanche7.paradigm.storage.StorageException;
+import eu.avalanche7.paradigm.storage.StorageService;
 import eu.avalanche7.paradigm.storage.StorageTransactionException;
 import eu.avalanche7.paradigm.storage.identity.ServerIdentity;
 import eu.avalanche7.paradigm.storage.identity.ServerIdentityService;
@@ -147,9 +154,35 @@ class PermissionInstanceSyncTest {
             assertThrows(StorageException.class, b::synchronizePermissions);
             assertEquals(version, b.stateVersion());
             assertEquals(Boolean.TRUE, b.hasPermission(user, "example.vip"));
+            var explanation = b.explainPermission(user, "example.vip");
+            assertEquals(Boolean.TRUE, explanation.allowed());
+            assertEquals("vip", explanation.sourceName());
             unavailable.set(false);
             assertTrue(b.synchronizePermissions());
             assertNull(b.hasPermission(user, "example.vip"));
+        }
+    }
+
+    @Test void initialSqlOutageFailsClosedAndExplainsTheUnavailableState() {
+        try (var provider = provider("tfg-modern")) {
+            var unavailable = new AtomicBoolean(true);
+            var reader = api(failing(provider.permissions(), unavailable), "tfg-modern");
+            String node = "paradigm.msg";
+            assertEquals(Boolean.FALSE, reader.hasPermission(user, node));
+            assertEquals(new PermissionAPI.PermissionExplain(false, "unavailable", "", "", List.of()),
+                    reader.explainPermission(user, node));
+            assertThrows(StorageException.class, () -> reader.hasStoredPermission(user, node));
+
+            unavailable.set(false);
+            var writer = api(provider.permissions(), "tfg-modern");
+            assertEquals(Boolean.TRUE, writer.hasPermission(user, node));
+            assertEquals(Boolean.TRUE, reader.hasStoredPermission(user, node));
+            assertEquals(Boolean.FALSE, reader.hasPermission(user, node));
+
+            reader.reload();
+            assertEquals(Boolean.TRUE, reader.hasPermission(user, node));
+            assertEquals(new PermissionAPI.PermissionExplain(true, "group", "default", node, List.of("default")),
+                    reader.explainPermission(user, node));
         }
     }
 
@@ -169,6 +202,111 @@ class PermissionInstanceSyncTest {
             queue.forEach(Runnable::run);
             assertTrue(second.permissions().getUser(user.toString()).orElseThrow().groups().isEmpty());
             assertEquals(1, second.permissions().getUser(user.toString()).orElseThrow().permissions().size());
+        }
+    }
+
+    @Test void backgroundReadsAndQueuedWritesDoNotHoldTheRuntimeLock() throws Exception {
+        try (var provider = provider("gtnh")) {
+            var blockedMethod = new java.util.concurrent.atomic.AtomicReference<String>();
+            var entered = new java.util.concurrent.Semaphore(0);
+            var release = new java.util.concurrent.Semaphore(0);
+            var repository = (PermissionRepository) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{PermissionRepository.class}, (proxy, method, args) -> {
+                String blocked = blockedMethod.get();
+                if (method.getName().equals(blocked) && blockedMethod.compareAndSet(blocked, null)) {
+                    entered.release();
+                    if (!release.tryAcquire(10, java.util.concurrent.TimeUnit.SECONDS)) throw new StorageException("Fixture timed out");
+                }
+                try { return method.invoke(provider.permissions(), args); }
+                catch (InvocationTargetException failure) { throw failure.getCause(); }
+            });
+            var api = api(repository, "gtnh");
+            var queue = new ArrayList<Runnable>();
+            api.setAsyncPersistenceExecutor((key, work) -> queue.add(work));
+            var pool = java.util.concurrent.Executors.newFixedThreadPool(2);
+            try {
+                provider.permissions().addUserPermission(user.toString(), new StoredPermissionNode("example.remote", false, null, null));
+                blockedMethod.set("changesSince");
+                var syncing = pool.submit(api::synchronizePermissions);
+                assertTrue(entered.tryAcquire(5, java.util.concurrent.TimeUnit.SECONDS));
+                assertEquals(Boolean.TRUE, pool.submit(() -> api.hasPermission(user, "paradigm.msg")).get(3, java.util.concurrent.TimeUnit.SECONDS));
+                assertTrue(pool.submit(() -> api.addUserPermission(user, "example.first", false)).get(3, java.util.concurrent.TimeUnit.SECONDS));
+                release.release();
+                syncing.get(5, java.util.concurrent.TimeUnit.SECONDS);
+
+                blockedMethod.set("applyUserChanges");
+                var writing = pool.submit(queue.get(0));
+                assertTrue(entered.tryAcquire(5, java.util.concurrent.TimeUnit.SECONDS));
+                assertEquals(Boolean.TRUE, pool.submit(() -> api.hasPermission(user, "example.first")).get(3, java.util.concurrent.TimeUnit.SECONDS));
+                assertTrue(pool.submit(() -> api.addUserPermission(user, "example.second", false)).get(3, java.util.concurrent.TimeUnit.SECONDS));
+                release.release();
+                writing.get(5, java.util.concurrent.TimeUnit.SECONDS);
+                assertEquals(Boolean.TRUE, api.hasStoredPermission(user, "example.first"));
+                assertNull(api.hasStoredPermission(user, "example.second"));
+                queue.get(1).run();
+                assertEquals(Boolean.TRUE, api.hasStoredPermission(user, "example.second"));
+                assertTrue(api.synchronizePermissions());
+                assertEquals(Boolean.TRUE, api.hasPermission(user, "example.remote"));
+                assertEquals(Boolean.TRUE, api.hasPermission(user, "example.second"));
+            } finally {
+                release.release();
+                pool.shutdownNow();
+            }
+        }
+    }
+
+    @Test void reloadInvalidatesQueuedCallbacksEvenWhenTheRepositoryIsUnchanged() {
+        try (var provider = provider("gtnh")) {
+            var api = api(provider.permissions(), "gtnh");
+            var queue = new ArrayList<Runnable>();
+            api.setAsyncPersistenceExecutor((key, write) -> queue.add(write));
+            assertTrue(api.addUserPermission(user, "example.discarded", false));
+            api.reload();
+            assertTrue(api.addUserPermission(user, "example.current", false));
+            queue.get(0).run();
+            assertNull(api.hasStoredPermission(user, "example.current"));
+            queue.get(1).run();
+            assertEquals(Boolean.TRUE, api.hasStoredPermission(user, "example.current"));
+            assertNull(api.hasStoredPermission(user, "example.discarded"));
+        }
+    }
+
+    @Test void rejectedQueuedSubmissionRetainsRuntimeAcceptanceUntilTheNextFlush() {
+        try (var provider = provider("gtnh")) {
+            var api = api(provider.permissions(), "gtnh");
+            api.setAsyncPersistenceExecutor((key, write) -> { throw new java.util.concurrent.RejectedExecutionException(); });
+            assertTrue(api.addUserPermission(user, "example.pending", false));
+            assertEquals(Boolean.TRUE, api.hasPermission(user, "example.pending"));
+            assertNull(api.hasStoredPermission(user, "example.pending"));
+            api.synchronizePermissions();
+            assertEquals(Boolean.TRUE, api.hasStoredPermission(user, "example.pending"));
+        }
+    }
+
+    @Test void queuedCommitWithLostAcknowledgementRequiresExplicitRecovery() {
+        try (var provider = provider("gtnh")) {
+            var actual = provider.permissions();
+            var loseAcknowledgement = new AtomicBoolean(true);
+            var repository = (PermissionRepository) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{PermissionRepository.class}, (proxy, method, args) -> {
+                try {
+                    Object result = method.invoke(actual, args);
+                    if (method.getName().equals("applyUserChanges") && loseAcknowledgement.getAndSet(false)) {
+                        throw new StorageTransactionException("Lost acknowledgement", null, StorageTransactionException.Outcome.UNKNOWN);
+                    }
+                    return result;
+                } catch (InvocationTargetException failure) { throw failure.getCause(); }
+            });
+            var api = api(repository, "gtnh");
+            var queue = new ArrayList<Runnable>();
+            api.setAsyncPersistenceExecutor((key, write) -> queue.add(write));
+            assertTrue(api.addUserPermission(user, "example.committed", false));
+            assertThrows(StorageTransactionException.class, queue.get(0)::run);
+            long revision = actual.changesSince(-1).revision();
+            assertFalse(api.synchronizePermissions());
+            assertThrows(StorageTransactionException.class, () -> api.addUserPermission(user, "example.rejected", false));
+            assertNull(api.hasPermission(user, "example.rejected"));
+            assertEquals(revision, actual.changesSince(-1).revision());
+            api.reload();
+            assertEquals(Boolean.TRUE, api.hasPermission(user, "example.committed"));
         }
     }
 
@@ -210,6 +348,28 @@ class PermissionInstanceSyncTest {
             assertThrows(StorageTransactionException.class, () -> api.addUserPermission(user, "example.unknown", false));
             assertFalse(api.synchronizePermissions());
             assertThrows(StorageTransactionException.class, () -> api.addUserPermission(user, "example.blocked", false));
+            assertNull(api.hasPermission(user, "example.blocked"));
+        }
+    }
+
+    @Test void transactionalRevocationRemovesReloadedGlobalAssignmentAndCannotBeRequeued() {
+        try (var provider = provider("gtnh")) {
+            seed(provider.permissions());
+            var api = api(provider.permissions(), "gtnh");
+            assertTrue(api.changeGlobalGroups(user, List.of(new PermissionRepository.GroupChange("vip", true)), () -> {}));
+            assertTrue(api.assignGroup(user, "vip", 0L, "dashboard", modern));
+            api.reload();
+            assertEquals(Boolean.TRUE, api.hasPermission(user, "example.vip"));
+            assertTrue(api.changeGlobalGroups(user, List.of(new PermissionRepository.GroupChange("vip", false)), () -> {}));
+            assertNull(api.hasPermission(user, "example.vip"));
+            assertEquals(Boolean.TRUE, api.hasPermission(user, "example.vip", modern));
+
+            var queue = new ArrayList<Runnable>();
+            api.setAsyncPersistenceExecutor((key, task) -> queue.add(task));
+            assertTrue(api.addUserPermission(user, "example.unrelated", false));
+            queue.forEach(Runnable::run);
+            assertNull(api.hasStoredPermission(user, "example.vip"));
+            assertEquals(Boolean.TRUE, api.hasStoredPermission(user, "example.vip", modern));
         }
     }
 
@@ -264,14 +424,20 @@ class PermissionInstanceSyncTest {
             long expiry = System.currentTimeMillis() + 600_000;
             playerData.setTemporaryGroup(user.toString(), "vip", expiry, 1L, "old-mirror");
             var a = api(first.permissions(), "gtnh");
+            assertTrue(a.addUserPermission(user, "example.direct", false));
             var b = new PermissionAPI(LoggerFactory.getLogger(getClass()), new DebugLogger(null), null, playerData);
             b.setPermissionRepository(second.permissions()); b.initialize();
             assertNull(b.hasPermission(user, "example.vip"));
+            assertNull(b.hasStoredPermission(user, "example.vip"));
             assertTrue(a.assignGroup(user, "vip", expiry, "dashboard", PermissionContextSet.empty()));
+            assertEquals(Boolean.TRUE, b.hasStoredPermission(user, "example.vip"));
+            assertNull(b.hasPermission(user, "example.vip"));
             assertTrue(b.synchronizePermissions());
             assertEquals(Boolean.TRUE, b.hasPermission(user, "example.vip"));
             assertEquals(1, b.getUserGroups(user).temporaryGroups().size());
             assertTrue(a.revokeGroup(user, "vip"));
+            assertNull(b.hasStoredPermission(user, "example.vip"));
+            assertEquals(Boolean.TRUE, b.hasPermission(user, "example.vip"));
             assertTrue(b.synchronizePermissions());
             assertNull(b.hasPermission(user, "example.vip"));
             b.reload();
@@ -287,6 +453,140 @@ class PermissionInstanceSyncTest {
         }
     }
 
+    @Test void dashboardLoginUsesAuthoritativePermissionsAndPropagatesReadFailures() {
+        try (var writer = provider("gtnh"); var host = provider("tfg-modern")) {
+            var permission = ParadigmPermissions.DASHBOARD_ACCESS;
+            writer.permissions().saveUser(new StoredUserPermissionData(user.toString(), "Player", List.of(),
+                    List.of(new StoredPermissionNode(permission.node(), false, null, "tfg-modern"))));
+            var unavailable = new AtomicBoolean();
+            var repository = failing(host.permissions(), unavailable);
+            var config = new IConfig() {
+                @Override public Path getConfigDirectory() { return directory; }
+                @Override public String getModId() { return "paradigm"; }
+            };
+            try (var storage = new StorageService(null, null, config, null, null, null, null) {
+                @Override public boolean isMysqlActive() { return true; }
+                @Override public boolean isSqlActive() { return true; }
+                @Override public PermissionRepository permissions() { return repository; }
+                @Override public StorageContext context() { return new StorageContext(new ServerIdentity("isolated", "tfg-modern", "Host")); }
+            }) {
+                var reader = new PermissionsHandler(LoggerFactory.getLogger(getClass()), null, new DebugLogger(null), null, null, storage) {
+                    @Override public boolean isInternalPermissionsEnabled() { return true; }
+                };
+                reader.initialize();
+                assertTrue(reader.hasPermission(user.toString(), permission));
+                assertTrue(reader.hasDashboardLoginPermission(user.toString(), permission));
+
+                writer.permissions().saveUser(new StoredUserPermissionData(user.toString(), "Player", List.of(),
+                        List.of(new StoredPermissionNode(permission.node(), true, null, "tfg-modern"))));
+                assertTrue(reader.hasPermission(user.toString(), permission));
+                assertFalse(reader.hasDashboardLoginPermission(user.toString(), permission));
+
+                unavailable.set(true);
+                assertThrows(StorageException.class, () -> reader.hasDashboardLoginPermission(user.toString(), permission));
+            }
+        }
+    }
+
+    @Test void dashboardWaitsForCommitAndShutdownDrainsAcceptedUserWrites() throws Exception {
+        try (var provider = provider("tfg-modern")) {
+            var entered = new java.util.concurrent.Semaphore(0);
+            var proceed = new java.util.concurrent.Semaphore(0);
+            var block = new AtomicBoolean(true);
+            var reject = new AtomicBoolean();
+            var rejectSubmission = new AtomicBoolean();
+            var repository = (PermissionRepository) Proxy.newProxyInstance(getClass().getClassLoader(), new Class<?>[]{PermissionRepository.class}, (proxy, method, args) -> {
+                if (method.getName().equals("applyUserChanges")) {
+                    if (reject.get()) throw new StorageException("Known write failure");
+                    if (block.get()) {
+                        entered.release();
+                        if (!proceed.tryAcquire(10, java.util.concurrent.TimeUnit.SECONDS)) throw new StorageException("Fixture timed out");
+                    }
+                }
+                try { return method.invoke(provider.permissions(), args); }
+                catch (InvocationTargetException failure) { throw failure.getCause(); }
+            });
+            var config = new IConfig() {
+                @Override public Path getConfigDirectory() { return directory; }
+                @Override public String getModId() { return "paradigm"; }
+            };
+            try (var storage = new StorageService(null, null, config, null, null, null, null) {
+                @Override public boolean isSqlActive() { return true; }
+                @Override public PermissionRepository permissions() { return repository; }
+                @Override public <T> java.util.concurrent.CompletableFuture<T> submitAcknowledged(java.util.function.Supplier<T> work) {
+                    if (rejectSubmission.get()) return java.util.concurrent.CompletableFuture.failedFuture(new StorageException("Storage is closing."));
+                    return super.submitAcknowledged(work);
+                }
+            }) {
+                var handler = new PermissionsHandler(LoggerFactory.getLogger(getClass()), null, new DebugLogger(null), null, null, storage) {
+                    @Override public boolean isInternalPermissionsEnabled() { return true; }
+                };
+                handler.initialize();
+                var services = new eu.avalanche7.paradigm.core.Services(null, null, null, null, null, null, null, null, null, null, null,
+                        null, handler, null, null, null, null, null, storage, null, null);
+                var admin = new PermissionAdminService(services, null);
+                var console = new DashboardPrincipal(null, "Console", true);
+                var pool = java.util.concurrent.Executors.newSingleThreadExecutor();
+                try {
+                    var dashboardWrite = admin.mutateAsync(console, userGrant("example.acknowledged"), pool);
+                    assertTrue(entered.tryAcquire(5, java.util.concurrent.TimeUnit.SECONDS));
+                    assertFalse(dashboardWrite.isDone());
+                    assertTrue(provider.permissions().getUser(user.toString()).isEmpty());
+                    proceed.release();
+                    assertEquals("ok", dashboardWrite.get(5, java.util.concurrent.TimeUnit.SECONDS).code());
+
+                    reject.set(true);
+                    var failure = admin.mutateAsync(console, userGrant("example.rejected"), pool).get(5, java.util.concurrent.TimeUnit.SECONDS);
+                    assertFalse(failure.applied());
+                    assertEquals("persistence_failed", failure.code());
+                    assertNull(handler.queryDefinedPermission(user, "example.rejected"));
+                    reject.set(false);
+
+                    rejectSubmission.set(true);
+                    var rejected = admin.mutateTrusted(console, userGrant("example.not_queued"));
+                    assertFalse(rejected.applied());
+                    assertEquals("persistence_failed", rejected.code());
+                    assertNull(handler.queryDefinedPermission(user, "example.not_queued"));
+                    rejectSubmission.set(false);
+
+                    var pending = admin.mutateTrusted(console, userGrant("example.shutdown"));
+                    assertTrue(pending.applied());
+                    assertEquals("persistence_pending", pending.code());
+                    assertTrue(entered.tryAcquire(5, java.util.concurrent.TimeUnit.SECONDS));
+                    assertTrue(provider.permissions().getUser(user.toString()).orElseThrow().permissions().stream()
+                            .noneMatch(node -> "example.shutdown".equals(node.permission())));
+                    var closeStarted = new java.util.concurrent.CountDownLatch(1);
+                    var closing = pool.submit(() -> {
+                        closeStarted.countDown();
+                        storage.close();
+                    });
+                    assertTrue(closeStarted.await(5, java.util.concurrent.TimeUnit.SECONDS));
+                    proceed.release();
+                    closing.get(5, java.util.concurrent.TimeUnit.SECONDS);
+                    assertTrue(provider.permissions().getUser(user.toString()).orElseThrow().permissions().stream()
+                            .anyMatch(node -> "example.shutdown".equals(node.permission())));
+                    assertTrue(provider.permissions().getUser(user.toString()).orElseThrow().permissions().stream()
+                            .noneMatch(node -> "example.not_queued".equals(node.permission())));
+
+                    var afterClose = admin.mutateAsync(console, userGrant("example.closed"), pool).get(5, java.util.concurrent.TimeUnit.SECONDS);
+                    assertEquals("persistence_failed", afterClose.code());
+                    assertNull(handler.queryDefinedPermission(user, "example.closed"));
+                } finally {
+                    proceed.release(2);
+                    pool.shutdownNow();
+                }
+            }
+        }
+    }
+
+    private PermissionMutationRequest userGrant(String node) {
+        var request = new PermissionMutationRequest();
+        request.action = "user_permission_add";
+        request.user = user.toString();
+        request.permission = node;
+        return request;
+    }
+
     @Test void dashboardMutationServiceAndCommandHandlerUseTheSameCommittedRevision() {
         try (var first = provider("gtnh"); var second = provider("tfg-modern")) {
             seed(first.permissions());
@@ -298,7 +598,6 @@ class PermissionInstanceSyncTest {
                 @Override public boolean isSqlActive() { return true; }
                 @Override public PermissionRepository permissions() { return first.permissions(); }
                 @Override public StorageContext context() { return new StorageContext(new ServerIdentity("isolated", "gtnh", "GTNH")); }
-                @Override public void runStorageAsync(String key, Runnable task) { task.run(); }
             };
             var handler = new eu.avalanche7.paradigm.modules.permissions.PermissionsHandler(LoggerFactory.getLogger(getClass()), null, new DebugLogger(null), null, null, storage) {
                 @Override public boolean isInternalPermissionsEnabled() { return true; }
@@ -316,6 +615,7 @@ class PermissionInstanceSyncTest {
                 assertTrue(reader.synchronizePermissions());
                 assertEquals(Boolean.TRUE, reader.hasPermission(user, "example.vip"));
                 assertTrue(handler.revokePlayerGroup(user, "vip", modern));
+                storage.submitAcknowledged(() -> null).join();
                 assertTrue(reader.synchronizePermissions());
                 assertNull(reader.hasPermission(user, "example.vip"));
             } finally { services.shutdown(); storage.close(); }

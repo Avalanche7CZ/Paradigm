@@ -25,9 +25,10 @@ public abstract class ServerConfigurationManagerMixin {
     }
 
     @Inject(method = "initializeConnectionToPlayer", at = @At("RETURN"), remap = false)
-    private void paradigm$visualJoin(NetworkManager network, EntityPlayerMP player, NetHandlerPlayServer handler, CallbackInfo callback) {
+    private void paradigm$finishLogin(NetworkManager network, EntityPlayerMP player, NetHandlerPlayServer handler, CallbackInfo callback) {
         LegacyVisualController visuals = LegacyVisualController.current();
         if (visuals != null) visuals.joined(player);
+        MinecraftEventSystem.finishLogin(player);
     }
 
     @Inject(method = "readPlayerDataFromFile", at = @At("RETURN"), require = 0)

@@ -68,7 +68,7 @@ public class PermissionsApiHandler {
             }
         }
 
-        Object result = dashboard.permissionMutationAsync(ctx.principal(), mutation).get();
+        Object result = dashboard.permissionMutationAsync(ctx, mutation).get();
         if (result instanceof PermissionMutationResult mutationResult
                 && !mutationResult.applied()
                 && !mutationResult.confirmationRequired()) {
@@ -122,7 +122,8 @@ public class PermissionsApiHandler {
 
     private static int statusFor(String code) {
         if ("assignment_not_found".equals(code)) return 404;
-        if ("persistence_uncertain".equals(code)) return 503;
+        if ("persistence_failed".equals(code) || "persistence_uncertain".equals(code)
+                || "persistence_committed_recovery".equals(code)) return 503;
         if ("persistence_conflict".equals(code)) return 409;
         if ("permission_denied".equals(code)) {
             return 403;

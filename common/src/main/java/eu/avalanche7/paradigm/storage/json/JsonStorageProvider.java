@@ -27,7 +27,7 @@ import eu.avalanche7.paradigm.utils.DebugLogger;
 public class JsonStorageProvider implements StorageProvider {
     private final PlayerRepository players;
     private final WarpRepository warps;
-    private final PermissionRepository permissions;
+    private final JsonPermissionRepository permissions;
     private final ModerationRepository moderation;
     private final AdminStateRepository adminState;
     private final ServerRepository servers;
@@ -62,6 +62,10 @@ public class JsonStorageProvider implements StorageProvider {
     @Override public PlayerRepository players() { return players; }
     @Override public WarpRepository warps() { return warps; }
     @Override public PermissionRepository permissions() { return permissions; }
+
+    public void preparePermissionExport() {
+        permissions.completeTemporaryGroupMigration();
+    }
     @Override public ModerationRepository moderation() { return moderation; }
     @Override public AdminStateRepository adminState() { return adminState; }
     @Override public ServerRepository servers() { return servers; }

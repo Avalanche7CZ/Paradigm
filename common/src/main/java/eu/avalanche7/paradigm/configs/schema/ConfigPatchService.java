@@ -30,11 +30,11 @@ import eu.avalanche7.paradigm.core.Services;
 import eu.avalanche7.paradigm.modules.chat.PlayerNameClickAction;
 import eu.avalanche7.paradigm.modules.commands.shared.DurationParser;
 import eu.avalanche7.paradigm.modules.dashboard.DashboardConfig;
+import eu.avalanche7.paradigm.modules.permissions.PermissionNodeSyntax;
 
 public class ConfigPatchService {
     private static final Pattern HEX_COLOR = Pattern.compile("#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})");
     private static final Pattern NAMED_COLOR = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
-    private static final Pattern PERMISSION_NODE = Pattern.compile("[A-Za-z0-9_.*-]+");
     private static final int MAX_HOVER_LINES = 16;
     private static final int MAX_HOVER_LINE_LENGTH = 256;
     private static final int MAX_HOVER_VARIANTS = 8;
@@ -437,8 +437,8 @@ public class ConfigPatchService {
             if (permission.isEmpty() || permission.length() > 128) {
                 throw new IllegalArgumentException("Hover variants require a permission node of 1 to 128 characters.");
             }
-            if (!PERMISSION_NODE.matcher(permission).matches()) {
-                throw new IllegalArgumentException("Hover variant permission nodes may only use letters, digits, dot, dash, underscore, and *.");
+            if (!PermissionNodeSyntax.validConfigured(permission)) {
+                throw new IllegalArgumentException("Hover variant permission nodes may only use letters, digits, dot, dash, underscore, dollar sign, and *.");
             }
             if (!seen.add(permission.toLowerCase(Locale.ROOT))) {
                 throw new IllegalArgumentException("Hover variant permissions must be unique.");

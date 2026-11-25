@@ -96,6 +96,7 @@
       "user_temp_line": "Dočasné {group} do {until}",
       "duration_invalid": "Neplatná doba. Použij days/weeks/months a amount > 0.",
       "metadata_ok": "Pole {field} pro {group} bylo aktualizováno.",
+      "persistence_pending": "Změna je účinná na serveru. Uložení zatím nebylo potvrzeno.",
       "metadata_fail": "Pole {field} pro {group} se nepodařilo aktualizovat.",
       "perm_add_ok": "Permission {permission} byla přidána do {group}.",
       "perm_add_fail": "Permission {permission} se nepodařilo přidat do {group}.",
