@@ -64,6 +64,7 @@ ForgeAnnoucements-1.0.0/plugin.yml
 !/dashboard/tests/
 /dashboard/tests/**
 !/dashboard/tests/login.test.tsx
+!/dashboard/tests/permission-assignment.test.tsx
 
 !/common/src/test/java/eu/avalanche7/paradigm/platform/VanishTrackingDimensionTest.java
 
@@ -93,6 +94,7 @@ ForgeAnnoucements-1.0.0/plugin.yml
 !/Forge-1.7.10/src/test/
 /Forge-1.7.10/src/test/**
 !/Forge-1.7.10/src/test/**/
+!/Forge-1.7.10/src/test/java/serverutils/lib/command/CommandTreeBase.java
 !/Forge-1.7.10/src/test/java/eu/avalanche7/paradigm/ParadigmLifecycleTest.java
 !/Forge-1.7.10/src/test/java/eu/avalanche7/paradigm/platform/ChatSocialTest.java
 !/Forge-1.7.10/src/test/java/eu/avalanche7/paradigm/platform/HomeOtherAccessTest.java
@@ -109,6 +111,7 @@ ForgeAnnoucements-1.0.0/plugin.yml
 !/NeoForge-26.1.2/src/test/java/eu/avalanche7/paradigm/platform/InteractiveChatTest.java
 !/NeoForge-26.1.2/src/test/java/eu/avalanche7/paradigm/platform/TeleportOperationsTest.java
 !/NeoForge-26.1.2/src/test/java/eu/avalanche7/paradigm/platform/HomeCommandBrigadierTest.java
+!/NeoForge-26.1.2/src/test/java/eu/avalanche7/paradigm/platform/CommandAuthorizationTest.java
 
 # Permission presentation and offline command regression coverage.
 !/common/src/test/java/eu/avalanche7/paradigm/modules/permissions/PermissionPresentationTest.java
@@ -122,3 +125,7 @@ ForgeAnnoucements-1.0.0/plugin.yml
 !/common/src/test/java/eu/avalanche7/paradigm/support/TestStyle.java
 
 !/common/src/test/java/eu/avalanche7/paradigm/modules/commands/AutomaticSpawnPlacementTest.java
+!/common/src/test/java/eu/avalanche7/paradigm/modules/tab/TablistTeamOrderTest.java
+!/Forge-1.7.10/src/test/java/eu/avalanche7/paradigm/platform/LegacyVisualTest.java
+!/Forge-1.7.10/src/test/java/eu/avalanche7/paradigm/platform/visual/LegacyTablistCompatibilityTest.java
+!/Forge-1.7.10/src/test/java/eu/avalanche7/paradigm/platform/visual/LegacyTablistOrderTest.java

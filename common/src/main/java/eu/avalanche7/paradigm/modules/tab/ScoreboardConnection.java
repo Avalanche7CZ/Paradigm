@@ -66,6 +66,7 @@ public final class ScoreboardConnection extends ChannelDuplexHandler {
     private record Pending(Write write, Cleanup cleanup) { }
 
     private final Codec codec;
+    private final boolean confirmEncoding;
     private final AtomicLong epoch = new AtomicLong();
     // All supported team packet classes use object identity. Weak keys also cover packets cancelled above Netty.
     private final Map<Object, Owner> marked = Collections.synchronizedMap(new WeakHashMap<>());
@@ -80,9 +81,16 @@ public final class ScoreboardConnection extends ChannelDuplexHandler {
     private boolean draining;
     private boolean writing;
     private boolean flushPending;
+    private Write encoding;
+    private boolean encodedAsExpected;
 
     public ScoreboardConnection(Codec codec) {
+        this(codec, false);
+    }
+
+    private ScoreboardConnection(Codec codec, boolean confirmEncoding) {
         this.codec = codec;
+        this.confirmEncoding = confirmEncoding;
     }
 
     public static ScoreboardConnection install(Channel channel, Codec codec) {
@@ -93,6 +101,24 @@ public final class ScoreboardConnection extends ChannelDuplexHandler {
         var scoreboard = new ScoreboardConnection(codec);
         channel.pipeline().addAfter(encoder, HANDLER, scoreboard);
         return scoreboard;
+    }
+
+    public static ScoreboardConnection installBeforePacketHandler(Channel channel, Codec codec) {
+        var pipeline = channel.pipeline();
+        if (pipeline.get(HANDLER) instanceof ScoreboardConnection current) return current;
+        if (pipeline.get("encoder") == null || pipeline.get("packet_handler") == null) return null;
+        var scoreboard = new ScoreboardConnection(codec, true);
+        pipeline.addBefore("packet_handler", HANDLER, scoreboard);
+        return scoreboard;
+    }
+
+    public static void confirmEncoded(ChannelHandlerContext ctx, Object packet) {
+        if (ctx.pipeline().get(HANDLER) instanceof ScoreboardConnection scoreboard && scoreboard.encoding != null) {
+            Write expected = scoreboard.encoding;
+            scoreboard.encodedAsExpected = expected.packet() == packet
+                    && java.util.Objects.equals(expected.change(), scoreboard.codec.team(packet))
+                    && java.util.Objects.equals(expected.listing(), scoreboard.codec.listing(packet));
+        }
     }
 
     public static ScoreboardConnection of(Object connection) {
@@ -275,15 +301,18 @@ public final class ScoreboardConnection extends ChannelDuplexHandler {
 
     private void acknowledged(ChannelHandlerContext ctx, Write write, Runnable commit) {
         writing = true;
+        encoding = confirmEncoding ? write : null;
+        encodedAsExpected = false;
         ChannelPromise actual = ctx.newPromise();
         actual.addListener((ChannelFutureListener) result -> {
+            boolean confirmed = !confirmEncoding || encodedAsExpected;
+            encoding = null;
             if (result.isSuccess()) {
-                if (context != null && ctx.channel().isActive()) commit.run();
+                if (!confirmed && ctx.channel().isActive()) degrade(null);
+                else if (confirmed && context != null && ctx.channel().isActive()) commit.run();
                 write.promise().trySuccess();
             } else {
-                if (!degraded) LOGGER.warn("Paradigm scoreboard state could not be confirmed on this connection. Optional teams are suspended until the next login.", result.cause());
-                degraded = true;
-                publish();
+                degrade(result.cause());
                 // A failed optional write must never trigger Minecraft's disconnect-on-send-failure listener.
                 if (write.owner() != null) write.promise().trySuccess();
                 else write.promise().tryFailure(result.cause());
@@ -292,6 +321,12 @@ public final class ScoreboardConnection extends ChannelDuplexHandler {
             drain(context);
         });
         ctx.writeAndFlush(write.packet(), actual);
+    }
+
+    private void degrade(Throwable cause) {
+        if (!degraded) LOGGER.warn("Paradigm scoreboard state could not be confirmed on this connection. Optional teams are suspended until the next login.", cause);
+        degraded = true;
+        publish();
     }
 
     private static void skip(Write write) {

@@ -177,6 +177,46 @@ class TablistTeamOrderTest {
         assertEquals(List.of("External"), client.ordered());
     }
 
+    @Test void legacyTrackingSeesPacketsBeforeAnInjectedEncoderAndRequiresNativeEncoding() {
+        var drop = new AtomicBoolean();
+        var channel = new EmbeddedChannel(new ChannelOutboundHandlerAdapter());
+        try {
+            channel.pipeline().addLast("encoder", new ChannelOutboundHandlerAdapter());
+            channel.pipeline().addAfter("encoder", "plugin_encoder", new ChannelOutboundHandlerAdapter() {
+                @Override public void write(ChannelHandlerContext ctx, Object packet, ChannelPromise promise) {
+                    if (drop.get()) {
+                        promise.setSuccess();
+                        return;
+                    }
+                    ScoreboardConnection.confirmEncoded(ctx, packet);
+                    ctx.write(packet, promise);
+                }
+            });
+            channel.pipeline().addLast("packet_handler", new ChannelOutboundHandlerAdapter());
+            var connection = ScoreboardConnection.installBeforePacketHandler(channel, CODEC);
+            assertNotNull(connection);
+            channel.writeAndFlush(JOIN);
+            assertSame(JOIN, channel.readOutbound());
+            assertTrue(connection.view().ready());
+
+            drop.set(true);
+            connection.sendOwned(new Packet("pg3", CREATE, "Member"), "Member", "a", channel::writeAndFlush);
+            assertNull(channel.readOutbound());
+            assertFalse(connection.view().ready());
+            assertTrue(connection.view().owned().isEmpty());
+
+            drop.set(false);
+            channel.writeAndFlush(JOIN);
+            assertSame(JOIN, channel.readOutbound());
+            var create = new Packet("pg3", CREATE, "Member");
+            connection.sendOwned(create, "Member", "a", channel::writeAndFlush);
+            assertSame(create, channel.readOutbound());
+            assertEquals("Member", connection.view().owned().get("pg3").subject());
+        } finally {
+            channel.finish();
+        }
+    }
+
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
     void reloadOrVanishQueuesCleanupAfterAnInFlightWriteAndPreservesForeignMembership(boolean vanish) {

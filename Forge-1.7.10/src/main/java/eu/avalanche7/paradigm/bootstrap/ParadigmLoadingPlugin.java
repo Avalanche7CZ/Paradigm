@@ -18,7 +18,7 @@ public final class ParadigmLoadingPlugin implements IFMLLoadingPlugin, IEarlyMix
     @Override
     public List<String> getMixins(Set<String> loadedCoreMods) {
         return List.of("LegacyCommandHandlerMixin", "CrucibleCommandMapMixin", "PlayerCommandAccess", "NetHandlerLoginServerMixin", "ServerConfigurationManagerMixin", "NetHandlerPlayServerMixin", "EntityTrackerAccess", "PlayerListPacketAccess", "TeamPacketAccess", "ScoreboardConnectionMixin", "CrucibleChatMixin", "LegacyRespawnMixin", "CrucibleRespawnEventsMixin", "CrucibleRespawnEventMixin", "EntityTrackerEntryMixin", "ServerStatusMixin", "ClientCapabilitiesMixin", "MenuNetworkMixin", "CloseWindowPacketAccess", "UseEntityPacketAccess", "HologramInteractionMixin", "VanishMixin$OnlineList",
-                "VanishInteractionMixin$Pickup", "VanishInteractionMixin$Orb", "VanishInteractionMixin$Push",
+                "ScoreboardConnectionMixin$Encoder", "VanishInteractionMixin$Pickup", "VanishInteractionMixin$Orb", "VanishInteractionMixin$Push",
                 "VanishInteractionMixin$Movement", "VanishInteractionMixin$LivingMovement", "VanishInteractionMixin$WeightedPlate",
                 "VanishInteractionMixin$VulnerablePlayers", "VanishInteractionMixin$Targeting", "VanishInteractionMixin$MobTarget",
                 "VanishInteractionMixin$CreatureTarget", "VanishInteractionMixin$Temptation", "VanishInteractionMixin$ChestMenu",

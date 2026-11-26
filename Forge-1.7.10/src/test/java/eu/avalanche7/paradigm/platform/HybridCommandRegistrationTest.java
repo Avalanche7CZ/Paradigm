@@ -233,6 +233,38 @@ public class HybridCommandRegistrationTest {
         assertEquals(ForgeCommand.class.getName(), manager.wrappers.get("fly").getPermission());
     }
 
+    @Test void retainedCrucibleWrapperStillDispatchesAfterItsOldCommandIsCollected() throws Exception {
+        SimulatedCrucible manager = hybrid();
+        EntityPlayerMP player = player(false);
+        assertTrue(permissions.addPermissionToPlayer(player.getUniqueID(), "paradigm.fly", false));
+        platform.registerCommandContributor("fly-owner", () -> platform.registerCommand(root("fly")));
+        ModCustomCommand retained = manager.wrappers.get("fly");
+
+        platform.refreshRegisteredCommandContributors();
+        assertSame(retained, manager.wrappers.get("fly"));
+        var bindings = CrucibleCommandBridge.class.getDeclaredField("BINDINGS");
+        bindings.setAccessible(true);
+        Object binding = ((Map<?, ?>) bindings.get(null)).get(retained);
+        var command = binding.getClass().getDeclaredMethod("command");
+        command.setAccessible(true);
+        ((java.lang.ref.Reference<?>) command.invoke(binding)).clear();
+
+        manager.forward("fly", player);
+        manager.forward("mod:fly", player);
+        assertEquals(2, executions.get());
+        assertTrue(permissions.addPermissionToPlayer(player.getUniqueID(), "command.fly", true));
+        manager.forward("fly", player);
+        assertEquals(2, executions.get());
+
+        ICommand external = external("fly");
+        EntityPlayerMP other = player(false);
+        when(external.canCommandSenderUseCommand(other)).thenReturn(true);
+        manager.registerCommand(external);
+        assertTrue(permissions.addPermissionToPlayer(other.getUniqueID(), "command.fly", false));
+        manager.forward("fly", other);
+        verify(external, never()).processCommand(any(), any());
+    }
+
     @Test void priorityAndDisableRestoreExternalCommandWithoutLeavingAnOpenGate() {
         SimulatedCrucible manager = hybrid();
         ICommand external = external("fly");

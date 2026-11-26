@@ -29,7 +29,8 @@ public final class CrucibleCommandBridge {
     }
 
     public static void bind(Object wrapper, ICommand command, String permission, String namespace) {
-        BINDINGS.put(wrapper, new Binding(new WeakReference<>(command), permission, namespace));
+        String ownedRoot = command instanceof ForgeCommand ? command.getCommandName() : null;
+        BINDINGS.put(wrapper, new Binding(new WeakReference<>(command), permission, namespace, ownedRoot));
     }
 
     static String originalNode(ICommand command) {
@@ -92,10 +93,13 @@ public final class CrucibleCommandBridge {
         boolean owned = command instanceof ForgeCommand own && own.ownedBy(platform);
         boolean displaced = owned && !namespaced && label.equals(command.getCommandName())
                 && platform.displacedCommand(label, registered);
-        boolean staleOwnWrapper = registered instanceof ForgeCommand && !matches;
+        // Crucible may retain a bare wrapper after the replaced Forge command is collected.
+        boolean retainedOwnedRoot = registered == null && binding != null && owned
+                && label.equals(binding.ownedRoot()) && label.equals(wrapperName) && label.equals(command.getCommandName());
+        boolean staleOwnWrapper = !namespaced && !matches && (registered instanceof ForgeCommand || retainedOwnedRoot);
         boolean enabled = platform.commandPermissions() != null
                 && platform.commandPermissions().isExternalCommandPermissionsEnabled();
-        if (enabled && binding != null && !matches && !displaced && !(staleOwnWrapper && !namespaced)) {
+        if (enabled && binding != null && !matches && !displaced && !staleOwnWrapper) {
             LegacyCommandPermissions.deny(player, null);
             return false;
         }
@@ -176,7 +180,7 @@ public final class CrucibleCommandBridge {
         return allowed;
     }
 
-    private record Binding(WeakReference<ICommand> command, String permission, String namespace) {}
+    private record Binding(WeakReference<ICommand> command, String permission, String namespace, String ownedRoot) {}
 
     private static final class Forwarding {
         final CommandHandler manager;
